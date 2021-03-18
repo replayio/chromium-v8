@@ -201,5 +201,15 @@ v8::MaybeLocal<v8::Value> DebugStackTraceIterator::Evaluate(
   return Utils::ToLocal(value);
 }
 
+StackFrameId DebugStackTraceIterator::FrameId() {
+  DCHECK(!Done());
+  return iterator_.frame()->id();
+}
+
+int DebugStackTraceIterator::InlineFrameIndex() {
+  DCHECK(!Done());
+  return inlined_frame_index_;
+}
+
 }  // namespace internal
 }  // namespace v8

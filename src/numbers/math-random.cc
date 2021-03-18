@@ -60,7 +60,9 @@ Address MathRandom::RefillCache(Isolate* isolate, Address raw_native_context) {
   for (int i = 0; i < kCacheSize; i++) {
     // Generate random numbers using xorshift128+.
     base::RandomNumberGenerator::XorShift128(&state.s0, &state.s1);
-    cache.set(i, base::RandomNumberGenerator::ToDouble(state.s0));
+    double v = base::RandomNumberGenerator::ToDouble(state.s0);
+    recordreplay::AssertBytes("MathRandom", &v, sizeof(v));
+    cache.set(i, v);
   }
   pod.set(0, state);
 

@@ -986,6 +986,10 @@ bool GetOptimizedCodeLater(std::unique_ptr<OptimizedCompilationJob> job,
                            Isolate* isolate,
                            OptimizedCompilationInfo* compilation_info,
                            CodeKind code_kind, Handle<JSFunction> function) {
+  // Optimization jobs are generated non-deterministically and we don't
+  // support posting non-deterministic tasks to other threads yet.
+  CHECK(!recordreplay::IsRecordingOrReplaying());
+
   if (!isolate->optimizing_compile_dispatcher()->IsQueueAvailable()) {
     if (FLAG_trace_concurrent_recompilation) {
       PrintF("  ** Compilation queue full, will retry optimizing ");
@@ -1751,6 +1755,8 @@ bool Compiler::Compile(Handle<SharedFunctionInfo> shared_info,
   // We should never reach here if the function is already compiled.
   DCHECK(!shared_info->is_compiled());
   DCHECK(!is_compiled_scope->is_compiled());
+
+  recordreplay::AutoDisallowEvents disallow;
 
   Isolate* isolate = shared_info->GetIsolate();
   DCHECK(AllowCompilation::IsAllowed(isolate));

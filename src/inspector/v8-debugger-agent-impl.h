@@ -131,6 +131,7 @@ class V8DebuggerAgentImpl : public protocol::Debugger::Backend {
       const String16& scriptId,
       std::unique_ptr<protocol::Array<protocol::Debugger::ScriptPosition>>
           positions) override;
+  Response getCallFrames(std::unique_ptr<protocol::Array<protocol::Debugger::CallFrame>>* out_callFrames) override;
 
   bool enabled() const { return m_enabled; }
 
@@ -167,11 +168,14 @@ class V8DebuggerAgentImpl : public protocol::Debugger::Backend {
 
   v8::Isolate* isolate() { return m_isolate; }
 
+  Response currentCallFrames(
+      std::unique_ptr<protocol::Array<protocol::Debugger::CallFrame>>*);
+  std::unique_ptr<protocol::Runtime::RemoteObject> wrapObject(int contextId,
+                                                              v8::Local<v8::Value> val);
+
  private:
   void enableImpl();
 
-  Response currentCallFrames(
-      std::unique_ptr<protocol::Array<protocol::Debugger::CallFrame>>*);
   std::unique_ptr<protocol::Runtime::StackTrace> currentAsyncStackTrace();
   std::unique_ptr<protocol::Runtime::StackTraceId> currentExternalStackTrace();
 

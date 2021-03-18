@@ -1437,8 +1437,8 @@ bool ValueMirror::getProperties(v8::Local<v8::Context> context,
   }
   bool shouldSkipProto = internalType == V8InternalValueType::kScopeList;
 
-  bool formatAccessorsAsProperties =
-      clientFor(context)->formatAccessorsAsProperties(object);
+  bool formatAccessorsAsProperties = false;
+  //    clientFor(context)->formatAccessorsAsProperties(object);
 
   if (object->IsArrayBuffer()) {
     addTypedArrayViews(context, object.As<v8::ArrayBuffer>(), accumulator);
@@ -1816,6 +1816,7 @@ std::unique_ptr<ValueMirror> ValueMirror::create(v8::Local<v8::Context> context,
   if (v8::debug::WasmValue::IsWasmValue(value)) {
     return std::make_unique<WasmValueMirror>(value.As<v8::debug::WasmValue>());
   }
+  /*
   auto clientSubtype = (value->IsUndefined() || value->IsObject())
                            ? clientFor(context)->valueSubtype(value)
                            : nullptr;
@@ -1823,6 +1824,7 @@ std::unique_ptr<ValueMirror> ValueMirror::create(v8::Local<v8::Context> context,
     String16 subtype = toString16(clientSubtype->string());
     return clientMirror(context, value, subtype);
   }
+  */
   if (value->IsUndefined()) {
     return std::make_unique<PrimitiveValueMirror>(
         value, RemoteObject::TypeEnum::Undefined);
