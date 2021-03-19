@@ -168,6 +168,12 @@ static void RecordReplayPrint(const char* format, ...) {
   va_end(arguments);
 }
 
+static __attribute__((noinline)) void BusyWait() {
+  fprintf(stderr, "Busy-waiting... (pid %d)", getpid());
+  volatile int x = 1;
+  while (x) {}
+}
+
 #ifdef DEBUG
 void V8_Fatal(const char* file, int line, const char* format, ...) {
 #else
@@ -210,6 +216,11 @@ void V8_Fatal(const char* format, ...) {
   if (v8::base::g_print_stack_trace) v8::base::g_print_stack_trace();
 
   fflush(stderr);
+
+  if (getenv("RECORD_REPLAY_WAIT_AT_CRASH")) {
+    BusyWait();
+  }
+
   v8::base::OS::Abort();
 }
 
