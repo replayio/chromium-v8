@@ -11459,13 +11459,11 @@ bool ShouldEmitRecordReplayAssertValue() {
 
 } // namespace internal
 
-namespace recordreplay {
-
-bool IsRecordingOrReplaying() {
+bool recordreplay::IsRecordingOrReplaying() {
   return gRecordingOrReplaying;
 }
 
-void Print(const char* format, ...) {
+void recordreplay::Print(const char* format, ...) {
   if (IsRecordingOrReplaying()) {
     va_list args;
     va_start(args, format);
@@ -11475,7 +11473,7 @@ void Print(const char* format, ...) {
 }
 
 extern "C" void V8RecordReplayPrint(const char* format, ...) {
-  if (IsRecordingOrReplaying()) {
+  if (recordreplay::IsRecordingOrReplaying()) {
     va_list args;
     va_start(args, format);
     gRecordReplayPrint(format, args);
@@ -11483,7 +11481,7 @@ extern "C" void V8RecordReplayPrint(const char* format, ...) {
   }
 }
 
-void Diagnostic(const char* format, ...) {
+void recordreplay::Diagnostic(const char* format, ...) {
   if (IsRecordingOrReplaying()) {
     va_list args;
     va_start(args, format);
@@ -11492,7 +11490,7 @@ void Diagnostic(const char* format, ...) {
   }
 }
 
-void Assert(const char* format, ...) {
+void recordreplay::Assert(const char* format, ...) {
   if (IsRecordingOrReplaying()) {
     va_list ap;
     va_start(ap, format);
@@ -11502,7 +11500,7 @@ void Assert(const char* format, ...) {
 }
 
 extern "C" void V8RecordReplayAssert(const char* format, ...) {
-  if (IsRecordingOrReplaying()) {
+  if (recordreplay::IsRecordingOrReplaying()) {
     va_list ap;
     va_start(ap, format);
     gRecordReplayAssert(format, ap);
@@ -11510,17 +11508,17 @@ extern "C" void V8RecordReplayAssert(const char* format, ...) {
   }
 }
 
-void AssertBytes(const char* why, const void* buf, size_t size) {
+void recordreplay::AssertBytes(const char* why, const void* buf, size_t size) {
   if (IsRecordingOrReplaying()) {
     gRecordReplayAssertBytes(why, buf, size);
   }
 }
 
 extern "C" void V8RecordReplayAssertBytes(const char* why, const void* buf, size_t size) {
-  AssertBytes(why, buf, size);
+  recordreplay::AssertBytes(why, buf, size);
 }
 
-uintptr_t RecordReplayValue(const char* why, uintptr_t v) {
+uintptr_t recordreplay::RecordReplayValue(const char* why, uintptr_t v) {
   if (IsRecordingOrReplaying()) {
     return gRecordReplayValue(why, v);
   }
@@ -11528,60 +11526,60 @@ uintptr_t RecordReplayValue(const char* why, uintptr_t v) {
 }
 
 extern "C" uintptr_t V8RecordReplayValue(const char* why, uintptr_t value) {
-  return RecordReplayValue(why, value);
+  return recordreplay::RecordReplayValue(why, value);
 }
 
-void RecordReplayBytes(const char* why, void* buf, size_t size) {
+void recordreplay::RecordReplayBytes(const char* why, void* buf, size_t size) {
   if (IsRecordingOrReplaying()) {
     gRecordReplayBytes(why, buf, size);
   }
 }
 
 extern "C" void V8RecordReplayBytes(const char* why, void* buf, size_t size) {
-  RecordReplayBytes(why, buf, size);
+  recordreplay::RecordReplayBytes(why, buf, size);
 }
 
-bool AreEventsDisallowed() {
+bool recordreplay::AreEventsDisallowed() {
   return gRecordReplayAreEventsDisallowed();
 }
 
-void BeginPassThroughEvents() {
+void recordreplay::BeginPassThroughEvents() {
   if (IsRecordingOrReplaying()) {
     gRecordReplayBeginPassThroughEvents();
   }
 }
 
-void EndPassThroughEvents() {
+void recordreplay::EndPassThroughEvents() {
   if (IsRecordingOrReplaying()) {
     gRecordReplayEndPassThroughEvents();
   }
 }
 
-void BeginDisallowEvents() {
+void recordreplay::BeginDisallowEvents() {
   if (IsRecordingOrReplaying()) {
     gRecordReplayBeginDisallowEvents();
   }
 }
 
-void EndDisallowEvents() {
+void recordreplay::EndDisallowEvents() {
   if (IsRecordingOrReplaying()) {
     gRecordReplayEndDisallowEvents();
   }
 }
 
-void InvalidateRecording(const char* why) {
+void recordreplay::InvalidateRecording(const char* why) {
   if (IsRecordingOrReplaying()) {
     gRecordReplayInvalidateRecording("%s", why);
   }
 }
 
-void NewCheckpoint() {
+void recordreplay::NewCheckpoint() {
   if (IsRecordingOrReplaying()) {
     gRecordReplayNewCheckpoint();
   }
 }
 
-size_t CreateOrderedLock(const char* name) {
+size_t recordreplay::CreateOrderedLock(const char* name) {
   if (IsRecordingOrReplaying()) {
     return gRecordReplayCreateOrderedLock(name);
   }
@@ -11589,37 +11587,37 @@ size_t CreateOrderedLock(const char* name) {
 }
 
 extern "C" size_t V8RecordReplayCreateOrderedLock(const char* name) {
-  return CreateOrderedLock(name);
+  return recordreplay::CreateOrderedLock(name);
 }
 
-void OrderedLock(int lock) {
+void recordreplay::OrderedLock(int lock) {
   if (IsRecordingOrReplaying()) {
     gRecordReplayOrderedLock(lock);
   }
 }
 
 extern "C" void V8RecordReplayOrderedLock(int lock) {
-  OrderedLock(lock);
+  recordreplay::OrderedLock(lock);
 }
 
-void OrderedUnlock(int lock) {
+void recordreplay::OrderedUnlock(int lock) {
   if (IsRecordingOrReplaying()) {
     gRecordReplayOrderedUnlock(lock);
   }
 }
 
 extern "C" void V8RecordReplayOrderedUnlock(int lock) {
-  OrderedUnlock(lock);
+  recordreplay::OrderedUnlock(lock);
 }
 
 extern "C" void V8RecordReplayAddOrderedPthreadMutex(const char* name,
                                                      pthread_mutex_t* mutex) {
-  if (IsRecordingOrReplaying()) {
+  if (recordreplay::IsRecordingOrReplaying()) {
     gRecordReplayAddOrderedPthreadMutex(name, mutex);
   }
 }
 
-bool IsReplaying() {
+bool recordreplay::IsReplaying() {
   if (IsRecordingOrReplaying()) {
     return gRecordReplayIsReplaying();
   }
@@ -11627,34 +11625,34 @@ bool IsReplaying() {
 }
 
 extern "C" int V8RecordReplayIsReplaying() {
-  return IsReplaying();
+  return recordreplay::IsReplaying();
 }
 
-bool IsRecording() {
+bool recordreplay::IsRecording() {
   return !IsReplaying();
 }
 
-void RegisterPointer(void* ptr) {
+void recordreplay::RegisterPointer(void* ptr) {
   if (IsRecordingOrReplaying()) {
     gRecordReplayRegisterPointer(ptr);
   }
 }
 
 extern "C" void V8RecordReplayRegisterPointer(void* ptr) {
-  RegisterPointer(ptr);
+  recordreplay::RegisterPointer(ptr);
 }
 
-void UnregisterPointer(void* ptr) {
+void recordreplay::UnregisterPointer(void* ptr) {
   if (IsRecordingOrReplaying()) {
     gRecordReplayUnregisterPointer(ptr);
   }
 }
 
 extern "C" void V8RecordReplayUnregisterPointer(void* ptr) {
-  UnregisterPointer(ptr);
+  recordreplay::UnregisterPointer(ptr);
 }
 
-int PointerId(void* ptr) {
+int recordreplay::PointerId(void* ptr) {
   if (IsRecordingOrReplaying()) {
     return gRecordReplayPointerId(ptr);
   }
@@ -11662,10 +11660,10 @@ int PointerId(void* ptr) {
 }
 
 extern "C" int V8RecordReplayPointerId(void* ptr) {
-  return PointerId(ptr);
+  return recordreplay::PointerId(ptr);
 }
 
-void* IdPointer(int id) {
+void* recordreplay::IdPointer(int id) {
   CHECK(IsRecordingOrReplaying());
   return gRecordReplayIdPointer(id);
 }
@@ -11690,7 +11688,7 @@ static void RecordReplayLoadSymbol(void* handle, const char* name, T& function) 
 
 static pthread_t gMainThread;
 
-void SetRecordingOrReplaying(void* handle) {
+void recordreplay::SetRecordingOrReplaying(void* handle) {
   gRecordingOrReplaying = true;
   gMainThread = pthread_self();
 
@@ -11740,10 +11738,8 @@ void SetRecordingOrReplaying(void* handle) {
   internal::FLAG_concurrent_sweeping = false;
 }
 
-} // namespace recordreplay
-
 bool IsMainThread() {
-  return recordreplay::gMainThread == pthread_self();
+  return gMainThread == pthread_self();
 }
 
 namespace internal {
