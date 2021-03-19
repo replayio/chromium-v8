@@ -2944,6 +2944,8 @@ static Handle<Object> RecordReplayGetFunctionsInRange(Isolate* isolate,
   return rv;
 }
 
+extern void RecordReplaySetHasInterestingSources();
+
 static void RecordReplayRegisterScript(Handle<Script> script) {
   CHECK(IsMainThread());
 
@@ -2967,7 +2969,11 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
   std::string url;
   if (!script->name().IsUndefined()) {
     std::unique_ptr<char[]> name = String::cast(script->name()).ToCString();
-    url = std::string("file://") + name.get();
+    url = name.get();
+  }
+
+  if (!strncmp(url.c_str(), "http", 4)) {
+    RecordReplaySetHasInterestingSources();
   }
 
   RecordReplayOnNewSource(isolate, id.get(), "scriptSource", url.length() ? url.c_str() : nullptr);

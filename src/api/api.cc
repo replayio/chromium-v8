@@ -11407,6 +11407,9 @@ static void (*gRecordReplayRegisterPointer)(void* ptr);
 static void (*gRecordReplayUnregisterPointer)(void* ptr);
 static int (*gRecordReplayPointerId)(void* ptr);
 static void* (*gRecordReplayIdPointer)(int id);
+static void (*gRecordReplayFinishRecording)();
+static char* (*gGetRecordingId)();
+static char* (*gGetUnusableRecordingReason)();
 
 namespace internal {
 
@@ -11455,6 +11458,22 @@ bool gRecordReplayAssertValues;
 
 bool ShouldEmitRecordReplayAssertValue() {
   return gRecordReplayAssertValues;
+}
+
+// We only finish recordings if there were interesting sources loaded
+// into the process.
+static bool gRecordReplayHasInterestingSources;
+
+void RecordReplaySetHasInterestingSources() {
+  gRecordReplayHasInterestingSources = true;
+}
+
+// For posting tasks to the main thread.
+static Isolate* gMainThreadIsolate;
+
+void RecordReplayOnMainThreadIsolatedCreated(Isolate* isolate) {
+  CHECK(!gMainThreadIsolate);
+  gMainThreadIsolate = isolate;
 }
 
 } // namespace internal
@@ -11686,6 +11705,82 @@ static void RecordReplayLoadSymbol(void* handle, const char* name, T& function) 
   CastPointer(sym, &function);
 }
 
+static bool IsRecordingUnusable() {
+  if (recordreplay::IsRecording()) {
+    char* reason = gGetUnusableRecordingReason();
+    if (reason) {
+      free(reason);
+      return true;
+    }
+  }
+  return false;
+}
+
+// Recording IDs are UUIDs, and have a fixed length.
+static char gRecordingId[40];
+
+static const char* GetRecordingId() {
+  if (IsRecordingUnusable()) {
+    return nullptr;
+  }
+  if (!gRecordingId[0]) {
+    // RecordReplayGetRecordingId() is not currently supported while replaying,
+    // so we embed the recording ID in the recording itself.
+    if (recordreplay::IsRecording()) {
+      char* recordingId = gGetRecordingId();
+      if (!recordingId) {
+        CHECK(IsRecordingUnusable());
+        return nullptr;
+      }
+      CHECK(*recordingId != 0);
+      CHECK(strlen(recordingId) + 1 <= sizeof(gRecordingId));
+      strcpy(gRecordingId, recordingId);
+    }
+    recordreplay::RecordReplayBytes("RecordingId", gRecordingId, sizeof(gRecordingId));
+  }
+  return gRecordingId;
+}
+
+static void DoFinishRecording() {
+  // Add the recording to a recording ID file if specified.
+  char* env = getenv("RECORD_REPLAY_RECORDING_ID_FILE");
+  if (env) {
+    FILE* file = fopen(env, "a");
+    if (file) {
+      const char* recordingId = GetRecordingId();
+      fprintf(file, "%s\n", recordingId);
+      fclose(file);
+      fprintf(stderr, "Found content, saving recording ID %s\n", recordingId);
+    } else {
+      fprintf(stderr, "Error: Could not open %s for adding recording ID", env);
+    }
+  }
+
+  gRecordReplayFinishRecording();
+}
+
+class FinishRecordingTask final : public Task {
+ public:
+  void Run() final { DoFinishRecording(); }
+};
+
+extern "C" V8_EXPORT void V8RecordReplayFinishRecording() {
+  if (recordreplay::IsRecordingOrReplaying()) {
+    if (internal::gRecordReplayHasInterestingSources) {
+      if (IsMainThread()) {
+        DoFinishRecording();
+      } else {
+        CHECK(internal::gMainThreadIsolate);
+        auto runner = internal::V8::GetCurrentPlatform()->GetForegroundTaskRunner((Isolate*)internal::gMainThreadIsolate);
+        runner->PostTask(std::make_unique<FinishRecordingTask>());
+        sleep(UINT32_MAX);
+      }
+    } else {
+      recordreplay::InvalidateRecording("No interesting content");
+    }
+  }
+}
+
 static pthread_t gMainThread;
 
 void recordreplay::SetRecordingOrReplaying(void* handle) {
@@ -11720,6 +11815,9 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   RecordReplayLoadSymbol(handle, "RecordReplayUnregisterPointer", gRecordReplayUnregisterPointer);
   RecordReplayLoadSymbol(handle, "RecordReplayPointerId", gRecordReplayPointerId);
   RecordReplayLoadSymbol(handle, "RecordReplayIdPointer", gRecordReplayIdPointer);
+  RecordReplayLoadSymbol(handle, "RecordReplayFinishRecording", gRecordReplayFinishRecording);
+  RecordReplayLoadSymbol(handle, "RecordReplayGetRecordingId", gGetRecordingId);
+  RecordReplayLoadSymbol(handle, "RecordReplayGetUnusableRecordingReason", gGetUnusableRecordingReason);
 
   void (*setDefaultCommandCallback)(char* (*callback)(const char* command, const char* params));
   RecordReplayLoadSymbol(handle, "RecordReplaySetDefaultCommandCallback", setDefaultCommandCallback);
