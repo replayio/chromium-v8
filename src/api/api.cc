@@ -11836,6 +11836,10 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   internal::FLAG_concurrent_sweeping = false;
 }
 
+extern "C" void V8SetRecordingOrReplaying(void* handle) {
+  recordreplay::SetRecordingOrReplaying(handle);
+}
+
 bool IsMainThread() {
   return gMainThread == pthread_self();
 }
