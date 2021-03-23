@@ -11482,6 +11482,10 @@ bool recordreplay::IsRecordingOrReplaying() {
   return gRecordingOrReplaying;
 }
 
+extern "C" bool V8IsRecordingOrReplaying() {
+  return recordreplay::IsRecordingOrReplaying();
+}
+
 void recordreplay::Print(const char* format, ...) {
   if (IsRecordingOrReplaying()) {
     va_list args;
@@ -11568,10 +11572,18 @@ void recordreplay::BeginPassThroughEvents() {
   }
 }
 
+extern "C" void V8RecordReplayBeginPassThroughEvents() {
+  recordreplay::BeginPassThroughEvents();
+}
+
 void recordreplay::EndPassThroughEvents() {
   if (IsRecordingOrReplaying()) {
     gRecordReplayEndPassThroughEvents();
   }
+}
+
+extern "C" void V8RecordReplayEndPassThroughEvents() {
+  recordreplay::EndPassThroughEvents();
 }
 
 void recordreplay::BeginDisallowEvents() {
@@ -11643,7 +11655,7 @@ bool recordreplay::IsReplaying() {
   return false;
 }
 
-extern "C" int V8RecordReplayIsReplaying() {
+extern "C" int V8IsReplaying() {
   return recordreplay::IsReplaying();
 }
 
@@ -11685,6 +11697,10 @@ extern "C" int V8RecordReplayPointerId(void* ptr) {
 void* recordreplay::IdPointer(int id) {
   CHECK(IsRecordingOrReplaying());
   return gRecordReplayIdPointer(id);
+}
+
+extern "C" void* V8RecordReplayIdPointer(int id) {
+  return recordreplay::IdPointer(id);
 }
 
 template <typename Src, typename Dst>
