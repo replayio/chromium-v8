@@ -11450,7 +11450,12 @@ void RecordReplayOnExceptionUnwind(Isolate* isolate) {
   }
 }
 
+static bool gHasCheckpoint;
+
 uint64_t* RecordReplayProgressCounter() {
+  if (!gHasCheckpoint) {
+    recordreplay::Print("ERROR_INCREMENT_PROGRESS_COUNTER");
+  }
   return gRecordReplayProgressCounter();
 }
 
@@ -11461,7 +11466,6 @@ void RecordReplayInstrument(const char* kind, const char* function, int offset) 
 extern char* CommandCallback(const char* command, const char* params);
 extern void ClearPauseDataCallback();
 
-bool gRecordReplayInstrumentNodeInternals;
 bool gRecordReplayAssertValues;
 
 bool ShouldEmitRecordReplayAssertValue() {
@@ -11626,16 +11630,27 @@ void recordreplay::InvalidateRecording(const char* why) {
   }
 }
 
+// Invoke aCallback, making sure that the isolate has a context by switching
+// to the default context if necessary.
+static void CallWithActiveContext(void (*aCallback)()) {
+  CHECK(internal::gDefaultContext);
+  internal::Isolate* isolate = internal::gMainThreadIsolate;
+  if (isolate->context().is_null()) {
+    Local<v8::Context> cx = internal::gDefaultContext->Get((v8::Isolate*)isolate);
+    i::Handle<i::Context> env = Utils::OpenHandle(*cx);
+    internal::SaveAndSwitchContext ssc(isolate, *env);
+    aCallback();
+  } else {
+    aCallback();
+  }
+}
+
 void recordreplay::NewCheckpoint() {
   // We can only create checkpoints if a context has been created. A context is
   // needed to process commands which we might get from the driver.
   if (IsRecordingOrReplaying() && IsMainThread() && internal::gDefaultContext) {
-    // If the isolate has no current context, use the default one.
-    internal::Isolate* isolate = internal::gMainThreadIsolate;
-    Local<v8::Context> cx = internal::gDefaultContext->Get((v8::Isolate*)isolate);
-    i::Handle<i::Context> env = Utils::OpenHandle(*cx);
-    internal::SaveAndSwitchContext ssc(isolate, *env);
-    gRecordReplayNewCheckpoint();
+    CallWithActiveContext(gRecordReplayNewCheckpoint);
+    internal::gHasCheckpoint = true;
   }
 }
 
@@ -11809,7 +11824,7 @@ static void DoFinishRecording() {
     }
   }
 
-  gRecordReplayFinishRecording();
+  CallWithActiveContext(gRecordReplayFinishRecording);
 }
 
 class FinishRecordingTask final : public Task {
@@ -11880,7 +11895,6 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   RecordReplayLoadSymbol(handle, "RecordReplaySetClearPauseDataCallback", setClearPauseDataCallback);
   setClearPauseDataCallback(i::ClearPauseDataCallback);
 
-  internal::gRecordReplayInstrumentNodeInternals = !!getenv("RECORD_REPLAY_INSTRUMENT_NODE");
   internal::gRecordReplayAssertValues = !!getenv("RECORD_REPLAY_JS_ASSERTS");
 
   // Set flags to disable non-deterministic posting of tasks to other threads.

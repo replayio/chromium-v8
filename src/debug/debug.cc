@@ -2946,6 +2946,10 @@ static Handle<Object> RecordReplayGetFunctionsInRange(Isolate* isolate,
 
 extern void RecordReplaySetHasInterestingSources();
 
+static bool IgnoreScriptByURL(const char* aURL) {
+  return strncmp(aURL, "http", 4);
+}
+
 static void RecordReplayRegisterScript(Handle<Script> script) {
   CHECK(IsMainThread());
 
@@ -2972,10 +2976,11 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
     url = name.get();
   }
 
-  if (!strncmp(url.c_str(), "http", 4)) {
-    RecordReplaySetHasInterestingSources();
+  if (IgnoreScriptByURL(url.c_str())) {
+    return;
   }
 
+  RecordReplaySetHasInterestingSources();
   RecordReplayOnNewSource(isolate, id.get(), "scriptSource", url.length() ? url.c_str() : nullptr);
 
   // If this is the first script we were notified about, look for other scripts
@@ -3079,8 +3084,6 @@ void ClearPauseDataCallback() {
   }
 }
 
-extern bool gRecordReplayInstrumentNodeInternals;
-
 typedef std::unordered_map<int, bool> ScriptIdIgnoreMap;
 static ScriptIdIgnoreMap* gShouldIgnoreScripts;
 
@@ -3090,26 +3093,7 @@ static bool RecordReplayIgnoreScriptRaw(Handle<Script> script) {
   }
 
   std::unique_ptr<char[]> name = String::cast(script->name()).ToCString();
-
-  if (gRecordReplayInstrumentNodeInternals) {
-    // When exposing node internals, we still ignore the record/replay specific
-    // scripts, as these will have on stack frames when processing commands.
-    if (strstr(name.get(), "node:internal/recordreplay")) {
-      return true;
-    }
-
-    // This causes problems with stack size mismatches where the main module
-    // has been entered but the frame does not appear on stack. The underlying
-    // cause is unknown.
-    if (strstr(name.get(), "node:internal/main/run_main_module")) {
-      return true;
-    }
-
-    return false;
-  }
-
-  // Normally we ignore node internal scripts entirely.
-  return !strncmp(name.get(), "node:", 5);
+  return IgnoreScriptByURL(name.get());
 }
 
 bool RecordReplayIgnoreScript(Handle<Script> script) {
