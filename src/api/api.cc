@@ -6186,15 +6186,23 @@ Local<Context> NewContext(
   return Utils::ToLocal(scope.CloseAndEscape(env));
 }
 
+namespace internal {
+static void RecordReplayOnNewContext(v8::Isolate* isolate, v8::Local<v8::Context> cx);
+}
+
 Local<Context> v8::Context::New(
     v8::Isolate* external_isolate, v8::ExtensionConfiguration* extensions,
     v8::MaybeLocal<ObjectTemplate> global_template,
     v8::MaybeLocal<Value> global_object,
     DeserializeInternalFieldsCallback internal_fields_deserializer,
     v8::MicrotaskQueue* microtask_queue) {
-  return NewContext(external_isolate, extensions, global_template,
-                    global_object, 0, internal_fields_deserializer,
-                    microtask_queue);
+  Local<Context> rv = NewContext(external_isolate, extensions, global_template,
+                                 global_object, 0, internal_fields_deserializer,
+                                 microtask_queue);
+  if (recordreplay::IsRecordingOrReplaying()) {
+    internal::RecordReplayOnNewContext(external_isolate, rv);
+  }
+  return rv;
 }
 
 MaybeLocal<Context> v8::Context::FromSnapshot(
@@ -11476,6 +11484,14 @@ void RecordReplayOnMainThreadIsolatedCreated(Isolate* isolate) {
   gMainThreadIsolate = isolate;
 }
 
+static Eternal<v8::Context>* gDefaultContext;
+
+static void RecordReplayOnNewContext(v8::Isolate* isolate, v8::Local<v8::Context> cx) {
+  if (IsMainThread() && !gDefaultContext) {
+    gDefaultContext = new Eternal<v8::Context>(isolate, cx);
+  }
+}
+
 } // namespace internal
 
 bool recordreplay::IsRecordingOrReplaying() {
@@ -11528,6 +11544,12 @@ extern "C" void V8RecordReplayAssert(const char* format, ...) {
     va_start(ap, format);
     gRecordReplayAssert(format, ap);
     va_end(ap);
+  }
+}
+
+extern "C" void V8RecordReplayAssertVA(const char* format, va_list args) {
+  if (recordreplay::IsRecordingOrReplaying()) {
+    gRecordReplayAssert(format, args);
   }
 }
 
@@ -11605,9 +11627,20 @@ void recordreplay::InvalidateRecording(const char* why) {
 }
 
 void recordreplay::NewCheckpoint() {
-  if (IsRecordingOrReplaying()) {
+  // We can only create checkpoints if a context has been created. A context is
+  // needed to process commands which we might get from the driver.
+  if (IsRecordingOrReplaying() && IsMainThread() && internal::gDefaultContext) {
+    // If the isolate has no current context, use the default one.
+    internal::Isolate* isolate = internal::gMainThreadIsolate;
+    Local<v8::Context> cx = internal::gDefaultContext->Get((v8::Isolate*)isolate);
+    i::Handle<i::Context> env = Utils::OpenHandle(*cx);
+    internal::SaveAndSwitchContext ssc(isolate, *env);
     gRecordReplayNewCheckpoint();
   }
+}
+
+extern "C" void V8RecordReplayNewCheckpoint() {
+  recordreplay::NewCheckpoint();
 }
 
 size_t recordreplay::CreateOrderedLock(const char* name) {
@@ -11655,12 +11688,16 @@ bool recordreplay::IsReplaying() {
   return false;
 }
 
-extern "C" int V8IsReplaying() {
+extern "C" bool V8IsReplaying() {
   return recordreplay::IsReplaying();
 }
 
 bool recordreplay::IsRecording() {
   return !IsReplaying();
+}
+
+extern "C" bool V8IsRecording() {
+  return recordreplay::IsRecording();
 }
 
 void recordreplay::RegisterPointer(void* ptr) {
