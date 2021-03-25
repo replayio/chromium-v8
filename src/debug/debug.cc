@@ -2581,9 +2581,22 @@ Handle<Object> RecordReplayGetSourceContents(Isolate* isolate, Handle<Object> pa
   int script_id = GetSourceIdProperty(isolate, params);
   Handle<Script> script = GetScript(isolate, script_id);
 
+  Script::PositionInfo info;
+  Script::GetPositionInfo(script, 0, &info, Script::WITH_OFFSET);
+
+  // Pad the start of the source with lines to adjust for its starting position.
+  // Note that we don't pad the starting line with blank spaces so that columns
+  // match up, in order to match the spidermonkey implementation.
+  std::string padded_source;
+  for (int i = 0; i < info.line; i++) {
+    padded_source += "\n";
+  }
+
   Handle<String> source(String::cast(script->source()), isolate);
+  padded_source += source->ToCString().get();
+
   Handle<JSObject> obj = NewPlainObject(isolate);
-  SetProperty(isolate, obj, "contents", source);
+  SetProperty(isolate, obj, "contents", padded_source.c_str());
   SetProperty(isolate, obj, "contentType", "text/javascript");
   return obj;
 }
@@ -2944,6 +2957,62 @@ static Handle<Object> RecordReplayGetFunctionsInRange(Isolate* isolate,
   return rv;
 }
 
+struct HTMLParseData {
+  void* token_;
+  std::string url_;
+  std::string contents_;
+  HTMLParseData(void* token, const char* url) : token_(token), url_(url) {}
+};
+typedef std::vector<HTMLParseData> HTMLParseDataVector;
+static HTMLParseDataVector* gHTMLParses;
+
+extern "C" void V8RecordReplayHTMLParseStart(void* token, const char* url) {
+  if (!gHTMLParses) {
+    gHTMLParses = new HTMLParseDataVector();
+  }
+  gHTMLParses->emplace_back(token, url);
+}
+
+extern "C" void V8RecordReplayHTMLParseFinish(void* token) {
+  if (gHTMLParses) {
+    for (HTMLParseData& data : *gHTMLParses) {
+      if (data.token_ == token) {
+        data.token_ = nullptr;
+      }
+    }
+  }
+}
+
+extern "C" void V8RecordReplayHTMLParseAddData(void* token, const char* text) {
+  if (gHTMLParses) {
+    for (HTMLParseData& data : *gHTMLParses) {
+      if (data.token_ == token) {
+        data.contents_ += text;
+        break;
+      }
+    }
+  }
+}
+
+static Handle<Object> RecordReplayGetHTMLSource(Isolate* isolate, Handle<Object> params) {
+  Handle<Object> url_raw = GetProperty(isolate, params, "url");
+  std::unique_ptr<char[]> url_chars = String::cast(*url_raw).ToCString();
+
+  std::string contents;
+  if (gHTMLParses) {
+    for (const HTMLParseData& data : *gHTMLParses) {
+      if (data.url_ == url_chars.get()) {
+        contents = data.contents_;
+        break;
+      }
+    }
+  }
+
+  Handle<JSObject> rv = NewPlainObject(isolate);
+  SetProperty(isolate, rv, "contents", contents.c_str());
+  return rv;
+}
+
 extern void RecordReplaySetHasInterestingSources();
 
 static bool IgnoreScriptByURL(const char* aURL) {
@@ -2981,7 +3050,16 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
   }
 
   RecordReplaySetHasInterestingSources();
-  RecordReplayOnNewSource(isolate, id.get(), "scriptSource", url.length() ? url.c_str() : nullptr);
+
+  // It's not clear how we can distinguish inline scripts from HTML files vs.
+  // scripts loaded in other ways here. Use the initial position of the script
+  // to distinguish these cases: if the starting position is anything other
+  // than line zero / column zero, the script must be inlined into another file.
+  Script::PositionInfo start_info;
+  Script::GetPositionInfo(script, 0, &start_info, Script::WITH_OFFSET);
+  const char* kind = (start_info.line || start_info.column) ? "inlineScript" : "scriptSource";
+
+  RecordReplayOnNewSource(isolate, id.get(), kind, url.length() ? url.c_str() : nullptr);
 
   // If this is the first script we were notified about, look for other scripts
   // that were already added without a notification. It would be nice to figure
@@ -3017,6 +3095,7 @@ static InternalCommandCallback gInternalCommandCallbacks[] = {
   { "Target.convertLocationToFunctionOffset", RecordReplayConvertLocationToFunctionOffset },
   { "Target.convertFunctionOffsetToLocation", RecordReplayConvertFunctionOffsetToLocation },
   { "Target.getFunctionsInRange", RecordReplayGetFunctionsInRange },
+  { "Target.getHTMLSource", RecordReplayGetHTMLSource },
 };
 
 // Function to invoke on command callbacks which we don't have a C++ implementation for.
