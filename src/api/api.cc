@@ -11453,9 +11453,7 @@ void RecordReplayOnExceptionUnwind(Isolate* isolate) {
 static bool gHasCheckpoint;
 
 uint64_t* RecordReplayProgressCounter() {
-  if (!gHasCheckpoint) {
-    recordreplay::Print("ERROR_INCREMENT_PROGRESS_COUNTER");
-  }
+  CHECK(gHasCheckpoint);
   return gRecordReplayProgressCounter();
 }
 
@@ -11521,6 +11519,12 @@ extern "C" void V8RecordReplayPrint(const char* format, ...) {
     va_start(args, format);
     gRecordReplayPrint(format, args);
     va_end(args);
+  }
+}
+
+extern "C" void V8RecordReplayPrintVA(const char* format, va_list args) {
+  if (recordreplay::IsRecordingOrReplaying()) {
+    gRecordReplayPrint(format, args);
   }
 }
 
