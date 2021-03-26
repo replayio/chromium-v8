@@ -11411,6 +11411,7 @@ static void (*gRecordReplayAddOrderedPthreadMutex)(const char* name, pthread_mut
 static void (*gRecordReplayInvalidateRecording)(const char* format, ...);
 static void (*gRecordReplayNewCheckpoint)();
 static bool (*gRecordReplayIsReplaying)();
+static bool (*gRecordReplayHasDivergedFromRecording)();
 static void (*gRecordReplayRegisterPointer)(void* ptr);
 static void (*gRecordReplayUnregisterPointer)(void* ptr);
 static int (*gRecordReplayPointerId)(void* ptr);
@@ -11719,6 +11720,13 @@ extern "C" bool V8IsRecording() {
   return recordreplay::IsRecording();
 }
 
+extern "C" bool V8RecordReplayHasDivergedFromRecording() {
+  if (recordreplay::IsRecordingOrReplaying()) {
+    return gRecordReplayHasDivergedFromRecording();
+  }
+  return false;
+}
+
 void recordreplay::RegisterPointer(void* ptr) {
   if (IsRecordingOrReplaying()) {
     gRecordReplayRegisterPointer(ptr);
@@ -11883,6 +11891,7 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   RecordReplayLoadSymbol(handle, "RecordReplayOrderedUnlock", gRecordReplayOrderedUnlock);
   RecordReplayLoadSymbol(handle, "RecordReplayAddOrderedPthreadMutex", gRecordReplayAddOrderedPthreadMutex);
   RecordReplayLoadSymbol(handle, "RecordReplayIsReplaying", gRecordReplayIsReplaying);
+  RecordReplayLoadSymbol(handle, "RecordReplayHasDivergedFromRecording", gRecordReplayHasDivergedFromRecording);
   RecordReplayLoadSymbol(handle, "RecordReplayRegisterPointer", gRecordReplayRegisterPointer);
   RecordReplayLoadSymbol(handle, "RecordReplayUnregisterPointer", gRecordReplayUnregisterPointer);
   RecordReplayLoadSymbol(handle, "RecordReplayPointerId", gRecordReplayPointerId);
@@ -11905,6 +11914,7 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   // We don't support this yet when recording/replaying.
   internal::FLAG_concurrent_array_buffer_sweeping = false;
   internal::FLAG_concurrent_sweeping = false;
+  internal::FLAG_parallel_scavenge = false;
 }
 
 extern "C" void V8SetRecordingOrReplaying(void* handle) {
