@@ -11925,6 +11925,7 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   internal::FLAG_concurrent_array_buffer_sweeping = false;
   internal::FLAG_concurrent_sweeping = false;
   internal::FLAG_parallel_scavenge = false;
+  internal::FLAG_scavenge_task = false;
 }
 
 extern "C" void V8SetRecordingOrReplaying(void* handle) {
