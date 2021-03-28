@@ -973,6 +973,12 @@ void RecordReplayAssertScriptedCaller(Isolate* isolate, const char* aWhy) {
   }
 }
 
+// Assertion and instrumentation site indexes embedded in bytecodes are offset
+// by this value. This forces the bytecode emitter to always use four bytes to
+// encode the index, so that bytecode offsets will be stable between recording
+// and replaying (or different replays) even if the indexes themselves aren't.
+static const int BytecodeSiteOffset = 1 << 16;
+
 // Locations for each assertion site, filled in lazily.
 typedef std::vector<std::string> StringVector;
 static StringVector* gAssertionSites;
@@ -984,7 +990,7 @@ int RegisterAssertValueSite() {
   }
   int index = (int)gAssertionSites->size();
   gAssertionSites->push_back("");
-  return index;
+  return index + BytecodeSiteOffset;
 }
 
 extern std::string RecordReplayBasicValueContents(Handle<Object> value);
@@ -1007,7 +1013,8 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertValue) {
     return *value;
   }
 
-  CHECK(gAssertionSites && index < (int)gAssertionSites->size());
+  index -= BytecodeSiteOffset;
+  CHECK(gAssertionSites && (size_t)index < gAssertionSites->size());
   std::string& location = (*gAssertionSites)[index];
 
   if (!location.length()) {
@@ -1044,27 +1051,31 @@ int RegisterInstrumentationSite(const char* kind, int source_position,
   if (!gInstrumentationSites) {
     gInstrumentationSites = new InstrumentationSiteVector();
   }
+  int index = (int)gInstrumentationSites->size();
   gInstrumentationSites->push_back(site);
-  return (int)gInstrumentationSites->size() - 1;
+  return index + BytecodeSiteOffset;
 }
 
 const char* InstrumentationSiteKind(int index) {
   CHECK(IsMainThread());
-  DCHECK(index < (int32_t)gInstrumentationSites->size());
+  index -= BytecodeSiteOffset;
+  CHECK((size_t)index < gInstrumentationSites->size());
   InstrumentationSite& site = (*gInstrumentationSites)[index];
   return site.kind_;
 }
 
 int InstrumentationSiteSourcePosition(int index) {
   CHECK(IsMainThread());
-  DCHECK(index < (int32_t)gInstrumentationSites->size());
+  index -= BytecodeSiteOffset;
+  CHECK((size_t)index < gInstrumentationSites->size());
   InstrumentationSite& site = (*gInstrumentationSites)[index];
   return site.source_position_;
 }
 
 int InstrumentationSiteBytecodeOffset(int index) {
   CHECK(IsMainThread());
-  DCHECK(index < (int32_t)gInstrumentationSites->size());
+  index -= BytecodeSiteOffset;
+  CHECK((size_t)index < gInstrumentationSites->size());
   InstrumentationSite& site = (*gInstrumentationSites)[index];
   return site.bytecode_offset_;
 }
@@ -1122,7 +1133,8 @@ RUNTIME_FUNCTION(Runtime_RecordReplayInstrumentation) {
     return ReadOnlyRoots(isolate).undefined_value();
   }
 
-  DCHECK(index < (int32_t)gInstrumentationSites->size());
+  index -= BytecodeSiteOffset;
+  CHECK((size_t)index < gInstrumentationSites->size());
   InstrumentationSite& site = (*gInstrumentationSites)[index];
 
   if (!site.function_id_.length()) {
