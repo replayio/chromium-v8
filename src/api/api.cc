@@ -11420,6 +11420,7 @@ static char* (*gGetUnusableRecordingReason)();
 static size_t (*gRecordReplayPaintStart)();
 static void (*gRecordReplayPaintFinished)(size_t bookmark);
 static void (*gRecordReplaySetPaintCallback)(char* (*callback)(const char*, int));
+static void (*gRecordReplayOnDebuggerStatement)();
 
 namespace internal {
 
@@ -11774,6 +11775,11 @@ extern "C" void V8RecordReplaySetPaintCallback(char* (*callback)(const char*, in
   gRecordReplaySetPaintCallback(callback);
 }
 
+extern "C" void V8RecordReplayOnDebuggerStatement() {
+  CHECK(recordreplay::IsRecordingOrReplaying());
+  gRecordReplayOnDebuggerStatement();
+}
+
 template <typename Src, typename Dst>
 static inline void CastPointer(const Src src, Dst* dst) {
   static_assert(sizeof(Src) == sizeof(uintptr_t), "bad size");
@@ -11909,6 +11915,7 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   RecordReplayLoadSymbol(handle, "RecordReplayPaintStart", gRecordReplayPaintStart);
   RecordReplayLoadSymbol(handle, "RecordReplayPaintFinished", gRecordReplayPaintFinished);
   RecordReplayLoadSymbol(handle, "RecordReplaySetPaintCallback", gRecordReplaySetPaintCallback);
+  RecordReplayLoadSymbol(handle, "RecordReplayOnDebuggerStatement", gRecordReplayOnDebuggerStatement);
 
   void (*setDefaultCommandCallback)(char* (*callback)(const char* command, const char* params));
   RecordReplayLoadSymbol(handle, "RecordReplaySetDefaultCommandCallback", setDefaultCommandCallback);
