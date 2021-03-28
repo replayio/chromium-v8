@@ -11417,6 +11417,9 @@ static void* (*gRecordReplayIdPointer)(int id);
 static void (*gRecordReplayFinishRecording)();
 static char* (*gGetRecordingId)();
 static char* (*gGetUnusableRecordingReason)();
+static size_t (*gRecordReplayPaintStart)();
+static void (*gRecordReplayPaintFinished)(size_t bookmark);
+static void (*gRecordReplaySetPaintCallback)(char* (*callback)(const char*, int));
 
 namespace internal {
 
@@ -11491,6 +11494,12 @@ static void RecordReplayOnNewContext(v8::Isolate* isolate, v8::Local<v8::Context
   if (IsMainThread() && !gDefaultContext) {
     gDefaultContext = new Eternal<v8::Context>(isolate, cx);
   }
+}
+
+Handle<Context> RecordReplayGetDefaultContext(Isolate* isolate) {
+  CHECK(IsMainThread() && gDefaultContext);
+  Local<v8::Context> cx = gDefaultContext->Get((v8::Isolate*)isolate);
+  return Utils::OpenHandle(*cx);
 }
 
 } // namespace internal
@@ -11633,26 +11642,11 @@ void recordreplay::InvalidateRecording(const char* why) {
   }
 }
 
-// Invoke aCallback, making sure that the isolate has a context by switching
-// to the default context if necessary.
-static void CallWithActiveContext(void (*aCallback)()) {
-  CHECK(internal::gDefaultContext);
-  internal::Isolate* isolate = internal::gMainThreadIsolate;
-  if (isolate->context().is_null()) {
-    Local<v8::Context> cx = internal::gDefaultContext->Get((v8::Isolate*)isolate);
-    i::Handle<i::Context> env = Utils::OpenHandle(*cx);
-    internal::SaveAndSwitchContext ssc(isolate, *env);
-    aCallback();
-  } else {
-    aCallback();
-  }
-}
-
 void recordreplay::NewCheckpoint() {
   // We can only create checkpoints if a context has been created. A context is
   // needed to process commands which we might get from the driver.
   if (IsRecordingOrReplaying() && IsMainThread() && internal::gDefaultContext) {
-    CallWithActiveContext(gRecordReplayNewCheckpoint);
+    gRecordReplayNewCheckpoint();
     internal::gHasCheckpoint = true;
   }
 }
@@ -11765,6 +11759,21 @@ extern "C" void* V8RecordReplayIdPointer(int id) {
   return recordreplay::IdPointer(id);
 }
 
+extern "C" size_t V8RecordReplayPaintStart() {
+  CHECK(recordreplay::IsRecordingOrReplaying());
+  return gRecordReplayPaintStart();
+}
+
+extern "C" void V8RecordReplayPaintFinished(size_t bookmark) {
+  CHECK(recordreplay::IsRecordingOrReplaying());
+  gRecordReplayPaintFinished(bookmark);
+}
+
+extern "C" void V8RecordReplaySetPaintCallback(char* (*callback)(const char*, int)) {
+  CHECK(recordreplay::IsRecordingOrReplaying());
+  gRecordReplaySetPaintCallback(callback);
+}
+
 template <typename Src, typename Dst>
 static inline void CastPointer(const Src src, Dst* dst) {
   static_assert(sizeof(Src) == sizeof(uintptr_t), "bad size");
@@ -11834,7 +11843,7 @@ static void DoFinishRecording() {
     }
   }
 
-  CallWithActiveContext(gRecordReplayFinishRecording);
+  gRecordReplayFinishRecording();
 }
 
 class FinishRecordingTask final : public Task {
@@ -11897,6 +11906,9 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   RecordReplayLoadSymbol(handle, "RecordReplayFinishRecording", gRecordReplayFinishRecording);
   RecordReplayLoadSymbol(handle, "RecordReplayGetRecordingId", gGetRecordingId);
   RecordReplayLoadSymbol(handle, "RecordReplayGetUnusableRecordingReason", gGetUnusableRecordingReason);
+  RecordReplayLoadSymbol(handle, "RecordReplayPaintStart", gRecordReplayPaintStart);
+  RecordReplayLoadSymbol(handle, "RecordReplayPaintFinished", gRecordReplayPaintFinished);
+  RecordReplayLoadSymbol(handle, "RecordReplaySetPaintCallback", gRecordReplaySetPaintCallback);
 
   void (*setDefaultCommandCallback)(char* (*callback)(const char* command, const char* params));
   RecordReplayLoadSymbol(handle, "RecordReplaySetDefaultCommandCallback", setDefaultCommandCallback);

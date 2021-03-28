@@ -3101,10 +3101,21 @@ static InternalCommandCallback gInternalCommandCallbacks[] = {
 // Function to invoke on command callbacks which we don't have a C++ implementation for.
 static Eternal<Value>* gCommandCallback;
 
+extern Handle<Context> RecordReplayGetDefaultContext(Isolate* isolate);
+
 char* CommandCallback(const char* command, const char* params) {
   CHECK(IsMainThread());
 
   Isolate* isolate = Isolate::Current();
+
+  // Make sure that the isolate has a context by switching to the default
+  // context if necessary.
+  base::Optional<SaveAndSwitchContext> ssc;
+  if (isolate->context().is_null()) {
+    Handle<Context> context = RecordReplayGetDefaultContext(isolate);
+    ssc.emplace(isolate, *context);
+  }
+
   HandleScope scope(isolate);
 
   Handle<Object> undefined = isolate->factory()->undefined_value();
