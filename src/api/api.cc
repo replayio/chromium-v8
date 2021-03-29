@@ -3041,6 +3041,12 @@ int Message::ErrorLevel() const {
   return self->error_level();
 }
 
+extern "C" int V8GetMessageRecordReplayBookmark(v8::Local<v8::Message> message) {
+  auto self = Utils::OpenHandle(*message);
+  ASSERT_NO_SCRIPT_NO_EXCEPTION(self->GetIsolate());
+  return self->record_replay_bookmark();
+}
+
 int Message::GetStartColumn() const {
   auto self = Utils::OpenHandle(this);
   i::Isolate* isolate = self->GetIsolate();
@@ -11417,6 +11423,7 @@ static void* (*gRecordReplayIdPointer)(int id);
 static void (*gRecordReplayFinishRecording)();
 static char* (*gGetRecordingId)();
 static char* (*gGetUnusableRecordingReason)();
+static size_t (*gRecordReplayNewBookmark)();
 static size_t (*gRecordReplayPaintStart)();
 static void (*gRecordReplayPaintFinished)(size_t bookmark);
 static void (*gRecordReplaySetPaintCallback)(char* (*callback)(const char*, int));
@@ -11760,6 +11767,13 @@ extern "C" void* V8RecordReplayIdPointer(int id) {
   return recordreplay::IdPointer(id);
 }
 
+extern "C" size_t V8RecordReplayNewBookmark() {
+  if (recordreplay::IsRecordingOrReplaying()) {
+    return gRecordReplayNewBookmark();
+  }
+  return 0;
+}
+
 extern "C" size_t V8RecordReplayPaintStart() {
   CHECK(recordreplay::IsRecordingOrReplaying());
   return gRecordReplayPaintStart();
@@ -11912,6 +11926,7 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   RecordReplayLoadSymbol(handle, "RecordReplayFinishRecording", gRecordReplayFinishRecording);
   RecordReplayLoadSymbol(handle, "RecordReplayGetRecordingId", gGetRecordingId);
   RecordReplayLoadSymbol(handle, "RecordReplayGetUnusableRecordingReason", gGetUnusableRecordingReason);
+  RecordReplayLoadSymbol(handle, "RecordReplayNewBookmark", gRecordReplayNewBookmark);
   RecordReplayLoadSymbol(handle, "RecordReplayPaintStart", gRecordReplayPaintStart);
   RecordReplayLoadSymbol(handle, "RecordReplayPaintFinished", gRecordReplayPaintFinished);
   RecordReplayLoadSymbol(handle, "RecordReplaySetPaintCallback", gRecordReplaySetPaintCallback);
