@@ -1409,6 +1409,11 @@ Response V8DebuggerAgentImpl::setBlackboxedRanges(
   return Response::Success();
 }
 
+Response V8DebuggerAgentImpl::getCallFrames(
+    std::unique_ptr<protocol::Array<protocol::Debugger::CallFrame>>* out_callFrames) {
+  return currentCallFrames(out_callFrames);
+}
+
 Response V8DebuggerAgentImpl::currentCallFrames(
     std::unique_ptr<Array<CallFrame>>* result) {
   if (!isPaused()) {
@@ -1519,7 +1524,8 @@ V8DebuggerAgentImpl::currentExternalStackTrace() {
 }
 
 bool V8DebuggerAgentImpl::isPaused() const {
-  return m_debugger->isPausedInContextGroup(m_session->contextGroupId());
+  return true;
+  //return m_debugger->isPausedInContextGroup(m_session->contextGroupId());
 }
 
 static String16 getScriptLanguage(const V8DebuggerScript& script) {
@@ -1958,4 +1964,16 @@ Response V8DebuggerAgentImpl::processSkipList(
   m_skipList = std::move(skipListInit);
   return Response::Success();
 }
+
+std::unique_ptr<protocol::Runtime::RemoteObject>
+V8DebuggerAgentImpl::wrapObject(int context_id, v8::Local<v8::Value> val) {
+  InjectedScript* injectedScript = nullptr;
+  m_session->findInjectedScript(context_id, injectedScript);
+
+  std::unique_ptr<protocol::Runtime::RemoteObject> rv;
+  injectedScript->wrapObject(val, kBacktraceObjectGroup,
+                             WrapMode::kNoPreview, &rv);
+  return rv;
+}
+
 }  // namespace v8_inspector

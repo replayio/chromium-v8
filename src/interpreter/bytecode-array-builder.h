@@ -464,6 +464,11 @@ class V8_EXPORT_PRIVATE BytecodeArrayBuilder final {
   // Increment the block counter at the given slot (block code coverage).
   BytecodeArrayBuilder& IncBlockCounter(int slot);
 
+  BytecodeArrayBuilder& RecordReplayIncExecutionProgressCounter();
+  BytecodeArrayBuilder& RecordReplayAssertValue();
+  BytecodeArrayBuilder& RecordReplayInstrumentation(const char* kind,
+                                                    int source_position = kNoSourcePosition);
+
   // Complex flow control.
   BytecodeArrayBuilder& ForInEnumerate(Register receiver);
   BytecodeArrayBuilder& ForInPrepare(RegisterList cache_info_triple,
@@ -514,6 +519,7 @@ class V8_EXPORT_PRIVATE BytecodeArrayBuilder final {
   void SetStatementPosition(int position) {
     if (position == kNoSourcePosition) return;
     latest_source_info_.MakeStatementPosition(position);
+    RecordReplayInstrumentation("breakpoint", stmt->position());
   }
 
   void SetExpressionPosition(Expression* expr) {

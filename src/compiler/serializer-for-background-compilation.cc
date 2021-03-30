@@ -109,7 +109,10 @@ namespace compiler {
 #define UNREACHABLE_BYTECODE_LIST(V) \
   V(ExtraWide)                       \
   V(Illegal)                         \
-  V(Wide)
+  V(Wide)                            \
+  V(RecordReplayIncExecutionProgressCounter) \
+  V(RecordReplayInstrumentation)     \
+  V(RecordReplayAssertValue)
 
 #define BINARY_OP_LIST(V) \
   V(Add)                  \

@@ -1218,12 +1218,34 @@ bool ValueMirror::getProperties(v8::Local<v8::Context> context,
   }
   bool shouldSkipProto = internalType == V8InternalValueType::kScopeList;
 
+<<<<<<< HEAD
   bool formatAccessorsAsProperties =
       clientFor(context)->formatAccessorsAsProperties(object);
   auto iterator = v8::debug::PropertyIterator::Create(context, object);
   if (!iterator) {
     CHECK(tryCatch.HasCaught());
     return false;
+||||||| cbed76b711
+  bool formatAccessorsAsProperties =
+      clientFor(context)->formatAccessorsAsProperties(object);
+
+  if (object->IsArrayBuffer()) {
+    addTypedArrayViews(context, object.As<v8::ArrayBuffer>(), accumulator);
+  }
+  if (object->IsSharedArrayBuffer()) {
+    addTypedArrayViews(context, object.As<v8::SharedArrayBuffer>(),
+                       accumulator);
+=======
+  bool formatAccessorsAsProperties = false;
+  //    clientFor(context)->formatAccessorsAsProperties(object);
+
+  if (object->IsArrayBuffer()) {
+    addTypedArrayViews(context, object.As<v8::ArrayBuffer>(), accumulator);
+  }
+  if (object->IsSharedArrayBuffer()) {
+    addTypedArrayViews(context, object.As<v8::SharedArrayBuffer>(),
+                       accumulator);
+>>>>>>> replay-merge
   }
   while (!iterator->Done()) {
     bool isOwn = iterator->is_own();
@@ -1600,6 +1622,7 @@ std::unique_ptr<ValueMirror> ValueMirror::create(v8::Local<v8::Context> context,
   if (value->IsSymbol()) {
     return std::make_unique<SymbolMirror>(value.As<v8::Symbol>());
   }
+  /*
   auto clientSubtype = (value->IsUndefined() || value->IsObject())
                            ? clientFor(context)->valueSubtype(value)
                            : nullptr;
@@ -1607,6 +1630,7 @@ std::unique_ptr<ValueMirror> ValueMirror::create(v8::Local<v8::Context> context,
     String16 subtype = toString16(clientSubtype->string());
     return clientMirror(context, value, subtype);
   }
+  */
   if (value->IsUndefined()) {
     return std::make_unique<PrimitiveValueMirror>(
         value, RemoteObject::TypeEnum::Undefined);

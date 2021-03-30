@@ -50,6 +50,10 @@
 #include "src/base/win32-headers.h"  // NOLINT
 #endif
 
+#include "v8.h"
+
+#include <dlfcn.h>
+
 namespace v8 {
 namespace base {
 
@@ -57,6 +61,50 @@ namespace base {
 
 // Define __cpuid() for non-MSVC libraries.
 #if !V8_LIBC_MSVCRT
+
+template <typename Dst, typename Src>
+inline void BitwiseCast(const Src src, Dst* dst) {
+  static_assert(sizeof(Src) == sizeof(Dst), "size mismatch");
+  memcpy((void*)dst, (const void*)&src, sizeof(Src));
+}
+
+template <typename Dst, typename Src>
+inline Dst BitwiseCast(const Src src) {
+  Dst temp;
+  BitwiseCast(src, &temp);
+  return temp;
+}
+
+static void (*gRecordReplayAssertFn)(const char*, va_list);
+
+static void RecordReplayAssert(const char* format, ...) {
+  if (!gRecordReplayAssertFn) {
+    void* fnptr = dlsym(RTLD_DEFAULT, "RecordReplayAssert");
+    if (!fnptr) {
+      return;
+    }
+    gRecordReplayAssertFn = BitwiseCast<void (*)(const char*, va_list)>(fnptr);
+  }
+
+  va_list ap;
+  va_start(ap, format);
+  gRecordReplayAssertFn(format, ap);
+  va_end(ap);
+}
+
+static void (*gRecordReplayBytesFn)(const char*, void*, size_t);
+
+static void RecordReplayBytes(const char* why, void* data, size_t nbytes) {
+  if (!gRecordReplayBytesFn) {
+    void* fnptr = dlsym(RTLD_DEFAULT, "RecordReplayBytes");
+    if (!fnptr) {
+      return;
+    }
+    gRecordReplayBytesFn = BitwiseCast<void (*)(const char*, void*, size_t)>(fnptr);
+  }
+
+  gRecordReplayBytesFn(why, data, nbytes);
+}
 
 static V8_INLINE void __cpuid(int cpu_info[4], int info_type) {
 // Clear ecx to align with __cpuid() of MSVC:
@@ -77,6 +125,11 @@ static V8_INLINE void __cpuid(int cpu_info[4], int info_type) {
                      "=d"(cpu_info[3])
                    : "a"(info_type), "c"(0));
 #endif  // defined(__i386__) && defined(__pic__)
+
+  // When recording/replaying we might replay on a different CPU than we
+  // recorded on. Force the CPU info to match.
+  RecordReplayAssert("__cpuid %d", info_type);
+  RecordReplayBytes("__cpuid", cpu_info, 4 * sizeof(int));
 }
 
 #endif  // !V8_LIBC_MSVCRT

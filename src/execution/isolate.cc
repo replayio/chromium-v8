@@ -2922,6 +2922,8 @@ v8::PageAllocator* Isolate::page_allocator() {
   return isolate_allocator_->page_allocator();
 }
 
+extern void RecordReplayOnMainThreadIsolatedCreated(Isolate* isolate);
+
 Isolate::Isolate(std::unique_ptr<i::IsolateAllocator> isolate_allocator)
     : isolate_data_(this),
       isolate_allocator_(std::move(isolate_allocator)),
@@ -2943,6 +2945,8 @@ Isolate::Isolate(std::unique_ptr<i::IsolateAllocator> isolate_allocator)
       cancelable_task_manager_(new CancelableTaskManager()) {
   TRACE_ISOLATE(constructor);
   CheckIsolateLayout();
+
+  owning_thread_ = pthread_self();
 
   // ThreadManager is initialized early to support locking an isolate
   // before it is entered.
@@ -2966,6 +2970,10 @@ Isolate::Isolate(std::unique_ptr<i::IsolateAllocator> isolate_allocator)
   InitializeDefaultEmbeddedBlob();
 
   MicrotaskQueue::SetUpDefaultMicrotaskQueue(this);
+
+  if (recordreplay::IsRecordingOrReplaying() && IsMainThread()) {
+    RecordReplayOnMainThreadIsolatedCreated(this);
+  }
 }
 
 void Isolate::CheckIsolateLayout() {
@@ -4525,6 +4533,13 @@ void Isolate::SetUseCounterCallback(v8::Isolate::UseCounterCallback callback) {
 }
 
 void Isolate::CountUsage(v8::Isolate::UseCounterFeature feature) {
+  // Don't count usage when recording/replaying, as this can involve posting
+  // tasks to other threads in places that run non-deterministically
+  // (e.g. compilation).
+  if (recordreplay::IsRecordingOrReplaying()) {
+    return;
+  }
+
   // The counter callback
   // - may cause the embedder to call into V8, which is not generally possible
   //   during GC.

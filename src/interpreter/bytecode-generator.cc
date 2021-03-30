@@ -1425,6 +1425,18 @@ void BytecodeGenerator::GenerateBytecodeBody() {
     }
   }
 
+  if (recordreplay::IsRecordingOrReplaying()) {
+    builder()->RecordReplayIncExecutionProgressCounter();
+
+    int num_parameters = closure_scope()->num_parameters();
+    for (int i = 0; i < num_parameters; i++) {
+      Register parameter(builder()->Parameter(i));
+      builder()->LoadAccumulatorWithRegister(parameter).RecordReplayAssertValue();
+    }
+
+    builder()->RecordReplayInstrumentation("main");
+  }
+
   // Increment the function-scope block coverage counter.
   BuildIncrementBlockCoverageCounterIfEnabled(literal, SourceRangeKind::kBody);
 
@@ -3315,6 +3327,7 @@ void BytecodeGenerator::BuildReturn(int source_position) {
     builder()->CollectTypeProfile(info()->literal()->return_position());
   }
   builder()->SetStatementPosition(source_position);
+  builder()->RecordReplayInstrumentation("exit");
   builder()->Return();
 }
 
@@ -4321,6 +4334,8 @@ void BytecodeGenerator::BuildSuspendPoint(int position) {
 
   RegisterList registers = register_allocator()->AllLiveRegisters();
 
+  builder()->RecordReplayInstrumentation("exit");
+
   // Save context, registers, and state. This bytecode then returns the value
   // in the accumulator.
   builder()->SetExpressionPosition(position);
@@ -4332,6 +4347,9 @@ void BytecodeGenerator::BuildSuspendPoint(int position) {
   // Clobbers all registers and sets the accumulator to the
   // [[input_or_debug_pos]] slot of the generator object.
   builder()->ResumeGenerator(generator_object(), registers);
+
+  builder()->RecordReplayIncExecutionProgressCounter();
+  builder()->RecordReplayInstrumentation("entry");
 }
 
 void BytecodeGenerator::VisitYield(Yield* expr) {

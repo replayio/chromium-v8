@@ -1092,6 +1092,10 @@ bool GetOptimizedCodeLater(std::unique_ptr<OptimizedCompilationJob> job,
                            Isolate* isolate,
                            OptimizedCompilationInfo* compilation_info,
                            CodeKind code_kind, Handle<JSFunction> function) {
+  // Optimization jobs are generated non-deterministically and we don't
+  // support posting non-deterministic tasks to other threads yet.
+  CHECK(!recordreplay::IsRecordingOrReplaying());
+
   if (!isolate->optimizing_compile_dispatcher()->IsQueueAvailable()) {
     if (FLAG_trace_concurrent_recompilation) {
       PrintF("  ** Compilation queue full, will retry optimizing ");
@@ -1890,6 +1894,8 @@ bool Compiler::Compile(Isolate* isolate, Handle<SharedFunctionInfo> shared_info,
   DCHECK_EQ(ThreadId::Current(), isolate->thread_id());
   DCHECK(!isolate->has_pending_exception());
   DCHECK(!shared_info->HasBytecodeArray());
+
+  recordreplay::AutoDisallowEvents disallow;
 
   VMState<BYTECODE_COMPILER> state(isolate);
   PostponeInterruptsScope postpone(isolate);
