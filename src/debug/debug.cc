@@ -3082,7 +3082,7 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
   }
 }
 
-extern void RecordReplayOnConsoleMessage(Isolate* isolate, size_t bookmark);
+extern void RecordReplayOnConsoleMessage(size_t bookmark);
 
 // Command callbacks which we handle directly.
 struct InternalCommandCallback {
@@ -3277,9 +3277,7 @@ void FunctionCallbackIsRecordingOrReplaying(const FunctionCallbackInfo<Value>& c
 void FunctionCallbackRecordReplayOnConsoleAPI(const FunctionCallbackInfo<Value>& callArgs) {
   CHECK(recordreplay::IsRecordingOrReplaying());
   if (IsMainThread()) {
-    Isolate* v8isolate = callArgs.GetIsolate();
-    i::Isolate* isolate = (i::Isolate*)v8isolate;
-    i::RecordReplayOnConsoleMessage(isolate, 0);
+    i::RecordReplayOnConsoleMessage(0);
   }
 }
 

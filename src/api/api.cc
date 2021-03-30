@@ -11437,9 +11437,13 @@ void RecordReplayOnNewSource(Isolate* isolate, const char* id,
   gRecordReplayOnNewSource(id, kind, url);
 }
 
-void RecordReplayOnConsoleMessage(Isolate* isolate, size_t bookmark) {
+void RecordReplayOnConsoleMessage(size_t bookmark) {
   DCHECK(gRecordingOrReplaying);
   gRecordReplayOnConsoleMessage(bookmark);
+}
+
+extern "C" void V8RecordReplayOnConsoleMessage(size_t bookmark) {
+  RecordReplayOnConsoleMessage(bookmark);
 }
 
 void RecordReplayOnExceptionUnwind(Isolate* isolate) {
