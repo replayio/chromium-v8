@@ -3101,7 +3101,7 @@ static InternalCommandCallback gInternalCommandCallbacks[] = {
 // Function to invoke on command callbacks which we don't have a C++ implementation for.
 static Eternal<Value>* gCommandCallback;
 
-extern Handle<Context> RecordReplayGetDefaultContext(Isolate* isolate);
+extern "C" void V8RecordReplayGetDefaultContext(v8::Isolate* isolate, v8::Local<v8::Context>* cx);
 
 char* CommandCallback(const char* command, const char* params) {
   CHECK(IsMainThread());
@@ -3112,7 +3112,9 @@ char* CommandCallback(const char* command, const char* params) {
   // context if necessary.
   base::Optional<SaveAndSwitchContext> ssc;
   if (isolate->context().is_null()) {
-    Handle<Context> context = RecordReplayGetDefaultContext(isolate);
+    Local<v8::Context> v8_context;
+    V8RecordReplayGetDefaultContext((v8::Isolate*)isolate, &v8_context);
+    Handle<Context> context = Utils::OpenHandle(*v8_context);
     ssc.emplace(isolate, *context);
   }
 

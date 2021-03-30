@@ -11508,10 +11508,9 @@ static void RecordReplayOnNewContext(v8::Isolate* isolate, v8::Local<v8::Context
   }
 }
 
-Handle<Context> RecordReplayGetDefaultContext(Isolate* isolate) {
+extern "C" void V8RecordReplayGetDefaultContext(v8::Isolate* isolate, v8::Local<v8::Context>* cx) {
   CHECK(IsMainThread() && gDefaultContext);
-  Local<v8::Context> cx = gDefaultContext->Get((v8::Isolate*)isolate);
-  return Utils::OpenHandle(*cx);
+  *cx = gDefaultContext->Get(isolate);
 }
 
 } // namespace internal
