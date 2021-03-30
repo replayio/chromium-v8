@@ -695,6 +695,8 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
 
   THREAD_LOCAL_TOP_ADDRESS(Object, scheduled_exception)
 
+  inline Object pending_message();
+  inline void set_pending_message(Object message_obj);
   inline void clear_pending_message();
   Address pending_message_obj_address() {
     return reinterpret_cast<Address>(&thread_local_top()->pending_message_obj_);
@@ -1097,7 +1099,10 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
     return descriptor_lookup_cache_;
   }
 
-  HandleScopeData* handle_scope_data() { return &handle_scope_data_; }
+  HandleScopeData* handle_scope_data() {
+    DCHECK(pthread_self() == owning_thread_);
+    return &handle_scope_data_;
+  }
 
   HandleScopeImplementer* handle_scope_implementer() {
     DCHECK(handle_scope_implementer_);
@@ -1775,6 +1780,14 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   ReadOnlyHeap* read_only_heap_ = nullptr;
   std::shared_ptr<ReadOnlyArtifacts> artifacts_;
   std::unique_ptr<StringTable> string_table_;
+
+  // I don't know what isolate ownership rules are and they seem more
+  // complicated than is initially apparent. This is used for checking
+  // that various parts of the isolate are accessed in a single threaded
+  // manner.
+ public:
+  pthread_t owning_thread_;
+ private:
 
   const int id_;
   EntryStackItem* entry_stack_ = nullptr;

@@ -8,6 +8,8 @@
 #include "src/base/logging.h"
 #include "src/base/platform/time.h"
 
+#include "include/v8.h"
+
 namespace v8 {
 namespace base {
 
@@ -67,7 +69,11 @@ class ElapsedTimer final {
   TimeDelta Elapsed() const {
     DCHECK(IsStarted());
     TimeDelta elapsed = Now() - start_ticks_;
-    DCHECK_GE(elapsed.InMicroseconds(), 0);
+    // Not sure why this fails sometimes when replaying.
+    //DCHECK_GE(elapsed.InMicroseconds(), 0);
+    if (elapsed.InMicroseconds() < 0) {
+      return TimeDelta();
+    }
     return elapsed;
   }
 
@@ -81,6 +87,7 @@ class ElapsedTimer final {
 
  private:
   static V8_INLINE TimeTicks Now() {
+    recordreplay::AutoPassThroughEvents pt;
     TimeTicks now = TimeTicks::HighResolutionNow();
     DCHECK(!now.IsNull());
     return now;

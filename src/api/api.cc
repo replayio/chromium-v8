@@ -139,6 +139,8 @@
 #endif  // V8_OS_WIN64
 #endif  // V8_OS_WIN
 
+#include <dlfcn.h>
+
 #define TRACE_BS(...)                                     \
   do {                                                    \
     if (i::FLAG_trace_backing_store) PrintF(__VA_ARGS__); \
@@ -3037,6 +3039,12 @@ int Message::ErrorLevel() const {
   auto self = Utils::OpenHandle(this);
   ASSERT_NO_SCRIPT_NO_EXCEPTION(self->GetIsolate());
   return self->error_level();
+}
+
+extern "C" int V8GetMessageRecordReplayBookmark(v8::Local<v8::Message> message) {
+  auto self = Utils::OpenHandle(*message);
+  ASSERT_NO_SCRIPT_NO_EXCEPTION(self->GetIsolate());
+  return self->record_replay_bookmark();
 }
 
 int Message::GetStartColumn() const {
@@ -6157,6 +6165,10 @@ static i::Handle<ObjectType> CreateEnvironment(
   return result;
 }
 
+namespace internal {
+static void RecordReplayOnNewContext(v8::Isolate* isolate, v8::Local<v8::Context> cx);
+}
+
 Local<Context> NewContext(
     v8::Isolate* external_isolate, v8::ExtensionConfiguration* extensions,
     v8::MaybeLocal<ObjectTemplate> global_template,
@@ -6181,7 +6193,9 @@ Local<Context> NewContext(
     if (isolate->has_pending_exception()) isolate->clear_pending_exception();
     return Local<Context>();
   }
-  return Utils::ToLocal(scope.CloseAndEscape(env));
+  Local<Context> rv = Utils::ToLocal(scope.CloseAndEscape(env));
+  internal::RecordReplayOnNewContext(external_isolate, rv);
+  return rv;
 }
 
 Local<Context> v8::Context::New(
@@ -11370,6 +11384,581 @@ RegisterState& RegisterState::operator=(const RegisterState& other)
     }
   }
   return *this;
+}
+
+static bool gRecordingOrReplaying;
+static void (*gRecordReplayOnNewSource)(const char* id, const char* kind,
+                                        const char* url);
+static void (*gRecordReplayOnConsoleMessage)(size_t bookmark);
+static void (*gRecordReplayOnExceptionUnwind)();
+
+typedef char* (CommandCallbackRaw)(const char* params);
+static void (*gRecordReplaySetCommandCallback)(const char* method, CommandCallbackRaw callback);
+
+static void (*gRecordReplayPrint)(const char* format, va_list args);
+static void (*gRecordReplayDiagnostic)(const char* format, va_list args);
+static void (*gRecordReplayOnInstrument)(const char* kind, const char* function, int offset);
+static void (*gRecordReplayAssert)(const char*, va_list);
+static void (*gRecordReplayAssertBytes)(const char* why, const void* ptr, size_t nbytes);
+static void (*gRecordReplayBytes)(const char* why, void* buf, size_t size);
+static uintptr_t (*gRecordReplayValue)(const char* why, uintptr_t v);
+static uint64_t* (*gRecordReplayProgressCounter)();
+static bool (*gRecordReplayAreEventsDisallowed)();
+static void (*gRecordReplayBeginPassThroughEvents)();
+static void (*gRecordReplayEndPassThroughEvents)();
+static void (*gRecordReplayBeginDisallowEvents)();
+static void (*gRecordReplayEndDisallowEvents)();
+static size_t (*gRecordReplayCreateOrderedLock)(const char* name);
+static void (*gRecordReplayOrderedLock)(int lock);
+static void (*gRecordReplayOrderedUnlock)(int lock);
+static void (*gRecordReplayAddOrderedPthreadMutex)(const char* name, pthread_mutex_t* mutex);
+static void (*gRecordReplayInvalidateRecording)(const char* format, ...);
+static void (*gRecordReplayNewCheckpoint)();
+static bool (*gRecordReplayIsReplaying)();
+static bool (*gRecordReplayHasDivergedFromRecording)();
+static void (*gRecordReplayRegisterPointer)(void* ptr);
+static void (*gRecordReplayUnregisterPointer)(void* ptr);
+static int (*gRecordReplayPointerId)(void* ptr);
+static void* (*gRecordReplayIdPointer)(int id);
+static void (*gRecordReplayFinishRecording)();
+static char* (*gGetRecordingId)();
+static char* (*gGetUnusableRecordingReason)();
+static size_t (*gRecordReplayNewBookmark)();
+static size_t (*gRecordReplayPaintStart)();
+static void (*gRecordReplayPaintFinished)(size_t bookmark);
+static void (*gRecordReplaySetPaintCallback)(char* (*callback)(const char*, int));
+static void (*gRecordReplayOnDebuggerStatement)();
+
+namespace internal {
+
+void RecordReplayOnNewSource(Isolate* isolate, const char* id,
+                             const char* kind, const char* url) {
+  DCHECK(gRecordingOrReplaying);
+  gRecordReplayOnNewSource(id, kind, url);
+}
+
+void RecordReplayOnConsoleMessage(size_t bookmark) {
+  DCHECK(gRecordingOrReplaying);
+  gRecordReplayOnConsoleMessage(bookmark);
+}
+
+extern "C" void V8RecordReplayOnConsoleMessage(size_t bookmark) {
+  RecordReplayOnConsoleMessage(bookmark);
+}
+
+void RecordReplayOnExceptionUnwind(Isolate* isolate) {
+  DCHECK(gRecordingOrReplaying);
+
+  HandleScope scope(isolate);
+
+  CHECK(isolate->has_pending_exception());
+  Handle<Object> exception(isolate->pending_exception(), isolate);
+  if (isolate->is_catchable_by_javascript(*exception)) {
+    isolate->clear_pending_exception();
+    Handle<Object> message(isolate->pending_message(), isolate);
+    isolate->clear_pending_message();
+    gRecordReplayOnExceptionUnwind();
+    CHECK(!isolate->has_pending_exception());
+    isolate->set_pending_exception(*exception);
+    isolate->set_pending_message(*message);
+  }
+}
+
+static bool gHasCheckpoint;
+
+uint64_t* RecordReplayProgressCounter() {
+  CHECK(gHasCheckpoint);
+  return gRecordReplayProgressCounter();
+}
+
+void RecordReplayInstrument(const char* kind, const char* function, int offset) {
+  gRecordReplayOnInstrument(kind, function, offset);
+}
+
+extern char* CommandCallback(const char* command, const char* params);
+extern void ClearPauseDataCallback();
+
+bool gRecordReplayAssertValues;
+
+bool ShouldEmitRecordReplayAssertValue() {
+  return gRecordReplayAssertValues;
+}
+
+// We only finish recordings if there were interesting sources loaded
+// into the process.
+static bool gRecordReplayHasInterestingSources;
+
+void RecordReplaySetHasInterestingSources() {
+  gRecordReplayHasInterestingSources = true;
+}
+
+// For posting tasks to the main thread.
+static Isolate* gMainThreadIsolate;
+
+void RecordReplayOnMainThreadIsolatedCreated(Isolate* isolate) {
+  CHECK(!gMainThreadIsolate);
+  gMainThreadIsolate = isolate;
+}
+
+static Eternal<v8::Context>* gDefaultContext;
+
+static void RecordReplayOnNewContext(v8::Isolate* isolate, v8::Local<v8::Context> cx) {
+  if (IsMainThread() && !gDefaultContext) {
+    gDefaultContext = new Eternal<v8::Context>(isolate, cx);
+  }
+}
+
+extern "C" void V8RecordReplayGetDefaultContext(v8::Isolate* isolate, v8::Local<v8::Context>* cx) {
+  CHECK(IsMainThread() && gDefaultContext);
+  *cx = gDefaultContext->Get(isolate);
+}
+
+} // namespace internal
+
+bool recordreplay::IsRecordingOrReplaying() {
+  return gRecordingOrReplaying;
+}
+
+extern "C" bool V8IsRecordingOrReplaying() {
+  return recordreplay::IsRecordingOrReplaying();
+}
+
+void recordreplay::Print(const char* format, ...) {
+  if (IsRecordingOrReplaying()) {
+    va_list args;
+    va_start(args, format);
+    gRecordReplayPrint(format, args);
+    va_end(args);
+  }
+}
+
+extern "C" void V8RecordReplayPrint(const char* format, ...) {
+  if (recordreplay::IsRecordingOrReplaying()) {
+    va_list args;
+    va_start(args, format);
+    gRecordReplayPrint(format, args);
+    va_end(args);
+  }
+}
+
+extern "C" void V8RecordReplayPrintVA(const char* format, va_list args) {
+  if (recordreplay::IsRecordingOrReplaying()) {
+    gRecordReplayPrint(format, args);
+  }
+}
+
+void recordreplay::Diagnostic(const char* format, ...) {
+  if (IsRecordingOrReplaying()) {
+    va_list args;
+    va_start(args, format);
+    gRecordReplayDiagnostic(format, args);
+    va_end(args);
+  }
+}
+
+void recordreplay::Assert(const char* format, ...) {
+  if (IsRecordingOrReplaying()) {
+    va_list ap;
+    va_start(ap, format);
+    gRecordReplayAssert(format, ap);
+    va_end(ap);
+  }
+}
+
+extern "C" void V8RecordReplayAssert(const char* format, ...) {
+  if (recordreplay::IsRecordingOrReplaying()) {
+    va_list ap;
+    va_start(ap, format);
+    gRecordReplayAssert(format, ap);
+    va_end(ap);
+  }
+}
+
+extern "C" void V8RecordReplayAssertVA(const char* format, va_list args) {
+  if (recordreplay::IsRecordingOrReplaying()) {
+    gRecordReplayAssert(format, args);
+  }
+}
+
+void recordreplay::AssertBytes(const char* why, const void* buf, size_t size) {
+  if (IsRecordingOrReplaying()) {
+    gRecordReplayAssertBytes(why, buf, size);
+  }
+}
+
+extern "C" void V8RecordReplayAssertBytes(const char* why, const void* buf, size_t size) {
+  recordreplay::AssertBytes(why, buf, size);
+}
+
+uintptr_t recordreplay::RecordReplayValue(const char* why, uintptr_t v) {
+  if (IsRecordingOrReplaying()) {
+    return gRecordReplayValue(why, v);
+  }
+  return v;
+}
+
+extern "C" uintptr_t V8RecordReplayValue(const char* why, uintptr_t value) {
+  return recordreplay::RecordReplayValue(why, value);
+}
+
+void recordreplay::RecordReplayBytes(const char* why, void* buf, size_t size) {
+  if (IsRecordingOrReplaying()) {
+    gRecordReplayBytes(why, buf, size);
+  }
+}
+
+extern "C" void V8RecordReplayBytes(const char* why, void* buf, size_t size) {
+  recordreplay::RecordReplayBytes(why, buf, size);
+}
+
+bool recordreplay::AreEventsDisallowed() {
+  return gRecordReplayAreEventsDisallowed();
+}
+
+void recordreplay::BeginPassThroughEvents() {
+  if (IsRecordingOrReplaying()) {
+    gRecordReplayBeginPassThroughEvents();
+  }
+}
+
+extern "C" void V8RecordReplayBeginPassThroughEvents() {
+  recordreplay::BeginPassThroughEvents();
+}
+
+void recordreplay::EndPassThroughEvents() {
+  if (IsRecordingOrReplaying()) {
+    gRecordReplayEndPassThroughEvents();
+  }
+}
+
+extern "C" void V8RecordReplayEndPassThroughEvents() {
+  recordreplay::EndPassThroughEvents();
+}
+
+void recordreplay::BeginDisallowEvents() {
+  if (IsRecordingOrReplaying()) {
+    gRecordReplayBeginDisallowEvents();
+  }
+}
+
+void recordreplay::EndDisallowEvents() {
+  if (IsRecordingOrReplaying()) {
+    gRecordReplayEndDisallowEvents();
+  }
+}
+
+void recordreplay::InvalidateRecording(const char* why) {
+  if (IsRecordingOrReplaying()) {
+    gRecordReplayInvalidateRecording("%s", why);
+  }
+}
+
+void recordreplay::NewCheckpoint() {
+  // We can only create checkpoints if a context has been created. A context is
+  // needed to process commands which we might get from the driver.
+  if (IsRecordingOrReplaying() && IsMainThread() && internal::gDefaultContext) {
+    gRecordReplayNewCheckpoint();
+    internal::gHasCheckpoint = true;
+  }
+}
+
+extern "C" void V8RecordReplayNewCheckpoint() {
+  recordreplay::NewCheckpoint();
+}
+
+size_t recordreplay::CreateOrderedLock(const char* name) {
+  if (IsRecordingOrReplaying()) {
+    return gRecordReplayCreateOrderedLock(name);
+  }
+  return 0;
+}
+
+extern "C" size_t V8RecordReplayCreateOrderedLock(const char* name) {
+  return recordreplay::CreateOrderedLock(name);
+}
+
+void recordreplay::OrderedLock(int lock) {
+  if (IsRecordingOrReplaying()) {
+    gRecordReplayOrderedLock(lock);
+  }
+}
+
+extern "C" void V8RecordReplayOrderedLock(int lock) {
+  recordreplay::OrderedLock(lock);
+}
+
+void recordreplay::OrderedUnlock(int lock) {
+  if (IsRecordingOrReplaying()) {
+    gRecordReplayOrderedUnlock(lock);
+  }
+}
+
+extern "C" void V8RecordReplayOrderedUnlock(int lock) {
+  recordreplay::OrderedUnlock(lock);
+}
+
+extern "C" void V8RecordReplayAddOrderedPthreadMutex(const char* name,
+                                                     pthread_mutex_t* mutex) {
+  if (recordreplay::IsRecordingOrReplaying()) {
+    gRecordReplayAddOrderedPthreadMutex(name, mutex);
+  }
+}
+
+bool recordreplay::IsReplaying() {
+  if (IsRecordingOrReplaying()) {
+    return gRecordReplayIsReplaying();
+  }
+  return false;
+}
+
+extern "C" bool V8IsReplaying() {
+  return recordreplay::IsReplaying();
+}
+
+bool recordreplay::IsRecording() {
+  return !IsReplaying();
+}
+
+extern "C" bool V8IsRecording() {
+  return recordreplay::IsRecording();
+}
+
+extern "C" bool V8RecordReplayHasDivergedFromRecording() {
+  if (recordreplay::IsRecordingOrReplaying()) {
+    return gRecordReplayHasDivergedFromRecording();
+  }
+  return false;
+}
+
+void recordreplay::RegisterPointer(void* ptr) {
+  if (IsRecordingOrReplaying()) {
+    gRecordReplayRegisterPointer(ptr);
+  }
+}
+
+extern "C" void V8RecordReplayRegisterPointer(void* ptr) {
+  recordreplay::RegisterPointer(ptr);
+}
+
+void recordreplay::UnregisterPointer(void* ptr) {
+  if (IsRecordingOrReplaying()) {
+    gRecordReplayUnregisterPointer(ptr);
+  }
+}
+
+extern "C" void V8RecordReplayUnregisterPointer(void* ptr) {
+  recordreplay::UnregisterPointer(ptr);
+}
+
+int recordreplay::PointerId(void* ptr) {
+  if (IsRecordingOrReplaying()) {
+    return gRecordReplayPointerId(ptr);
+  }
+  return 0;
+}
+
+extern "C" int V8RecordReplayPointerId(void* ptr) {
+  return recordreplay::PointerId(ptr);
+}
+
+void* recordreplay::IdPointer(int id) {
+  CHECK(IsRecordingOrReplaying());
+  return gRecordReplayIdPointer(id);
+}
+
+extern "C" void* V8RecordReplayIdPointer(int id) {
+  return recordreplay::IdPointer(id);
+}
+
+extern "C" size_t V8RecordReplayNewBookmark() {
+  if (recordreplay::IsRecordingOrReplaying()) {
+    return gRecordReplayNewBookmark();
+  }
+  return 0;
+}
+
+extern "C" size_t V8RecordReplayPaintStart() {
+  CHECK(recordreplay::IsRecordingOrReplaying());
+  return gRecordReplayPaintStart();
+}
+
+extern "C" void V8RecordReplayPaintFinished(size_t bookmark) {
+  CHECK(recordreplay::IsRecordingOrReplaying());
+  gRecordReplayPaintFinished(bookmark);
+}
+
+extern "C" void V8RecordReplaySetPaintCallback(char* (*callback)(const char*, int)) {
+  CHECK(recordreplay::IsRecordingOrReplaying());
+  gRecordReplaySetPaintCallback(callback);
+}
+
+extern "C" void V8RecordReplayOnDebuggerStatement() {
+  CHECK(recordreplay::IsRecordingOrReplaying());
+  gRecordReplayOnDebuggerStatement();
+}
+
+template <typename Src, typename Dst>
+static inline void CastPointer(const Src src, Dst* dst) {
+  static_assert(sizeof(Src) == sizeof(uintptr_t), "bad size");
+  static_assert(sizeof(Dst) == sizeof(uintptr_t), "bad size");
+  memcpy((void*)dst, (const void*)&src, sizeof(uintptr_t));
+}
+
+template <typename T>
+static void RecordReplayLoadSymbol(void* handle, const char* name, T& function) {
+  void* sym = dlsym(handle, name);
+  if (!sym) {
+    fprintf(stderr, "Could not find %s in Record Replay driver, crashing.\n", name);
+    V8_IMMEDIATE_CRASH();
+  }
+
+  CastPointer(sym, &function);
+}
+
+static bool IsRecordingUnusable() {
+  if (recordreplay::IsRecording()) {
+    char* reason = gGetUnusableRecordingReason();
+    if (reason) {
+      free(reason);
+      return true;
+    }
+  }
+  return false;
+}
+
+// Recording IDs are UUIDs, and have a fixed length.
+static char gRecordingId[40];
+
+static const char* GetRecordingId() {
+  if (IsRecordingUnusable()) {
+    return nullptr;
+  }
+  if (!gRecordingId[0]) {
+    // RecordReplayGetRecordingId() is not currently supported while replaying,
+    // so we embed the recording ID in the recording itself.
+    if (recordreplay::IsRecording()) {
+      char* recordingId = gGetRecordingId();
+      if (!recordingId) {
+        CHECK(IsRecordingUnusable());
+        return nullptr;
+      }
+      CHECK(*recordingId != 0);
+      CHECK(strlen(recordingId) + 1 <= sizeof(gRecordingId));
+      strcpy(gRecordingId, recordingId);
+    }
+    recordreplay::RecordReplayBytes("RecordingId", gRecordingId, sizeof(gRecordingId));
+  }
+  return gRecordingId;
+}
+
+static void DoFinishRecording() {
+  // Add the recording to a recording ID file if specified.
+  char* env = getenv("RECORD_REPLAY_RECORDING_ID_FILE");
+  if (env) {
+    FILE* file = fopen(env, "a");
+    if (file) {
+      const char* recordingId = GetRecordingId();
+      fprintf(file, "%s\n", recordingId);
+      fclose(file);
+      fprintf(stderr, "Found content, saving recording ID %s\n", recordingId);
+    } else {
+      fprintf(stderr, "Error: Could not open %s for adding recording ID", env);
+    }
+  }
+
+  gRecordReplayFinishRecording();
+}
+
+class FinishRecordingTask final : public Task {
+ public:
+  void Run() final { DoFinishRecording(); }
+};
+
+extern "C" V8_EXPORT void V8RecordReplayFinishRecording() {
+  if (recordreplay::IsRecordingOrReplaying()) {
+    if (internal::gRecordReplayHasInterestingSources) {
+      if (IsMainThread()) {
+        DoFinishRecording();
+      } else {
+        CHECK(internal::gMainThreadIsolate);
+        auto runner = internal::V8::GetCurrentPlatform()->GetForegroundTaskRunner((Isolate*)internal::gMainThreadIsolate);
+        runner->PostTask(std::make_unique<FinishRecordingTask>());
+        sleep(UINT32_MAX);
+      }
+    } else {
+      recordreplay::InvalidateRecording("No interesting content");
+    }
+  }
+}
+
+static pthread_t gMainThread;
+
+void recordreplay::SetRecordingOrReplaying(void* handle) {
+  gRecordingOrReplaying = true;
+  gMainThread = pthread_self();
+
+  RecordReplayLoadSymbol(handle, "RecordReplayOnNewSource", gRecordReplayOnNewSource);
+  RecordReplayLoadSymbol(handle, "RecordReplayOnConsoleMessage", gRecordReplayOnConsoleMessage);
+  RecordReplayLoadSymbol(handle, "RecordReplayOnExceptionUnwind", gRecordReplayOnExceptionUnwind);
+  RecordReplayLoadSymbol(handle, "RecordReplaySetCommandCallback", gRecordReplaySetCommandCallback);
+  RecordReplayLoadSymbol(handle, "RecordReplayPrint", gRecordReplayPrint);
+  RecordReplayLoadSymbol(handle, "RecordReplayDiagnostic", gRecordReplayDiagnostic);
+  RecordReplayLoadSymbol(handle, "RecordReplayAssert", gRecordReplayAssert);
+  RecordReplayLoadSymbol(handle, "RecordReplayAssertBytes", gRecordReplayAssertBytes);
+  RecordReplayLoadSymbol(handle, "RecordReplayBytes", gRecordReplayBytes);
+  RecordReplayLoadSymbol(handle, "RecordReplayValue", gRecordReplayValue);
+  RecordReplayLoadSymbol(handle, "RecordReplayOnInstrument", gRecordReplayOnInstrument);
+  RecordReplayLoadSymbol(handle, "RecordReplayProgressCounter", gRecordReplayProgressCounter);
+  RecordReplayLoadSymbol(handle, "RecordReplayAreEventsDisallowed", gRecordReplayAreEventsDisallowed);
+  RecordReplayLoadSymbol(handle, "RecordReplayBeginPassThroughEvents", gRecordReplayBeginPassThroughEvents);
+  RecordReplayLoadSymbol(handle, "RecordReplayEndPassThroughEvents", gRecordReplayEndPassThroughEvents);
+  RecordReplayLoadSymbol(handle, "RecordReplayBeginDisallowEvents", gRecordReplayBeginDisallowEvents);
+  RecordReplayLoadSymbol(handle, "RecordReplayEndDisallowEvents", gRecordReplayEndDisallowEvents);
+  RecordReplayLoadSymbol(handle, "RecordReplayInvalidateRecording", gRecordReplayInvalidateRecording);
+  RecordReplayLoadSymbol(handle, "RecordReplayNewCheckpoint", gRecordReplayNewCheckpoint);
+  RecordReplayLoadSymbol(handle, "RecordReplayCreateOrderedLock", gRecordReplayCreateOrderedLock);
+  RecordReplayLoadSymbol(handle, "RecordReplayOrderedLock", gRecordReplayOrderedLock);
+  RecordReplayLoadSymbol(handle, "RecordReplayOrderedUnlock", gRecordReplayOrderedUnlock);
+  RecordReplayLoadSymbol(handle, "RecordReplayAddOrderedPthreadMutex", gRecordReplayAddOrderedPthreadMutex);
+  RecordReplayLoadSymbol(handle, "RecordReplayIsReplaying", gRecordReplayIsReplaying);
+  RecordReplayLoadSymbol(handle, "RecordReplayHasDivergedFromRecording", gRecordReplayHasDivergedFromRecording);
+  RecordReplayLoadSymbol(handle, "RecordReplayRegisterPointer", gRecordReplayRegisterPointer);
+  RecordReplayLoadSymbol(handle, "RecordReplayUnregisterPointer", gRecordReplayUnregisterPointer);
+  RecordReplayLoadSymbol(handle, "RecordReplayPointerId", gRecordReplayPointerId);
+  RecordReplayLoadSymbol(handle, "RecordReplayIdPointer", gRecordReplayIdPointer);
+  RecordReplayLoadSymbol(handle, "RecordReplayFinishRecording", gRecordReplayFinishRecording);
+  RecordReplayLoadSymbol(handle, "RecordReplayGetRecordingId", gGetRecordingId);
+  RecordReplayLoadSymbol(handle, "RecordReplayGetUnusableRecordingReason", gGetUnusableRecordingReason);
+  RecordReplayLoadSymbol(handle, "RecordReplayNewBookmark", gRecordReplayNewBookmark);
+  RecordReplayLoadSymbol(handle, "RecordReplayPaintStart", gRecordReplayPaintStart);
+  RecordReplayLoadSymbol(handle, "RecordReplayPaintFinished", gRecordReplayPaintFinished);
+  RecordReplayLoadSymbol(handle, "RecordReplaySetPaintCallback", gRecordReplaySetPaintCallback);
+  RecordReplayLoadSymbol(handle, "RecordReplayOnDebuggerStatement", gRecordReplayOnDebuggerStatement);
+
+  void (*setDefaultCommandCallback)(char* (*callback)(const char* command, const char* params));
+  RecordReplayLoadSymbol(handle, "RecordReplaySetDefaultCommandCallback", setDefaultCommandCallback);
+  setDefaultCommandCallback(i::CommandCallback);
+
+  void (*setClearPauseDataCallback)(void (*callback)());
+  RecordReplayLoadSymbol(handle, "RecordReplaySetClearPauseDataCallback", setClearPauseDataCallback);
+  setClearPauseDataCallback(i::ClearPauseDataCallback);
+
+  internal::gRecordReplayAssertValues = !!getenv("RECORD_REPLAY_JS_ASSERTS");
+
+  // Set flags to disable non-deterministic posting of tasks to other threads.
+  // We don't support this yet when recording/replaying.
+  internal::FLAG_concurrent_array_buffer_sweeping = false;
+  internal::FLAG_concurrent_sweeping = false;
+  internal::FLAG_parallel_scavenge = false;
+  internal::FLAG_scavenge_task = false;
+}
+
+extern "C" void V8SetRecordingOrReplaying(void* handle) {
+  recordreplay::SetRecordingOrReplaying(handle);
+}
+
+bool IsMainThread() {
+  return gMainThread == pthread_self();
 }
 
 namespace internal {

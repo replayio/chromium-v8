@@ -35,6 +35,9 @@ class DebugStackTraceIterator final : public debug::StackTraceIterator {
   v8::MaybeLocal<v8::Value> Evaluate(v8::Local<v8::String> source,
                                      bool throw_on_side_effect) override;
 
+  StackFrameId FrameId() override;
+  int InlineFrameIndex() override;
+
  private:
   Isolate* isolate_;
   StackTraceFrameIterator iterator_;
