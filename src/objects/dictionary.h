@@ -18,6 +18,13 @@
 namespace v8 {
 namespace internal {
 
+#ifdef V8_ENABLE_SWISS_NAME_DICTIONARY
+class SwissNameDictionary;
+using PropertyDictionary = SwissNameDictionary;
+#else
+using PropertyDictionary = NameDictionary;
+#endif
+
 template <typename T>
 class Handle;
 
@@ -74,6 +81,9 @@ class EXPORT_TEMPLATE_DECLARE(V8_EXPORT_PRIVATE) Dictionary
       LocalIsolate* isolate, Handle<Derived> dictionary, Key key,
       Handle<Object> value, PropertyDetails details,
       InternalIndex* entry_out = nullptr);
+
+  static Handle<Derived> ShallowCopy(Isolate* isolate,
+                                     Handle<Derived> dictionary);
 
  protected:
   // Generic at put operation.

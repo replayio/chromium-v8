@@ -69,7 +69,8 @@ FunctionLiteral* Parser::DefaultConstructor(const AstRawString* name,
 
         args.Add(spread_args);
         Expression* super_call_ref = NewSuperCallReference(pos);
-        call = factory()->NewCall(super_call_ref, args, pos);
+        constexpr bool has_spread = true;
+        call = factory()->NewCall(super_call_ref, args, pos, has_spread);
       }
       body.Add(factory()->NewReturnStatement(call, pos));
     }
@@ -281,14 +282,14 @@ Expression* Parser::NewThrowError(Runtime::FunctionId id,
 }
 
 Expression* Parser::NewSuperPropertyReference(int pos) {
-  // this_function[home_object_symbol]
-  VariableProxy* this_function_proxy =
-      NewUnresolved(ast_value_factory()->this_function_string(), pos);
-  Expression* home_object_symbol_literal = factory()->NewSymbolLiteral(
-      AstSymbol::kHomeObjectSymbol, kNoSourcePosition);
-  Expression* home_object = factory()->NewProperty(
-      this_function_proxy, home_object_symbol_literal, pos);
-  return factory()->NewSuperPropertyReference(home_object, pos);
+  const AstRawString* home_object_name;
+  if (IsStatic(scope()->GetReceiverScope()->function_kind())) {
+    home_object_name = ast_value_factory_->dot_static_home_object_string();
+  } else {
+    home_object_name = ast_value_factory_->dot_home_object_string();
+  }
+  return factory()->NewSuperPropertyReference(
+      NewUnresolved(home_object_name, pos), pos);
 }
 
 Expression* Parser::NewSuperCallReference(int pos) {
@@ -489,12 +490,14 @@ void Parser::DeserializeScopeChain(
 namespace {
 
 void MaybeResetCharacterStream(ParseInfo* info, FunctionLiteral* literal) {
+#if V8_ENABLE_WEBASSEMBLY
   // Don't reset the character stream if there is an asm.js module since it will
   // be used again by the asm-parser.
   if (info->contains_asm_module()) {
     if (FLAG_stress_validate_asm) return;
     if (literal != nullptr && literal->scope()->ContainsAsmModule()) return;
   }
+#endif  // V8_ENABLE_WEBASSEMBLY
   info->ResetCharacterStream();
 }
 
@@ -3026,7 +3029,8 @@ void Parser::DeclarePublicClassField(ClassScope* scope,
                                      bool is_static, bool is_computed_name,
                                      ClassInfo* class_info) {
   if (is_static) {
-    class_info->static_fields->Add(property, zone());
+    class_info->static_elements->Add(
+        factory()->NewClassLiteralStaticElement(property), zone());
   } else {
     class_info->instance_fields->Add(property, zone());
   }
@@ -3049,7 +3053,8 @@ void Parser::DeclarePrivateClassMember(ClassScope* scope,
                                        bool is_static, ClassInfo* class_info) {
   if (kind == ClassLiteralProperty::Kind::FIELD) {
     if (is_static) {
-      class_info->static_fields->Add(property, zone());
+      class_info->static_elements->Add(
+          factory()->NewClassLiteralStaticElement(property), zone());
     } else {
       class_info->instance_fields->Add(property, zone());
     }
@@ -3089,16 +3094,18 @@ void Parser::DeclarePublicClassMethod(const AstRawString* class_name,
   class_info->public_members->Add(property, zone());
 }
 
+void Parser::AddClassStaticBlock(Block* block, ClassInfo* class_info) {
+  DCHECK(class_info->has_static_elements);
+  class_info->static_elements->Add(
+      factory()->NewClassLiteralStaticElement(block), zone());
+}
+
 FunctionLiteral* Parser::CreateInitializerFunction(
-    const char* name, DeclarationScope* scope,
-    ZonePtrList<ClassLiteral::Property>* fields) {
-  DCHECK_EQ(scope->function_kind(),
-            FunctionKind::kClassMembersInitializerFunction);
+    const char* name, DeclarationScope* scope, Statement* initializer_stmt) {
+  DCHECK(IsClassMembersInitializerFunction(scope->function_kind()));
   // function() { .. class fields initializer .. }
   ScopedPtrList<Statement> statements(pointer_buffer());
-  InitializeClassMembersStatement* stmt =
-      factory()->NewInitializeClassMembersStatement(fields, kNoSourcePosition);
-  statements.Add(stmt);
+  statements.Add(initializer_stmt);
   FunctionLiteral* result = factory()->NewFunctionLiteral(
       ast_value_factory()->GetOneByteString(name), scope, statements, 0, 0, 0,
       FunctionLiteral::kNoDuplicateParameters,
@@ -3139,18 +3146,20 @@ Expression* Parser::RewriteClassLiteral(ClassScope* block_scope,
     block_scope->class_variable()->set_initializer_position(end_pos);
   }
 
-  FunctionLiteral* static_fields_initializer = nullptr;
-  if (class_info->has_static_class_fields) {
-    static_fields_initializer = CreateInitializerFunction(
-        "<static_fields_initializer>", class_info->static_fields_scope,
-        class_info->static_fields);
+  FunctionLiteral* static_initializer = nullptr;
+  if (class_info->has_static_elements) {
+    static_initializer = CreateInitializerFunction(
+        "<static_initializer>", class_info->static_elements_scope,
+        factory()->NewInitializeClassStaticElementsStatement(
+            class_info->static_elements, kNoSourcePosition));
   }
 
   FunctionLiteral* instance_members_initializer_function = nullptr;
   if (class_info->has_instance_members) {
     instance_members_initializer_function = CreateInitializerFunction(
         "<instance_members_initializer>", class_info->instance_members_scope,
-        class_info->instance_fields);
+        factory()->NewInitializeClassMembersStatement(
+            class_info->instance_fields, kNoSourcePosition));
     class_info->constructor->set_requires_instance_members_initializer(true);
     class_info->constructor->add_expected_properties(
         class_info->instance_fields->length());
@@ -3165,10 +3174,11 @@ Expression* Parser::RewriteClassLiteral(ClassScope* block_scope,
   ClassLiteral* class_literal = factory()->NewClassLiteral(
       block_scope, class_info->extends, class_info->constructor,
       class_info->public_members, class_info->private_members,
-      static_fields_initializer, instance_members_initializer_function, pos,
-      end_pos, class_info->has_name_static_property,
+      static_initializer, instance_members_initializer_function, pos, end_pos,
+      class_info->has_name_static_property,
       class_info->has_static_computed_names, class_info->is_anonymous,
-      class_info->has_private_methods);
+      class_info->has_private_methods, class_info->home_object_variable,
+      class_info->static_home_object_variable);
 
   AddFunctionForNameInference(class_info->constructor);
   return class_literal;
@@ -3335,19 +3345,6 @@ Expression* Parser::CloseTemplateLiteral(TemplateLiteralState* state, int start,
   }
 }
 
-namespace {
-
-bool OnlyLastArgIsSpread(const ScopedPtrList<Expression>& args) {
-  for (int i = 0; i < args.length() - 1; i++) {
-    if (args.at(i)->IsSpread()) {
-      return false;
-    }
-  }
-  return args.at(args.length() - 1)->IsSpread();
-}
-
-}  // namespace
-
 ArrayLiteral* Parser::ArrayLiteralFromListWithSpread(
     const ScopedPtrList<Expression>& list) {
   // If there's only a single spread argument, a fast path using CallWithSpread
@@ -3364,58 +3361,6 @@ ArrayLiteral* Parser::ArrayLiteralFromListWithSpread(
   return factory()->NewArrayLiteral(list, first_spread, kNoSourcePosition);
 }
 
-Expression* Parser::SpreadCall(Expression* function,
-                               const ScopedPtrList<Expression>& args_list,
-                               int pos, Call::PossiblyEval is_possibly_eval,
-                               bool optional_chain) {
-  // Handle this case in BytecodeGenerator.
-  if (OnlyLastArgIsSpread(args_list) || function->IsSuperCallReference()) {
-    return factory()->NewCall(function, args_list, pos, Call::NOT_EVAL,
-                              optional_chain);
-  }
-
-  ScopedPtrList<Expression> args(pointer_buffer());
-  if (function->IsProperty()) {
-    // Method calls
-    if (function->AsProperty()->IsSuperAccess()) {
-      Expression* home = ThisExpression();
-      args.Add(function);
-      args.Add(home);
-    } else {
-      Variable* temp = NewTemporary(ast_value_factory()->empty_string());
-      VariableProxy* obj = factory()->NewVariableProxy(temp);
-      Assignment* assign_obj = factory()->NewAssignment(
-          Token::ASSIGN, obj, function->AsProperty()->obj(), kNoSourcePosition);
-      function =
-          factory()->NewProperty(assign_obj, function->AsProperty()->key(),
-                                 kNoSourcePosition, optional_chain);
-      args.Add(function);
-      obj = factory()->NewVariableProxy(temp);
-      args.Add(obj);
-    }
-  } else {
-    // Non-method calls
-    args.Add(function);
-    args.Add(factory()->NewUndefinedLiteral(kNoSourcePosition));
-  }
-  args.Add(ArrayLiteralFromListWithSpread(args_list));
-  return factory()->NewCallRuntime(Context::REFLECT_APPLY_INDEX, args, pos);
-}
-
-Expression* Parser::SpreadCallNew(Expression* function,
-                                  const ScopedPtrList<Expression>& args_list,
-                                  int pos) {
-  if (OnlyLastArgIsSpread(args_list)) {
-    // Handle in BytecodeGenerator.
-    return factory()->NewCallNew(function, args_list, pos);
-  }
-  ScopedPtrList<Expression> args(pointer_buffer());
-  args.Add(function);
-  args.Add(ArrayLiteralFromListWithSpread(args_list));
-
-  return factory()->NewCallRuntime(Context::REFLECT_CONSTRUCT_INDEX, args, pos);
-}
-
 void Parser::SetLanguageMode(Scope* scope, LanguageMode mode) {
   v8::Isolate::UseCounterFeature feature;
   if (is_sloppy(mode))
@@ -3428,6 +3373,7 @@ void Parser::SetLanguageMode(Scope* scope, LanguageMode mode) {
   scope->SetLanguageMode(mode);
 }
 
+#if V8_ENABLE_WEBASSEMBLY
 void Parser::SetAsmModule() {
   // Store the usage count; The actual use counter on the isolate is
   // incremented after parsing is done.
@@ -3436,6 +3382,7 @@ void Parser::SetAsmModule() {
   scope()->AsDeclarationScope()->set_is_asm_module();
   info_->set_contains_asm_module(true);
 }
+#endif  // V8_ENABLE_WEBASSEMBLY
 
 Expression* Parser::ExpressionListToExpression(
     const ScopedPtrList<Expression>& args) {

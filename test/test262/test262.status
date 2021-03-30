@@ -79,12 +79,6 @@
   # https://bugs.chromium.org/p/v8/issues/detail?id=4895
   'built-ins/TypedArrayConstructors/internals/DefineOwnProperty/tonumber-value-detached-buffer': [FAIL],
   'built-ins/TypedArrayConstructors/internals/DefineOwnProperty/BigInt/tonumber-value-detached-buffer': [FAIL],
-  'built-ins/TypedArrayConstructors/internals/DefineOwnProperty/BigInt/key-is-numericindex': [FAIL],
-  'built-ins/TypedArrayConstructors/internals/DefineOwnProperty/BigInt/key-is-numericindex-desc-configurable': [FAIL],
-  'built-ins/TypedArrayConstructors/internals/DefineOwnProperty/key-is-numericindex': [FAIL],
-  'built-ins/TypedArrayConstructors/internals/DefineOwnProperty/key-is-numericindex-desc-configurable': [FAIL],
-  'built-ins/TypedArrayConstructors/internals/GetOwnProperty/BigInt/index-prop-desc': [FAIL],
-  'built-ins/TypedArrayConstructors/internals/GetOwnProperty/index-prop-desc': [FAIL],
   # Some TypedArray methods throw due to the same bug, from Get
   'built-ins/TypedArray/prototype/every/callbackfn-detachbuffer': [FAIL],
   'built-ins/TypedArray/prototype/every/BigInt/callbackfn-detachbuffer': [FAIL],
@@ -120,6 +114,8 @@
   'built-ins/TypedArray/prototype/fill/coerced-value-detach': [FAIL],
   'built-ins/TypedArray/prototype/fill/coerced-end-detach': [FAIL],
   'built-ins/TypedArray/prototype/fill/coerced-start-detach': [FAIL],
+  'built-ins/TypedArray/prototype/includes/detached-buffer-during-fromIndex-returns-true-for-undefined': [FAIL],
+  'built-ins/TypedArray/prototype/includes/BigInt/detached-buffer-during-fromIndex-returns-true-for-undefined': [FAIL],
 
   # https://bugs.chromium.org/p/v8/issues/detail?id=4951
   'language/expressions/assignment/destructuring/iterator-destructuring-property-reference-target-evaluation-order': [FAIL],
@@ -497,8 +493,6 @@
 
   # https://bugs.chromium.org/p/v8/issues/detail?id=5690
   'language/expressions/call/eval-spread': [FAIL],
-  'language/expressions/call/eval-spread-empty-leading': [FAIL],
-  'language/expressions/call/eval-spread-empty-trailing': [FAIL],
 
   # https://bugs.chromium.org/p/v8/issues/detail?id=7472
   'intl402/NumberFormat/currency-digits': [FAIL],
@@ -533,15 +527,6 @@
 
   # https://bugs.chromium.org/p/v8/issues/detail?id=9049
   'language/comments/hashbang/use-strict': [SKIP],
-
-  # https://github.com/tc39/test262/pull/2903
-  'intl402/Intl/getCanonicalLocales/canonicalized-tags': [FAIL],
-  'intl402/Intl/getCanonicalLocales/preferred-variant': [FAIL],
-  'intl402/Intl/getCanonicalLocales/preferred-grandfathered': [FAIL],
-  'intl402/Locale/extensions-grandfathered': [FAIL],
-
-  # https://github.com/tc39/test262/pull/2904
-  'intl402/Locale/likely-subtags-grandfathered': [FAIL],
 
   # http://crbug/v8/10447
   'intl402/Intl/getCanonicalLocales/unicode-ext-canonicalize-yes-to-true': [FAIL],
@@ -587,6 +572,23 @@
 
   # http://crbug/v8/10905
   'language/identifier-resolution/assign-to-global-undefined': [FAIL],
+
+  # https://bugs.chromium.org/p/chromium/issues/detail?id=1159764
+  'built-ins/Array/prototype/at/*': [FAIL],
+  'built-ins/String/prototype/at/*': [FAIL],
+  'built-ins/TypedArray/prototype/at/*': [FAIL],
+
+  # http://crbug/v8/11530
+  'built-ins/Function/internals/Call/class-ctor-realm': [FAIL],
+
+  # http://crbug/v8/11531
+  'built-ins/RegExp/prototype/flags/get-order': [FAIL],
+
+  # http://crbug/v8/11532
+  'language/expressions/object/dstr/object-rest-proxy-gopd-not-called-on-excluded-keys': [FAIL],
+
+  # http://crbug/v8/11533
+  'language/statements/class/subclass/default-constructor-spread-override': [FAIL],
 
   ######################## NEEDS INVESTIGATION ###########################
 

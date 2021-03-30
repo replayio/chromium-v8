@@ -35,7 +35,7 @@
 #include "src/objects/visitors.h"
 #include "src/roots/roots.h"
 #include "src/utils/allocation.h"
-#include "testing/gtest/include/gtest/gtest_prod.h"
+#include "testing/gtest/include/gtest/gtest_prod.h"  // nogncheck
 
 namespace v8 {
 
@@ -445,14 +445,7 @@ class Heap {
 
   // Helper function to get the bytecode flushing mode based on the flags. This
   // is required because it is not safe to acess flags in concurrent marker.
-  static inline BytecodeFlushMode GetBytecodeFlushMode() {
-    if (FLAG_stress_flush_bytecode) {
-      return BytecodeFlushMode::kStressFlushBytecode;
-    } else if (FLAG_flush_bytecode) {
-      return BytecodeFlushMode::kFlushBytecode;
-    }
-    return BytecodeFlushMode::kDoNotFlushBytecode;
-  }
+  static inline BytecodeFlushMode GetBytecodeFlushMode(Isolate* isolate);
 
   static uintptr_t ZapValue() {
     return FLAG_clear_free_memory ? kClearedFreeMemoryValue : kZapValue;
@@ -674,8 +667,8 @@ class Heap {
   template <FindMementoMode mode>
   inline AllocationMemento FindAllocationMemento(Map map, HeapObject object);
 
-  // Requests collection and blocks until GC is finished.
-  void RequestCollectionBackground(LocalHeap* local_heap);
+  // Performs GC after background allocation failure.
+  void CollectGarbageForBackground(LocalHeap* local_heap);
 
   //
   // Support for the API.
@@ -818,6 +811,12 @@ class Heap {
 
   // Create ObjectStats if live_object_stats_ or dead_object_stats_ are nullptr.
   void CreateObjectStats();
+
+  // If the code range exists, allocates executable pages in the code range and
+  // copies the embedded builtins code blob there. Returns address of the copy.
+  // The builtins code region will be freed with the code range at tear down.
+  uint8_t* RemapEmbeddedBuiltinsIntoCodeRange(const uint8_t* embedded_blob_code,
+                                              size_t embedded_blob_code_size);
 
   // Sets the TearDown state, so no new GC tasks get posted.
   void StartTearDown();
@@ -1111,7 +1110,6 @@ class Heap {
   // ===========================================================================
 
   // Setters for code offsets of well-known deoptimization targets.
-  void SetArgumentsAdaptorDeoptPCOffset(int pc_offset);
   void SetConstructStubCreateDeoptPCOffset(int pc_offset);
   void SetConstructStubInvokeDeoptPCOffset(int pc_offset);
   void SetInterpreterEntryReturnPCOffset(int pc_offset);
@@ -1145,10 +1143,10 @@ class Heap {
   // Unified heap (C++) support. ===============================================
   // ===========================================================================
 
-  V8_EXPORT_PRIVATE void ConfigureCppHeap(
-      std::shared_ptr<CppHeapCreateParams> params);
+  V8_EXPORT_PRIVATE void AttachCppHeap(v8::CppHeap* cpp_heap);
+  V8_EXPORT_PRIVATE void DetachCppHeap();
 
-  v8::CppHeap* cpp_heap() const { return cpp_heap_.get(); }
+  v8::CppHeap* cpp_heap() const { return cpp_heap_; }
 
   // ===========================================================================
   // External string table API. ================================================
@@ -1934,12 +1932,14 @@ class Heap {
   bool always_allocate() { return always_allocate_scope_count_ != 0; }
 
   V8_EXPORT_PRIVATE bool CanExpandOldGeneration(size_t size);
-  V8_EXPORT_PRIVATE bool CanExpandOldGenerationBackground(size_t size);
+  V8_EXPORT_PRIVATE bool CanExpandOldGenerationBackground(LocalHeap* local_heap,
+                                                          size_t size);
   V8_EXPORT_PRIVATE bool CanPromoteYoungAndExpandOldGeneration(size_t size);
 
   bool ShouldExpandOldGenerationOnSlowAllocation(
       LocalHeap* local_heap = nullptr);
   bool IsRetryOfFailedAllocation(LocalHeap* local_heap);
+  bool IsMainThreadParked(LocalHeap* local_heap);
 
   HeapGrowingMode CurrentHeapGrowingMode();
 
@@ -2244,7 +2244,9 @@ class Heap {
   std::unique_ptr<AllocationObserver> stress_concurrent_allocation_observer_;
   std::unique_ptr<LocalEmbedderHeapTracer> local_embedder_heap_tracer_;
   std::unique_ptr<MarkingBarrier> marking_barrier_;
-  std::unique_ptr<v8::CppHeap> cpp_heap_;
+
+  // The embedder owns the C++ heap.
+  v8::CppHeap* cpp_heap_ = nullptr;
 
   StrongRootsEntry* strong_roots_head_ = nullptr;
   base::Mutex strong_roots_mutex_;
@@ -2362,6 +2364,7 @@ class Heap {
   friend class ScavengeTaskObserver;
   friend class IncrementalMarking;
   friend class IncrementalMarkingJob;
+  friend class LocalHeap;
   friend class OldLargeObjectSpace;
   template <typename ConcreteVisitor, typename MarkingState>
   friend class MarkingVisitorBase;
@@ -2649,10 +2652,7 @@ class StrongRootBlockAllocator {
   using size_type = size_t;
   using difference_type = ptrdiff_t;
   template <class U>
-  struct rebind {
-    STATIC_ASSERT((std::is_same<Address, U>::value));
-    using other = StrongRootBlockAllocator;
-  };
+  struct rebind;
 
   explicit StrongRootBlockAllocator(Heap* heap) : heap_(heap) {}
 
@@ -2661,6 +2661,23 @@ class StrongRootBlockAllocator {
 
  private:
   Heap* heap_;
+};
+
+// Rebinding to Address gives another StrongRootBlockAllocator.
+template <>
+struct StrongRootBlockAllocator::rebind<Address> {
+  using other = StrongRootBlockAllocator;
+};
+
+// Rebinding to something other than Address gives a std::allocator that
+// is copy-constructable from StrongRootBlockAllocator.
+template <class U>
+struct StrongRootBlockAllocator::rebind {
+  class other : public std::allocator<U> {
+   public:
+    // NOLINTNEXTLINE
+    other(const StrongRootBlockAllocator&) {}
+  };
 };
 
 }  // namespace internal

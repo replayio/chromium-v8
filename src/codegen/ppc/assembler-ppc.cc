@@ -54,6 +54,8 @@ static unsigned CpuFeaturesImpliedByCompiler() {
   return answer;
 }
 
+bool CpuFeatures::SupportsWasmSimd128() { return false; }
+
 void CpuFeatures::ProbeImpl(bool cross_compile) {
   supported_ |= CpuFeaturesImpliedByCompiler();
   icache_line_size_ = 128;
@@ -74,6 +76,10 @@ void CpuFeatures::ProbeImpl(bool cross_compile) {
   if (cpu.part() == base::CPU::PPC_POWER8 ||
       cpu.part() == base::CPU::PPC_POWER9) {
     supported_ |= (1u << FPR_GPR_MOV);
+  }
+  // V8 PPC Simd implementations need P9 at a minimum.
+  if (cpu.part() == base::CPU::PPC_POWER9) {
+    supported_ |= (1u << SIMD);
   }
 #endif
   if (cpu.part() == base::CPU::PPC_POWER6 ||
@@ -106,10 +112,17 @@ void CpuFeatures::ProbeImpl(bool cross_compile) {
   supported_ |= (1u << ISELECT);
   supported_ |= (1u << VSX);
   supported_ |= (1u << MODULO);
+  supported_ |= (1u << SIMD);
 #if V8_TARGET_ARCH_PPC64
   supported_ |= (1u << FPR_GPR_MOV);
 #endif
 #endif
+
+  // Set a static value on whether Simd is supported.
+  // This variable is only used for certain archs to query SupportWasmSimd128()
+  // at runtime in builtins using an extern ref. Other callers should use
+  // CpuFeatures::SupportWasmSimd128().
+  CpuFeatures::supports_wasm_simd_128_ = CpuFeatures::SupportsWasmSimd128();
 }
 
 void CpuFeatures::PrintTarget() {
@@ -1469,7 +1482,8 @@ void Assembler::mcrfs(CRegister cr, FPSCRBit bit) {
 
 void Assembler::mfcr(Register dst) { emit(EXT2 | MFCR | dst.code() * B21); }
 
-void Assembler::mtcrf(unsigned char FXM, Register src) {
+void Assembler::mtcr(Register src) {
+  uint8_t FXM = 0xFF;
   emit(MTCRF | src.code() * B21 | FXM * B12);
 }
 #if V8_TARGET_ARCH_PPC64
@@ -1860,7 +1874,14 @@ void Assembler::stxvd(const Simd128Register rt, const MemOperand& dst) {
 
 void Assembler::xxspltib(const Simd128Register rt, const Operand& imm) {
   int TX = 1;
+  CHECK(is_uint8(imm.immediate()));
   emit(XXSPLTIB | rt.code() * B21 | imm.immediate() * B11 | TX);
+}
+
+void Assembler::xxbrq(const Simd128Register rt, const Simd128Register rb) {
+  int BX = 1;
+  int TX = 1;
+  emit(XXBRQ | rt.code() * B21 | 31 * B16 | rb.code() * B11 | BX * B1 | TX);
 }
 
 // Pseudo instructions.
@@ -1947,20 +1968,32 @@ void Assembler::db(uint8_t data) {
   pc_ += sizeof(uint8_t);
 }
 
-void Assembler::dd(uint32_t data) {
+void Assembler::dd(uint32_t data, RelocInfo::Mode rmode) {
   CheckBuffer();
+  if (!RelocInfo::IsNone(rmode)) {
+    DCHECK(RelocInfo::IsDataEmbeddedObject(rmode));
+    RecordRelocInfo(rmode);
+  }
   *reinterpret_cast<uint32_t*>(pc_) = data;
   pc_ += sizeof(uint32_t);
 }
 
-void Assembler::dq(uint64_t value) {
+void Assembler::dq(uint64_t value, RelocInfo::Mode rmode) {
   CheckBuffer();
+  if (!RelocInfo::IsNone(rmode)) {
+    DCHECK(RelocInfo::IsDataEmbeddedObject(rmode));
+    RecordRelocInfo(rmode);
+  }
   *reinterpret_cast<uint64_t*>(pc_) = value;
   pc_ += sizeof(uint64_t);
 }
 
-void Assembler::dp(uintptr_t data) {
+void Assembler::dp(uintptr_t data, RelocInfo::Mode rmode) {
   CheckBuffer();
+  if (!RelocInfo::IsNone(rmode)) {
+    DCHECK(RelocInfo::IsDataEmbeddedObject(rmode));
+    RecordRelocInfo(rmode);
+  }
   *reinterpret_cast<uintptr_t*>(pc_) = data;
   pc_ += sizeof(uintptr_t);
 }

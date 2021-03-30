@@ -16,9 +16,9 @@ class Platform;
 
 namespace internal {
 
-class StatsCollector;
-class RawHeap;
+class HeapBase;
 class ConcurrentSweeperTest;
+class NormalPageSpace;
 
 class V8_EXPORT_PRIVATE Sweeper final {
  public:
@@ -31,7 +31,7 @@ class V8_EXPORT_PRIVATE Sweeper final {
         CompactableSpaceHandling::kSweep;
   };
 
-  Sweeper(RawHeap*, cppgc::Platform*, StatsCollector*);
+  explicit Sweeper(HeapBase&);
   ~Sweeper();
 
   Sweeper(const Sweeper&) = delete;
@@ -41,11 +41,20 @@ class V8_EXPORT_PRIVATE Sweeper final {
   void Start(SweepingConfig);
   void FinishIfRunning();
   void NotifyDoneIfNeeded();
+  // SweepForAllocationIfRunning sweeps the given |space| until a slot that can
+  // fit an allocation of size |size| is found. Returns true if a slot was
+  // found.
+  bool SweepForAllocationIfRunning(NormalPageSpace* space, size_t size);
+
+  bool IsSweepingOnMutatorThread() const;
+  bool IsSweepingInProgress() const;
 
  private:
   void WaitForConcurrentSweepingForTesting();
 
   class SweeperImpl;
+
+  HeapBase& heap_;
   std::unique_ptr<SweeperImpl> impl_;
 
   friend class ConcurrentSweeperTest;

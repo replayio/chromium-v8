@@ -86,6 +86,9 @@ const Register ApiGetterDescriptor::CallbackRegister() { return r3; }
 const Register GrowArrayElementsDescriptor::ObjectRegister() { return r0; }
 const Register GrowArrayElementsDescriptor::KeyRegister() { return r3; }
 
+const Register BaselineLeaveFrameDescriptor::ParamsSizeRegister() { return r3; }
+const Register BaselineLeaveFrameDescriptor::WeightRegister() { return r4; }
+
 // static
 const Register TypeConversionDescriptor::ArgumentRegister() { return r0; }
 
@@ -209,20 +212,27 @@ void CompareDescriptor::InitializePlatformSpecific(
   data->InitializePlatformSpecific(arraysize(registers), registers);
 }
 
+void Compare_BaselineDescriptor::InitializePlatformSpecific(
+    CallInterfaceDescriptorData* data) {
+  // r1: left operand
+  // r0: right operand
+  // r2: feedback slot
+  Register registers[] = {r1, r0, r2};
+  data->InitializePlatformSpecific(arraysize(registers), registers);
+}
+
 void BinaryOpDescriptor::InitializePlatformSpecific(
     CallInterfaceDescriptorData* data) {
   Register registers[] = {r1, r0};
   data->InitializePlatformSpecific(arraysize(registers), registers);
 }
 
-void ArgumentsAdaptorDescriptor::InitializePlatformSpecific(
+void BinaryOp_BaselineDescriptor::InitializePlatformSpecific(
     CallInterfaceDescriptorData* data) {
-  Register registers[] = {
-      r1,  // JSFunction
-      r3,  // the new target
-      r0,  // actual number of arguments
-      r2,  // expected number of arguments
-  };
+  // r1: left operand
+  // r0: right operand
+  // r2: feedback slot
+  Register registers[] = {r1, r0, r2};
   data->InitializePlatformSpecific(arraysize(registers), registers);
 }
 

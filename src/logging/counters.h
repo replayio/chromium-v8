@@ -903,6 +903,7 @@ class RuntimeCallTimer final {
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, AssignSpillSlots)                \
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, BuildLiveRangeBundles)           \
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, BuildLiveRanges)                 \
+  ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, BytecodeGraphBuilder)            \
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, CommitAssignment)                \
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, ConnectRanges)                   \
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, ControlFlowOptimization)         \
@@ -914,16 +915,15 @@ class RuntimeCallTimer final {
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, EarlyTrimming)                   \
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, EffectLinearization)             \
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, EscapeAnalysis)                  \
-  ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, MidTierRegisterOutputDefinition) \
-  ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, MidTierPopulateReferenceMaps)    \
-  ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, MidTierRegisterAllocator)        \
-  ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, MidTierSpillSlotAllocator)       \
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, FinalizeCode)                    \
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, FrameElision)                    \
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, GenericLowering)                 \
-  ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, BytecodeGraphBuilder)            \
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, Inlining)                        \
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, JumpThreading)                   \
+  ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, MidTierPopulateReferenceMaps)    \
+  ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, MidTierRegisterAllocator)        \
+  ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, MidTierRegisterOutputDefinition) \
+  ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, MidTierSpillSlotAllocator)       \
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, LateGraphTrimming)               \
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, LateOptimization)                \
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, LoadElimination)                 \
@@ -951,7 +951,8 @@ class RuntimeCallTimer final {
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, Untyper)                         \
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, VerifyGraph)                     \
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, WasmBaseOptimization)            \
-  ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, WasmFullOptimization)            \
+  ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, WasmInlining)                    \
+  ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, WasmLoopUnrolling)               \
                                                                             \
   ADD_THREAD_SPECIFIC_COUNTER(V, Parse, ArrowFunctionLiteral)               \
   ADD_THREAD_SPECIFIC_COUNTER(V, Parse, FunctionLiteral)                    \
@@ -968,6 +969,9 @@ class RuntimeCallTimer final {
   V(BoundFunctionNameGetter)                   \
   V(CodeGenerationFromStringsCallbacks)        \
   V(CompileBackgroundCompileTask)              \
+  V(CompileBaseline)                           \
+  V(CompileBaselineVisit)                      \
+  V(CompileBaselinePreVisit)                   \
   V(CompileCollectSourcePositions)             \
   V(CompileDeserialize)                        \
   V(CompileEnqueueOnDispatcher)                \
@@ -977,6 +981,8 @@ class RuntimeCallTimer final {
   V(CompilePublishBackgroundFinalization)      \
   V(CompileSerialize)                          \
   V(CompileWaitForDispatcher)                  \
+  V(ConfigureInstance)                         \
+  V(CreateApiFunction)                         \
   V(DeoptimizeCode)                            \
   V(DeserializeContext)                        \
   V(DeserializeIsolate)                        \
@@ -991,6 +997,7 @@ class RuntimeCallTimer final {
   V(GCEpilogueCallback)                        \
   V(GCPrologueCallback)                        \
   V(Genesis)                                   \
+  V(GetCompatibleReceiver)                     \
   V(GetMoreDataCallback)                       \
   V(IndexedDefinerCallback)                    \
   V(IndexedDeleterCallback)                    \
@@ -999,9 +1006,14 @@ class RuntimeCallTimer final {
   V(IndexedGetterCallback)                     \
   V(IndexedQueryCallback)                      \
   V(IndexedSetterCallback)                     \
+  V(InstantiateFunction)                       \
+  V(InstantiateObject)                         \
   V(Invoke)                                    \
   V(InvokeApiFunction)                         \
   V(InvokeApiInterruptCallbacks)               \
+  V(IsCompatibleReceiver)                      \
+  V(IsCompatibleReceiverMap)                   \
+  V(IsTemplateFor)                             \
   V(JS_Execution)                              \
   V(Map_SetPrototype)                          \
   V(Map_TransitionToAccessorProperty)          \
@@ -1018,8 +1030,8 @@ class RuntimeCallTimer final {
   V(ObjectVerify)                              \
   V(OptimizeBackgroundDispatcherJob)           \
   V(OptimizeCode)                              \
-  V(OptimizeConcurrentPrepare)                 \
   V(OptimizeConcurrentFinalize)                \
+  V(OptimizeConcurrentPrepare)                 \
   V(OptimizeFinalizePipelineJob)               \
   V(OptimizeHeapBrokerInitialization)          \
   V(OptimizeNonConcurrent)                     \
@@ -1032,6 +1044,7 @@ class RuntimeCallTimer final {
   V(PrototypeMap_TransitionToDataProperty)     \
   V(PrototypeObject_DeleteProperty)            \
   V(ReconfigureToDataProperty)                 \
+  V(UpdateProtector)                           \
   V(StringLengthGetter)                        \
   V(TestCounter1)                              \
   V(TestCounter2)                              \

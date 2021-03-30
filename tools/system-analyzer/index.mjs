@@ -39,7 +39,7 @@ class App {
 
       mapPanel: $('#map-panel'),
       codePanel: $('#code-panel'),
-      sourcePanel: $('#source-panel'),
+      scriptPanel: $('#script-panel'),
 
       toolTip: $('#tool-tip'),
     };
@@ -52,12 +52,19 @@ class App {
     this._startupPromise = this.runAsyncInitialize();
   }
 
+  static get allEventTypes() {
+    return new Set([
+      SourcePosition, MapLogEntry, IcLogEntry, ApiLogEntry, CodeLogEntry,
+      DeoptLogEntry
+    ]);
+  }
+
   async runAsyncInitialize() {
     await Promise.all([
       import('./view/list-panel.mjs'),
       import('./view/timeline-panel.mjs'),
       import('./view/map-panel.mjs'),
-      import('./view/source-panel.mjs'),
+      import('./view/script-panel.mjs'),
       import('./view/code-panel.mjs'),
       import('./view/tool-tip.mjs'),
     ]);
@@ -118,10 +125,7 @@ class App {
   }
 
   selectEntries(entries) {
-    const missingTypes = new Set([
-      SourcePosition, MapLogEntry, IcLogEntry, ApiLogEntry, CodeLogEntry,
-      DeoptLogEntry
-    ]);
+    const missingTypes = App.allEventTypes;
     groupBy(entries, each => each.constructor, true).forEach(group => {
       this.selectEntriesOfSingleType(group.entries);
       missingTypes.delete(group.key);
@@ -176,7 +180,7 @@ class App {
   }
 
   showSourcePositions(entries) {
-    this._view.sourcePanel.selectedSourcePositions = entries
+    this._view.scriptPanel.selectedSourcePositions = entries
   }
 
   handleTimeRangeSelect(e) {
@@ -244,7 +248,7 @@ class App {
 
   focusSourcePosition(sourcePosition) {
     if (!sourcePosition) return;
-    this._view.sourcePanel.focusedSourcePositions = [sourcePosition];
+    this._view.scriptPanel.focusedSourcePositions = [sourcePosition];
   }
 
   handleToolTip(event) {
@@ -280,7 +284,7 @@ class App {
       this._view.deoptList.timeline = deoptTimeline;
       this._view.codeList.timeline = codeTimeline;
       this._view.apiList.timeline = apiTimeline;
-      this._view.sourcePanel.scripts = processor.scripts;
+      this._view.scriptPanel.scripts = processor.scripts;
       this._view.codePanel.timeline = codeTimeline;
       this.refreshTimelineTrackView();
     } catch (e) {

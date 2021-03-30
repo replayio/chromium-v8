@@ -617,15 +617,15 @@ MaybeHandle<Object> Intl::LegacyUnwrapReceiver(Isolate* isolate,
                                                Handle<JSReceiver> receiver,
                                                Handle<JSFunction> constructor,
                                                bool has_initialized_slot) {
-  Handle<Object> obj_is_instance_of;
-  ASSIGN_RETURN_ON_EXCEPTION(isolate, obj_is_instance_of,
-                             Object::InstanceOf(isolate, receiver, constructor),
-                             Object);
-  bool is_instance_of = obj_is_instance_of->BooleanValue(isolate);
+  Handle<Object> obj_ordinary_has_instance;
+  ASSIGN_RETURN_ON_EXCEPTION(
+      isolate, obj_ordinary_has_instance,
+      Object::OrdinaryHasInstance(isolate, constructor, receiver), Object);
+  bool ordinary_has_instance = obj_ordinary_has_instance->BooleanValue(isolate);
 
   // 2. If receiver does not have an [[Initialized...]] internal slot
-  //    and ? InstanceofOperator(receiver, constructor) is true, then
-  if (!has_initialized_slot && is_instance_of) {
+  //    and ? OrdinaryHasInstance(constructor, receiver) is true, then
+  if (!has_initialized_slot && ordinary_has_instance) {
     // 2. a. Let new_receiver be ? Get(receiver, %Intl%.[[FallbackSymbol]]).
     Handle<Object> new_receiver;
     ASSIGN_RETURN_ON_EXCEPTION(
@@ -1599,10 +1599,6 @@ Handle<JSArray> CreateArrayFromList(Isolate* isolate,
   return array;
 }
 
-// To mitigate the risk of bestfit locale matcher, we first check in without
-// turnning it on.
-static bool implement_bestfit = false;
-
 // ECMA 402 9.2.9 SupportedLocales(availableLocales, requestedLocales, options)
 // https://tc39.github.io/ecma402/#sec-supportedlocales
 MaybeHandle<JSObject> SupportedLocales(
@@ -1611,28 +1607,24 @@ MaybeHandle<JSObject> SupportedLocales(
     const std::vector<std::string>& requested_locales, Handle<Object> options) {
   std::vector<std::string> supported_locales;
 
-  // 2. Else, let matcher be "best fit".
-  Intl::MatcherOption matcher = Intl::MatcherOption::kBestFit;
+  // 1. Set options to ? CoerceOptionsToObject(options).
+  Handle<JSReceiver> options_obj;
+  ASSIGN_RETURN_ON_EXCEPTION(
+      isolate, options_obj,
+      Intl::CoerceOptionsToObject(isolate, options, method), JSObject);
 
-  // 1. If options is not undefined, then
-  if (!options->IsUndefined(isolate)) {
-    // 1. a. Let options be ? ToObject(options).
-    Handle<JSReceiver> options_obj;
-    ASSIGN_RETURN_ON_EXCEPTION(isolate, options_obj,
-                               Object::ToObject(isolate, options), JSObject);
-
-    // 1. b. Let matcher be ? GetOption(options, "localeMatcher", "string",
-    //       « "lookup", "best fit" », "best fit").
-    Maybe<Intl::MatcherOption> maybe_locale_matcher =
-        Intl::GetLocaleMatcher(isolate, options_obj, method);
-    MAYBE_RETURN(maybe_locale_matcher, MaybeHandle<JSObject>());
-    matcher = maybe_locale_matcher.FromJust();
-  }
+  // 2. Let matcher be ? GetOption(options, "localeMatcher", "string",
+  //       « "lookup", "best fit" », "best fit").
+  Maybe<Intl::MatcherOption> maybe_locale_matcher =
+      Intl::GetLocaleMatcher(isolate, options_obj, method);
+  MAYBE_RETURN(maybe_locale_matcher, MaybeHandle<JSObject>());
+  Intl::MatcherOption matcher = maybe_locale_matcher.FromJust();
 
   // 3. If matcher is "best fit", then
   //    a. Let supportedLocales be BestFitSupportedLocales(availableLocales,
   //       requestedLocales).
-  if (matcher == Intl::MatcherOption::kBestFit && implement_bestfit) {
+  if (matcher == Intl::MatcherOption::kBestFit &&
+      FLAG_harmony_intl_best_fit_matcher) {
     supported_locales =
         BestFitSupportedLocales(isolate, available_locales, requested_locales);
   } else {
@@ -1889,7 +1881,8 @@ Maybe<Intl::ResolvedLocale> Intl::ResolveLocale(
     const std::vector<std::string>& requested_locales, MatcherOption matcher,
     const std::set<std::string>& relevant_extension_keys) {
   std::string locale;
-  if (matcher == Intl::MatcherOption::kBestFit && implement_bestfit) {
+  if (matcher == Intl::MatcherOption::kBestFit &&
+      FLAG_harmony_intl_best_fit_matcher) {
     locale = BestFitMatcher(isolate, available_locales, requested_locales);
   } else {
     locale = LookupMatcher(isolate, available_locales, requested_locales);
@@ -2218,6 +2211,40 @@ MaybeHandle<String> Intl::FormattedToString(
   return Intl::ToString(isolate, result);
 }
 
+// ecma402/#sec-getoptionsobject
+MaybeHandle<JSReceiver> Intl::GetOptionsObject(Isolate* isolate,
+                                               Handle<Object> options,
+                                               const char* service) {
+  // 1. If options is undefined, then
+  if (options->IsUndefined(isolate)) {
+    // a. Return ! ObjectCreate(null).
+    return isolate->factory()->NewJSObjectWithNullProto();
+  }
+  // 2. If Type(options) is Object, then
+  if (options->IsJSReceiver()) {
+    // a. Return options.
+    return Handle<JSReceiver>::cast(options);
+  }
+  // 3. Throw a TypeError exception.
+  THROW_NEW_ERROR(isolate, NewTypeError(MessageTemplate::kInvalidArgument),
+                  JSReceiver);
+}
+
+// ecma402/#sec-coerceoptionstoobject
+MaybeHandle<JSReceiver> Intl::CoerceOptionsToObject(Isolate* isolate,
+                                                    Handle<Object> options,
+                                                    const char* service) {
+  // 1. If options is undefined, then
+  if (options->IsUndefined(isolate)) {
+    // a. Return ! ObjectCreate(null).
+    return isolate->factory()->NewJSObjectWithNullProto();
+  }
+  // 2. Return ? ToObject(options).
+  ASSIGN_RETURN_ON_EXCEPTION(isolate, options,
+                             Object::ToObject(isolate, options, service),
+                             JSReceiver);
+  return Handle<JSReceiver>::cast(options);
+}
 
 }  // namespace internal
 }  // namespace v8

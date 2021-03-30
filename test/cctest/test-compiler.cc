@@ -274,8 +274,9 @@ TEST(Regression236) {
 
 TEST(GetScriptLineNumber) {
   LocalContext context;
-  v8::HandleScope scope(CcTest::isolate());
-  v8::ScriptOrigin origin = v8::ScriptOrigin(v8_str("test"));
+  v8::Isolate* isolate = CcTest::isolate();
+  v8::HandleScope scope(isolate);
+  v8::ScriptOrigin origin = v8::ScriptOrigin(isolate, v8_str("test"));
   const char function_f[] = "function f() {}";
   const int max_rows = 1000;
   const int buffer_size = max_rows + sizeof(function_f);
@@ -650,9 +651,10 @@ TEST(CompileFunctionInContextQuirks) {
 
 TEST(CompileFunctionInContextScriptOrigin) {
   CcTest::InitializeVM();
-  v8::HandleScope scope(CcTest::isolate());
+  v8::Isolate* isolate = CcTest::isolate();
+  v8::HandleScope scope(isolate);
   LocalContext env;
-  v8::ScriptOrigin origin(v8_str("test"), 22, 41);
+  v8::ScriptOrigin origin(isolate, v8_str("test"), 22, 41);
   v8::ScriptCompiler::Source script_source(v8_str("throw new Error()"), origin);
   Local<ScriptOrModule> script;
   v8::Local<v8::Function> fun =
@@ -693,12 +695,13 @@ void TestCompileFunctionInContextToStringImpl() {
 
   {  // NOLINT
     CcTest::InitializeVM();
-    v8::HandleScope scope(CcTest::isolate());
+    v8::Isolate* isolate = CcTest::isolate();
+    v8::HandleScope scope(isolate);
     LocalContext env;
 
     // Regression test for v8:6190
     {
-      v8::ScriptOrigin origin(v8_str("test"), 22, 41);
+      v8::ScriptOrigin origin(isolate, v8_str("test"), 22, 41);
       v8::ScriptCompiler::Source script_source(v8_str("return event"), origin);
 
       v8::Local<v8::String> params[] = {v8_str("event")};
@@ -725,7 +728,7 @@ void TestCompileFunctionInContextToStringImpl() {
 
     // With no parameters:
     {
-      v8::ScriptOrigin origin(v8_str("test"), 17, 31);
+      v8::ScriptOrigin origin(isolate, v8_str("test"), 17, 31);
       v8::ScriptCompiler::Source script_source(v8_str("return 0"), origin);
 
       v8::TryCatch try_catch(CcTest::isolate());
@@ -750,7 +753,7 @@ void TestCompileFunctionInContextToStringImpl() {
 
     // With a name:
     {
-      v8::ScriptOrigin origin(v8_str("test"), 17, 31);
+      v8::ScriptOrigin origin(isolate, v8_str("test"), 17, 31);
       v8::ScriptCompiler::Source script_source(v8_str("return 0"), origin);
 
       v8::TryCatch try_catch(CcTest::isolate());
@@ -944,9 +947,9 @@ static int AllocationSitesCount(Heap* heap) {
 TEST(DecideToPretenureDuringCompilation) {
   // The test makes use of optimization and relies on deterministic
   // compilation.
-  if (!i::FLAG_opt || i::FLAG_always_opt || i::FLAG_minor_mc ||
-      i::FLAG_stress_incremental_marking || i::FLAG_optimize_for_size ||
-      i::FLAG_turbo_nci || i::FLAG_turbo_nci_as_midtier ||
+  if (!i::FLAG_opt || i::FLAG_always_opt || i::FLAG_always_sparkplug ||
+      i::FLAG_minor_mc || i::FLAG_stress_incremental_marking ||
+      i::FLAG_optimize_for_size || i::FLAG_turbo_nci ||
       i::FLAG_stress_concurrent_allocation) {
     return;
   }
@@ -1097,7 +1100,7 @@ TEST(ProfilerEnabledDuringBackgroundCompile) {
   v8::Local<v8::Script> script =
       v8::ScriptCompiler::Compile(isolate->GetCurrentContext(),
                                   &streamed_source, v8_str(source),
-                                  v8::ScriptOrigin(v8_str("foo")))
+                                  v8::ScriptOrigin(isolate, v8_str("foo")))
           .ToLocalChecked();
 
   i::Handle<i::Object> obj = Utils::OpenHandle(*script);

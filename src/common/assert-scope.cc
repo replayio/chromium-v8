@@ -69,6 +69,27 @@ bool PerIsolateAssertScope<kType, kAllow>::IsAllowed(Isolate* isolate) {
   return PerIsolateDataBit<kType>::decode(isolate->per_isolate_assert_data());
 }
 
+// static
+template <PerIsolateAssertType kType, bool kAllow>
+void PerIsolateAssertScope<kType, kAllow>::Open(Isolate* isolate,
+                                                bool* was_execution_allowed) {
+  DCHECK_NOT_NULL(isolate);
+  DCHECK_NOT_NULL(was_execution_allowed);
+  uint32_t old_data = isolate->per_isolate_assert_data();
+  *was_execution_allowed = PerIsolateDataBit<kType>::decode(old_data);
+  isolate->set_per_isolate_assert_data(
+      PerIsolateDataBit<kType>::update(old_data, kAllow));
+}
+// static
+template <PerIsolateAssertType kType, bool kAllow>
+void PerIsolateAssertScope<kType, kAllow>::Close(Isolate* isolate,
+                                                 bool was_execution_allowed) {
+  DCHECK_NOT_NULL(isolate);
+  uint32_t old_data = isolate->per_isolate_assert_data();
+  isolate->set_per_isolate_assert_data(
+      PerIsolateDataBit<kType>::update(old_data, was_execution_allowed));
+}
+
 // -----------------------------------------------------------------------------
 // Instantiations.
 
@@ -84,6 +105,7 @@ template class PerThreadAssertScope<CODE_DEPENDENCY_CHANGE_ASSERT, false>;
 template class PerThreadAssertScope<CODE_DEPENDENCY_CHANGE_ASSERT, true>;
 template class PerThreadAssertScope<CODE_ALLOCATION_ASSERT, false>;
 template class PerThreadAssertScope<CODE_ALLOCATION_ASSERT, true>;
+template class PerThreadAssertScope<GC_MOLE, false>;
 
 template class PerIsolateAssertScope<JAVASCRIPT_EXECUTION_ASSERT, false>;
 template class PerIsolateAssertScope<JAVASCRIPT_EXECUTION_ASSERT, true>;

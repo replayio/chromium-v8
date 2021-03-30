@@ -6,6 +6,7 @@
 #include "src/builtins/builtins-utils-inl.h"
 #include "src/builtins/builtins.h"
 #include "src/codegen/code-factory.h"
+#include "src/common/assert-scope.h"
 #include "src/debug/debug.h"
 #include "src/execution/isolate.h"
 #include "src/execution/protectors-inl.h"
@@ -14,6 +15,7 @@
 #include "src/objects/contexts.h"
 #include "src/objects/elements-inl.h"
 #include "src/objects/hash-table-inl.h"
+#include "src/objects/js-array-buffer-inl.h"
 #include "src/objects/js-array-inl.h"
 #include "src/objects/lookup.h"
 #include "src/objects/objects-inl.h"
@@ -112,7 +114,7 @@ inline bool EnsureJSArrayWithWritableFastElements(Isolate* isolate,
 
   // Adding elements to the array prototype would break code that makes sure
   // it has no elements. Handle that elsewhere.
-  if (isolate->IsAnyInitialArrayPrototype(array)) return false;
+  if (isolate->IsAnyInitialArrayPrototype(*array)) return false;
 
   // Need to ensure that the arguments passed in args can be contained in
   // the array.
@@ -332,7 +334,7 @@ V8_WARN_UNUSED_RESULT Object GenericArrayPush(Isolate* isolate,
     Handle<Object> element = args->at(i + 1);
 
     // b. Perform ? Set(O, ! ToString(len), E, true).
-    if (length <= static_cast<double>(JSArray::kMaxArrayIndex)) {
+    if (length <= JSObject::kMaxElementIndex) {
       RETURN_FAILURE_ON_EXCEPTION(
           isolate, Object::SetElement(isolate, receiver, length, element,
                                       ShouldThrow::kThrowOnError));
@@ -608,7 +610,7 @@ BUILTIN(ArrayUnshift) {
   DCHECK(array->map().is_extensible());
   DCHECK(!IsDictionaryElementsKind(array->GetElementsKind()));
   DCHECK(IsJSArrayFastElementMovingAllowed(isolate, *array));
-  DCHECK(!isolate->IsAnyInitialArrayPrototype(array));
+  DCHECK(!isolate->IsAnyInitialArrayPrototype(*array));
 
   MatchArrayElementsKindToArguments(isolate, array, &args, 1,
                                     args.length() - 1);
@@ -661,7 +663,10 @@ class ArrayConcatVisitor {
   V8_WARN_UNUSED_RESULT bool visit(uint32_t i, Handle<Object> elm) {
     uint32_t index = index_offset_ + i;
 
-    if (i >= JSObject::kMaxElementCount - index_offset_) {
+    // Note we use >=kMaxArrayLength instead of the more appropriate
+    // >kMaxArrayIndex here due to overflowing arithmetic and
+    // increase_index_offset.
+    if (i >= JSArray::kMaxArrayLength - index_offset_) {
       set_exceeds_array_limit(true);
       // Exception hasn't been thrown at this point. Return true to
       // break out, and caller will throw. !visit would imply that
@@ -706,8 +711,8 @@ class ArrayConcatVisitor {
   uint32_t index_offset() const { return index_offset_; }
 
   void increase_index_offset(uint32_t delta) {
-    if (JSObject::kMaxElementCount - index_offset_ < delta) {
-      index_offset_ = JSObject::kMaxElementCount;
+    if (JSArray::kMaxArrayLength - index_offset_ < delta) {
+      index_offset_ = JSArray::kMaxArrayLength;
     } else {
       index_offset_ += delta;
     }
@@ -812,7 +817,7 @@ class ArrayConcatVisitor {
   Isolate* isolate_;
   Handle<Object> storage_;  // Always a global handle.
   // Index after last seen index. Always less than or equal to
-  // JSObject::kMaxElementCount.
+  // JSArray::kMaxArrayLength.
   uint32_t index_offset_;
   uint32_t bit_field_;
 };
@@ -969,6 +974,7 @@ void CollectElementIndices(Isolate* isolate, Handle<JSObject> object,
     case FAST_SLOPPY_ARGUMENTS_ELEMENTS:
     case SLOW_SLOPPY_ARGUMENTS_ELEMENTS: {
       DisallowGarbageCollection no_gc;
+      DisableGCMole no_gc_mole;
       FixedArrayBase elements = object->elements();
       JSObject raw_object = *object;
       ElementsAccessor* accessor = object->GetElementsAccessor();
@@ -1247,14 +1253,14 @@ Object Slow_ArrayConcat(BuiltinArguments* args, Handle<Object> species,
       length_estimate = 1;
       element_estimate = 1;
     }
-    // Avoid overflows by capping at kMaxElementCount.
-    if (JSObject::kMaxElementCount - estimate_result_length < length_estimate) {
-      estimate_result_length = JSObject::kMaxElementCount;
+    // Avoid overflows by capping at kMaxArrayLength.
+    if (JSArray::kMaxArrayLength - estimate_result_length < length_estimate) {
+      estimate_result_length = JSArray::kMaxArrayLength;
     } else {
       estimate_result_length += length_estimate;
     }
-    if (JSObject::kMaxElementCount - estimate_nof < element_estimate) {
-      estimate_nof = JSObject::kMaxElementCount;
+    if (JSArray::kMaxArrayLength - estimate_nof < element_estimate) {
+      estimate_nof = JSArray::kMaxArrayLength;
     } else {
       estimate_nof += element_estimate;
     }

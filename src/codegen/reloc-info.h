@@ -59,17 +59,21 @@ class RelocInfo {
     CODE_TARGET,
     RELATIVE_CODE_TARGET,  // LAST_CODE_TARGET_MODE
     COMPRESSED_EMBEDDED_OBJECT,
-    FULL_EMBEDDED_OBJECT,  // LAST_GCED_ENUM
+    FULL_EMBEDDED_OBJECT,
+    DATA_EMBEDDED_OBJECT,  // LAST_GCED_ENUM
 
     WASM_CALL,  // FIRST_SHAREABLE_RELOC_MODE
     WASM_STUB_CALL,
 
+    // TODO(ishell): rename to UNEMBEDDED_BUILTIN_ENTRY.
+    // An un-embedded off-heap instruction stream target.
+    // See http://crbug.com/v8/11527 for details.
     RUNTIME_ENTRY,
 
     EXTERNAL_REFERENCE,  // The address of an external C++ function.
     INTERNAL_REFERENCE,  // An address inside the same function.
 
-    // Encoded internal reference, used only on MIPS, MIPS64 and PPC.
+    // Encoded internal reference, used only on RISCV64, MIPS, MIPS64 and PPC.
     INTERNAL_REFERENCE_ENCODED,
 
     // An off-heap instruction stream target. See http://goo.gl/Z2HUiM.
@@ -96,7 +100,7 @@ class RelocInfo {
     FIRST_REAL_RELOC_MODE = CODE_TARGET,
     LAST_REAL_RELOC_MODE = VENEER_POOL,
     FIRST_EMBEDDED_OBJECT_RELOC_MODE = COMPRESSED_EMBEDDED_OBJECT,
-    LAST_EMBEDDED_OBJECT_RELOC_MODE = FULL_EMBEDDED_OBJECT,
+    LAST_EMBEDDED_OBJECT_RELOC_MODE = DATA_EMBEDDED_OBJECT,
     LAST_GCED_ENUM = LAST_EMBEDDED_OBJECT_RELOC_MODE,
     FIRST_SHAREABLE_RELOC_MODE = WASM_CALL,
   };
@@ -140,10 +144,14 @@ class RelocInfo {
   static constexpr bool IsCompressedEmbeddedObject(Mode mode) {
     return COMPRESS_POINTERS_BOOL && mode == COMPRESSED_EMBEDDED_OBJECT;
   }
+  static constexpr bool IsDataEmbeddedObject(Mode mode) {
+    return mode == DATA_EMBEDDED_OBJECT;
+  }
   static constexpr bool IsEmbeddedObjectMode(Mode mode) {
     return base::IsInRange(mode, FIRST_EMBEDDED_OBJECT_RELOC_MODE,
                            LAST_EMBEDDED_OBJECT_RELOC_MODE);
   }
+  // TODO(ishell): rename to IsUnembeddedBuiltinEntry().
   static constexpr bool IsRuntimeEntry(Mode mode) {
     return mode == RUNTIME_ENTRY;
   }
@@ -337,7 +345,8 @@ class RelocInfo {
 
   static int EmbeddedObjectModeMask() {
     return ModeMask(RelocInfo::FULL_EMBEDDED_OBJECT) |
-           ModeMask(RelocInfo::COMPRESSED_EMBEDDED_OBJECT);
+           ModeMask(RelocInfo::COMPRESSED_EMBEDDED_OBJECT) |
+           ModeMask(RelocInfo::DATA_EMBEDDED_OBJECT);
   }
 
   // In addition to modes covered by the apply mask (which is applied at GC
@@ -347,6 +356,7 @@ class RelocInfo {
     return ModeMask(RelocInfo::CODE_TARGET) |
            ModeMask(RelocInfo::COMPRESSED_EMBEDDED_OBJECT) |
            ModeMask(RelocInfo::FULL_EMBEDDED_OBJECT) |
+           ModeMask(RelocInfo::DATA_EMBEDDED_OBJECT) |
            ModeMask(RelocInfo::RUNTIME_ENTRY) |
            ModeMask(RelocInfo::RELATIVE_CODE_TARGET) | kApplyMask;
   }

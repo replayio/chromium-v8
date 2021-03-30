@@ -32,21 +32,26 @@ bool CanAllocate(const Node* node) {
     case IrOpcode::kEffectPhi:
     case IrOpcode::kIfException:
     case IrOpcode::kLoad:
+    case IrOpcode::kLoadImmutable:
     case IrOpcode::kLoadElement:
     case IrOpcode::kLoadField:
     case IrOpcode::kLoadFromObject:
+    case IrOpcode::kLoadLane:
+    case IrOpcode::kLoadTransform:
+    case IrOpcode::kMemoryBarrier:
     case IrOpcode::kPoisonedLoad:
     case IrOpcode::kProtectedLoad:
     case IrOpcode::kProtectedStore:
     case IrOpcode::kRetain:
     case IrOpcode::kStackPointerGreaterThan:
     case IrOpcode::kStaticAssert:
-    // TODO(tebbi): Store nodes might do a bump-pointer allocation.
+    // TODO(turbofan): Store nodes might do a bump-pointer allocation.
     //              We should introduce a special bump-pointer store node to
     //              differentiate that.
     case IrOpcode::kStore:
     case IrOpcode::kStoreElement:
     case IrOpcode::kStoreField:
+    case IrOpcode::kStoreLane:
     case IrOpcode::kStoreToObject:
     case IrOpcode::kTaggedPoisonOnSpeculation:
     case IrOpcode::kUnalignedLoad:

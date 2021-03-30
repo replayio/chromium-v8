@@ -170,10 +170,6 @@ class BreakPointInfo
 class CoverageInfo
     : public TorqueGeneratedCoverageInfo<CoverageInfo, HeapObject> {
  public:
-  int StartSourcePosition(int slot_index) const;
-  int EndSourcePosition(int slot_index) const;
-  int BlockCount(int slot_index) const;
-
   void InitializeSlot(int slot_index, int start_pos, int end_pos);
   void ResetBlockCount(int slot_index);
 
@@ -191,9 +187,6 @@ class CoverageInfo
   // Description of layout within each slot.
   using Slot = TorqueGeneratedCoverageInfoSlotOffsets;
 
- private:
-  int SlotFieldOffset(int slot_index, int field_offset) const;
-
   TQ_OBJECT_CONSTRUCTORS(CoverageInfo)
 };
 
@@ -201,14 +194,6 @@ class CoverageInfo
 class BreakPoint : public TorqueGeneratedBreakPoint<BreakPoint, Struct> {
  public:
   TQ_OBJECT_CONSTRUCTORS(BreakPoint)
-};
-
-// Holds Wasm values. This is used by the inspector.
-class WasmValue : public TorqueGeneratedWasmValue<WasmValue, Struct> {
- public:
-  NEVER_READ_ONLY_SPACE
-
-  TQ_OBJECT_CONSTRUCTORS(WasmValue)
 };
 
 }  // namespace internal

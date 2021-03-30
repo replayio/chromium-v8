@@ -1173,6 +1173,10 @@ int DisassemblerX64::AVXInstruction(byte* data) {
         current += PrintRightXMMOperand(current);
         AppendToBuffer(",%s", NameOfXMMRegister(regop));
         break;
+      case 0xE6:
+        AppendToBuffer("vcvtdq2pd %s,", NameOfXMMRegister(regop));
+        current += PrintRightXMMOperand(current);
+        break;
       default:
         UnimplementedInstruction();
     }
@@ -1441,45 +1445,6 @@ int DisassemblerX64::AVXInstruction(byte* data) {
         AppendToBuffer("vmovmskps %s,", NameOfCPURegister(regop));
         current += PrintRightXMMOperand(current);
         break;
-      case 0x51:
-      case 0x52:
-      case 0x53: {
-        const char* const pseudo_op[] = {"vsqrtps", "vrsqrtps", "vrcpps"};
-
-        AppendToBuffer("%s %s,", pseudo_op[opcode - 0x51],
-                       NameOfXMMRegister(regop));
-        current += PrintRightXMMOperand(current);
-        break;
-      }
-      case 0x5A:
-      case 0x5B: {
-        const char* const pseudo_op[] = {"vcvtps2pd", "vcvtdq2ps"};
-
-        AppendToBuffer("%s %s,", pseudo_op[opcode - 0x5A],
-                       NameOfXMMRegister(regop));
-        current += PrintRightXMMOperand(current);
-        break;
-      }
-      case 0x54:
-      case 0x55:
-      case 0x56:
-      case 0x57:
-      case 0x58:
-      case 0x59:
-      case 0x5C:
-      case 0x5D:
-      case 0x5E:
-      case 0x5F: {
-        const char* const pseudo_op[] = {
-            "vandps", "vandnps", "vorps",  "vxorps", "vaddps", "vmulps",
-            "",       "",        "vsubps", "vminps", "vdivps", "vmaxps",
-        };
-
-        AppendToBuffer("%s %s,%s,", pseudo_op[opcode - 0x54],
-                       NameOfXMMRegister(regop), NameOfXMMRegister(vvvv));
-        current += PrintRightXMMOperand(current);
-        break;
-      }
       case 0xC2: {
         AppendToBuffer("vcmpps %s,%s,", NameOfXMMRegister(regop),
                        NameOfXMMRegister(vvvv));
@@ -1495,6 +1460,21 @@ int DisassemblerX64::AVXInstruction(byte* data) {
         AppendToBuffer(",0x%x", *current++);
         break;
       }
+#define SSE_UNOP_CASE(instruction, unused, code)                       \
+  case 0x##code:                                                       \
+    AppendToBuffer("v" #instruction " %s,", NameOfXMMRegister(regop)); \
+    current += PrintRightXMMOperand(current);                          \
+    break;
+        SSE_UNOP_INSTRUCTION_LIST(SSE_UNOP_CASE)
+#undef SSE_UNOP_CASE
+#define SSE_BINOP_CASE(instruction, unused, code)                        \
+  case 0x##code:                                                         \
+    AppendToBuffer("v" #instruction " %s,%s,", NameOfXMMRegister(regop), \
+                   NameOfXMMRegister(vvvv));                             \
+    current += PrintRightXMMOperand(current);                            \
+    break;
+        SSE_BINOP_INSTRUCTION_LIST(SSE_BINOP_CASE)
+#undef SSE_BINOP_CASE
       default:
         UnimplementedInstruction();
     }
@@ -2071,6 +2051,8 @@ int DisassemblerX64::TwoByteOpcodeInstruction(byte* data) {
       AppendToBuffer("cmp%sss %s,%s", cmp_pseudo_op[current[1]],
                      NameOfXMMRegister(regop), NameOfXMMRegister(rm));
       current += 2;
+    } else if (opcode == 0xE6) {
+      current += PrintOperands("cvtdq2pd", XMMREG_XMMOPER_OP_ORDER, current);
     } else {
       UnimplementedInstruction();
     }
@@ -2090,24 +2072,15 @@ int DisassemblerX64::TwoByteOpcodeInstruction(byte* data) {
     }
   } else if (opcode == 0x13) {
     // movlps m64, xmm1
-    AppendToBuffer("movlps ");
-    current += PrintRightXMMOperand(current);
-    AppendToBuffer(",%s", NameOfXMMRegister(regop));
+    current += PrintOperands("movlps", XMMOPER_XMMREG_OP_ORDER, current);
   } else if (opcode == 0x16) {
-    // movlhps xmm1, xmm2
-    // movhps xmm1, m64
     if (mod == 0b11) {
-      AppendToBuffer("movlhps ");
+      current += PrintOperands("movlhps", XMMREG_XMMOPER_OP_ORDER, current);
     } else {
-      AppendToBuffer("movhps ");
+      current += PrintOperands("movhps", XMMREG_XMMOPER_OP_ORDER, current);
     }
-    AppendToBuffer("%s,", NameOfXMMRegister(regop));
-    current += PrintRightXMMOperand(current);
   } else if (opcode == 0x17) {
-    // movhps m64, xmm1
-    AppendToBuffer("movhps ");
-    current += PrintRightXMMOperand(current);
-    AppendToBuffer(",%s", NameOfXMMRegister(regop));
+    current += PrintOperands("movhps", XMMOPER_XMMREG_OP_ORDER, current);
   } else if (opcode == 0x1F) {
     // NOP
     current++;
@@ -2122,19 +2095,11 @@ int DisassemblerX64::TwoByteOpcodeInstruction(byte* data) {
     AppendToBuffer("nop");
 
   } else if (opcode == 0x28) {
-    // movaps xmm, xmm/m128
-    AppendToBuffer("movaps %s,", NameOfXMMRegister(regop));
-    current += PrintRightXMMOperand(current);
-
+    current += PrintOperands("movaps", XMMREG_XMMOPER_OP_ORDER, current);
   } else if (opcode == 0x29) {
-    // movaps xmm/m128, xmm
-    AppendToBuffer("movaps ");
-    current += PrintRightXMMOperand(current);
-    AppendToBuffer(",%s", NameOfXMMRegister(regop));
-
+    current += PrintOperands("movaps", XMMOPER_XMMREG_OP_ORDER, current);
   } else if (opcode == 0x2E) {
-    AppendToBuffer("ucomiss %s,", NameOfXMMRegister(regop));
-    current += PrintRightXMMOperand(current);
+    current += PrintOperands("ucomiss", XMMREG_XMMOPER_OP_ORDER, current);
   } else if (opcode == 0xA2) {
     // CPUID
     AppendToBuffer("%s", mnemonic);
@@ -2144,17 +2109,6 @@ int DisassemblerX64::TwoByteOpcodeInstruction(byte* data) {
     const InstructionDesc& idesc = cmov_instructions[condition];
     byte_size_operand_ = idesc.byte_size_operation;
     current += PrintOperands(idesc.mnem, idesc.op_order_, current);
-
-  } else if (opcode >= 0x51 && opcode <= 0x5F) {
-    const char* const pseudo_op[] = {
-        "sqrtps",   "rsqrtps", "rcpps", "andps", "andnps",
-        "orps",     "xorps",   "addps", "mulps", "cvtps2pd",
-        "cvtdq2ps", "subps",   "minps", "divps", "maxps",
-    };
-    AppendToBuffer("%s %s,", pseudo_op[opcode - 0x51],
-                   NameOfXMMRegister(regop));
-    current += PrintRightXMMOperand(current);
-
   } else if (opcode == 0xC0) {
     byte_size_operand_ = true;
     current += PrintOperands("xadd", OPER_REG_OP_ORDER, current);
@@ -2227,6 +2181,14 @@ int DisassemblerX64::TwoByteOpcodeInstruction(byte* data) {
   } else if (opcode == 0xAE && (data[2] & 0xF8) == 0xE8) {
     AppendToBuffer("lfence");
     current = data + 3;
+    // clang-format off
+#define SSE_DISASM_CASE(instruction, unused, code) \
+  } else if (opcode == 0x##code) {                 \
+    current += PrintOperands(#instruction, XMMREG_XMMOPER_OP_ORDER, current);
+    SSE_UNOP_INSTRUCTION_LIST(SSE_DISASM_CASE)
+    SSE_BINOP_INSTRUCTION_LIST(SSE_DISASM_CASE)
+#undef SSE_DISASM_CASE
+    // clang-format on
   } else {
     UnimplementedInstruction();
   }
@@ -2248,14 +2210,12 @@ int DisassemblerX64::ThreeByteOpcodeInstruction(byte* data) {
   if (second_byte == 0x38) {
     switch (third_byte) {
       case 0x10: {
-        AppendToBuffer("pblendvb %s,", NameOfXMMRegister(regop));
-        current += PrintRightXMMOperand(current);
+        current += PrintOperands("pblendvb", XMMREG_XMMOPER_OP_ORDER, current);
         AppendToBuffer(",<xmm0>");
         break;
       }
       case 0x14: {
-        AppendToBuffer("blendvps %s,", NameOfXMMRegister(regop));
-        current += PrintRightXMMOperand(current);
+        current += PrintOperands("blendvps", XMMREG_XMMOPER_OP_ORDER, current);
         AppendToBuffer(",<xmm0>");
         break;
       }

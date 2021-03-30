@@ -413,6 +413,16 @@ void Decoder::DecodeExt0(Instruction* instr) {
     PPC_VA_OPCODE_A_FORM_LIST(DECODE_VA_A_FORM__INSTRUCTIONS)
 #undef DECODE_VA_A_FORM__INSTRUCTIONS
   }
+  switch (EXT0 | (instr->BitField(9, 0))) {
+// TODO(miladfarca): Fix RC indicator.
+#define DECODE_VC_FORM__INSTRUCTIONS(name, opcode_name, opcode_value) \
+  case opcode_name: {                                                 \
+    Format(instr, #name " 'Vt, 'Va, 'Vb");                            \
+    return;                                                           \
+  }
+    PPC_VC_OPCODE_LIST(DECODE_VC_FORM__INSTRUCTIONS)
+#undef DECODE_VC_FORM__INSTRUCTIONS
+  }
   switch (EXT0 | (instr->BitField(10, 0))) {
 #define DECODE_VX_A_FORM__INSTRUCTIONS(name, opcode_name, opcode_value) \
   case opcode_name: {                                                   \
@@ -790,7 +800,7 @@ void Decoder::DecodeExt2(Instruction* instr) {
   }
 
   // ?? are all of these xo_form?
-  switch (EXT2 | (instr->BitField(9, 1))) {
+  switch (EXT2 | (instr->BitField(10, 1))) {
     case CMP: {
 #if V8_TARGET_ARCH_PPC64
       if (instr->Bit(21)) {
@@ -1056,6 +1066,14 @@ void Decoder::DecodeExt2(Instruction* instr) {
       Format(instr, "mtvsrwz 'Xt, 'ra");
       return;
     }
+    case LDBRX: {
+      Format(instr, "ldbrx   'rt, 'ra, 'rb");
+      return;
+    }
+    case MTCRF: {
+      Format(instr, "mtcr    'rs");
+      return;
+    }
 #endif
   }
 
@@ -1254,6 +1272,12 @@ void Decoder::DecodeExt5(Instruction* instr) {
 }
 
 void Decoder::DecodeExt6(Instruction* instr) {
+  switch (EXT6 | (instr->BitField(10, 2))) {
+    case XXBRQ: {
+      Format(instr, "xxbrq  'Xt, 'Xb");
+      return;
+    }
+  }
   switch (EXT6 | (instr->BitField(10, 1))) {
     case XXSPLTIB: {
       Format(instr, "xxspltib  'Xt, 'IMM8");

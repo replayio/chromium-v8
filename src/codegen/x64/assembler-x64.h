@@ -832,6 +832,7 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
   // Unconditional jump to L
   void jmp(Label* L, Label::Distance distance = Label::kFar);
   void jmp(Handle<Code> target, RelocInfo::Mode rmode);
+  void jmp(Address entry, RelocInfo::Mode rmode);
 
   // Jump near absolute indirect (r64)
   void jmp(Register adr);
@@ -920,6 +921,7 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
   void ucomiss(XMMRegister dst, XMMRegister src);
   void ucomiss(XMMRegister dst, Operand src);
   void movaps(XMMRegister dst, XMMRegister src);
+  void movaps(XMMRegister dst, Operand src);
 
   // Don't use this unless it's important to keep the
   // top half of the destination register unchanged.
@@ -1205,6 +1207,8 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
   void movupd(XMMRegister dst, Operand src);
   void movupd(Operand dst, XMMRegister src);
 
+  void cvtdq2pd(XMMRegister dst, XMMRegister src);
+
   void cvttsd2si(Register dst, Operand src);
   void cvttsd2si(Register dst, XMMRegister src);
   void cvttss2siq(Register dst, XMMRegister src);
@@ -1299,6 +1303,7 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
   void vmovddup(XMMRegister dst, Operand src);
   void vmovshdup(XMMRegister dst, XMMRegister src);
   void vbroadcastss(XMMRegister dst, Operand src);
+  void vbroadcastss(XMMRegister dst, XMMRegister src);
 
   void fma_instr(byte op, XMMRegister dst, XMMRegister src1, XMMRegister src2,
                  VectorLength l, SIMDPrefix pp, LeadingOpcode m, VexW w);
@@ -1329,6 +1334,7 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
   }
   void vmovsd(XMMRegister dst, Operand src) { vsd(0x10, dst, xmm0, src); }
   void vmovsd(Operand dst, XMMRegister src) { vsd(0x11, src, xmm0, dst); }
+  void vmovdqa(XMMRegister dst, Operand src);
   void vmovdqa(XMMRegister dst, XMMRegister src);
   void vmovdqu(XMMRegister dst, Operand src);
   void vmovdqu(Operand dst, XMMRegister src);
@@ -1397,6 +1403,9 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
   }
   void vmovhlps(XMMRegister dst, XMMRegister src1, XMMRegister src2) {
     vinstr(0x12, dst, src1, src2, kNone, k0F, kWIG);
+  }
+  void vcvtdq2pd(XMMRegister dst, XMMRegister src) {
+    vinstr(0xe6, dst, xmm0, src, kF3, k0F, kWIG);
   }
   void vcvtss2sd(XMMRegister dst, XMMRegister src1, XMMRegister src2) {
     vinstr(0x5a, dst, src1, src2, kF3, k0F, kWIG);
@@ -1512,6 +1521,7 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
   }
 
   void vmovaps(XMMRegister dst, XMMRegister src) { vps(0x28, dst, xmm0, src); }
+  void vmovaps(XMMRegister dst, Operand src) { vps(0x28, dst, xmm0, src); }
   void vmovups(XMMRegister dst, XMMRegister src) { vps(0x10, dst, xmm0, src); }
   void vmovups(XMMRegister dst, Operand src) { vps(0x10, dst, xmm0, src); }
   void vmovups(Operand dst, XMMRegister src) { vps(0x11, src, xmm0, dst); }
@@ -1844,9 +1854,11 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
   // Writes a single word of data in the code stream.
   // Used for inline tables, e.g., jump-tables.
   void db(uint8_t data);
-  void dd(uint32_t data);
-  void dq(uint64_t data);
-  void dp(uintptr_t data) { dq(data); }
+  void dd(uint32_t data, RelocInfo::Mode rmode = RelocInfo::NONE);
+  void dq(uint64_t data, RelocInfo::Mode rmode = RelocInfo::NONE);
+  void dp(uintptr_t data, RelocInfo::Mode rmode = RelocInfo::NONE) {
+    dq(data, rmode);
+  }
   void dq(Label* label);
 
   // Patch entries for partial constant pool.
