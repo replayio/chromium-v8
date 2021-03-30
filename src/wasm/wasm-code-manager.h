@@ -2,6 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#if !V8_ENABLE_WEBASSEMBLY
+#error This header should only be included if WebAssembly is enabled.
+#endif  // !V8_ENABLE_WEBASSEMBLY
+
 #ifndef V8_WASM_WASM_CODE_MANAGER_H_
 #define V8_WASM_WASM_CODE_MANAGER_H_
 
@@ -9,7 +13,6 @@
 #include <map>
 #include <memory>
 #include <set>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -64,20 +67,23 @@ struct WasmModule;
   V(WasmI32AtomicWait64)                 \
   V(WasmI64AtomicWait32)                 \
   V(WasmI64AtomicWait64)                 \
+  V(WasmGetOwnProperty)                  \
   V(WasmRefFunc)                         \
   V(WasmMemoryGrow)                      \
   V(WasmTableInit)                       \
   V(WasmTableCopy)                       \
+  V(WasmTableFill)                       \
+  V(WasmTableGrow)                       \
   V(WasmTableGet)                        \
   V(WasmTableSet)                        \
   V(WasmStackGuard)                      \
   V(WasmStackOverflow)                   \
+  V(WasmAllocateFixedArray)              \
   V(WasmThrow)                           \
   V(WasmRethrow)                         \
   V(WasmTraceEnter)                      \
   V(WasmTraceExit)                       \
   V(WasmTraceMemory)                     \
-  V(ArgumentsAdaptorTrampoline)          \
   V(BigIntToI32Pair)                     \
   V(BigIntToI64)                         \
   V(DoubleToI)                           \
@@ -87,7 +93,8 @@ struct WasmModule;
   V(ToNumber)                            \
   V(WasmAllocateArrayWithRtt)            \
   V(WasmAllocateRtt)                     \
-  V(WasmAllocateStructWithRtt)
+  V(WasmAllocateStructWithRtt)           \
+  V(WasmSubtypeCheck)
 
 // Sorted, disjoint and non-overlapping memory regions. A region is of the
 // form [start, end). So there's no [start, end), [end, other_end),
@@ -228,6 +235,14 @@ class V8_EXPORT_PRIVATE WasmCode final {
         return false;
       }
     }
+  }
+
+  // Decrement the ref count on code that is known to be in use (i.e. the ref
+  // count cannot drop to zero here).
+  void DecRefOnLiveCode() {
+    int old_count = ref_count_.fetch_sub(1, std::memory_order_acq_rel);
+    DCHECK_LE(2, old_count);
+    USE(old_count);
   }
 
   // Decrement the ref count on code that is known to be dead, even though there
@@ -501,8 +516,17 @@ class V8_EXPORT_PRIVATE NativeModule final {
   WasmCode* PublishCode(std::unique_ptr<WasmCode>);
   std::vector<WasmCode*> PublishCode(Vector<std::unique_ptr<WasmCode>>);
 
-  std::unique_ptr<WasmCode> AllocateDeserializedCode(
-      int index, Vector<const byte> instructions, int stack_slots,
+  // ReinstallDebugCode does a subset of PublishCode: It installs the code in
+  // the code table and patches the jump table. The given code must be debug
+  // code (with breakpoints) and must be owned by this {NativeModule} already.
+  // This method is used to re-instantiate code that was removed from the code
+  // table and jump table via another {PublishCode}.
+  void ReinstallDebugCode(WasmCode*);
+
+  Vector<uint8_t> AllocateForDeserializedCode(size_t total_code_size);
+
+  std::unique_ptr<WasmCode> AddDeserializedCode(
+      int index, Vector<byte> instructions, int stack_slots,
       int tagged_parameter_slots, int safepoint_table_offset,
       int handler_table_offset, int constant_pool_offset,
       int code_comments_offset, int unpadded_binary_size,
@@ -541,8 +565,8 @@ class V8_EXPORT_PRIVATE NativeModule final {
   Address GetCallTargetForFunction(uint32_t func_index) const;
 
   struct JumpTablesRef {
-    const Address jump_table_start = kNullAddress;
-    const Address far_jump_table_start = kNullAddress;
+    Address jump_table_start = kNullAddress;
+    Address far_jump_table_start = kNullAddress;
 
     bool is_valid() const { return far_jump_table_start != kNullAddress; }
   };
@@ -722,6 +746,13 @@ class V8_EXPORT_PRIVATE NativeModule final {
   // Hold the {allocation_mutex_} when calling {PublishCodeLocked}.
   WasmCode* PublishCodeLocked(std::unique_ptr<WasmCode>);
 
+  // Transfer owned code from {new_owned_code_} to {owned_code_}.
+  void TransferNewOwnedCodeLocked() const;
+
+  // Add code to the code cache, if it meets criteria for being cached and we do
+  // not have code in the cache yet.
+  void InsertToCodeCache(WasmCode* code);
+
   // -- Fields of {NativeModule} start here.
 
   WasmEngine* const engine_;
@@ -780,9 +811,15 @@ class V8_EXPORT_PRIVATE NativeModule final {
   //////////////////////////////////////////////////////////////////////////////
   // Protected by {allocation_mutex_}:
 
-  // Holds all allocated code objects. For lookup based on pc, the key is the
-  // instruction start address of the value.
-  std::map<Address, std::unique_ptr<WasmCode>> owned_code_;
+  // Holds allocated code objects for fast lookup and deletion. For lookup based
+  // on pc, the key is the instruction start address of the value. Filled lazily
+  // from {new_owned_code_} (below).
+  mutable std::map<Address, std::unique_ptr<WasmCode>> owned_code_;
+
+  // Holds owned code which is not inserted into {owned_code_} yet. It will be
+  // inserted on demand. This has much better performance than inserting
+  // individual code objects.
+  mutable std::vector<std::unique_ptr<WasmCode>> new_owned_code_;
 
   // Table of the latest code object per function, updated on initial
   // compilation and tier up. The number of entries is
@@ -800,6 +837,12 @@ class V8_EXPORT_PRIVATE NativeModule final {
   std::unique_ptr<DebugInfo> debug_info_;
 
   TieringState tiering_state_ = kTieredUp;
+
+  // Cache both baseline and top-tier code if we are debugging, to speed up
+  // repeated enabling/disabling of the debugger or profiler.
+  // Maps <tier, function_index> to WasmCode.
+  std::unique_ptr<std::map<std::pair<ExecutionTier, int>, WasmCode*>>
+      cached_code_;
 
   // End of fields protected by {allocation_mutex_}.
   //////////////////////////////////////////////////////////////////////////////
@@ -925,7 +968,7 @@ class V8_EXPORT_PRIVATE V8_NODISCARD WasmCodeRefScope {
 
  private:
   WasmCodeRefScope* const previous_scope_;
-  std::unordered_set<WasmCode*> code_ptrs_;
+  std::vector<WasmCode*> code_ptrs_;
 };
 
 // Similarly to a global handle, a {GlobalWasmCodeRef} stores a single

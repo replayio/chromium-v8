@@ -3930,19 +3930,6 @@ U Widen(T value) {
 }
 
 template <typename T, typename U>
-U Narrow(T value) {
-  static_assert(sizeof(int8_t) < sizeof(T), "T must be int16_t or larger");
-  static_assert(sizeof(U) < sizeof(T), "T must larger than U");
-  static_assert(std::is_unsigned<T>() == std::is_unsigned<U>(),
-                "Signed-ness of T and U must match");
-  // Make sure value can be expressed in the smaller type; otherwise, the
-  // casted result is implementation defined.
-  DCHECK_LE(std::numeric_limits<T>::min(), value);
-  DCHECK_GE(std::numeric_limits<T>::max(), value);
-  return static_cast<U>(value);
-}
-
-template <typename T, typename U>
 void Widen(Simulator* simulator, int Vd, int Vm) {
   static const int kLanes = 8 / sizeof(T);
   T src[kLanes];
@@ -3974,19 +3961,7 @@ void SaturatingNarrow(Simulator* simulator, int Vd, int Vm) {
   U dst[kLanes];
   simulator->get_neon_register(Vm, src);
   for (int i = 0; i < kLanes; i++) {
-    dst[i] = Narrow<T, U>(Saturate<U>(src[i]));
-  }
-  simulator->set_neon_register<U, kDoubleSize>(Vd, dst);
-}
-
-template <typename T, typename U>
-void SaturatingUnsignedNarrow(Simulator* simulator, int Vd, int Vm) {
-  static const int kLanes = 16 / sizeof(T);
-  T src[kLanes];
-  U dst[kLanes];
-  simulator->get_neon_register(Vm, src);
-  for (int i = 0; i < kLanes; i++) {
-    dst[i] = Saturate<U>(src[i]);
+    dst[i] = base::saturated_cast<U>(src[i]);
   }
   simulator->set_neon_register<U, kDoubleSize>(Vd, dst);
 }
@@ -4302,13 +4277,6 @@ void PairwiseAddLong(Simulator* simulator, int Vd, int Vm) {
   simulator->set_neon_register<WideType, SIZE>(Vd, dst);
 }
 
-template <typename T, int SIZE = kSimd128Size>
-void RoundingAverageUnsigned(Simulator* simulator, int Vd, int Vm, int Vn) {
-  static_assert(std::is_unsigned<T>::value,
-                "Implemented only for unsigned types.");
-  Binop<T>(simulator, Vd, Vm, Vn, base::RoundingAverageUnsigned<T>);
-}
-
 template <typename NarrowType, typename WideType>
 void MultiplyLong(Simulator* simulator, int Vd, int Vn, int Vm) {
   DCHECK_EQ(sizeof(WideType), 2 * sizeof(NarrowType));
@@ -4529,6 +4497,25 @@ void Simulator::DecodeAdvancedSIMDTwoOrThreeRegisters(Instruction* instr) {
       get_neon_register(vm, q_data);
       for (int i = 0; i < 4; i++) q_data[i] = ~q_data[i];
       set_neon_register(vd, q_data);
+    } else if (opc1 == 0b01 && opc2 == 0b0010) {
+      // vceq.<dt> Qd, Qm, #0 (signed integers).
+      int Vd = instr->VFPDRegValue(kSimd128Precision);
+      int Vm = instr->VFPMRegValue(kSimd128Precision);
+      switch (size) {
+        case Neon8:
+          Unop<int8_t>(this, Vd, Vm, [](int8_t x) { return x == 0 ? -1 : 0; });
+          break;
+        case Neon16:
+          Unop<int16_t>(this, Vd, Vm,
+                        [](int16_t x) { return x == 0 ? -1 : 0; });
+          break;
+        case Neon32:
+          Unop<int32_t>(this, Vd, Vm,
+                        [](int32_t x) { return x == 0 ? -1 : 0; });
+          break;
+        case Neon64:
+          UNREACHABLE();
+      }
     } else if (opc1 == 0b01 && opc2 == 0b0100) {
       // vclt.<dt> Qd, Qm, #0 (signed integers).
       int Vd = instr->VFPDRegValue(kSimd128Precision);
@@ -4546,7 +4533,6 @@ void Simulator::DecodeAdvancedSIMDTwoOrThreeRegisters(Instruction* instr) {
         case Neon64:
           UNREACHABLE();
       }
-
     } else if (opc1 == 0b01 && (opc2 & 0b0111) == 0b110) {
       // vabs<type>.<size> Qd, Qm
       int Vd = instr->VFPDRegValue(kSimd128Precision);
@@ -4731,7 +4717,7 @@ void Simulator::DecodeAdvancedSIMDTwoOrThreeRegisters(Instruction* instr) {
           if (src_unsigned) {
             SaturatingNarrow<uint16_t, uint8_t>(this, Vd, Vm);
           } else if (dst_unsigned) {
-            SaturatingUnsignedNarrow<int16_t, uint8_t>(this, Vd, Vm);
+            SaturatingNarrow<int16_t, uint8_t>(this, Vd, Vm);
           } else {
             SaturatingNarrow<int16_t, int8_t>(this, Vd, Vm);
           }
@@ -4741,7 +4727,7 @@ void Simulator::DecodeAdvancedSIMDTwoOrThreeRegisters(Instruction* instr) {
           if (src_unsigned) {
             SaturatingNarrow<uint32_t, uint16_t>(this, Vd, Vm);
           } else if (dst_unsigned) {
-            SaturatingUnsignedNarrow<int32_t, uint16_t>(this, Vd, Vm);
+            SaturatingNarrow<int32_t, uint16_t>(this, Vd, Vm);
           } else {
             SaturatingNarrow<int32_t, int16_t>(this, Vd, Vm);
           }
@@ -4751,7 +4737,7 @@ void Simulator::DecodeAdvancedSIMDTwoOrThreeRegisters(Instruction* instr) {
           if (src_unsigned) {
             SaturatingNarrow<uint64_t, uint32_t>(this, Vd, Vm);
           } else if (dst_unsigned) {
-            SaturatingUnsignedNarrow<int64_t, uint32_t>(this, Vd, Vm);
+            SaturatingNarrow<int64_t, uint32_t>(this, Vd, Vm);
           } else {
             SaturatingNarrow<int64_t, int32_t>(this, Vd, Vm);
           }
@@ -5041,6 +5027,11 @@ void Simulator::DecodeAdvancedSIMDDataProcessing(Instruction* instr) {
         }
       }
       set_neon_register(Vd, src1);
+    } else if (!u && opc == 1 && sz == 3 && q && op1) {
+      // vorn, Qd, Qm, Qn.
+      // NeonSize does not matter.
+      Binop<uint32_t>(this, Vd, Vm, Vn,
+                      [](uint32_t x, uint32_t y) { return x | (~y); });
     } else if (!u && opc == 1 && sz == 0 && q && op1) {
       // vand Qd, Qm, Qn.
       uint32_t src1[4], src2[4];
@@ -5321,13 +5312,13 @@ void Simulator::DecodeAdvancedSIMDDataProcessing(Instruction* instr) {
       NeonSize size = static_cast<NeonSize>(instr->Bits(21, 20));
       switch (size) {
         case Neon8:
-          RoundingAverageUnsigned<uint8_t>(this, Vd, Vm, Vn);
+          Binop<uint8_t>(this, Vd, Vm, Vn, RoundingAverageUnsigned<uint8_t>);
           break;
         case Neon16:
-          RoundingAverageUnsigned<uint16_t>(this, Vd, Vm, Vn);
+          Binop<uint16_t>(this, Vd, Vm, Vn, RoundingAverageUnsigned<uint16_t>);
           break;
         case Neon32:
-          RoundingAverageUnsigned<uint32_t>(this, Vd, Vm, Vn);
+          Binop<uint32_t>(this, Vd, Vm, Vn, RoundingAverageUnsigned<uint32_t>);
           break;
         default:
           UNREACHABLE();
@@ -5485,6 +5476,15 @@ void Simulator::DecodeAdvancedSIMDDataProcessing(Instruction* instr) {
         }
       }
       set_neon_register(Vd, dst);
+    } else if (u && opc == 0xB) {
+      // vqrdmulh.<dt> Qd, Qm, Qn
+      NeonSize size = static_cast<NeonSize>(instr->Bits(21, 20));
+      if (size == Neon16) {
+        Binop<int16_t>(this, Vd, Vm, Vn, SaturateRoundingQMul<int16_t>);
+      } else {
+        DCHECK_EQ(Neon32, size);
+        Binop<int32_t>(this, Vd, Vm, Vn, SaturateRoundingQMul<int32_t>);
+      }
     } else {
       UNIMPLEMENTED();
     }

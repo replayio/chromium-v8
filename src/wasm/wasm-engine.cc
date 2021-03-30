@@ -130,11 +130,10 @@ class WasmGCForegroundTask : public CancelableTask {
 class WeakScriptHandle {
  public:
   explicit WeakScriptHandle(Handle<Script> script) : script_id_(script->id()) {
-    DCHECK(script->source_url().IsString() ||
-           script->source_url().IsUndefined());
-    if (script->source_url().IsString()) {
+    DCHECK(script->name().IsString() || script->name().IsUndefined());
+    if (script->name().IsString()) {
       std::unique_ptr<char[]> source_url =
-          String::cast(script->source_url()).ToCString();
+          String::cast(script->name()).ToCString();
       // Convert from {unique_ptr} to {shared_ptr}.
       source_url_ = {source_url.release(), source_url.get_deleter()};
     }
@@ -389,6 +388,16 @@ struct WasmEngine::IsolateInfo {
 
   // Keep new modules in tiered down state.
   bool keep_tiered_down = false;
+
+  // Elapsed time since last throw/rethrow/catch event.
+  base::ElapsedTimer throw_timer;
+  base::ElapsedTimer rethrow_timer;
+  base::ElapsedTimer catch_timer;
+
+  // Total number of exception events in this isolate.
+  int throw_count = 0;
+  int rethrow_count = 0;
+  int catch_count = 0;
 };
 
 struct WasmEngine::NativeModuleInfo {
@@ -453,7 +462,9 @@ MaybeHandle<AsmWasmData> WasmEngine::SyncCompileTranslatedAsmJs(
     Isolate* isolate, ErrorThrower* thrower, const ModuleWireBytes& bytes,
     Vector<const byte> asm_js_offset_table_bytes,
     Handle<HeapNumber> uses_bitset, LanguageMode language_mode) {
-  TRACE_EVENT0("v8.wasm", "wasm.SyncCompileTranslatedAsmJs");
+  int compilation_id = next_compilation_id_.fetch_add(1);
+  TRACE_EVENT1("v8.wasm", "wasm.SyncCompileTranslatedAsmJs", "id",
+               compilation_id);
   ModuleOrigin origin = language_mode == LanguageMode::kSloppy
                             ? kAsmJsSloppyOrigin
                             : kAsmJsStrictOrigin;
@@ -475,9 +486,9 @@ MaybeHandle<AsmWasmData> WasmEngine::SyncCompileTranslatedAsmJs(
   // Transfer ownership of the WasmModule to the {Managed<WasmModule>} generated
   // in {CompileToNativeModule}.
   Handle<FixedArray> export_wrappers;
-  std::shared_ptr<NativeModule> native_module =
-      CompileToNativeModule(isolate, WasmFeatures::ForAsmjs(), thrower,
-                            std::move(result).value(), bytes, &export_wrappers);
+  std::shared_ptr<NativeModule> native_module = CompileToNativeModule(
+      isolate, WasmFeatures::ForAsmjs(), thrower, std::move(result).value(),
+      bytes, &export_wrappers, compilation_id);
   if (!native_module) return {};
 
   return AsmWasmData::New(isolate, std::move(native_module), export_wrappers,
@@ -499,7 +510,8 @@ Handle<WasmModuleObject> WasmEngine::FinalizeTranslatedAsmJs(
 MaybeHandle<WasmModuleObject> WasmEngine::SyncCompile(
     Isolate* isolate, const WasmFeatures& enabled, ErrorThrower* thrower,
     const ModuleWireBytes& bytes) {
-  TRACE_EVENT0("v8.wasm", "wasm.SyncCompile");
+  int compilation_id = next_compilation_id_.fetch_add(1);
+  TRACE_EVENT1("v8.wasm", "wasm.SyncCompile", "id", compilation_id);
   ModuleResult result = DecodeWasmModule(
       enabled, bytes.start(), bytes.end(), false, kWasmOrigin,
       isolate->counters(), isolate->metrics_recorder(),
@@ -513,9 +525,9 @@ MaybeHandle<WasmModuleObject> WasmEngine::SyncCompile(
   // Transfer ownership of the WasmModule to the {Managed<WasmModule>} generated
   // in {CompileToNativeModule}.
   Handle<FixedArray> export_wrappers;
-  std::shared_ptr<NativeModule> native_module =
-      CompileToNativeModule(isolate, enabled, thrower,
-                            std::move(result).value(), bytes, &export_wrappers);
+  std::shared_ptr<NativeModule> native_module = CompileToNativeModule(
+      isolate, enabled, thrower, std::move(result).value(), bytes,
+      &export_wrappers, compilation_id);
   if (!native_module) return {};
 
 #ifdef DEBUG
@@ -596,7 +608,8 @@ void WasmEngine::AsyncCompile(
     std::shared_ptr<CompilationResultResolver> resolver,
     const ModuleWireBytes& bytes, bool is_shared,
     const char* api_method_name_for_errors) {
-  TRACE_EVENT0("v8.wasm", "wasm.AsyncCompile");
+  int compilation_id = next_compilation_id_.fetch_add(1);
+  TRACE_EVENT1("v8.wasm", "wasm.AsyncCompile", "id", compilation_id);
   if (!FLAG_wasm_async_compilation) {
     // Asynchronous compilation disabled; fall back on synchronous compilation.
     ErrorThrower thrower(isolate, api_method_name_for_errors);
@@ -634,10 +647,10 @@ void WasmEngine::AsyncCompile(
   std::unique_ptr<byte[]> copy(new byte[bytes.length()]);
   base::Memcpy(copy.get(), bytes.start(), bytes.length());
 
-  AsyncCompileJob* job =
-      CreateAsyncCompileJob(isolate, enabled, std::move(copy), bytes.length(),
-                            handle(isolate->context(), isolate),
-                            api_method_name_for_errors, std::move(resolver));
+  AsyncCompileJob* job = CreateAsyncCompileJob(
+      isolate, enabled, std::move(copy), bytes.length(),
+      handle(isolate->context(), isolate), api_method_name_for_errors,
+      std::move(resolver), compilation_id);
   job->Start();
 }
 
@@ -645,11 +658,13 @@ std::shared_ptr<StreamingDecoder> WasmEngine::StartStreamingCompilation(
     Isolate* isolate, const WasmFeatures& enabled, Handle<Context> context,
     const char* api_method_name,
     std::shared_ptr<CompilationResultResolver> resolver) {
-  TRACE_EVENT0("v8.wasm", "wasm.StartStreamingCompilation");
+  int compilation_id = next_compilation_id_.fetch_add(1);
+  TRACE_EVENT1("v8.wasm", "wasm.StartStreamingCompilation", "id",
+               compilation_id);
   if (FLAG_wasm_async_compilation) {
     AsyncCompileJob* job = CreateAsyncCompileJob(
         isolate, enabled, std::unique_ptr<byte[]>(nullptr), 0, context,
-        api_method_name, std::move(resolver));
+        api_method_name, std::move(resolver), compilation_id);
     return job->CreateStreamingDecoder();
   }
   return StreamingDecoder::CreateSyncStreamingDecoder(
@@ -733,7 +748,7 @@ Handle<Script> CreateWasmScript(Isolate* isolate,
                                 std::shared_ptr<NativeModule> native_module,
                                 Vector<const char> source_url) {
   Handle<Script> script =
-      isolate->factory()->NewScript(isolate->factory()->empty_string());
+      isolate->factory()->NewScript(isolate->factory()->undefined_value());
   script->set_compilation_state(Script::COMPILATION_STATE_COMPILED);
   script->set_context_data(isolate->native_context()->debug_context_id());
   script->set_type(Script::TYPE_WASM);
@@ -786,7 +801,7 @@ Handle<Script> CreateWasmScript(Isolate* isolate,
                     .ToHandleChecked();
     }
   }
-  script->set_source_url(*url_str);
+  script->set_name(*url_str);
 
   const WasmDebugSymbols& debug_symbols = module->debug_symbols;
   if (debug_symbols.type == WasmDebugSymbols::Type::SourceMap &&
@@ -867,11 +882,11 @@ AsyncCompileJob* WasmEngine::CreateAsyncCompileJob(
     Isolate* isolate, const WasmFeatures& enabled,
     std::unique_ptr<byte[]> bytes_copy, size_t length, Handle<Context> context,
     const char* api_method_name,
-    std::shared_ptr<CompilationResultResolver> resolver) {
+    std::shared_ptr<CompilationResultResolver> resolver, int compilation_id) {
   Handle<Context> incumbent_context = isolate->GetIncumbentContext();
   AsyncCompileJob* job = new AsyncCompileJob(
       isolate, enabled, std::move(bytes_copy), length, context,
-      incumbent_context, api_method_name, std::move(resolver));
+      incumbent_context, api_method_name, std::move(resolver), compilation_id);
   // Pass ownership to the unique_ptr in {async_compile_jobs_}.
   base::MutexGuard guard(&mutex_);
   async_compile_jobs_[job] = std::unique_ptr<AsyncCompileJob>(job);
@@ -992,10 +1007,14 @@ void WasmEngine::RemoveIsolate(Isolate* isolate) {
   if (current_gc_info_) {
     if (RemoveIsolateFromCurrentGC(isolate)) PotentiallyFinishCurrentGC();
   }
-  if (auto* task = info->log_codes_task) task->Cancel();
-  for (auto& log_entry : info->code_to_log) {
-    WasmCode::DecrementRefCount(VectorOf(log_entry.second.code));
+  if (auto* task = info->log_codes_task) {
+    task->Cancel();
+    for (auto& log_entry : info->code_to_log) {
+      WasmCode::DecrementRefCount(VectorOf(log_entry.second.code));
+    }
+    info->code_to_log.clear();
   }
+  DCHECK(info->code_to_log.empty());
 }
 
 void WasmEngine::LogCode(Vector<WasmCode*> code_vec) {
@@ -1363,6 +1382,53 @@ Handle<Script> WasmEngine::GetOrCreateScript(
 std::shared_ptr<OperationsBarrier>
 WasmEngine::GetBarrierForBackgroundCompile() {
   return operations_barrier_;
+}
+
+namespace {
+void SampleExceptionEvent(base::ElapsedTimer* timer, TimedHistogram* counter) {
+  if (!timer->IsStarted()) {
+    timer->Start();
+    return;
+  }
+  counter->AddSample(static_cast<int>(timer->Elapsed().InMilliseconds()));
+  timer->Restart();
+}
+}  // namespace
+
+void WasmEngine::SampleThrowEvent(Isolate* isolate) {
+  base::MutexGuard guard(&mutex_);
+  IsolateInfo* isolate_info = isolates_[isolate].get();
+  int& throw_count = isolate_info->throw_count;
+  // To avoid an int overflow, clip the count to the histogram's max value.
+  throw_count =
+      std::min(throw_count + 1, isolate->counters()->wasm_throw_count()->max());
+  isolate->counters()->wasm_throw_count()->AddSample(throw_count);
+  SampleExceptionEvent(&isolate_info->throw_timer,
+                       isolate->counters()->wasm_time_between_throws());
+}
+
+void WasmEngine::SampleRethrowEvent(Isolate* isolate) {
+  base::MutexGuard guard(&mutex_);
+  IsolateInfo* isolate_info = isolates_[isolate].get();
+  int& rethrow_count = isolate_info->rethrow_count;
+  // To avoid an int overflow, clip the count to the histogram's max value.
+  rethrow_count = std::min(rethrow_count + 1,
+                           isolate->counters()->wasm_rethrow_count()->max());
+  isolate->counters()->wasm_rethrow_count()->AddSample(rethrow_count);
+  SampleExceptionEvent(&isolate_info->rethrow_timer,
+                       isolate->counters()->wasm_time_between_rethrows());
+}
+
+void WasmEngine::SampleCatchEvent(Isolate* isolate) {
+  base::MutexGuard guard(&mutex_);
+  IsolateInfo* isolate_info = isolates_[isolate].get();
+  int& catch_count = isolate_info->catch_count;
+  // To avoid an int overflow, clip the count to the histogram's max value.
+  catch_count =
+      std::min(catch_count + 1, isolate->counters()->wasm_catch_count()->max());
+  isolate->counters()->wasm_catch_count()->AddSample(catch_count);
+  SampleExceptionEvent(&isolate_info->catch_timer,
+                       isolate->counters()->wasm_time_between_catch());
 }
 
 void WasmEngine::TriggerGC(int8_t gc_sequence_index) {

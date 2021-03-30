@@ -21,7 +21,8 @@ class WasmCode;
 
 class SafepointEntry {
  public:
-  SafepointEntry() : deopt_index_(0), bits_(nullptr), trampoline_pc_(-1) {}
+  SafepointEntry()
+      : deopt_index_(0), bits_(nullptr), trampoline_pc_(kNoTrampolinePC) {}
 
   SafepointEntry(unsigned deopt_index, uint8_t* bits, int trampoline_pc)
       : deopt_index_(deopt_index), bits_(bits), trampoline_pc_(trampoline_pc) {
@@ -42,10 +43,23 @@ class SafepointEntry {
   int trampoline_pc() { return trampoline_pc_; }
 
   static const unsigned kNoDeoptIndex = kMaxUInt32;
+  static constexpr int kNoTrampolinePC = -1;
 
   int deoptimization_index() const {
     DCHECK(is_valid() && has_deoptimization_index());
     return deopt_index_;
+  }
+
+  uint32_t register_bits() const {
+    // The register bits use the same field as the deopt_index_.
+    DCHECK(is_valid());
+    return deopt_index_;
+  }
+
+  bool has_register_bits() const {
+    // The register bits use the same field as the deopt_index_.
+    DCHECK(is_valid());
+    return deopt_index_ != kNoDeoptIndex;
   }
 
   bool has_deoptimization_index() const {
@@ -59,7 +73,7 @@ class SafepointEntry {
   }
 
  private:
-  unsigned deopt_index_;
+  uint32_t deopt_index_;
   uint8_t* bits_;
   // It needs to be an integer as it is -1 for eager deoptimizations.
   int trampoline_pc_;
@@ -67,8 +81,12 @@ class SafepointEntry {
 
 class SafepointTable {
  public:
-  explicit SafepointTable(Code code);
+  // The isolate and pc arguments are used for figuring out whether pc
+  // belongs to the embedded or un-embedded code blob.
+  explicit SafepointTable(Isolate* isolate, Address pc, Code code);
+#if V8_ENABLE_WEBASSEMBLY
   explicit SafepointTable(const wasm::WasmCode* code);
+#endif  // V8_ENABLE_WEBASSEMBLY
 
   SafepointTable(const SafepointTable&) = delete;
   SafepointTable& operator=(const SafepointTable&) = delete;
@@ -96,8 +114,9 @@ class SafepointTable {
     unsigned deopt_index =
         base::Memory<uint32_t>(GetEncodedInfoLocation(index));
     uint8_t* bits = &base::Memory<uint8_t>(entries() + (index * entry_size_));
-    int trampoline_pc =
-        has_deopt_ ? base::Memory<int>(GetTrampolineLocation(index)) : -1;
+    int trampoline_pc = has_deopt_
+                            ? base::Memory<int>(GetTrampolineLocation(index))
+                            : SafepointEntry::kNoTrampolinePC;
     return SafepointEntry(deopt_index, bits, trampoline_pc);
   }
 
@@ -165,15 +184,22 @@ class SafepointTable {
 
 class Safepoint {
  public:
-  enum DeoptMode { kNoLazyDeopt, kLazyDeopt };
-
   static const int kNoDeoptimizationIndex = SafepointEntry::kNoDeoptIndex;
 
-  void DefinePointerSlot(int index) { indexes_->push_back(index); }
+  void DefinePointerSlot(int index) { stack_indexes_->push_back(index); }
+
+  void DefineRegister(int reg_code) {
+    // Make sure the recorded index is always less than 31, so that we don't
+    // generate {kNoDeoptimizationIndex} by accident.
+    DCHECK_LT(reg_code, 31);
+    *register_indexes_ |= 1u << reg_code;
+  }
 
  private:
-  explicit Safepoint(ZoneChunkList<int>* indexes) : indexes_(indexes) {}
-  ZoneChunkList<int>* const indexes_;
+  Safepoint(ZoneChunkList<int>* stack_indexes, uint32_t* register_indexes)
+      : stack_indexes_(stack_indexes), register_indexes_(register_indexes) {}
+  ZoneChunkList<int>* const stack_indexes_;
+  uint32_t* register_indexes_;
 
   friend class SafepointTableBuilder;
 };
@@ -192,7 +218,7 @@ class SafepointTableBuilder {
   unsigned GetCodeOffset() const;
 
   // Define a new safepoint for the current position in the body.
-  Safepoint DefineSafepoint(Assembler* assembler, Safepoint::DeoptMode mode);
+  Safepoint DefineSafepoint(Assembler* assembler);
 
   // Emit the safepoint table after the body. The number of bits per
   // entry must be enough to hold all the pointer indexes.
@@ -210,13 +236,15 @@ class SafepointTableBuilder {
     unsigned pc;
     unsigned deopt_index;
     int trampoline;
-    ZoneChunkList<int>* indexes;
+    ZoneChunkList<int>* stack_indexes;
+    uint32_t register_indexes;
     DeoptimizationInfo(Zone* zone, unsigned pc)
         : pc(pc),
           deopt_index(Safepoint::kNoDeoptimizationIndex),
           trampoline(-1),
-          indexes(zone->New<ZoneChunkList<int>>(
-              zone, ZoneChunkList<int>::StartMode::kSmall)) {}
+          stack_indexes(zone->New<ZoneChunkList<int>>(
+              zone, ZoneChunkList<int>::StartMode::kSmall)),
+          register_indexes(0) {}
   };
 
   // Compares all fields of a {DeoptimizationInfo} except {pc} and {trampoline}.

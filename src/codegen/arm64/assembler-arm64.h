@@ -880,9 +880,6 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
   // Store-release exclusive half-word.
   void stlxrh(const Register& rs, const Register& rt, const Register& rn);
 
-  void prfm(int prfop, const MemOperand& addr);
-  void prfm(PrefetchOperation prfop, const MemOperand& addr);
-
   // Move instructions. The default shift of -1 indicates that the move
   // instruction will calculate an appropriate 16-bit immediate and left shift
   // that is equal to the 64-bit immediate argument. If an explicit left shift
@@ -2066,10 +2063,31 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
   void debug(const char* message, uint32_t code, Instr params = BREAK);
 
   // Required by V8.
-  void dd(uint32_t data) { dc32(data); }
   void db(uint8_t data) { dc8(data); }
-  void dq(uint64_t data) { dc64(data); }
-  void dp(uintptr_t data) { dc64(data); }
+  void dd(uint32_t data, RelocInfo::Mode rmode = RelocInfo::NONE) {
+    BlockPoolsScope no_pool_scope(this);
+    if (!RelocInfo::IsNone(rmode)) {
+      DCHECK(RelocInfo::IsDataEmbeddedObject(rmode));
+      RecordRelocInfo(rmode);
+    }
+    dc32(data);
+  }
+  void dq(uint64_t data, RelocInfo::Mode rmode = RelocInfo::NONE) {
+    BlockPoolsScope no_pool_scope(this);
+    if (!RelocInfo::IsNone(rmode)) {
+      DCHECK(RelocInfo::IsDataEmbeddedObject(rmode));
+      RecordRelocInfo(rmode);
+    }
+    dc64(data);
+  }
+  void dp(uintptr_t data, RelocInfo::Mode rmode = RelocInfo::NONE) {
+    BlockPoolsScope no_pool_scope(this);
+    if (!RelocInfo::IsNone(rmode)) {
+      DCHECK(RelocInfo::IsDataEmbeddedObject(rmode));
+      RecordRelocInfo(rmode);
+    }
+    dc64(data);
+  }
 
   // Code generation helpers --------------------------------------------------
 

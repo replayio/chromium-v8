@@ -129,7 +129,8 @@ class V8_EXPORT_PRIVATE JSNativeContextSpecialization final
 
   Reduction ReduceJSLoadPropertyWithEnumeratedKey(Node* node);
 
-  const StringConstantBase* CreateDelayedStringConstant(Node* node);
+  base::Optional<const StringConstantBase*> CreateDelayedStringConstant(
+      Node* node);
 
   // A triple of nodes that represents a continuation.
   class ValueEffectControl final {
@@ -187,7 +188,6 @@ class V8_EXPORT_PRIVATE JSNativeContextSpecialization final
                                 PropertyAccessInfo const& access_info);
   Node* InlineApiCall(Node* receiver, Node* holder, Node* frame_state,
                       Node* value, Node** effect, Node** control,
-                      SharedFunctionInfoRef const& shared_info,
                       FunctionTemplateInfoRef const& function_template_info);
 
   // Construct the appropriate subgraph for element access.

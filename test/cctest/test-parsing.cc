@@ -1153,12 +1153,12 @@ TEST(ScopeUsesArgumentsSuperThis) {
         CHECK_NOT_NULL(scope->AsDeclarationScope()->arguments());
       }
       if (IsClassConstructor(scope->AsDeclarationScope()->function_kind())) {
-        CHECK_EQ((source_data[i].expected & SUPER_PROPERTY) != 0 ||
-                     (source_data[i].expected & EVAL) != 0,
-                 scope->AsDeclarationScope()->NeedsHomeObject());
+        CHECK_IMPLIES((source_data[i].expected & SUPER_PROPERTY) != 0 ||
+                          (source_data[i].expected & EVAL) != 0,
+                      scope->GetHomeObjectScope()->needs_home_object());
       } else {
-        CHECK_EQ((source_data[i].expected & SUPER_PROPERTY) != 0,
-                 scope->AsDeclarationScope()->NeedsHomeObject());
+        CHECK_IMPLIES((source_data[i].expected & SUPER_PROPERTY) != 0,
+                      scope->GetHomeObjectScope()->needs_home_object());
       }
       if ((source_data[i].expected & THIS) != 0) {
         // Currently the is_used() flag is conservative; all variables in a
@@ -1619,7 +1619,6 @@ const char* ReadString(unsigned* start) {
 enum ParserFlag {
   kAllowLazy,
   kAllowNatives,
-  kAllowHarmonyLogicalAssignment,
 };
 
 enum ParserSyncTestResult {
@@ -1630,15 +1629,11 @@ enum ParserSyncTestResult {
 
 void SetGlobalFlags(base::EnumSet<ParserFlag> flags) {
   i::FLAG_allow_natives_syntax = flags.contains(kAllowNatives);
-  i::FLAG_harmony_logical_assignment =
-      flags.contains(kAllowHarmonyLogicalAssignment);
 }
 
 void SetParserFlags(i::UnoptimizedCompileFlags* compile_flags,
                     base::EnumSet<ParserFlag> flags) {
   compile_flags->set_allow_natives_syntax(flags.contains(kAllowNatives));
-  compile_flags->set_allow_harmony_logical_assignment(
-      flags.contains(kAllowHarmonyLogicalAssignment));
 }
 
 void TestParserSyncWithFlags(i::Handle<i::String> source,
@@ -4328,6 +4323,7 @@ TEST(MaybeAssignedTopLevel) {
   }
 }
 
+#if V8_ENABLE_WEBASSEMBLY
 namespace {
 
 i::Scope* DeserializeFunctionScope(i::Isolate* isolate, i::Zone* zone,
@@ -4370,7 +4366,6 @@ TEST(AsmModuleFlag) {
   CHECK(s->IsAsmModule() && s->AsDeclarationScope()->is_asm_module());
 }
 
-
 TEST(UseAsmUseCount) {
   i::Isolate* isolate = CcTest::i_isolate();
   i::HandleScope scope(isolate);
@@ -4383,7 +4378,7 @@ TEST(UseAsmUseCount) {
              "function bar() { \"use asm\"; var baz = 1; }");
   CHECK_LT(0, use_counts[v8::Isolate::kUseAsm]);
 }
-
+#endif  // V8_ENABLE_WEBASSEMBLY
 
 TEST(StrictModeUseCount) {
   i::Isolate* isolate = CcTest::i_isolate();
@@ -4854,6 +4849,35 @@ TEST(ImportExpressionSuccess) {
   RunModuleParserSyncTest(context_data, data, kSuccess);
 }
 
+TEST(ImportExpressionWithImportAssertionSuccess) {
+  i::FLAG_harmony_import_assertions = true;
+
+  // clang-format off
+  const char* context_data[][2] = {
+    {"", ""},
+    {nullptr, nullptr}
+  };
+
+  const char* data[] = {
+    "import(x,)",
+    "import(x,1)",
+    "import(x,y)",
+    "import(x,y,)",
+    "import(x, { 'a': 'b' })",
+    "import(x, { a: 'b', 'c': 'd' },)",
+    "import(x, { 'a': { b: 'c' }, 'd': 'e' },)",
+    "import(x,import(y))",
+    "import(x,y=z)",
+    "import(x,[y, z])",
+    "import(x,undefined)",
+    nullptr
+  };
+
+  // clang-format on
+  RunParserSyncTest(context_data, data, kSuccess);
+  RunModuleParserSyncTest(context_data, data, kSuccess);
+}
+
 TEST(ImportExpressionErrors) {
   {
     // clang-format off
@@ -4925,9 +4949,6 @@ TEST(ImportExpressionErrors) {
     // clang-format on
     RunParserSyncTest(context_data, data, kError);
     RunModuleParserSyncTest(context_data, data, kError);
-
-    RunParserSyncTest(context_data, data, kError);
-    RunModuleParserSyncTest(context_data, data, kError);
   }
 
   // Import statements as arrow function params and destructuring targets.
@@ -4955,7 +4976,81 @@ TEST(ImportExpressionErrors) {
     // clang-format on
     RunParserSyncTest(context_data, data, kError);
     RunModuleParserSyncTest(context_data, data, kError);
+  }
+}
 
+TEST(ImportExpressionWithImportAssertionErrors) {
+  {
+    i::FLAG_harmony_import_assertions = true;
+
+    // clang-format off
+    const char* context_data[][2] = {
+      {"", ""},
+      {"var ", ""},
+      {"let ", ""},
+      {"new ", ""},
+      {nullptr, nullptr}
+    };
+
+    const char* data[] = {
+      "import(x,,)",
+      "import(x))",
+      "import(x,))",
+      "import(x,())",
+      "import(x,y,,)",
+      "import(x,y,z)",
+      "import(x,y",
+      "import(x,y,",
+      "import(x,y(",
+      nullptr
+    };
+
+    // clang-format on
+    RunParserSyncTest(context_data, data, kError);
+    RunModuleParserSyncTest(context_data, data, kError);
+  }
+
+  {
+    // clang-format off
+    const char* context_data[][2] = {
+      {"var ", ""},
+      {"let ", ""},
+      {nullptr, nullptr}
+    };
+
+    const char* data[] = {
+      "import('x',y)",
+      nullptr
+    };
+
+    // clang-format on
+    RunParserSyncTest(context_data, data, kError);
+    RunModuleParserSyncTest(context_data, data, kError);
+  }
+
+  // Import statements as arrow function params and destructuring targets.
+  {
+    // clang-format off
+    const char* context_data[][2] = {
+      {"(", ") => {}"},
+      {"(a, ", ") => {}"},
+      {"(1, ", ") => {}"},
+      {"let f = ", " => {}"},
+      {"[", "] = [1];"},
+      {"{", "} = {'a': 1};"},
+      {nullptr, nullptr}
+    };
+
+    const char* data[] = {
+      "import(foo,y)",
+      "import(1,y)",
+      "import(y=x,z)",
+      "import(import(x),y)",
+      "import(x,y).then()",
+      nullptr
+    };
+
+    // clang-format on
     RunParserSyncTest(context_data, data, kError);
     RunModuleParserSyncTest(context_data, data, kError);
   }
@@ -12301,9 +12396,7 @@ TEST(LogicalAssignmentDestructuringErrors) {
   };
   // clang-format on
 
-  static const ParserFlag flags[] = {kAllowHarmonyLogicalAssignment};
-  RunParserSyncTest(context_data, error_data, kError, nullptr, 0, flags,
-                    arraysize(flags));
+  RunParserSyncTest(context_data, error_data, kError);
 }
 
 }  // namespace test_parsing

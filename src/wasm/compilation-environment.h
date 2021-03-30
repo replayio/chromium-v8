@@ -2,6 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#if !V8_ENABLE_WEBASSEMBLY
+#error This header should only be included if WebAssembly is enabled.
+#endif  // !V8_ENABLE_WEBASSEMBLY
+
 #ifndef V8_WASM_COMPILATION_ENVIRONMENT_H_
 #define V8_WASM_COMPILATION_ENVIRONMENT_H_
 
@@ -141,6 +145,8 @@ class V8_EXPORT_PRIVATE CompilationState {
   bool baseline_compilation_finished() const;
   bool top_tier_compilation_finished() const;
   bool recompilation_finished() const;
+
+  void set_compilation_id(int compilation_id);
 
   // Override {operator delete} to avoid implicit instantiation of {operator
   // delete} with {size_t} argument. The {size_t} argument would be incorrect.

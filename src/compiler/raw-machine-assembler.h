@@ -539,6 +539,14 @@ class V8_EXPORT_PRIVATE RawMachineAssembler {
   Node* Word32PairSar(Node* low_word, Node* high_word, Node* shift) {
     return AddNode(machine()->Word32PairSar(), low_word, high_word, shift);
   }
+  Node* Word32Popcnt(Node* a) {
+    return AddNode(machine()->Word32Popcnt().op(), a);
+  }
+  Node* Word64Popcnt(Node* a) {
+    return AddNode(machine()->Word64Popcnt().op(), a);
+  }
+  Node* Word32Ctz(Node* a) { return AddNode(machine()->Word32Ctz().op(), a); }
+  Node* Word64Ctz(Node* a) { return AddNode(machine()->Word64Ctz().op(), a); }
   Node* StackPointerGreaterThan(Node* value) {
     return AddNode(
         machine()->StackPointerGreaterThan(StackCheckKind::kCodeStubAssembler),
@@ -693,6 +701,12 @@ class V8_EXPORT_PRIVATE RawMachineAssembler {
   Node* Float64GreaterThan(Node* a, Node* b) { return Float64LessThan(b, a); }
   Node* Float64GreaterThanOrEqual(Node* a, Node* b) {
     return Float64LessThanOrEqual(b, a);
+  }
+  Node* Float32Select(Node* condition, Node* b, Node* c) {
+    return AddNode(machine()->Float32Select().op(), condition, b, c);
+  }
+  Node* Float64Select(Node* condition, Node* b, Node* c) {
+    return AddNode(machine()->Float64Select().op(), condition, b, c);
   }
 
   // Conversions.
@@ -856,6 +870,9 @@ class V8_EXPORT_PRIVATE RawMachineAssembler {
   }
 
   // SIMD operations.
+  Node* S128Const(const uint8_t value[16]) {
+    return AddNode(machine()->S128Const(value));
+  }
   Node* I64x2Splat(Node* a) { return AddNode(machine()->I64x2Splat(), a); }
   Node* I64x2SplatI32Pair(Node* a, Node* b) {
     return AddNode(machine()->I64x2SplatI32Pair(), a, b);
@@ -1053,7 +1070,7 @@ class V8_EXPORT_PRIVATE RawMachineAssembler {
 
   // A post-processing pass to add effect and control edges so that the graph
   // can be optimized and re-scheduled.
-  // TODO(tebbi): Move this to a separate class.
+  // TODO(turbofan): Move this to a separate class.
   void MakeReschedulable();
   Node* CreateNodeFromPredecessors(const std::vector<BasicBlock*>& predecessors,
                                    const std::vector<Node*>& sidetable,

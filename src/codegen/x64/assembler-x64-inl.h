@@ -17,12 +17,6 @@ namespace internal {
 
 bool CpuFeatures::SupportsOptimizer() { return true; }
 
-bool CpuFeatures::SupportsWasmSimd128() {
-  if (IsSupported(SSE4_1)) return true;
-  if (FLAG_wasm_simd_ssse3_codegen) return true;
-  return false;
-}
-
 // -----------------------------------------------------------------------------
 // Implementation of Assembler
 
@@ -41,8 +35,10 @@ void Assembler::emitw(uint16_t x) {
   pc_ += sizeof(uint16_t);
 }
 
+// TODO(ishell): Rename accordingly once RUNTIME_ENTRY is renamed.
 void Assembler::emit_runtime_entry(Address entry, RelocInfo::Mode rmode) {
   DCHECK(RelocInfo::IsRuntimeEntry(rmode));
+  DCHECK_NE(options().code_range_start, 0);
   RecordRelocInfo(rmode);
   emitl(static_cast<uint32_t>(entry - options().code_range_start));
 }
@@ -320,6 +316,7 @@ HeapObject RelocInfo::target_object() {
         host_.ptr(), ReadUnalignedValue<Tagged_t>(pc_)));
     return HeapObject::cast(o);
   }
+  DCHECK(IsFullEmbeddedObject(rmode_) || IsDataEmbeddedObject(rmode_));
   return HeapObject::cast(Object(ReadUnalignedValue<Address>(pc_)));
 }
 
@@ -331,6 +328,7 @@ HeapObject RelocInfo::target_object_no_host(Isolate* isolate) {
     Object obj(DecompressTaggedPointer(isolate, compressed));
     return HeapObject::cast(obj);
   }
+  DCHECK(IsFullEmbeddedObject(rmode_) || IsDataEmbeddedObject(rmode_));
   return HeapObject::cast(Object(ReadUnalignedValue<Address>(pc_)));
 }
 
@@ -342,6 +340,7 @@ Handle<HeapObject> RelocInfo::target_object_handle(Assembler* origin) {
     if (IsCompressedEmbeddedObject(rmode_)) {
       return origin->compressed_embedded_object_handle_at(pc_);
     }
+    DCHECK(IsFullEmbeddedObject(rmode_) || IsDataEmbeddedObject(rmode_));
     return Handle<HeapObject>::cast(ReadUnalignedValue<Handle<Object>>(pc_));
   }
 }
@@ -379,6 +378,7 @@ void RelocInfo::set_target_object(Heap* heap, HeapObject target,
     Tagged_t tagged = CompressTagged(target.ptr());
     WriteUnalignedValue(pc_, tagged);
   } else {
+    DCHECK(IsFullEmbeddedObject(rmode_) || IsDataEmbeddedObject(rmode_));
     WriteUnalignedValue(pc_, target.ptr());
   }
   if (icache_flush_mode != SKIP_ICACHE_FLUSH) {

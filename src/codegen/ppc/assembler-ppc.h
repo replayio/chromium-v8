@@ -922,7 +922,7 @@ class Assembler : public AssemblerBase {
   void mtxer(Register src);
   void mcrfs(CRegister cr, FPSCRBit bit);
   void mfcr(Register dst);
-  void mtcrf(unsigned char FXM, Register src);
+  void mtcr(Register src);
 #if V8_TARGET_ARCH_PPC64
   void mffprd(Register dst, DoubleRegister src);
   void mffprwz(Register dst, DoubleRegister src);
@@ -1032,6 +1032,7 @@ class Assembler : public AssemblerBase {
   void stxsiwx(const Simd128Register rs, const MemOperand& src);
   void stxvd(const Simd128Register rt, const MemOperand& src);
   void xxspltib(const Simd128Register rt, const Operand& imm);
+  void xxbrq(const Simd128Register rt, const Simd128Register rb);
 
   // Pseudo instructions
 
@@ -1123,9 +1124,9 @@ class Assembler : public AssemblerBase {
   // Writes a single byte or word of data in the code stream.  Used
   // for inline tables, e.g., jump-tables.
   void db(uint8_t data);
-  void dd(uint32_t data);
-  void dq(uint64_t data);
-  void dp(uintptr_t data);
+  void dd(uint32_t data, RelocInfo::Mode rmode = RelocInfo::NONE);
+  void dq(uint64_t data, RelocInfo::Mode rmode = RelocInfo::NONE);
+  void dp(uintptr_t data, RelocInfo::Mode rmode = RelocInfo::NONE);
 
   // Read/patch instructions
   Instr instr_at(int pos) {

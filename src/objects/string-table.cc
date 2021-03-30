@@ -372,11 +372,12 @@ class InternalizedStringKey final : public StringTableKey {
     }
     if (FLAG_thin_strings) {
       // External strings get special treatment, to avoid copying their
-      // contents.
-      if (string_->IsExternalOneByteString()) {
+      // contents as long as they are not uncached.
+      StringShape shape(*string_);
+      if (shape.IsExternalOneByte() && !shape.IsUncachedExternal()) {
         return isolate->factory()
             ->InternalizeExternalString<ExternalOneByteString>(string_);
-      } else if (string_->IsExternalTwoByteString()) {
+      } else if (shape.IsExternalTwoByte() && !shape.IsUncachedExternal()) {
         return isolate->factory()
             ->InternalizeExternalString<ExternalTwoByteString>(string_);
       }
@@ -680,14 +681,14 @@ size_t StringTable::GetCurrentMemoryUsage() const {
 void StringTable::IterateElements(RootVisitor* visitor) {
   // This should only happen during garbage collection when background threads
   // are paused, so the load can be relaxed.
-  DCHECK_IMPLIES(FLAG_local_heaps, isolate_->heap()->safepoint()->IsActive());
+  DCHECK(isolate_->heap()->safepoint()->IsActive());
   data_.load(std::memory_order_relaxed)->IterateElements(visitor);
 }
 
 void StringTable::DropOldData() {
   // This should only happen during garbage collection when background threads
   // are paused, so the load can be relaxed.
-  DCHECK_IMPLIES(FLAG_local_heaps, isolate_->heap()->safepoint()->IsActive());
+  DCHECK(isolate_->heap()->safepoint()->IsActive());
   DCHECK_NE(isolate_->heap()->gc_state(), Heap::NOT_IN_GC);
   data_.load(std::memory_order_relaxed)->DropPreviousData();
 }
@@ -695,7 +696,7 @@ void StringTable::DropOldData() {
 void StringTable::NotifyElementsRemoved(int count) {
   // This should only happen during garbage collection when background threads
   // are paused, so the load can be relaxed.
-  DCHECK_IMPLIES(FLAG_local_heaps, isolate_->heap()->safepoint()->IsActive());
+  DCHECK(isolate_->heap()->safepoint()->IsActive());
   DCHECK_NE(isolate_->heap()->gc_state(), Heap::NOT_IN_GC);
   data_.load(std::memory_order_relaxed)->ElementsRemoved(count);
 }

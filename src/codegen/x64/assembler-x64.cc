@@ -71,6 +71,14 @@ bool OSHasAVXSupport() {
 
 }  // namespace
 
+bool CpuFeatures::SupportsWasmSimd128() {
+#if V8_ENABLE_WEBASSEMBLY
+  if (IsSupported(SSE4_1)) return true;
+  if (FLAG_wasm_simd_ssse3_codegen && IsSupported(SSSE3)) return true;
+#endif  // V8_ENABLE_WEBASSEMBLY
+  return false;
+}
+
 void CpuFeatures::ProbeImpl(bool cross_compile) {
   base::CPU cpu;
   CHECK(cpu.has_sse2());  // SSE2 support is mandatory.
@@ -108,6 +116,12 @@ void CpuFeatures::ProbeImpl(bool cross_compile) {
   } else if (strcmp(FLAG_mcpu, "atom") == 0) {
     supported_ |= 1u << ATOM;
   }
+
+  // Set a static value on whether Simd is supported.
+  // This variable is only used for certain archs to query SupportWasmSimd128()
+  // at runtime in builtins using an extern ref. Other callers should use
+  // CpuFeatures::SupportWasmSimd128().
+  CpuFeatures::supports_wasm_simd_128_ = CpuFeatures::SupportsWasmSimd128();
 }
 
 void CpuFeatures::PrintTarget() {}
@@ -1421,6 +1435,14 @@ void Assembler::j(Condition cc, Handle<Code> target, RelocInfo::Mode rmode) {
   RecordRelocInfo(rmode);
   int code_target_index = AddCodeTarget(target);
   emitl(code_target_index);
+}
+
+void Assembler::jmp(Address entry, RelocInfo::Mode rmode) {
+  DCHECK(RelocInfo::IsRuntimeEntry(rmode));
+  EnsureSpace ensure_space(this);
+  // 1110 1001 #32-bit disp.
+  emit(0xE9);
+  emit_runtime_entry(entry, rmode);
 }
 
 void Assembler::jmp_rel(int32_t offset) {
@@ -2919,6 +2941,15 @@ void Assembler::movaps(XMMRegister dst, XMMRegister src) {
   }
 }
 
+void Assembler::movaps(XMMRegister dst, Operand src) {
+  DCHECK(!IsEnabled(AVX));
+  EnsureSpace ensure_space(this);
+  emit_optional_rex_32(dst, src);
+  emit(0x0F);
+  emit(0x28);
+  emit_sse_operand(dst, src);
+}
+
 void Assembler::shufps(XMMRegister dst, XMMRegister src, byte imm8) {
   DCHECK(is_uint8(imm8));
   EnsureSpace ensure_space(this);
@@ -3086,6 +3117,10 @@ void Assembler::cmppd(XMMRegister dst, Operand src, int8_t cmp) {
   emit(0xC2);
   emit_sse_operand(dst, src);
   emit(cmp);
+}
+
+void Assembler::cvtdq2pd(XMMRegister dst, XMMRegister src) {
+  sse2_instr(dst, src, 0xF3, 0x0F, 0xE6);
 }
 
 void Assembler::cvttss2si(Register dst, Operand src) {
@@ -3423,6 +3458,14 @@ void Assembler::vbroadcastss(XMMRegister dst, Operand src) {
   emit_sse_operand(dst, src);
 }
 
+void Assembler::vbroadcastss(XMMRegister dst, XMMRegister src) {
+  DCHECK(IsEnabled(AVX2));
+  EnsureSpace ensure_space(this);
+  emit_vex_prefix(dst, xmm0, src, kL128, k66, k0F38, kW0);
+  emit(0x18);
+  emit_sse_operand(dst, src);
+}
+
 void Assembler::fma_instr(byte op, XMMRegister dst, XMMRegister src1,
                           XMMRegister src2, VectorLength l, SIMDPrefix pp,
                           LeadingOpcode m, VexW w) {
@@ -3493,6 +3536,14 @@ void Assembler::vmovq(Register dst, XMMRegister src) {
   emit_vex_prefix(src, xmm0, idst, kL128, k66, k0F, kW1);
   emit(0x7E);
   emit_sse_operand(src, dst);
+}
+
+void Assembler::vmovdqa(XMMRegister dst, Operand src) {
+  DCHECK(IsEnabled(AVX));
+  EnsureSpace ensure_space(this);
+  emit_vex_prefix(dst, xmm0, src, kL128, k66, k0F, kWIG);
+  emit(0x6F);
+  emit_sse_operand(dst, src);
 }
 
 void Assembler::vmovdqa(XMMRegister dst, XMMRegister src) {
@@ -4231,13 +4282,21 @@ void Assembler::db(uint8_t data) {
   emit(data);
 }
 
-void Assembler::dd(uint32_t data) {
+void Assembler::dd(uint32_t data, RelocInfo::Mode rmode) {
   EnsureSpace ensure_space(this);
+  if (!RelocInfo::IsNone(rmode)) {
+    DCHECK(RelocInfo::IsDataEmbeddedObject(rmode));
+    RecordRelocInfo(rmode);
+  }
   emitl(data);
 }
 
-void Assembler::dq(uint64_t data) {
+void Assembler::dq(uint64_t data, RelocInfo::Mode rmode) {
   EnsureSpace ensure_space(this);
+  if (!RelocInfo::IsNone(rmode)) {
+    DCHECK(RelocInfo::IsDataEmbeddedObject(rmode));
+    RecordRelocInfo(rmode);
+  }
   emitq(data);
 }
 
