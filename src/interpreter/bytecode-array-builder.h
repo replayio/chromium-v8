@@ -519,7 +519,7 @@ class V8_EXPORT_PRIVATE BytecodeArrayBuilder final {
   void SetStatementPosition(int position) {
     if (position == kNoSourcePosition) return;
     latest_source_info_.MakeStatementPosition(position);
-    RecordReplayInstrumentation("breakpoint", stmt->position());
+    RecordReplayInstrumentation("breakpoint", position);
   }
 
   void SetExpressionPosition(Expression* expr) {

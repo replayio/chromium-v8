@@ -1218,22 +1218,12 @@ bool ValueMirror::getProperties(v8::Local<v8::Context> context,
   }
   bool shouldSkipProto = internalType == V8InternalValueType::kScopeList;
 
+  bool formatAccessorsAsProperties = false;
   auto iterator = v8::debug::PropertyIterator::Create(context, object);
   if (!iterator) {
     CHECK(tryCatch.HasCaught());
     return false;
-
-  bool formatAccessorsAsProperties = false;
-  //    clientFor(context)->formatAccessorsAsProperties(object);
-
-  if (object->IsArrayBuffer()) {
-    addTypedArrayViews(context, object.As<v8::ArrayBuffer>(), accumulator);
   }
-  if (object->IsSharedArrayBuffer()) {
-    addTypedArrayViews(context, object.As<v8::SharedArrayBuffer>(),
-                       accumulator);
-  }
-
   while (!iterator->Done()) {
     bool isOwn = iterator->is_own();
     if (!isOwn && ownProperties) break;

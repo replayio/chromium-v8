@@ -10325,7 +10325,7 @@ static void RecordReplayLoadSymbol(void* handle, const char* name, T& function) 
   void* sym = dlsym(handle, name);
   if (!sym) {
     fprintf(stderr, "Could not find %s in Record Replay driver, crashing.\n", name);
-    V8_IMMEDIATE_CRASH();
+    IMMEDIATE_CRASH();
   }
 
   CastPointer(sym, &function);

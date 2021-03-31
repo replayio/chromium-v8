@@ -2313,6 +2313,22 @@ void BaselineCompiler::VisitIncBlockCounter() {
               IndexAsSmi(0));  // coverage array slot
 }
 
+void BaselineCompiler::VisitRecordReplayIncExecutionProgressCounter() {
+  CallRuntime(Runtime::kRecordReplayAssertExecutionProgress,
+              __ FunctionOperand());
+}
+
+void BaselineCompiler::VisitRecordReplayInstrumentation() {
+  CallRuntime(Runtime::kRecordReplayInstrumentation,
+              __ FunctionOperand(), Smi::FromInt(Index(0)));
+}
+
+void BaselineCompiler::VisitRecordReplayAssertValue() {
+  CallRuntime(Runtime::kRecordReplayAssertValue,
+              __ FunctionOperand(), Smi::FromInt(Index(0)),
+              kInterpreterAccumulatorRegister);
+}
+
 void BaselineCompiler::VisitAbort() {
   CallRuntime(Runtime::kAbort, Smi::FromInt(Index(0)));
   __ Trap();
