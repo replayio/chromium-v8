@@ -516,10 +516,12 @@ class V8_EXPORT_PRIVATE BytecodeArrayBuilder final {
     SetStatementPosition(stmt->position());
   }
 
-  void SetStatementPosition(int position) {
+  void SetStatementPosition(int position, bool record_replay_breakpoint = true) {
     if (position == kNoSourcePosition) return;
     latest_source_info_.MakeStatementPosition(position);
-    RecordReplayInstrumentation("breakpoint", position);
+    if (record_replay_breakpoint) {
+      RecordReplayInstrumentation("breakpoint", position);
+    }
   }
 
   void SetExpressionPosition(Expression* expr) {
