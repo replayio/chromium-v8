@@ -97,7 +97,10 @@ Handle<JSMessageObject> MessageHandler::MakeMessageObject(
       stack_frames.is_null() ? Handle<Object>::cast(factory->undefined_value())
                              : Handle<Object>::cast(stack_frames);
 
-  int record_replay_bookmark = (int)V8RecordReplayNewBookmark();
+  int record_replay_bookmark = 0;
+  if (!recordreplay::AreEventsDisallowed()) {
+    record_replay_bookmark = (int)V8RecordReplayNewBookmark();
+  }
 
   Handle<JSMessageObject> message_obj = factory->NewJSMessageObject(
       message, argument, start, end, shared_info, bytecode_offset,

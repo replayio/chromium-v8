@@ -3224,6 +3224,7 @@ extern "C" void V8RecordReplayGetDefaultContext(v8::Isolate* isolate, v8::Local<
 
 char* CommandCallback(const char* command, const char* params) {
   CHECK(IsMainThread());
+  recordreplay::AutoDisallowEvents disallow;
 
   Isolate* isolate = Isolate::Current();
 
@@ -3278,6 +3279,7 @@ static Eternal<Value>* gClearPauseDataCallback;
 
 void ClearPauseDataCallback() {
   CHECK(IsMainThread());
+  recordreplay::AutoDisallowEvents disallow;
 
   if (gClearPauseDataCallback) {
     Isolate* isolate = Isolate::Current();
