@@ -3698,6 +3698,7 @@ void Heap::IdleNotificationEpilogue(GCIdleTimeAction action,
 }
 
 double Heap::MonotonicallyIncreasingTimeInMs() {
+  recordreplay::AutoPassThroughEvents pt;
   return V8::GetCurrentPlatform()->MonotonicallyIncreasingTime() *
          static_cast<double>(base::Time::kMillisecondsPerSecond);
 }
