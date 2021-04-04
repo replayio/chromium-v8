@@ -43,6 +43,7 @@ double GCTracer::MonotonicallyIncreasingTimeInMs() {
   if (V8_UNLIKELY(FLAG_predictable)) {
     return heap_->MonotonicallyIncreasingTimeInMs();
   } else {
+    recordreplay::AutoPassThroughEvents pt;
     return base::TimeTicks::Now().ToInternalValue() /
            static_cast<double>(base::Time::kMicrosecondsPerMillisecond);
   }

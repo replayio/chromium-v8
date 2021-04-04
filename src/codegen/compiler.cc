@@ -1690,6 +1690,8 @@ class V8_NODISCARD OffThreadParseInfoScope {
 }  // namespace
 
 void BackgroundCompileTask::Run() {
+  recordreplay::Assert("BackgroundCompileTask::Run Start");
+
   TimedHistogramScope timer(timer_);
   base::Optional<OffThreadParseInfoScope> off_thread_scope(
       base::in_place, info_.get(), worker_thread_runtime_call_stats_,
@@ -1765,6 +1767,8 @@ void BackgroundCompileTask::Run() {
       info_.reset();
     }
   }
+
+  recordreplay::Assert("BackgroundCompileTask::Run Done");
 }
 
 MaybeHandle<SharedFunctionInfo> BackgroundCompileTask::GetOuterFunctionSfi(
