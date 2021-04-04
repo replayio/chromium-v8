@@ -3050,6 +3050,48 @@ static Handle<Object> RecordReplayConvertFunctionOffsetToLocation(Isolate* isola
   return rv;
 }
 
+bool RecordReplayIgnoreScript(Handle<Script> script);
+
+static Handle<Object> RecordReplayCountStackFrames(Isolate* isolate,
+                                                   Handle<Object> params) {
+  // This is handled in C++ instead of via a protocol JS handler for efficiency.
+  // Counting the stack frames is a common operation when there are many
+  // exception unwinds and so forth.
+  size_t count = 0;
+  for (StackFrameIterator it(isolate); !it.done(); it.Advance()) {
+    StackFrame* frame = it.frame();
+    if (frame->type() != StackFrame::OPTIMIZED && frame->type() != StackFrame::INTERPRETED) {
+      continue;
+    }
+    std::vector<FrameSummary> frames;
+    CommonFrame::cast(frame)->Summarize(&frames);
+
+    // We don't strictly need to iterate the frames in reverse order, but it
+    // helps when logging the stack contents for debugging.
+    for (int i = (int)frames.size() - 1; i >= 0; i--) {
+      const auto& summary = frames[i];
+      CHECK(summary.IsJavaScript());
+      const auto& js = summary.AsJavaScript();
+
+      Handle<SharedFunctionInfo> shared(js.function()->shared(), isolate);
+
+      // See GetStackLocation.
+      if (!shared->StartPosition() && !shared->EndPosition()) {
+        continue;
+      }
+
+      Handle<Script> script(Script::cast(shared->script()), isolate);
+      if (script->id() && !RecordReplayIgnoreScript(script)) {
+        count++;
+      }
+    }
+  }
+
+  Handle<JSObject> rv = NewPlainObject(isolate);
+  SetProperty(isolate, rv, "count", count);
+  return rv;
+}
+
 static Handle<Object> RecordReplayGetFunctionsInRange(Isolate* isolate,
                                                       Handle<Object> params) {
   std::set<std::string> functions;
@@ -3213,6 +3255,7 @@ static InternalCommandCallback gInternalCommandCallbacks[] = {
   { "Debugger.getPossibleBreakpoints", RecordReplayGetPossibleBreakpoints },
   { "Target.convertLocationToFunctionOffset", RecordReplayConvertLocationToFunctionOffset },
   { "Target.convertFunctionOffsetToLocation", RecordReplayConvertFunctionOffsetToLocation },
+  { "Target.countStackFrames", RecordReplayCountStackFrames },
   { "Target.getFunctionsInRange", RecordReplayGetFunctionsInRange },
   { "Target.getHTMLSource", RecordReplayGetHTMLSource },
 };
