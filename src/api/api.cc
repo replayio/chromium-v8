@@ -10470,7 +10470,9 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   internal::FLAG_concurrent_marking = false;
   internal::FLAG_concurrent_sweeping = false;
   internal::FLAG_incremental_marking_task = false;
+  internal::FLAG_parallel_compaction = false;
   internal::FLAG_parallel_marking = false;
+  internal::FLAG_parallel_pointer_update = false;
   internal::FLAG_parallel_scavenge = false;
   internal::FLAG_scavenge_task = false;
 

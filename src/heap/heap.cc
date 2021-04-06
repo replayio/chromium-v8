@@ -2008,6 +2008,7 @@ GCTracer::Scope::ScopeId CollectorScopeId(GarbageCollector collector) {
 
 size_t Heap::PerformGarbageCollection(
     GarbageCollector collector, const v8::GCCallbackFlags gc_callback_flags) {
+  recordreplay::AutoDisallowEvents disallow;
   DisallowJavascriptExecution no_js(isolate());
 
   if (IsYoungGenerationCollector(collector)) {
@@ -3698,7 +3699,6 @@ void Heap::IdleNotificationEpilogue(GCIdleTimeAction action,
 }
 
 double Heap::MonotonicallyIncreasingTimeInMs() {
-  recordreplay::AutoPassThroughEvents pt;
   return V8::GetCurrentPlatform()->MonotonicallyIncreasingTime() *
          static_cast<double>(base::Time::kMillisecondsPerSecond);
 }
@@ -5421,6 +5421,8 @@ void Heap::NotifyBootstrapComplete() {
 
 void Heap::NotifyOldGenerationExpansion(AllocationSpace space,
                                         MemoryChunk* chunk) {
+  recordreplay::AutoDisallowEvents disallow;
+
   // Pages created during bootstrapping may contain immortal immovable objects.
   if (!deserialization_complete()) {
     chunk->MarkNeverEvacuate();
