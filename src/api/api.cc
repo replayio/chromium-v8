@@ -10002,10 +10002,12 @@ bool ShouldEmitRecordReplayAssertValue() {
 
 // We only finish recordings if there were interesting sources loaded
 // into the process.
-static bool gRecordReplayHasInterestingSources;
+static char* gRecordReplayInterestingSource;
 
-void RecordReplaySetHasInterestingSources() {
-  gRecordReplayHasInterestingSources = true;
+void RecordReplaySetInterestingSource(const char* url) {
+  if (!gRecordReplayInterestingSource) {
+    gRecordReplayInterestingSource = strdup(url);
+  }
 }
 
 // For posting tasks to the main thread.
@@ -10374,7 +10376,7 @@ static void DoFinishRecording() {
     FILE* file = fopen(env, "a");
     if (file) {
       const char* recordingId = GetRecordingId();
-      fprintf(file, "%s\n", recordingId);
+      fprintf(file, "%s %s\n", recordingId, internal::gRecordReplayInterestingSource);
       fclose(file);
       fprintf(stderr, "Found content, saving recording ID %s\n", recordingId);
     } else {
@@ -10383,6 +10385,7 @@ static void DoFinishRecording() {
   }
 
   gRecordReplayFinishRecording();
+  _exit(0);
 }
 
 class FinishRecordingTask final : public Task {
@@ -10392,7 +10395,7 @@ class FinishRecordingTask final : public Task {
 
 extern "C" V8_EXPORT void V8RecordReplayFinishRecording() {
   if (recordreplay::IsRecordingOrReplaying()) {
-    if (internal::gRecordReplayHasInterestingSources) {
+    if (internal::gRecordReplayInterestingSource) {
       if (IsMainThread()) {
         DoFinishRecording();
       } else {
@@ -10464,9 +10467,17 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   // Set flags to disable non-deterministic posting of tasks to other threads.
   // We don't support this yet when recording/replaying.
   internal::FLAG_concurrent_array_buffer_sweeping = false;
+  internal::FLAG_concurrent_marking = false;
   internal::FLAG_concurrent_sweeping = false;
+  internal::FLAG_incremental_marking_task = false;
+  internal::FLAG_parallel_marking = false;
   internal::FLAG_parallel_scavenge = false;
   internal::FLAG_scavenge_task = false;
+
+  // Incremental/compacting GC are also disabled for now. These could probably
+  // be supported for now it's not worth the bother.
+  internal::FLAG_incremental_marking = false;
+  internal::FLAG_never_compact = true;
 }
 
 extern "C" void V8SetRecordingOrReplaying(void* handle) {
