@@ -1535,6 +1535,7 @@ Heap::DevToolsTraceEventScope::~DevToolsTraceEventScope() {
 bool Heap::CollectGarbage(AllocationSpace space,
                           GarbageCollectionReason gc_reason,
                           const v8::GCCallbackFlags gc_callback_flags) {
+  recordreplay::AutoDisallowEvents disallow;
   if (V8_UNLIKELY(!deserialization_complete_)) {
     // During isolate initialization heap always grows. GC is only requested
     // if a new page allocation fails. In such a case we should crash with
@@ -2008,7 +2009,13 @@ GCTracer::Scope::ScopeId CollectorScopeId(GarbageCollector collector) {
 
 size_t Heap::PerformGarbageCollection(
     GarbageCollector collector, const v8::GCCallbackFlags gc_callback_flags) {
-  recordreplay::AutoDisallowEvents disallow;
+  // For now we are completely disabling GC in the old space when recording/replaying
+  // to avoid crashes and needing to deal with non-deterministic behavior that
+  // can be triggered by sweeping.
+  if (recordreplay::IsRecordingOrReplaying() &&
+      collector == GarbageCollector::MARK_COMPACTOR) {
+    return 0;
+  }
   DisallowJavascriptExecution no_js(isolate());
 
   if (IsYoungGenerationCollector(collector)) {
@@ -4891,6 +4898,8 @@ bool Heap::ShouldOptimizeForLoadTime() {
 // - either we need to optimize for memory usage,
 // - or the incremental marking is not in progress and we cannot start it.
 bool Heap::ShouldExpandOldGenerationOnSlowAllocation(LocalHeap* local_heap) {
+  recordreplay::AutoDisallowEvents disallow;
+
   if (always_allocate() || OldGenerationSpaceAvailable() > 0) return true;
   // We reached the old generation allocation limit.
 
