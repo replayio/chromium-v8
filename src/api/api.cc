@@ -10004,7 +10004,24 @@ bool ShouldEmitRecordReplayAssertValue() {
 // into the process.
 static char* gRecordReplayInterestingSource;
 
-void RecordReplaySetInterestingSource(const char* url) {
+// URL filter for sources considered interesting.
+static const char* gRecordReplayInterestingSourceFilter;
+
+void RecordReplayAddInterestingSource(const char* url) {
+  if (!gRecordReplayInterestingSourceFilter) {
+    gRecordReplayInterestingSourceFilter = getenv("RECORD_REPLAY_SOURCE_FILTER");
+  }
+
+  if (!*url) {
+    // Always ignore sources with missing URLs.
+    return;
+  }
+
+  if (gRecordReplayInterestingSourceFilter &&
+      !strstr(url, gRecordReplayInterestingSourceFilter)) {
+    return;
+  }
+
   if (!gRecordReplayInterestingSource) {
     gRecordReplayInterestingSource = strdup(url);
   }
@@ -10376,7 +10393,16 @@ static void DoFinishRecording() {
     FILE* file = fopen(env, "a");
     if (file) {
       const char* recordingId = GetRecordingId();
-      fprintf(file, "%s %s\n", recordingId, internal::gRecordReplayInterestingSource);
+      if (internal::gRecordReplayInterestingSourceFilter) {
+        // When there is a filter we just write out the recording ID.
+        fprintf(file, "%s\n", recordingId);
+      } else {
+        // When there is no filter we include the first interesting source
+        // found when writing the recording ID out, to help distinguish
+        // between different content processes which Chromium will create
+        // for content from different origins.
+        fprintf(file, "%s %s\n", recordingId, internal::gRecordReplayInterestingSource);
+      }
       fclose(file);
       fprintf(stderr, "Found content, saving recording ID %s\n", recordingId);
     } else {

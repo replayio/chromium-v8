@@ -3174,7 +3174,7 @@ static Handle<Object> RecordReplayGetHTMLSource(Isolate* isolate, Handle<Object>
   return rv;
 }
 
-extern void RecordReplaySetInterestingSource(const char* url);
+extern void RecordReplayAddInterestingSource(const char* url);
 
 static bool IgnoreScriptByURL(const char* aURL) {
   return strncmp(aURL, "http", 4);
@@ -3210,7 +3210,7 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
     return;
   }
 
-  RecordReplaySetInterestingSource(url.c_str());
+  RecordReplayAddInterestingSource(url.c_str());
 
   // It's not clear how we can distinguish inline scripts from HTML files vs.
   // scripts loaded in other ways here. Use the initial position of the script
