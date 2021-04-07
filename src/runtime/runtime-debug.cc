@@ -1069,16 +1069,20 @@ void RecordReplayAssertScriptedCaller(Isolate* isolate, const char* aWhy) {
 static const int BytecodeSiteOffset = 1 << 16;
 
 // Locations for each assertion site, filled in lazily.
-typedef std::vector<std::string> StringVector;
-static StringVector* gAssertionSites;
+struct AssertionSite {
+  std::string location_;
+  int source_position_;
+};
+typedef std::vector<AssertionSite> AssertionSiteVector;
+static AssertionSiteVector* gAssertionSites;
 
-int RegisterAssertValueSite() {
+int RegisterAssertValueSite(int source_position) {
   CHECK(IsMainThread());
   if (!gAssertionSites) {
-    gAssertionSites = new StringVector();
+    gAssertionSites = new AssertionSiteVector();
   }
   int index = (int)gAssertionSites->size();
-  gAssertionSites->push_back("");
+  gAssertionSites->push_back({ "", source_position });
   return index + BytecodeSiteOffset;
 }
 
@@ -1104,16 +1108,27 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertValue) {
 
   index -= BytecodeSiteOffset;
   CHECK(gAssertionSites && (size_t)index < gAssertionSites->size());
-  std::string& location = (*gAssertionSites)[index];
+  AssertionSite& site = (*gAssertionSites)[index];
 
-  if (!location.length()) {
-    location = GetStackLocation(isolate);
+  if (!site.location_.length()) {
+    Script::PositionInfo info;
+    Script::GetPositionInfo(script, site.source_position_, &info, Script::WITH_OFFSET);
+
+    char buf[1024];
+    if (script->name().IsUndefined()) {
+      snprintf(buf, sizeof(buf), "<none>:%d:%d[%d]", info.line + 1, info.column, site.source_position_);
+    } else {
+      std::unique_ptr<char[]> name = String::cast(script->name()).ToCString();
+      snprintf(buf, sizeof(buf), "%s:%d:%d[%d]", name.get(), info.line + 1, info.column, site.source_position_);
+    }
+    buf[sizeof(buf) - 1] = 0;
+
+    site.location_ = buf;
   }
 
   std::string contents = RecordReplayBasicValueContents(value);
 
-  recordreplay::Assert("%s Value %s", location.c_str(), contents.c_str());
-
+  recordreplay::Assert("%s Value %s", site.location_.c_str(), contents.c_str());
   return *value;
 }
 

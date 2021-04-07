@@ -19,7 +19,7 @@
 namespace v8 {
 namespace internal {
 
-extern int RegisterAssertValueSite();
+extern int RegisterAssertValueSite(int source_position);
 extern int RegisterInstrumentationSite(const char* kind, int source_position,
                                        int bytecode_offset);
 extern bool ShouldEmitRecordReplayAssertValue();
@@ -1360,7 +1360,8 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayIncExecutionProgressCoun
 
 BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayAssertValue() {
   if (ShouldEmitRecordReplayAssertValue() && IsMainThread()) {
-    int index = RegisterAssertValueSite();
+    int source_position = latest_source_info_.source_position();
+    int index = RegisterAssertValueSite(source_position);
     OutputRecordReplayAssertValue(index);
   }
   return *this;
