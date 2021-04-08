@@ -3378,6 +3378,56 @@ static std::string StringPrintf(const char* format, ...) {
   return std::string(buf);
 }
 
+// When assertions are used we assign an ID to each object that is ever
+// encountered in one, so that we can determine whether consistent objects
+// are used when replaying.
+struct ContextObjectIdMap {
+  v8::Global<v8::Context> context_;
+  v8::Global<v8::debug::WeakMap> object_ids_;
+};
+typedef std::vector<ContextObjectIdMap> ContextObjectIdMapVector;
+static ContextObjectIdMapVector* gRecordReplayObjectIds;
+
+static Local<v8::debug::WeakMap> GetObjectIdMapForContext(v8::Isolate* isolate, Local<v8::Context> cx) {
+  if (!gRecordReplayObjectIds) {
+    gRecordReplayObjectIds = new ContextObjectIdMapVector();
+  }
+
+  for (const auto& entry : *gRecordReplayObjectIds) {
+    if (entry.context_ == cx) {
+      return entry.object_ids_.Get(isolate);
+    }
+  }
+
+  ContextObjectIdMap new_entry;
+  new_entry.context_.Reset(isolate, cx);
+  new_entry.object_ids_.Reset(isolate, v8::debug::WeakMap::New(isolate));
+  gRecordReplayObjectIds->push_back(std::move(new_entry));
+  return gRecordReplayObjectIds->back().object_ids_.Get(isolate);
+}
+
+static int gNextObjectId = 1;
+
+static int RecordReplayObjectId(Handle<Object> internal_object) {
+  CHECK(IsMainThread());
+  v8::Isolate* isolate = v8::Isolate::GetCurrent();
+
+  v8::Local<v8::Value> object = v8::Utils::ToLocal(internal_object);
+
+  Local<v8::Context> cx = isolate->GetCurrentContext();
+  Local<v8::debug::WeakMap> object_ids = GetObjectIdMapForContext(isolate, cx);
+
+  v8::Local<v8::Value> idValue;
+  if (object_ids->Get(cx, object).ToLocal(&idValue) && idValue->IsInt32()) {
+    return idValue.As<v8::Int32>()->Value();
+  }
+
+  int id = gNextObjectId++;
+  Local<Value> id_value = v8::Integer::New(isolate, id);
+  object_ids->Set(cx, object, id_value).ToLocalChecked();
+  return id;
+}
+
 // Get a string describing a value which can be used in assertions.
 // Only basic information about the value is obtained, to keep things fast.
 std::string RecordReplayBasicValueContents(Handle<Object> value) {
@@ -3407,6 +3457,8 @@ std::string RecordReplayBasicValueContents(Handle<Object> value) {
   }
 
   if (value->IsJSObject()) {
+    int object_id = RecordReplayObjectId(value);
+
     InstanceType type = JSObject::cast(*value).map().instance_type();
     const char* typeStr;
     switch (type) {
@@ -3419,9 +3471,9 @@ std::string RecordReplayBasicValueContents(Handle<Object> value) {
     if (!strcmp(typeStr, "JS_DATE_TYPE")) {
       JSDate date = JSDate::cast(*value);
       double time = date.value().Number();
-      return StringPrintf("Date %.2f", time);
+      return StringPrintf("Date %d %.2f", object_id, time);
     }
-    return StringPrintf("Object %s", typeStr);
+    return StringPrintf("Object %d %s", object_id, typeStr);
   }
 
   if (value->IsJSProxy()) {
