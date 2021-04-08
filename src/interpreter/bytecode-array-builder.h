@@ -465,7 +465,7 @@ class V8_EXPORT_PRIVATE BytecodeArrayBuilder final {
   BytecodeArrayBuilder& IncBlockCounter(int slot);
 
   BytecodeArrayBuilder& RecordReplayIncExecutionProgressCounter();
-  BytecodeArrayBuilder& RecordReplayAssertValue();
+  BytecodeArrayBuilder& RecordReplayAssertValue(const std::string& desc);
   BytecodeArrayBuilder& RecordReplayInstrumentation(const char* kind,
                                                     int source_position = kNoSourcePosition);
 
@@ -519,6 +519,7 @@ class V8_EXPORT_PRIVATE BytecodeArrayBuilder final {
   void SetStatementPosition(int position, bool record_replay_breakpoint = true) {
     if (position == kNoSourcePosition) return;
     latest_source_info_.MakeStatementPosition(position);
+    most_recent_source_position_ = position;
     if (record_replay_breakpoint) {
       RecordReplayInstrumentation("breakpoint", position);
     }
@@ -530,6 +531,7 @@ class V8_EXPORT_PRIVATE BytecodeArrayBuilder final {
 
   void SetExpressionPosition(int position) {
     if (position == kNoSourcePosition) return;
+    most_recent_source_position_ = position;
     if (!latest_source_info_.is_statement()) {
       // Ensure the current expression position is overwritten with the
       // latest value.
@@ -644,6 +646,7 @@ class V8_EXPORT_PRIVATE BytecodeArrayBuilder final {
   BytecodeRegisterOptimizer* register_optimizer_;
   BytecodeSourceInfo latest_source_info_;
   BytecodeSourceInfo deferred_source_info_;
+  int most_recent_source_position_ = -1;
 };
 
 V8_EXPORT_PRIVATE std::ostream& operator<<(

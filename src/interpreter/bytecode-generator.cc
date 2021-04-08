@@ -1431,7 +1431,7 @@ void BytecodeGenerator::GenerateBytecodeBody() {
     int num_parameters = closure_scope()->num_parameters();
     for (int i = 0; i < num_parameters; i++) {
       Register parameter(builder()->Parameter(i));
-      builder()->LoadAccumulatorWithRegister(parameter).RecordReplayAssertValue();
+      builder()->LoadAccumulatorWithRegister(parameter).RecordReplayAssertValue("Parameter");
     }
 
     builder()->RecordReplayInstrumentation("main");

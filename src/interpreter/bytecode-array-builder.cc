@@ -19,7 +19,7 @@
 namespace v8 {
 namespace internal {
 
-extern int RegisterAssertValueSite(int source_position);
+extern int RegisterAssertValueSite(const std::string& desc, int source_position);
 extern int RegisterInstrumentationSite(const char* kind, int source_position,
                                        int bytecode_offset);
 extern bool ShouldEmitRecordReplayAssertValue();
@@ -739,7 +739,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::LoadGlobal(const AstRawString* name,
     DCHECK_EQ(typeof_mode, NOT_INSIDE_TYPEOF);
     OutputLdaGlobal(name_index, feedback_slot);
   }
-  RecordReplayAssertValue();
+  RecordReplayAssertValue(std::string("LoadGlobal " + name->to_string()));
   return *this;
 }
 
@@ -766,7 +766,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::LoadContextSlot(
     DCHECK_EQ(mutability, kMutableSlot);
     OutputLdaContextSlot(context, slot_index, depth);
   }
-  RecordReplayAssertValue();
+  RecordReplayAssertValue("LoadContextSlot");
   return *this;
 }
 
@@ -790,7 +790,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::LoadLookupSlot(
     DCHECK_EQ(typeof_mode, NOT_INSIDE_TYPEOF);
     OutputLdaLookupSlot(name_index);
   }
-  RecordReplayAssertValue();
+  RecordReplayAssertValue(std::string("LoadLookupSlot " + name->to_string()));
   return *this;
 }
 
@@ -834,7 +834,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::LoadNamedProperty(
     Register object, const AstRawString* name, int feedback_slot) {
   size_t name_index = GetConstantPoolEntry(name);
   OutputLdaNamedProperty(object, name_index, feedback_slot);
-  RecordReplayAssertValue();
+  RecordReplayAssertValue(std::string("LoadNamedProperty ") + name->to_string());
   return *this;
 }
 
@@ -849,14 +849,14 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::LoadNamedPropertyNoFeedback(
     Register object, const AstRawString* name) {
   size_t name_index = GetConstantPoolEntry(name);
   OutputLdaNamedPropertyNoFeedback(object, name_index);
-  RecordReplayAssertValue();
+  RecordReplayAssertValue(std::string("LoadNamedPropertyNoFeedback ") + name->to_string());
   return *this;
 }
 
 BytecodeArrayBuilder& BytecodeArrayBuilder::LoadKeyedProperty(
     Register object, int feedback_slot) {
   OutputLdaKeyedProperty(object, feedback_slot);
-  RecordReplayAssertValue();
+  RecordReplayAssertValue("LoadKeyedProperty");
   return *this;
 }
 
@@ -899,6 +899,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::StoreNamedProperty(
   DCHECK_EQ(GetLanguageModeFromSlotKind(feedback_vector_spec()->GetKind(
                 FeedbackVector::ToSlot(feedback_slot))),
             language_mode);
+  RecordReplayAssertValue("StoreNamedProperty");
   OutputStaNamedProperty(object, name_index, feedback_slot);
   return *this;
 }
@@ -906,12 +907,14 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::StoreNamedProperty(
 BytecodeArrayBuilder& BytecodeArrayBuilder::StoreNamedProperty(
     Register object, const AstRawString* name, int feedback_slot,
     LanguageMode language_mode) {
+  RecordReplayAssertValue(std::string("StoreNamedProperty " + name->to_string()));
   size_t name_index = GetConstantPoolEntry(name);
   return StoreNamedProperty(object, name_index, feedback_slot, language_mode);
 }
 
 BytecodeArrayBuilder& BytecodeArrayBuilder::StoreNamedPropertyNoFeedback(
     Register object, const AstRawString* name, LanguageMode language_mode) {
+  RecordReplayAssertValue(std::string("StoreNamedPropertyNoFeedback " + name->to_string()));
   size_t name_index = GetConstantPoolEntry(name);
   OutputStaNamedPropertyNoFeedback(object, name_index,
                                    static_cast<uint8_t>(language_mode));
@@ -920,6 +923,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::StoreNamedPropertyNoFeedback(
 
 BytecodeArrayBuilder& BytecodeArrayBuilder::StoreNamedOwnProperty(
     Register object, const AstRawString* name, int feedback_slot) {
+  RecordReplayAssertValue(std::string("StoreNamedOwnProperty " + name->to_string()));
   size_t name_index = GetConstantPoolEntry(name);
   // Ensure that the store operation is in sync with the IC slot kind.
   DCHECK_EQ(
@@ -932,6 +936,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::StoreNamedOwnProperty(
 BytecodeArrayBuilder& BytecodeArrayBuilder::StoreKeyedProperty(
     Register object, Register key, int feedback_slot,
     LanguageMode language_mode) {
+  RecordReplayAssertValue("StoreKeyedProperty");
   // Ensure that language mode is in sync with the IC slot kind.
   DCHECK_EQ(GetLanguageModeFromSlotKind(feedback_vector_spec()->GetKind(
                 FeedbackVector::ToSlot(feedback_slot))),
@@ -957,6 +962,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::LoadClassFieldsInitializer(
     Register constructor, int feedback_slot) {
   size_t name_index = ClassFieldsSymbolConstantPoolEntry();
   OutputLdaNamedProperty(constructor, name_index, feedback_slot);
+  RecordReplayAssertValue("LoadClassFieldsInitializer");
   return *this;
 }
 
@@ -1358,10 +1364,9 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayIncExecutionProgressCoun
   return *this;
 }
 
-BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayAssertValue() {
+BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayAssertValue(const std::string& desc) {
   if (ShouldEmitRecordReplayAssertValue() && IsMainThread()) {
-    int source_position = latest_source_info_.source_position();
-    int index = RegisterAssertValueSite(source_position);
+    int index = RegisterAssertValueSite(desc, most_recent_source_position_);
     OutputRecordReplayAssertValue(index);
   }
   return *this;
@@ -1454,6 +1459,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::CallProperty(Register callable,
   } else {
     OutputCallProperty(callable, args, args.register_count(), feedback_slot);
   }
+  RecordReplayAssertValue("CallProperty");
   return *this;
 }
 
@@ -1469,6 +1475,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::CallUndefinedReceiver(
     OutputCallUndefinedReceiver(callable, args, args.register_count(),
                                 feedback_slot);
   }
+  RecordReplayAssertValue("CallUndefinedReceiver");
   return *this;
 }
 
@@ -1476,12 +1483,14 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::CallAnyReceiver(Register callable,
                                                             RegisterList args,
                                                             int feedback_slot) {
   OutputCallAnyReceiver(callable, args, args.register_count(), feedback_slot);
+  RecordReplayAssertValue("CallAnyReceiver");
   return *this;
 }
 
 BytecodeArrayBuilder& BytecodeArrayBuilder::CallNoFeedback(Register callable,
                                                            RegisterList args) {
   OutputCallNoFeedback(callable, args, args.register_count());
+  RecordReplayAssertValue("CallNoFeedback");
   return *this;
 }
 
@@ -1489,6 +1498,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::CallWithSpread(Register callable,
                                                            RegisterList args,
                                                            int feedback_slot) {
   OutputCallWithSpread(callable, args, args.register_count(), feedback_slot);
+  RecordReplayAssertValue("CallWithSpread");
   return *this;
 }
 
@@ -1496,6 +1506,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::Construct(Register constructor,
                                                       RegisterList args,
                                                       int feedback_slot_id) {
   OutputConstruct(constructor, args, args.register_count(), feedback_slot_id);
+  RecordReplayAssertValue("Construct");
   return *this;
 }
 

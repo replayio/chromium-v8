@@ -10419,12 +10419,33 @@ class FinishRecordingTask final : public Task {
   void Run() final { DoFinishRecording(); }
 };
 
+// Data for making sure we finish the recording if the main thread is stuck
+// doing a synchronous operation.
+static std::atomic<bool> gNeedFinishRecording;
+static std::atomic<void (*)(void*)> gUnblockMainThreadCallback;
+static std::atomic<void*> gUnblockMainThreadCallbackData;
+
+extern "C" void V8RecordReplayMaybeTerminate(void (*callback)(void*), void* data) {
+  if (IsMainThread()) {
+    gUnblockMainThreadCallback = callback;
+    gUnblockMainThreadCallbackData = data;
+    if (gNeedFinishRecording) {
+      DoFinishRecording();
+    }
+  }
+}
+
 extern "C" V8_EXPORT void V8RecordReplayFinishRecording() {
   if (recordreplay::IsRecordingOrReplaying()) {
     if (internal::gRecordReplayInterestingSource) {
       if (IsMainThread()) {
         DoFinishRecording();
       } else {
+        gNeedFinishRecording = true;
+        if (gUnblockMainThreadCallback) {
+          // This isn't thread safe. Oh well!
+          gUnblockMainThreadCallback.load()(gUnblockMainThreadCallbackData);
+        }
         CHECK(internal::gMainThreadIsolate);
         auto runner = internal::V8::GetCurrentPlatform()->GetForegroundTaskRunner((Isolate*)internal::gMainThreadIsolate);
         runner->PostTask(std::make_unique<FinishRecordingTask>());

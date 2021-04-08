@@ -1070,19 +1070,20 @@ static const int BytecodeSiteOffset = 1 << 16;
 
 // Locations for each assertion site, filled in lazily.
 struct AssertionSite {
-  std::string location_;
+  std::string desc_;
   int source_position_;
+  std::string location_;
 };
 typedef std::vector<AssertionSite> AssertionSiteVector;
 static AssertionSiteVector* gAssertionSites;
 
-int RegisterAssertValueSite(int source_position) {
+int RegisterAssertValueSite(const std::string& desc, int source_position) {
   CHECK(IsMainThread());
   if (!gAssertionSites) {
     gAssertionSites = new AssertionSiteVector();
   }
   int index = (int)gAssertionSites->size();
-  gAssertionSites->push_back({ "", source_position });
+  gAssertionSites->push_back({ desc, source_position, "" });
   return index + BytecodeSiteOffset;
 }
 
@@ -1116,10 +1117,10 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertValue) {
 
     char buf[1024];
     if (script->name().IsUndefined()) {
-      snprintf(buf, sizeof(buf), "<none>:%d:%d[%d]", info.line + 1, info.column, site.source_position_);
+      snprintf(buf, sizeof(buf), "<none>:%d:%d", info.line + 1, info.column);
     } else {
       std::unique_ptr<char[]> name = String::cast(script->name()).ToCString();
-      snprintf(buf, sizeof(buf), "%s:%d:%d[%d]", name.get(), info.line + 1, info.column, site.source_position_);
+      snprintf(buf, sizeof(buf), "%s:%d:%d", name.get(), info.line + 1, info.column);
     }
     buf[sizeof(buf) - 1] = 0;
 
@@ -1128,7 +1129,8 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertValue) {
 
   std::string contents = RecordReplayBasicValueContents(value);
 
-  recordreplay::Assert("%s Value %s", site.location_.c_str(), contents.c_str());
+  recordreplay::Assert("%s %s Value %s", site.location_.c_str(),
+                       site.desc_.c_str(),contents.c_str());
   return *value;
 }
 
