@@ -1190,6 +1190,8 @@ bool doesAttributeHaveObservableSideEffectOnGet(v8::Local<v8::Context> context,
 
 ValueMirror::~ValueMirror() = default;
 
+extern "C" bool V8RecordReplayHasDivergedFromRecording();
+
 // static
 bool ValueMirror::getProperties(v8::Local<v8::Context> context,
                                 v8::Local<v8::Object> object,
@@ -1219,6 +1221,7 @@ bool ValueMirror::getProperties(v8::Local<v8::Context> context,
   bool shouldSkipProto = internalType == V8InternalValueType::kScopeList;
 
   bool formatAccessorsAsProperties =
+      !V8RecordReplayHasDivergedFromRecording() &&
       clientFor(context)->formatAccessorsAsProperties(object);
   auto iterator = v8::debug::PropertyIterator::Create(context, object);
   if (!iterator) {
@@ -1600,12 +1603,14 @@ std::unique_ptr<ValueMirror> ValueMirror::create(v8::Local<v8::Context> context,
   if (value->IsSymbol()) {
     return std::make_unique<SymbolMirror>(value.As<v8::Symbol>());
   }
-  auto clientSubtype = (value->IsUndefined() || value->IsObject())
-                           ? clientFor(context)->valueSubtype(value)
-                           : nullptr;
-  if (clientSubtype) {
-    String16 subtype = toString16(clientSubtype->string());
-    return clientMirror(context, value, subtype);
+  if (!V8RecordReplayHasDivergedFromRecording()) {
+    auto clientSubtype = (value->IsUndefined() || value->IsObject())
+                            ? clientFor(context)->valueSubtype(value)
+                            : nullptr;
+    if (clientSubtype) {
+      String16 subtype = toString16(clientSubtype->string());
+      return clientMirror(context, value, subtype);
+    }
   }
   if (value->IsUndefined()) {
     return std::make_unique<PrimitiveValueMirror>(
