@@ -10017,6 +10017,11 @@ void RecordReplayAddInterestingSource(const char* url) {
     return;
   }
 
+  static bool gDumpSources = getenv("RECORD_REPLAY_PRINT_SOURCES");
+  if (gDumpSources) {
+    recordreplay::Print("NewSource %d %s", getpid(), url);
+  }
+
   if (gRecordReplayInterestingSourceFilter &&
       !strstr(url, gRecordReplayInterestingSourceFilter)) {
     return;
@@ -10147,7 +10152,10 @@ extern "C" void V8RecordReplayBytes(const char* why, void* buf, size_t size) {
 }
 
 bool recordreplay::AreEventsDisallowed() {
-  return gRecordReplayAreEventsDisallowed();
+  if (IsRecordingOrReplaying()) {
+    return gRecordReplayAreEventsDisallowed();
+  }
+  return false;
 }
 
 void recordreplay::BeginPassThroughEvents() {
@@ -10387,6 +10395,8 @@ static const char* GetRecordingId() {
 }
 
 static void DoFinishRecording() {
+  recordreplay::Print("DoFinishRecording %d", getpid());
+
   // Add the recording to a recording ID file if specified.
   char* env = getenv("RECORD_REPLAY_RECORDING_ID_FILE");
   if (env) {
@@ -10411,6 +10421,8 @@ static void DoFinishRecording() {
   }
 
   gRecordReplayFinishRecording();
+
+  recordreplay::Print("RecordingFinished %d", getpid());
   _exit(0);
 }
 
@@ -10426,6 +10438,7 @@ static std::atomic<void (*)(void*)> gUnblockMainThreadCallback;
 static std::atomic<void*> gUnblockMainThreadCallbackData;
 
 extern "C" void V8RecordReplayMaybeTerminate(void (*callback)(void*), void* data) {
+  recordreplay::Print("V8RecordReplayMaybeTerminate %d", !!callback);
   if (IsMainThread()) {
     gUnblockMainThreadCallback = callback;
     gUnblockMainThreadCallbackData = data;
@@ -10441,6 +10454,7 @@ extern "C" V8_EXPORT void V8RecordReplayFinishRecording() {
       if (IsMainThread()) {
         DoFinishRecording();
       } else {
+        recordreplay::Print("PendingFinishRecording %d", getpid());
         gNeedFinishRecording = true;
         if (gUnblockMainThreadCallback) {
           // This isn't thread safe. Oh well!
