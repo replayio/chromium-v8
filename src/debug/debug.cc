@@ -3428,6 +3428,15 @@ static int RecordReplayObjectId(Handle<Object> internal_object) {
   return id;
 }
 
+inline int HashBytes(const void* aPtr, size_t aSize) {
+  int hash = 0;
+  uint8_t* ptr = (uint8_t*)aPtr;
+  for (size_t i = 0; i < aSize; i++) {
+    hash = (((hash << 5) - hash) + ptr[i]) | 0;
+  }
+  return hash;
+}
+
 // Get a string describing a value which can be used in assertions.
 // Only basic information about the value is obtained, to keep things fast.
 std::string RecordReplayBasicValueContents(Handle<Object> value) {
@@ -3472,6 +3481,14 @@ std::string RecordReplayBasicValueContents(Handle<Object> value) {
       JSDate date = JSDate::cast(*value);
       double time = date.value().Number();
       return StringPrintf("Date %d %.2f", object_id, time);
+    }
+    if (!strcmp(typeStr, "JS_TYPED_ARRAY_TYPE")) {
+      v8::Local<v8::Value> obj = v8::Utils::ToLocal(value);
+      v8::Local<v8::TypedArray> tarr = obj.As<v8::TypedArray>();
+      char buf[50];
+      size_t written = tarr->CopyContents(buf, sizeof(buf));
+      int hash = HashBytes(buf, written);
+      return StringPrintf("TypedArray %d %lu %d", object_id, tarr->ByteLength(), hash);
     }
     return StringPrintf("Object %d %s", object_id, typeStr);
   }
