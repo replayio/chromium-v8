@@ -3437,6 +3437,12 @@ inline int HashBytes(const void* aPtr, size_t aSize) {
   return hash;
 }
 
+static int (*gGetAPIObjectIdCallback)(v8::Local<v8::Object> object);
+
+extern "C" void V8RecordReplaySetAPIObjectIdCallback(int (*callback)(v8::Local<v8::Object>)) {
+  gGetAPIObjectIdCallback = callback;
+}
+
 // Get a string describing a value which can be used in assertions.
 // Only basic information about the value is obtained, to keep things fast.
 std::string RecordReplayBasicValueContents(Handle<Object> value) {
@@ -3489,6 +3495,13 @@ std::string RecordReplayBasicValueContents(Handle<Object> value) {
       size_t written = tarr->CopyContents(buf, sizeof(buf));
       int hash = HashBytes(buf, written);
       return StringPrintf("TypedArray %d %lu %d", object_id, tarr->ByteLength(), hash);
+    }
+    if (!strcmp(typeStr, "JS_API_OBJECT_TYPE")) {
+      v8::Local<v8::Value> obj = v8::Utils::ToLocal(value);
+      if (gGetAPIObjectIdCallback) {
+        int api_id = gGetAPIObjectIdCallback(obj.As<v8::Object>());
+        return StringPrintf("APIObject %d %d", object_id, api_id);
+      }
     }
     return StringPrintf("Object %d %s", object_id, typeStr);
   }
