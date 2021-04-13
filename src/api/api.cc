@@ -10,6 +10,7 @@
 #include <string>
 #include <utility>  // For move
 #include <vector>
+#include <unistd.h>
 
 #include "include/cppgc/custom-space.h"
 #include "include/v8-cppgc.h"
