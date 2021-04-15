@@ -10542,6 +10542,16 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   // be supported for now it's not worth the bother.
   internal::FLAG_incremental_marking = false;
   internal::FLAG_never_compact = true;
+
+  // Write out our pid to a file if specified.
+  char* env = getenv("RECORD_REPLAY_PID_FILE");
+  if (env) {
+    FILE* file = fopen(env, "a");
+    if (file) {
+      fprintf(file, "%d\n", getpid());
+      fclose(file);
+    }
+  }
 }
 
 extern "C" void V8SetRecordingOrReplaying(void* handle) {
