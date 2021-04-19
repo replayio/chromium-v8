@@ -190,8 +190,8 @@ RUNTIME_FUNCTION(Runtime_UnwindAndFindExceptionHandler) {
   if (recordreplay::IsRecordingOrReplaying() &&
       IsMainThread() &&
       *RecordReplayProgressCounter() != gLastExceptionUnwindProgress) {
-    gLastExceptionUnwindProgress = *RecordReplayProgressCounter();
     RecordReplayOnExceptionUnwind(isolate);
+    gLastExceptionUnwindProgress = *RecordReplayProgressCounter();
   }
 
   return isolate->UnwindAndFindHandler();
