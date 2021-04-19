@@ -1879,6 +1879,11 @@ void BytecodeGenerator::BuildTryCatch(
   }
   try_control_builder.EndTry();
 
+  // Unlike in gecko, we need to increment the progress counter at catch
+  // blocks so we can detect when exceptions are initially thrown vs. being
+  // rethrown. See Runtime_UnwindAndFindExceptionHandler.
+  builder()->RecordReplayIncExecutionProgressCounter();
+
   builder()->RecordReplayAssertValue("BeginCatch");
 
   catch_body_func(context);
@@ -1942,6 +1947,8 @@ void BytecodeGenerator::BuildTryFinally(
   try_control_builder.BeginFinally();
   Register message = context;  // Reuse register.
 
+  // See BuildTryCatch for why we increment the progress counter here.
+  builder()->RecordReplayIncExecutionProgressCounter();
   builder()->RecordReplayAssertValue("BeginFinally");
 
   // Clear message object as we enter the finally block.

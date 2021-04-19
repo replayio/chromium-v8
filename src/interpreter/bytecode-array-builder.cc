@@ -1358,7 +1358,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::IncBlockCounter(
 }
 
 BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayIncExecutionProgressCounter() {
-  if (recordreplay::IsRecordingOrReplaying()) {
+  if (recordreplay::IsRecordingOrReplaying() && IsMainThread()) {
     OutputRecordReplayIncExecutionProgressCounter();
   }
   return *this;

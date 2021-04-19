@@ -9964,7 +9964,7 @@ extern "C" void V8RecordReplayOnConsoleMessage(size_t bookmark) {
 }
 
 void RecordReplayOnExceptionUnwind(Isolate* isolate) {
-  DCHECK(gRecordingOrReplaying);
+  CHECK(gRecordingOrReplaying);
 
   HandleScope scope(isolate);
 
