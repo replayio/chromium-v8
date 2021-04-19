@@ -1879,6 +1879,8 @@ void BytecodeGenerator::BuildTryCatch(
   }
   try_control_builder.EndTry();
 
+  builder()->RecordReplayAssertValue("BeginCatch");
+
   catch_body_func(context);
 
   try_control_builder.EndCatch();
@@ -1939,6 +1941,8 @@ void BytecodeGenerator::BuildTryFinally(
   // Pending message object is saved on entry.
   try_control_builder.BeginFinally();
   Register message = context;  // Reuse register.
+
+  builder()->RecordReplayAssertValue("BeginFinally");
 
   // Clear message object as we enter the finally block.
   builder()->LoadTheHole().SetPendingMessage().StoreAccumulatorInRegister(
