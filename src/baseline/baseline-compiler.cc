@@ -2320,7 +2320,6 @@ void BaselineCompiler::VisitRecordReplayIncExecutionProgressCounter() {
 
 void BaselineCompiler::VisitRecordReplayInstrumentation() {
   uint32_t index = Index(0);
-  recordreplay::Diagnostic("BaselineCompiler::VisitRecordReplayInstrumentation %u", index);
   CallRuntime(Runtime::kRecordReplayInstrumentation,
               __ FunctionOperand(), Smi::FromInt(index));
 }
