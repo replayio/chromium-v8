@@ -1162,28 +1162,28 @@ int RegisterInstrumentationSite(const char* kind, int source_position,
   return index + BytecodeSiteOffset;
 }
 
-const char* InstrumentationSiteKind(int index) {
+static InstrumentationSite& GetInstrumentationSite(const char* why, int index) {
   CHECK(IsMainThread());
+  CHECK(gInstrumentationSites);
   index -= BytecodeSiteOffset;
+  if ((size_t)index >= gInstrumentationSites->size()) {
+    recordreplay::Diagnostic("BadInstrumentationSite %s %d %d",
+                             why, index, gInstrumentationSites->size());
+  }
   CHECK((size_t)index < gInstrumentationSites->size());
-  InstrumentationSite& site = (*gInstrumentationSites)[index];
-  return site.kind_;
+  return (*gInstrumentationSites)[index];
+}
+
+const char* InstrumentationSiteKind(int index) {
+  return GetInstrumentationSite("Kind", index).kind_;
 }
 
 int InstrumentationSiteSourcePosition(int index) {
-  CHECK(IsMainThread());
-  index -= BytecodeSiteOffset;
-  CHECK((size_t)index < gInstrumentationSites->size());
-  InstrumentationSite& site = (*gInstrumentationSites)[index];
-  return site.source_position_;
+  return GetInstrumentationSite("SourcePosition", index).source_position_;
 }
 
 int InstrumentationSiteBytecodeOffset(int index) {
-  CHECK(IsMainThread());
-  index -= BytecodeSiteOffset;
-  CHECK((size_t)index < gInstrumentationSites->size());
-  InstrumentationSite& site = (*gInstrumentationSites)[index];
-  return site.bytecode_offset_;
+  return GetInstrumentationSite("BytecodeOffset", index).bytecode_offset_;
 }
 
 extern void RecordReplayInstrument(const char* kind, const char* function, int offset);
@@ -1239,9 +1239,7 @@ RUNTIME_FUNCTION(Runtime_RecordReplayInstrumentation) {
     return ReadOnlyRoots(isolate).undefined_value();
   }
 
-  index -= BytecodeSiteOffset;
-  CHECK((size_t)index < gInstrumentationSites->size());
-  InstrumentationSite& site = (*gInstrumentationSites)[index];
+  InstrumentationSite& site = GetInstrumentationSite("Callback", index);
 
   if (!site.function_id_.length()) {
     Handle<SharedFunctionInfo> shared(function->shared(), isolate);
