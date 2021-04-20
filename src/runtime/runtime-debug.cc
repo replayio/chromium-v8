@@ -1159,6 +1159,8 @@ int RegisterInstrumentationSite(const char* kind, int source_position,
   }
   int index = (int)gInstrumentationSites->size();
   gInstrumentationSites->push_back(site);
+  recordreplay::Diagnostic("AddInstrumentationSite %d %d",
+                           index, gInstrumentationSites->size());
   return index + BytecodeSiteOffset;
 }
 

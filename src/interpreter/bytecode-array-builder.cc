@@ -1377,6 +1377,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayInstrumentation(const ch
   if (recordreplay::IsRecordingOrReplaying() && IsMainThread()) {
     int bytecode_offset = bytecode_array_writer_.size();
     int index = RegisterInstrumentationSite(kind, source_position, bytecode_offset);
+    recordreplay::Diagnostic("OutputRecordReplayInstrumentation %d", index);
     OutputRecordReplayInstrumentation(index);
   }
   return *this;
