@@ -54,6 +54,8 @@ LocalHeap::LocalHeap(Heap* heap, ThreadKind kind,
       persistent_handles_(std::move(persistent_handles)),
       marking_barrier_(new MarkingBarrier(this)),
       old_space_allocator_(this, heap->old_space()) {
+  recordreplay::Diagnostic("LocalHeap Create %p", this);
+
   heap_->safepoint()->AddLocalHeap(this, [this] {
     if (!is_main_thread()) {
       WriteBarrier::SetForThread(marking_barrier_.get());
@@ -72,6 +74,8 @@ LocalHeap::LocalHeap(Heap* heap, ThreadKind kind,
 }
 
 LocalHeap::~LocalHeap() {
+  recordreplay::Diagnostic("LocalHeap Destroy %p", this);
+
   // Park thread since removing the local heap could block.
   EnsureParkedBeforeDestruction();
 
@@ -287,6 +291,11 @@ void LocalHeap::AddGCEpilogueCallback(GCEpilogueCallback* callback,
   DCHECK_EQ(std::find(gc_epilogue_callbacks_.begin(),
                       gc_epilogue_callbacks_.end(), callback_and_data),
             gc_epilogue_callbacks_.end());
+
+  recordreplay::Diagnostic("LocalHeap::AddGCEpilogueCallback Start %p", this);
+  recordreplay::Diagnostic("LocalHeap::AddGCEpilogueCallback #1 %lu",
+                           gc_epilogue_callbacks_.size());
+
   gc_epilogue_callbacks_.push_back(callback_and_data);
 }
 
