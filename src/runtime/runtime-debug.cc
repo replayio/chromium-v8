@@ -1159,8 +1159,6 @@ int RegisterInstrumentationSite(const char* kind, int source_position,
   }
   int index = (int)gInstrumentationSites->size();
   gInstrumentationSites->push_back(site);
-  recordreplay::Diagnostic("AddInstrumentationSite %d %d",
-                           index, gInstrumentationSites->size());
   return index + BytecodeSiteOffset;
 }
 
@@ -1231,6 +1229,8 @@ RUNTIME_FUNCTION(Runtime_RecordReplayInstrumentation) {
   DCHECK_EQ(2, args.length());
   CONVERT_ARG_HANDLE_CHECKED(JSFunction, function, 0);
   CONVERT_NUMBER_CHECKED(int32_t, index, Int32, args[1]);
+
+  recordreplay::Diagnostic("Runtime_RecordReplayInstrumentation %d", index);
 
   if (!IsMainThread()) {
     return ReadOnlyRoots(isolate).undefined_value();

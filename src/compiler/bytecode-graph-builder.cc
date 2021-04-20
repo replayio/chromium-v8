@@ -3705,7 +3705,9 @@ void BytecodeGraphBuilder::VisitRecordReplayIncExecutionProgressCounter() {
 void BytecodeGraphBuilder::VisitRecordReplayInstrumentation() {
   PrepareEagerCheckpoint();
   Node* closure = GetFunctionClosure();
-  Node* index_slot = jsgraph()->Constant(bytecode_iterator().GetIndexOperand(0));
+  uint32_t index = bytecode_iterator().GetIndexOperand(0);
+  recordreplay::Diagnostic("BytecodeGraphBuilder::VisitRecordReplayInstrumentation %u", index);
+  Node* index_slot = jsgraph()->Constant(index);
   const Operator* op = javascript()->CallRuntime(Runtime::kRecordReplayInstrumentation);
 
   Node* node = NewNode(op, closure, index_slot);

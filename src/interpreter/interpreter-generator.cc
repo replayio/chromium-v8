@@ -2828,6 +2828,7 @@ IGNITION_HANDLER(RecordReplayInstrumentation, InterpreterAssembler) {
   TNode<Context> context = GetContext();
   TNode<Object> closure = LoadRegister(Register::function_closure());
   TNode<Smi> index = BytecodeOperandIdxSmi(0);
+  recordreplay::Diagnostic("IGNITION_HANDLER RecordReplayInstrumentation");
   CallRuntime(Runtime::kRecordReplayInstrumentation, context, closure, index);
   Dispatch();
 }
