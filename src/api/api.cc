@@ -10001,18 +10001,11 @@ bool ShouldEmitRecordReplayAssertValue() {
   return gRecordReplayAssertValues;
 }
 
-// We only finish recordings if there were interesting sources loaded
+// Only finish recordings if there were interesting sources loaded
 // into the process.
 static char* gRecordReplayInterestingSource;
 
-// URL filter for sources considered interesting.
-static const char* gRecordReplayInterestingSourceFilter;
-
 void RecordReplayAddInterestingSource(const char* url) {
-  if (!gRecordReplayInterestingSourceFilter) {
-    gRecordReplayInterestingSourceFilter = getenv("RECORD_REPLAY_SOURCE_FILTER");
-  }
-
   if (!*url) {
     // Always ignore sources with missing URLs.
     return;
@@ -10020,17 +10013,28 @@ void RecordReplayAddInterestingSource(const char* url) {
 
   static bool gDumpSources = getenv("RECORD_REPLAY_PRINT_SOURCES");
   if (gDumpSources) {
-    recordreplay::Print("NewSource %d %s", getpid(), url);
-  }
-
-  if (gRecordReplayInterestingSourceFilter &&
-      !strstr(url, gRecordReplayInterestingSourceFilter)) {
-    return;
+    recordreplay::Print("NewSource %s", url);
   }
 
   if (!gRecordReplayInterestingSource) {
     gRecordReplayInterestingSource = strdup(url);
   }
+}
+
+// Processes which didn't paint anything will optionally be ignored,
+// even if they have interesting sources.
+static bool gRecordReplayHasPaint;
+
+static bool ShouldFinishRecording() {
+  if (!gRecordReplayInterestingSource) {
+    return false;
+  }
+
+  if (getenv("RECORD_REPLAY_IGNORE_NON_PAINTING_CONTENT") && !gRecordReplayHasPaint) {
+    return false;
+  }
+
+  return true;
 }
 
 // For posting tasks to the main thread.
@@ -10323,6 +10327,7 @@ extern "C" size_t V8RecordReplayNewBookmark() {
 
 extern "C" size_t V8RecordReplayPaintStart() {
   CHECK(recordreplay::IsRecordingOrReplaying());
+  internal::gRecordReplayHasPaint = true;
   return gRecordReplayPaintStart();
 }
 
@@ -10396,7 +10401,7 @@ static const char* GetRecordingId() {
 }
 
 static void DoFinishRecording() {
-  recordreplay::Print("DoFinishRecording %d", getpid());
+  recordreplay::Print("DoFinishRecording");
 
   // Add the recording to a recording ID file if specified.
   char* env = getenv("RECORD_REPLAY_RECORDING_ID_FILE");
@@ -10404,16 +10409,11 @@ static void DoFinishRecording() {
     FILE* file = fopen(env, "a");
     if (file) {
       const char* recordingId = GetRecordingId();
-      if (internal::gRecordReplayInterestingSourceFilter) {
-        // When there is a filter we just write out the recording ID.
-        fprintf(file, "%s\n", recordingId);
-      } else {
-        // When there is no filter we include the first interesting source
-        // found when writing the recording ID out, to help distinguish
-        // between different content processes which Chromium will create
-        // for content from different origins.
-        fprintf(file, "%s %s\n", recordingId, internal::gRecordReplayInterestingSource);
-      }
+      // Include the first interesting source found when writing the
+      // recording ID out, to help distinguish between different content
+      // processes which Chromium will create for content from different
+      // origins.
+      fprintf(file, "%s %s\n", recordingId, internal::gRecordReplayInterestingSource);
       fclose(file);
       fprintf(stderr, "Found content, saving recording ID %s\n", recordingId);
     } else {
@@ -10423,7 +10423,7 @@ static void DoFinishRecording() {
 
   gRecordReplayFinishRecording();
 
-  recordreplay::Print("RecordingFinished %d", getpid());
+  recordreplay::Print("RecordingFinished");
   _exit(0);
 }
 
@@ -10451,11 +10451,11 @@ extern "C" void V8RecordReplayMaybeTerminate(void (*callback)(void*), void* data
 
 extern "C" V8_EXPORT void V8RecordReplayFinishRecording() {
   if (recordreplay::IsRecordingOrReplaying()) {
-    if (internal::gRecordReplayInterestingSource) {
+    if (internal::ShouldFinishRecording()) {
       if (IsMainThread()) {
         DoFinishRecording();
       } else {
-        recordreplay::Print("PendingFinishRecording %d", getpid());
+        recordreplay::Print("PendingFinishRecording");
         gNeedFinishRecording = true;
         if (gUnblockMainThreadCallback) {
           // This isn't thread safe. Oh well!
