@@ -98,7 +98,7 @@ Handle<JSMessageObject> MessageHandler::MakeMessageObject(
                              : Handle<Object>::cast(stack_frames);
 
   int record_replay_bookmark = 0;
-  if (!recordreplay::AreEventsDisallowed()) {
+  if (!recordreplay::AreEventsDisallowed() && IsMainThread()) {
     record_replay_bookmark = (int)V8RecordReplayNewBookmark();
   }
 
