@@ -10023,7 +10023,7 @@ void RecordReplayAddInterestingSource(const char* url) {
 
 // Processes which didn't paint anything will optionally be ignored,
 // even if they have interesting sources.
-static bool gRecordReplayHasPaint;
+static std::atomic<bool> gRecordReplayHasPaint;
 
 static bool ShouldFinishRecording() {
   if (!gRecordReplayInterestingSource) {
@@ -10327,12 +10327,12 @@ extern "C" size_t V8RecordReplayNewBookmark() {
 
 extern "C" size_t V8RecordReplayPaintStart() {
   CHECK(recordreplay::IsRecordingOrReplaying());
-  internal::gRecordReplayHasPaint = true;
   return gRecordReplayPaintStart();
 }
 
 extern "C" void V8RecordReplayPaintFinished(size_t bookmark) {
   CHECK(recordreplay::IsRecordingOrReplaying());
+  internal::gRecordReplayHasPaint = true;
   gRecordReplayPaintFinished(bookmark);
 }
 
@@ -10415,9 +10415,9 @@ static void DoFinishRecording() {
       // origins.
       fprintf(file, "%s %s\n", recordingId, internal::gRecordReplayInterestingSource);
       fclose(file);
-      fprintf(stderr, "Found content, saving recording ID %s\n", recordingId);
+      recordreplay::Print("Found content, saving recording ID %s", recordingId);
     } else {
-      fprintf(stderr, "Error: Could not open %s for adding recording ID", env);
+      recordreplay::Print("Error: Could not open %s for adding recording ID", env);
     }
   }
 
