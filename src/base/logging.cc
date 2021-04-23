@@ -136,36 +136,10 @@ class FailureMessage {
 
 }  // namespace
 
-template <typename Src, typename Dst>
-static inline void CastPointer(const Src src, Dst* dst) {
-  static_assert(sizeof(Src) == sizeof(uintptr_t), "bad size");
-  static_assert(sizeof(Dst) == sizeof(uintptr_t), "bad size");
-  memcpy((void*)dst, (const void*)&src, sizeof(uintptr_t));
-}
+const char* gCrashReason;
 
-static void RecordReplayPrint(const char* format, ...) {
-  const char* driver = getenv("RECORD_REPLAY_DRIVER");
-  if (!driver) {
-    return;
-  }
-
-  void* handle = dlopen(driver, RTLD_LAZY);
-  if (!handle) {
-    return;
-  }
-
-  void* sym = dlsym(handle, "RecordReplayPrint");
-  if (!sym) {
-    return;
-  }
-
-  void (*recordReplayPrint)(const char* format, va_list args);
-  CastPointer(sym, &recordReplayPrint);
-
-  va_list arguments;
-  va_start(arguments, format);
-  recordReplayPrint(format, arguments);
-  va_end(arguments);
+extern "C" const char* V8RecordReplayCrashReasonCallback() {
+  return gCrashReason;
 }
 
 static __attribute__((noinline)) void BusyWait() {
@@ -190,7 +164,7 @@ void V8_Fatal(const char* format, ...) {
     str[sizeof(str) - 1] = 0;
     va_end(arguments);
 
-    RecordReplayPrint("V8_Fatal: %s", str);
+    gCrashReason = strdup(str);
   }
 
   va_list arguments;

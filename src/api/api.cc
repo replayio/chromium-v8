@@ -10400,6 +10400,8 @@ static const char* GetRecordingId() {
   return gRecordingId;
 }
 
+extern "C" const char* V8RecordReplayCrashReasonCallback();
+
 static void DoFinishRecording() {
   recordreplay::Print("DoFinishRecording");
 
@@ -10523,6 +10525,10 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   void (*setClearPauseDataCallback)(void (*callback)());
   RecordReplayLoadSymbol(handle, "RecordReplaySetClearPauseDataCallback", setClearPauseDataCallback);
   setClearPauseDataCallback(i::ClearPauseDataCallback);
+
+  void (*setCrashReasonCallback)(const char* (*aCallback)());
+  RecordReplayLoadSymbol(handle, "RecordReplaySetCrashReasonCallback", setCrashReasonCallback);
+  setCrashReasonCallback(V8RecordReplayCrashReasonCallback);
 
   internal::gRecordReplayAssertValues = !!getenv("RECORD_REPLAY_JS_ASSERTS");
 
