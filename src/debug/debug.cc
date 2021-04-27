@@ -2684,16 +2684,23 @@ static int GetSourceIdProperty(Isolate* isolate, Handle<Object> obj) {
 }
 
 // Get the script from an ID.
-Handle<Script> GetScript(Isolate* isolate, int script_id) {
+static MaybeHandle<Script> MaybeGetScript(Isolate* isolate, int script_id) {
   CHECK(gRecordReplayScripts);
   auto iter = gRecordReplayScripts->find(script_id);
-  CHECK(iter != gRecordReplayScripts->end());
+  if (iter == gRecordReplayScripts->end()) {
+    return MaybeHandle<Script>();
+  }
 
   Local<v8::Value> scriptValue = iter->second.Get((v8::Isolate*)isolate);
   Handle<Object> scriptObj = Utils::OpenHandle(*scriptValue);
   Handle<Script> script(Script::cast(*scriptObj), isolate);
   CHECK(script->id() == script_id);
   return script;
+}
+
+// Get the script from an ID.
+Handle<Script> GetScript(Isolate* isolate, int script_id) {
+  return MaybeGetScript(isolate, script_id).ToHandleChecked();
 }
 
 Handle<Object> RecordReplayGetSourceContents(Isolate* isolate, Handle<Object> params) {
@@ -2847,7 +2854,13 @@ static void ForEachInstrumentationOpInRange(
   const std::function<void(Handle<Script> script, int bytecode_offset,
                            const std::string& function_id, int line, int column)> callback) {
   int script_id = GetSourceIdProperty(isolate, params);
-  Handle<Script> script = GetScript(isolate, script_id);
+  MaybeHandle<Script> maybe_script = MaybeGetScript(isolate, script_id);
+
+  if (maybe_script.is_null()) {
+    return;
+  }
+
+  Handle<Script> script = maybe_script.ToHandleChecked();
 
   int beginLine = 1, beginColumn = 0;
   DecodeLocationProperty(isolate, params, "begin", &beginLine, &beginColumn);
