@@ -3175,8 +3175,14 @@ static Handle<Object> RecordReplayGetHTMLSource(Isolate* isolate, Handle<Object>
   return rv;
 }
 
+extern int RecordReplayCurrentGeneratorIdRaw();
+
 static Handle<Object> RecordReplayCurrentGeneratorId(Isolate* isolate, Handle<Object> params) {
   Handle<JSObject> rv = NewPlainObject(isolate);
+  int id = RecordReplayCurrentGeneratorIdRaw();
+  if (id) {
+    SetProperty(isolate, rv, "id", id);
+  }
   return rv;
 }
 

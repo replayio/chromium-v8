@@ -22,6 +22,9 @@ extern class JSGeneratorObject extends JSObject {
   // cannot be resumed.
   continuation: Smi;
 
+  // ID for this generator used when recording/replaying.
+  record_replay_id: Smi;
+
   // Saved interpreter register file.
   parameters_and_registers: FixedArray;
 }
