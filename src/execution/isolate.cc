@@ -1393,6 +1393,8 @@ bool Isolate::MayAccess(Handle<Context> accessing_context,
 }
 
 Object Isolate::StackOverflow() {
+  recordreplay::InvalidateRecording("Stack overflow");
+
   if (FLAG_correctness_fuzzer_suppressions) {
     FATAL("Aborting on stack overflow");
   }
