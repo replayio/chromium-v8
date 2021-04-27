@@ -112,6 +112,7 @@ namespace compiler {
   V(Wide)                            \
   V(RecordReplayIncExecutionProgressCounter) \
   V(RecordReplayInstrumentation)     \
+  V(RecordReplayInstrumentationGenerator) \
   V(RecordReplayAssertValue)
 
 #define BINARY_OP_LIST(V) \

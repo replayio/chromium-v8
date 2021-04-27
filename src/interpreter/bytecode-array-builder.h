@@ -468,6 +468,8 @@ class V8_EXPORT_PRIVATE BytecodeArrayBuilder final {
   BytecodeArrayBuilder& RecordReplayAssertValue(const std::string& desc);
   BytecodeArrayBuilder& RecordReplayInstrumentation(const char* kind,
                                                     int source_position = kNoSourcePosition);
+  BytecodeArrayBuilder& RecordReplayInstrumentationGenerator(const char* kind,
+                                                             Register generator_object);
 
   // Complex flow control.
   BytecodeArrayBuilder& ForInEnumerate(Register receiver);

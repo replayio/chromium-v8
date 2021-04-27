@@ -1224,19 +1224,15 @@ void ParseRecordReplayFunctionId(const std::string& function_id,
   *source_position = atoi(strchr(raw, ':') + 1);
 }
 
-RUNTIME_FUNCTION(Runtime_RecordReplayInstrumentation) {
-  HandleScope scope(isolate);
-  DCHECK_EQ(2, args.length());
-  CONVERT_ARG_HANDLE_CHECKED(JSFunction, function, 0);
-  CONVERT_NUMBER_CHECKED(int32_t, index, Int32, args[1]);
-
+static inline void OnInstrumentation(Isolate* isolate,
+                                     Handle<JSFunction> function, int32_t index) {
   if (!IsMainThread()) {
-    return ReadOnlyRoots(isolate).undefined_value();
+    return;
   }
 
   Handle<Script> script(Script::cast(function->shared().script()), isolate);
   if (RecordReplayIgnoreScript(script)) {
-    return ReadOnlyRoots(isolate).undefined_value();
+    return;
   }
 
   InstrumentationSite& site = GetInstrumentationSite("Callback", index);
@@ -1248,6 +1244,27 @@ RUNTIME_FUNCTION(Runtime_RecordReplayInstrumentation) {
 
   RecordReplayInstrument(site.kind_, site.function_id_.c_str(),
                          site.bytecode_offset_);
+}
+
+RUNTIME_FUNCTION(Runtime_RecordReplayInstrumentation) {
+  HandleScope scope(isolate);
+  DCHECK_EQ(2, args.length());
+  CONVERT_ARG_HANDLE_CHECKED(JSFunction, function, 0);
+  CONVERT_NUMBER_CHECKED(int32_t, index, Int32, args[1]);
+
+  OnInstrumentation(isolate, function, index);
+
+  return ReadOnlyRoots(isolate).undefined_value();
+}
+
+RUNTIME_FUNCTION(Runtime_RecordReplayInstrumentationGenerator) {
+  HandleScope scope(isolate);
+  DCHECK_EQ(3, args.length());
+  CONVERT_ARG_HANDLE_CHECKED(JSFunction, function, 0);
+  CONVERT_NUMBER_CHECKED(int32_t, index, Int32, args[1]);
+  CONVERT_ARG_HANDLE_CHECKED(JSGeneratorObject, generator_object, 2);
+
+  OnInstrumentation(isolate, function, index);
 
   return ReadOnlyRoots(isolate).undefined_value();
 }

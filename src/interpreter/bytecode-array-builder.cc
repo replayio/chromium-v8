@@ -1382,6 +1382,16 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayInstrumentation(const ch
   return *this;
 }
 
+BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayInstrumentationGenerator(
+    const char* kind, Register generator_object) {
+  if (recordreplay::IsRecordingOrReplaying() && IsMainThread()) {
+    int bytecode_offset = bytecode_array_writer_.size();
+    int index = RegisterInstrumentationSite(kind, kNoSourcePosition, bytecode_offset);
+    OutputRecordReplayInstrumentationGenerator(index, generator_object);
+  }
+  return *this;
+}
+
 BytecodeArrayBuilder& BytecodeArrayBuilder::ForInEnumerate(Register receiver) {
   OutputForInEnumerate(receiver);
   return *this;

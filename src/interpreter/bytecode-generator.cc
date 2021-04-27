@@ -1434,7 +1434,11 @@ void BytecodeGenerator::GenerateBytecodeBody() {
       builder()->LoadAccumulatorWithRegister(parameter).RecordReplayAssertValue("Parameter");
     }
 
-    builder()->RecordReplayInstrumentation("main");
+    if (IsResumableFunction(literal->kind())) {
+      builder()->RecordReplayInstrumentationGenerator("generator", generator_object());
+    } else {
+      builder()->RecordReplayInstrumentation("main");
+    }
   }
 
   // Increment the function-scope block coverage counter.
@@ -4361,7 +4365,7 @@ void BytecodeGenerator::BuildSuspendPoint(int position) {
   builder()->ResumeGenerator(generator_object(), registers);
 
   builder()->RecordReplayIncExecutionProgressCounter();
-  builder()->RecordReplayInstrumentation("entry");
+  builder()->RecordReplayInstrumentationGenerator("entry", generator_object());
 }
 
 void BytecodeGenerator::VisitYield(Yield* expr) {

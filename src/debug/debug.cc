@@ -2782,7 +2782,8 @@ static void ForEachInstrumentationOp(Isolate* isolate, Handle<Script> script,
       for (interpreter::BytecodeArrayIterator it(bytecode); !it.done();
            it.Advance()) {
         interpreter::Bytecode bytecode = it.current_bytecode();
-        if (bytecode == interpreter::Bytecode::kRecordReplayInstrumentation) {
+        if (bytecode == interpreter::Bytecode::kRecordReplayInstrumentation ||
+            bytecode == interpreter::Bytecode::kRecordReplayInstrumentationGenerator) {
           int index = it.GetIndexOperand(0);
           aCallback(candidate, index);
         }
@@ -3174,6 +3175,11 @@ static Handle<Object> RecordReplayGetHTMLSource(Isolate* isolate, Handle<Object>
   return rv;
 }
 
+static Handle<Object> RecordReplayCurrentGeneratorId(Isolate* isolate, Handle<Object> params) {
+  Handle<JSObject> rv = NewPlainObject(isolate);
+  return rv;
+}
+
 extern void RecordReplayAddInterestingSource(const char* url);
 
 static bool IgnoreScriptByURL(const char* aURL) {
@@ -3258,6 +3264,7 @@ static InternalCommandCallback gInternalCommandCallbacks[] = {
   { "Target.countStackFrames", RecordReplayCountStackFrames },
   { "Target.getFunctionsInRange", RecordReplayGetFunctionsInRange },
   { "Target.getHTMLSource", RecordReplayGetHTMLSource },
+  { "Target.currentGeneratorId", RecordReplayCurrentGeneratorId },
 };
 
 // Function to invoke on command callbacks which we don't have a C++ implementation for.

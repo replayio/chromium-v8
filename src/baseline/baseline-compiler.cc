@@ -2324,6 +2324,12 @@ void BaselineCompiler::VisitRecordReplayInstrumentation() {
               __ FunctionOperand(), Smi::FromInt(index));
 }
 
+void BaselineCompiler::VisitRecordReplayInstrumentationGenerator() {
+  uint32_t index = Index(0);
+  CallRuntime(Runtime::kRecordReplayInstrumentationGenerator,
+              __ FunctionOperand(), Smi::FromInt(index), RegisterOperand(1));
+}
+
 void BaselineCompiler::VisitRecordReplayAssertValue() {
   CallRuntime(Runtime::kRecordReplayAssertValue,
               __ FunctionOperand(), Smi::FromInt(Index(0)),
