@@ -3291,21 +3291,24 @@ static Eternal<Value>* gCommandCallback;
 
 extern "C" void V8RecordReplayGetDefaultContext(v8::Isolate* isolate, v8::Local<v8::Context>* cx);
 
-char* CommandCallback(const char* command, const char* params) {
-  CHECK(IsMainThread());
-  recordreplay::AutoDisallowEvents disallow;
-
-  Isolate* isolate = Isolate::Current();
-
-  // Make sure that the isolate has a context by switching to the default
-  // context if necessary.
-  base::Optional<SaveAndSwitchContext> ssc;
+// Make sure that the isolate has a context by switching to the default
+// context if necessary.
+static void EnsureIsolateContext(Isolate* isolate, base::Optional<SaveAndSwitchContext>& ssc) {
   if (isolate->context().is_null()) {
     Local<v8::Context> v8_context;
     V8RecordReplayGetDefaultContext((v8::Isolate*)isolate, &v8_context);
     Handle<Context> context = Utils::OpenHandle(*v8_context);
     ssc.emplace(isolate, *context);
   }
+}
+
+char* CommandCallback(const char* command, const char* params) {
+  CHECK(IsMainThread());
+  recordreplay::AutoDisallowEvents disallow;
+
+  Isolate* isolate = Isolate::Current();
+  base::Optional<SaveAndSwitchContext> ssc;
+  EnsureIsolateContext(isolate, ssc);
 
   HandleScope scope(isolate);
 
@@ -3350,15 +3353,20 @@ void ClearPauseDataCallback() {
   CHECK(IsMainThread());
   recordreplay::AutoDisallowEvents disallow;
 
-  if (gClearPauseDataCallback) {
-    Isolate* isolate = Isolate::Current();
-    Local<v8::Value> callbackValue = gClearPauseDataCallback->Get((v8::Isolate*)isolate);
-    Handle<Object> callback = Utils::OpenHandle(*callbackValue);
-
-    Handle<Object> undefined = isolate->factory()->undefined_value();
-    MaybeHandle<Object> rv = Execution::Call(isolate, callback, undefined, 0, nullptr);
-    CHECK(!rv.is_null());
+  if (!gClearPauseDataCallback) {
+    return;
   }
+
+  Isolate* isolate = Isolate::Current();
+  base::Optional<SaveAndSwitchContext> ssc;
+  EnsureIsolateContext(isolate, ssc);
+
+  Local<v8::Value> callbackValue = gClearPauseDataCallback->Get((v8::Isolate*)isolate);
+  Handle<Object> callback = Utils::OpenHandle(*callbackValue);
+
+  Handle<Object> undefined = isolate->factory()->undefined_value();
+  MaybeHandle<Object> rv = Execution::Call(isolate, callback, undefined, 0, nullptr);
+  CHECK(!rv.is_null());
 }
 
 typedef std::unordered_map<int, bool> ScriptIdIgnoreMap;
