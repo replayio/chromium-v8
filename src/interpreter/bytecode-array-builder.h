@@ -39,6 +39,7 @@ class V8_EXPORT_PRIVATE BytecodeArrayBuilder final {
  public:
   BytecodeArrayBuilder(
       Zone* zone, int parameter_count, int locals_count,
+      bool record_replay_ignore,
       FeedbackVectorSpec* feedback_vector_spec = nullptr,
       SourcePositionTableBuilder::RecordingMode source_position_mode =
           SourcePositionTableBuilder::RECORD_SOURCE_POSITIONS);
@@ -649,6 +650,7 @@ class V8_EXPORT_PRIVATE BytecodeArrayBuilder final {
   BytecodeSourceInfo latest_source_info_;
   BytecodeSourceInfo deferred_source_info_;
   int most_recent_source_position_ = -1;
+  bool emit_record_replay_opcodes_ = false;
 };
 
 V8_EXPORT_PRIVATE std::ostream& operator<<(

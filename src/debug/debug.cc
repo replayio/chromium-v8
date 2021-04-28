@@ -3064,7 +3064,7 @@ static Handle<Object> RecordReplayConvertFunctionOffsetToLocation(Isolate* isola
   return rv;
 }
 
-bool RecordReplayIgnoreScript(Handle<Script> script);
+bool RecordReplayIgnoreScript(Script script);
 
 static Handle<Object> RecordReplayCountStackFrames(Isolate* isolate,
                                                    Handle<Object> params) {
@@ -3095,7 +3095,7 @@ static Handle<Object> RecordReplayCountStackFrames(Isolate* isolate,
       }
 
       Handle<Script> script(Script::cast(shared->script()), isolate);
-      if (script->id() && !RecordReplayIgnoreScript(script)) {
+      if (script->id() && !RecordReplayIgnoreScript(*script)) {
         count++;
       }
     }
@@ -3201,8 +3201,8 @@ static Handle<Object> RecordReplayCurrentGeneratorId(Isolate* isolate, Handle<Ob
 
 extern void RecordReplayAddInterestingSource(const char* url);
 
-static bool IgnoreScriptByURL(const char* aURL) {
-  return strncmp(aURL, "http", 4);
+bool RecordReplayIgnoreScriptByURL(const char* url) {
+  return strncmp(url, "http", 4);
 }
 
 static void RecordReplayRegisterScript(Handle<Script> script) {
@@ -3231,7 +3231,7 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
     url = name.get();
   }
 
-  if (IgnoreScriptByURL(url.c_str())) {
+  if (RecordReplayIgnoreScriptByURL(url.c_str())) {
     return;
   }
 
@@ -3372,34 +3372,34 @@ void ClearPauseDataCallback() {
 typedef std::unordered_map<int, bool> ScriptIdIgnoreMap;
 static ScriptIdIgnoreMap* gShouldIgnoreScripts;
 
-static bool RecordReplayIgnoreScriptRaw(Handle<Script> script) {
-  if (script->name().IsUndefined()) {
+static bool RecordReplayIgnoreScriptRaw(Script script) {
+  if (script.name().IsUndefined()) {
     return false;
   }
 
-  std::unique_ptr<char[]> name = String::cast(script->name()).ToCString();
-  return IgnoreScriptByURL(name.get());
+  std::unique_ptr<char[]> name = String::cast(script.name()).ToCString();
+  return RecordReplayIgnoreScriptByURL(name.get());
 }
 
-bool RecordReplayIgnoreScript(Handle<Script> script) {
+bool RecordReplayIgnoreScript(Script script) {
   CHECK(IsMainThread());
 
   if (!gShouldIgnoreScripts) {
     gShouldIgnoreScripts = new ScriptIdIgnoreMap();
   }
-  auto iter = gShouldIgnoreScripts->find(script->id());
+  auto iter = gShouldIgnoreScripts->find(script.id());
   if (iter != gShouldIgnoreScripts->end()) {
     return iter->second;
   }
 
   bool rv = RecordReplayIgnoreScriptRaw(script);
-  (*gShouldIgnoreScripts)[script->id()] = rv;
+  (*gShouldIgnoreScripts)[script.id()] = rv;
   return rv;
 }
 
 static bool RecordReplayIgnoreScriptById(Isolate* isolate, int script_id) {
   Handle<Script> script = GetScript(isolate, script_id);
-  return RecordReplayIgnoreScript(script);
+  return RecordReplayIgnoreScript(*script);
 }
 
 static std::string StringPrintf(const char* format, ...) {

@@ -970,25 +970,21 @@ static inline void RecordReplayIncrementProgressCounter() {
   }
 }
 
-extern bool RecordReplayIgnoreScript(Handle<Script> script);
+extern bool RecordReplayIgnoreScript(Script script);
 extern bool ShouldEmitRecordReplayAssertValue();
+
+extern "C" bool V8RecordReplayHasDivergedFromRecording();
 
 RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
   HandleScope scope(isolate);
   DCHECK_EQ(1, args.length());
   CONVERT_ARG_HANDLE_CHECKED(JSFunction, function, 0);
-
-  if (recordreplay::AreEventsDisallowed() ||
-      !IsMainThread()) {
-    return ReadOnlyRoots(isolate).undefined_value();
-  }
+  CHECK(IsMainThread());
+  CHECK(!recordreplay::AreEventsDisallowed() || V8RecordReplayHasDivergedFromRecording());
 
   Handle<SharedFunctionInfo> shared(function->shared(), isolate);
   Handle<Script> script(Script::cast(shared->script()), isolate);
-
-  if (RecordReplayIgnoreScript(script)) {
-    return ReadOnlyRoots(isolate).undefined_value();
-  }
+  CHECK(!RecordReplayIgnoreScript(*script));
 
   RecordReplayIncrementProgressCounter();
 
@@ -1091,6 +1087,8 @@ extern std::string RecordReplayBasicValueContents(Handle<Object> value);
 
 RUNTIME_FUNCTION(Runtime_RecordReplayAssertValue) {
   CHECK(ShouldEmitRecordReplayAssertValue());
+  CHECK(IsMainThread());
+  CHECK(!recordreplay::AreEventsDisallowed() || V8RecordReplayHasDivergedFromRecording());
 
   HandleScope scope(isolate);
   DCHECK_EQ(3, args.length());
@@ -1098,14 +1096,8 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertValue) {
   CONVERT_NUMBER_CHECKED(int32_t, index, Int32, args[1]);
   CONVERT_ARG_HANDLE_CHECKED(Object, value, 2);
 
-  if (recordreplay::AreEventsDisallowed() || !IsMainThread()) {
-    return *value;
-  }
-
   Handle<Script> script(Script::cast(function->shared().script()), isolate);
-  if (RecordReplayIgnoreScript(script)) {
-    return *value;
-  }
+  CHECK(!RecordReplayIgnoreScript(*script));
 
   index -= BytecodeSiteOffset;
   CHECK(gAssertionSites && (size_t)index < gAssertionSites->size());
@@ -1226,14 +1218,11 @@ void ParseRecordReplayFunctionId(const std::string& function_id,
 
 static inline void OnInstrumentation(Isolate* isolate,
                                      Handle<JSFunction> function, int32_t index) {
-  if (!IsMainThread()) {
-    return;
-  }
+  CHECK(IsMainThread());
+  CHECK(!recordreplay::AreEventsDisallowed() || V8RecordReplayHasDivergedFromRecording());
 
   Handle<Script> script(Script::cast(function->shared().script()), isolate);
-  if (RecordReplayIgnoreScript(script)) {
-    return;
-  }
+  CHECK(!RecordReplayIgnoreScript(*script));
 
   InstrumentationSite& site = GetInstrumentationSite("Callback", index);
 

@@ -48,6 +48,7 @@ class RegisterTransferWriter final
 
 BytecodeArrayBuilder::BytecodeArrayBuilder(
     Zone* zone, int parameter_count, int locals_count,
+    bool record_replay_ignore,
     FeedbackVectorSpec* feedback_vector_spec,
     SourcePositionTableBuilder::RecordingMode source_position_mode)
     : zone_(zone),
@@ -68,6 +69,10 @@ BytecodeArrayBuilder::BytecodeArrayBuilder(
     register_optimizer_ = zone->New<BytecodeRegisterOptimizer>(
         zone, &register_allocator_, fixed_register_count(), parameter_count,
         zone->New<RegisterTransferWriter>(this));
+  }
+
+  if (recordreplay::IsRecordingOrReplaying() && IsMainThread() && !record_replay_ignore) {
+    emit_record_replay_opcodes_ = true;
   }
 }
 
@@ -1358,14 +1363,14 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::IncBlockCounter(
 }
 
 BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayIncExecutionProgressCounter() {
-  if (recordreplay::IsRecordingOrReplaying() && IsMainThread()) {
+  if (emit_record_replay_opcodes_) {
     OutputRecordReplayIncExecutionProgressCounter();
   }
   return *this;
 }
 
 BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayAssertValue(const std::string& desc) {
-  if (ShouldEmitRecordReplayAssertValue() && IsMainThread()) {
+  if (emit_record_replay_opcodes_ && ShouldEmitRecordReplayAssertValue()) {
     int index = RegisterAssertValueSite(desc, most_recent_source_position_);
     OutputRecordReplayAssertValue(index);
   }
@@ -1374,7 +1379,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayAssertValue(const std::s
 
 BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayInstrumentation(const char* kind,
                                                                         int source_position) {
-  if (recordreplay::IsRecordingOrReplaying() && IsMainThread()) {
+  if (emit_record_replay_opcodes_) {
     int bytecode_offset = bytecode_array_writer_.size();
     int index = RegisterInstrumentationSite(kind, source_position, bytecode_offset);
     OutputRecordReplayInstrumentation(index);
@@ -1384,7 +1389,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayInstrumentation(const ch
 
 BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayInstrumentationGenerator(
     const char* kind, Register generator_object) {
-  if (recordreplay::IsRecordingOrReplaying() && IsMainThread()) {
+  if (emit_record_replay_opcodes_) {
     int bytecode_offset = bytecode_array_writer_.size();
     int index = RegisterInstrumentationSite(kind, kNoSourcePosition, bytecode_offset);
     OutputRecordReplayInstrumentationGenerator(index, generator_object);

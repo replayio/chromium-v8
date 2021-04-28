@@ -30,6 +30,9 @@
 
 namespace v8 {
 namespace internal {
+
+extern bool RecordReplayIgnoreScript(Script script);
+
 namespace interpreter {
 
 // Scoped class tracking context objects created by the visitor. Represents
@@ -1128,7 +1131,9 @@ BytecodeGenerator::BytecodeGenerator(
     std::vector<FunctionLiteral*>* eager_inner_literals)
     : zone_(compile_zone),
       builder_(zone(), info->num_parameters_including_this(),
-               info->scope()->num_stack_slots(), info->feedback_vector_spec(),
+               info->scope()->num_stack_slots(),
+               info->flags().record_replay_ignore(),
+               info->feedback_vector_spec(),
                info->SourcePositionRecordingMode()),
       info_(info),
       ast_string_constants_(ast_string_constants),
@@ -1189,6 +1194,10 @@ using NullContextScopeFor = typename NullContextScopeHelper<Isolate>::Type;
 template <typename LocalIsolate>
 Handle<BytecodeArray> BytecodeGenerator::FinalizeBytecode(
     LocalIsolate* isolate, Handle<Script> script) {
+  if (recordreplay::IsRecordingOrReplaying()) {
+    CHECK(info()->flags().record_replay_ignore() == RecordReplayIgnoreScript(*script));
+  }
+
   DCHECK_EQ(ThreadId::Current(), isolate->thread_id());
 #ifdef DEBUG
   // Unoptimized compilation should be context-independent. Verify that we don't
