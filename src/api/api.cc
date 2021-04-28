@@ -9963,8 +9963,19 @@ extern "C" void V8RecordReplayOnConsoleMessage(size_t bookmark) {
   RecordReplayOnConsoleMessage(bookmark);
 }
 
+static Handle<Object>* gCurrentException;
+
+extern "C" void V8RecordReplayGetCurrentException(MaybeLocal<Value>* exception) {
+  CHECK(IsMainThread());
+  if (gCurrentException) {
+    *exception = Utils::ToLocal(*gCurrentException);
+  }
+}
+
 void RecordReplayOnExceptionUnwind(Isolate* isolate) {
   CHECK(gRecordingOrReplaying);
+  CHECK(IsMainThread());
+  CHECK(!gCurrentException);
 
   HandleScope scope(isolate);
 
@@ -9974,7 +9985,9 @@ void RecordReplayOnExceptionUnwind(Isolate* isolate) {
     isolate->clear_pending_exception();
     Handle<Object> message(isolate->pending_message(), isolate);
     isolate->clear_pending_message();
+    gCurrentException = &exception;
     gRecordReplayOnExceptionUnwind();
+    gCurrentException = nullptr;
     CHECK(!isolate->has_pending_exception());
     isolate->set_pending_exception(*exception);
     isolate->set_pending_message(*message);
