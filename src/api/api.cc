@@ -10452,30 +10452,35 @@ class FinishRecordingTask final : public Task {
 static std::atomic<bool> gNeedFinishRecording;
 static std::atomic<void (*)(void*)> gUnblockMainThreadCallback;
 static std::atomic<void*> gUnblockMainThreadCallbackData;
+static int gFinishRecordingOrderedLockId;
 
 extern "C" void V8RecordReplayMaybeTerminate(void (*callback)(void*), void* data) {
-  recordreplay::Print("V8RecordReplayMaybeTerminate %d", !!callback);
+  recordreplay::Assert("V8RecordReplayMaybeTerminate");
   if (IsMainThread()) {
+    recordreplay::OrderedLock(gFinishRecordingOrderedLockId);
     gUnblockMainThreadCallback = callback;
     gUnblockMainThreadCallbackData = data;
     if (gNeedFinishRecording) {
       DoFinishRecording();
     }
+    recordreplay::OrderedUnlock(gFinishRecordingOrderedLockId);
   }
 }
 
 extern "C" V8_EXPORT void V8RecordReplayFinishRecording() {
+  recordreplay::Assert("V8RecordReplayFinishRecording");
   if (recordreplay::IsRecordingOrReplaying()) {
     if (internal::ShouldFinishRecording()) {
       if (IsMainThread()) {
         DoFinishRecording();
       } else {
         recordreplay::Print("PendingFinishRecording");
+        recordreplay::OrderedLock(gFinishRecordingOrderedLockId);
         gNeedFinishRecording = true;
         if (gUnblockMainThreadCallback) {
-          // This isn't thread safe. Oh well!
           gUnblockMainThreadCallback.load()(gUnblockMainThreadCallbackData);
         }
+        recordreplay::OrderedUnlock(gFinishRecordingOrderedLockId);
         CHECK(internal::gMainThreadIsolate);
         auto runner = internal::V8::GetCurrentPlatform()->GetForegroundTaskRunner((Isolate*)internal::gMainThreadIsolate);
         runner->PostTask(std::make_unique<FinishRecordingTask>());
@@ -10542,6 +10547,8 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   void (*setCrashReasonCallback)(const char* (*aCallback)());
   RecordReplayLoadSymbol(handle, "RecordReplaySetCrashReasonCallback", setCrashReasonCallback);
   setCrashReasonCallback(V8RecordReplayCrashReasonCallback);
+
+  gFinishRecordingOrderedLockId = (int)CreateOrderedLock("FinishRecording");
 
   internal::gRecordReplayAssertValues = !!getenv("RECORD_REPLAY_JS_ASSERTS");
 
