@@ -975,12 +975,16 @@ extern bool ShouldEmitRecordReplayAssertValue();
 
 extern "C" bool V8RecordReplayHasDivergedFromRecording();
 
+static inline void CheckRecordReplayBytecodeAllowed() {
+  CHECK(IsMainThread());
+  CHECK(!recordreplay::AreEventsDisallowed() || V8RecordReplayHasDivergedFromRecording());
+}
+
 RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
   HandleScope scope(isolate);
   DCHECK_EQ(1, args.length());
   CONVERT_ARG_HANDLE_CHECKED(JSFunction, function, 0);
-  CHECK(IsMainThread());
-  CHECK(!recordreplay::AreEventsDisallowed() || V8RecordReplayHasDivergedFromRecording());
+  CheckRecordReplayBytecodeAllowed();
 
   Handle<SharedFunctionInfo> shared(function->shared(), isolate);
   Handle<Script> script(Script::cast(shared->script()), isolate);
@@ -1087,8 +1091,7 @@ extern std::string RecordReplayBasicValueContents(Handle<Object> value);
 
 RUNTIME_FUNCTION(Runtime_RecordReplayAssertValue) {
   CHECK(ShouldEmitRecordReplayAssertValue());
-  CHECK(IsMainThread());
-  CHECK(!recordreplay::AreEventsDisallowed() || V8RecordReplayHasDivergedFromRecording());
+  CheckRecordReplayBytecodeAllowed();
 
   HandleScope scope(isolate);
   DCHECK_EQ(3, args.length());
@@ -1218,8 +1221,7 @@ void ParseRecordReplayFunctionId(const std::string& function_id,
 
 static inline void OnInstrumentation(Isolate* isolate,
                                      Handle<JSFunction> function, int32_t index) {
-  CHECK(IsMainThread());
-  CHECK(!recordreplay::AreEventsDisallowed() || V8RecordReplayHasDivergedFromRecording());
+  CheckRecordReplayBytecodeAllowed();
 
   Handle<Script> script(Script::cast(function->shared().script()), isolate);
   CHECK(!RecordReplayIgnoreScript(*script));

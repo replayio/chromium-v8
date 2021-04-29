@@ -3382,7 +3382,9 @@ static bool RecordReplayIgnoreScriptRaw(Script script) {
 }
 
 bool RecordReplayIgnoreScript(Script script) {
-  CHECK(IsMainThread());
+  if (!IsMainThread()) {
+    return true;
+  }
 
   if (!gShouldIgnoreScripts) {
     gShouldIgnoreScripts = new ScriptIdIgnoreMap();
