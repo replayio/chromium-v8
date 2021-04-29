@@ -3361,6 +3361,8 @@ void ClearPauseDataCallback() {
   base::Optional<SaveAndSwitchContext> ssc;
   EnsureIsolateContext(isolate, ssc);
 
+  HandleScope scope(isolate);
+
   Local<v8::Value> callbackValue = gClearPauseDataCallback->Get((v8::Isolate*)isolate);
   Handle<Object> callback = Utils::OpenHandle(*callbackValue);
 
