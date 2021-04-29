@@ -1194,7 +1194,7 @@ using NullContextScopeFor = typename NullContextScopeHelper<Isolate>::Type;
 template <typename LocalIsolate>
 Handle<BytecodeArray> BytecodeGenerator::FinalizeBytecode(
     LocalIsolate* isolate, Handle<Script> script) {
-  if (recordreplay::IsRecordingOrReplaying()) {
+  if (recordreplay::IsRecordingOrReplaying() && IsMainThread()) {
     CHECK(info()->flags().record_replay_ignore() == RecordReplayIgnoreScript(*script));
   }
 
