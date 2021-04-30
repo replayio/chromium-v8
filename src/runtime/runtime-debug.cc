@@ -975,20 +975,34 @@ extern bool ShouldEmitRecordReplayAssertValue();
 
 extern "C" bool V8RecordReplayHasDivergedFromRecording();
 
-static inline void CheckRecordReplayBytecodeAllowed() {
-  CHECK(IsMainThread());
-  CHECK(!recordreplay::AreEventsDisallowed() || V8RecordReplayHasDivergedFromRecording());
+static inline bool RecordReplayBytecodeAllowed() {
+  return IsMainThread()
+      && (!recordreplay::AreEventsDisallowed() || V8RecordReplayHasDivergedFromRecording());
 }
 
 RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
   HandleScope scope(isolate);
   DCHECK_EQ(1, args.length());
   CONVERT_ARG_HANDLE_CHECKED(JSFunction, function, 0);
-  CheckRecordReplayBytecodeAllowed();
 
   Handle<SharedFunctionInfo> shared(function->shared(), isolate);
   Handle<Script> script(Script::cast(shared->script()), isolate);
   CHECK(!RecordReplayIgnoreScript(*script));
+
+  if (!RecordReplayBytecodeAllowed()) {
+    Script::PositionInfo info;
+    Script::GetPositionInfo(script, shared->StartPosition(), &info, Script::WITH_OFFSET);
+
+    if (script->name().IsUndefined()) {
+      recordreplay::Diagnostic("RecordReplayAssertExecutionProgress not allowed <none>:%d:%d",
+                               info.line + 1, info.column);
+    } else {
+      std::unique_ptr<char[]> name = String::cast(script->name()).ToCString();
+      recordreplay::Diagnostic("RecordReplayAssertExecutionProgress not allowed %s:%d:%d",
+                               name.get(), info.line + 1, info.column);
+    }
+  }
+  CHECK(RecordReplayBytecodeAllowed());
 
   RecordReplayIncrementProgressCounter();
 
@@ -1091,7 +1105,7 @@ extern std::string RecordReplayBasicValueContents(Handle<Object> value);
 
 RUNTIME_FUNCTION(Runtime_RecordReplayAssertValue) {
   CHECK(ShouldEmitRecordReplayAssertValue());
-  CheckRecordReplayBytecodeAllowed();
+  CHECK(RecordReplayBytecodeAllowed());
 
   HandleScope scope(isolate);
   DCHECK_EQ(3, args.length());
@@ -1221,7 +1235,7 @@ void ParseRecordReplayFunctionId(const std::string& function_id,
 
 static inline void OnInstrumentation(Isolate* isolate,
                                      Handle<JSFunction> function, int32_t index) {
-  CheckRecordReplayBytecodeAllowed();
+  CHECK(RecordReplayBytecodeAllowed());
 
   Handle<Script> script(Script::cast(function->shared().script()), isolate);
   CHECK(!RecordReplayIgnoreScript(*script));
