@@ -153,6 +153,8 @@
     if (i::FLAG_trace_backing_store) PrintF(__VA_ARGS__); \
   } while (false)
 
+extern const char* gCrashReason;
+
 namespace v8 {
 
 static ScriptOrigin GetScriptOriginForScript(i::Isolate* isolate,
@@ -185,6 +187,8 @@ void i::FatalProcessOutOfMemory(i::Isolate* isolate, const char* location) {
 // OOM error handler is called and execution is stopped.
 void i::V8::FatalProcessOutOfMemory(i::Isolate* isolate, const char* location,
                                     bool is_heap_oom) {
+  gCrashReason = location;
+
   char last_few_messages[Heap::kTraceRingBufferSize + 1];
   char js_stacktrace[Heap::kStacktraceBufferSize + 1];
   i::HeapStats heap_stats;
