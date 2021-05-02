@@ -176,15 +176,9 @@ ScavengerCollector::JobTask::JobTask(
       promotion_list_(promotion_list) {}
 
 void ScavengerCollector::JobTask::Run(JobDelegate* delegate) {
-  Scavenger* scavenger;
-  if (recordreplay::IsRecordingOrReplaying()) {
-    CHECK(scavengers_->size() == 1);
-    scavenger = (*scavengers_)[0].get();
-  } else {
-    DCHECK_LT(delegate->GetTaskId(), scavengers_->size());
-    scavenger = (*scavengers_)[delegate->GetTaskId()].get();
-  }
-  if (!delegate || delegate->IsJoiningThread()) {
+  DCHECK_LT(delegate->GetTaskId(), scavengers_->size());
+  Scavenger* scavenger = (*scavengers_)[delegate->GetTaskId()].get();
+  if (delegate->IsJoiningThread()) {
     TRACE_GC(outer_->heap_->tracer(),
              GCTracer::Scope::SCAVENGER_SCAVENGE_PARALLEL);
     ProcessItems(delegate, scavenger);
@@ -336,17 +330,12 @@ void ScavengerCollector::CollectGarbage() {
     {
       // Parallel phase scavenging all copied and promoted objects.
       TRACE_GC(heap_->tracer(), GCTracer::Scope::SCAVENGER_SCAVENGE_PARALLEL);
-      std::unique_ptr<JobTask> task =
-        std::make_unique<JobTask>(this, &scavengers,
-                                  std::move(memory_chunks),
-                                  &copied_list, &promotion_list);
-      if (recordreplay::IsRecordingOrReplaying()) {
-        task->Run(nullptr);
-      } else {
-        V8::GetCurrentPlatform()
-            ->PostJob(v8::TaskPriority::kUserBlocking, std::move(task))
-            ->Join();
-      }
+      V8::GetCurrentPlatform()
+          ->PostJob(v8::TaskPriority::kUserBlocking,
+                    std::make_unique<JobTask>(this, &scavengers,
+                                              std::move(memory_chunks),
+                                              &copied_list, &promotion_list))
+          ->Join();
       DCHECK(copied_list.IsEmpty());
       DCHECK(promotion_list.IsEmpty());
     }
