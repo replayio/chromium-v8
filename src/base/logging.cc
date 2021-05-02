@@ -191,7 +191,8 @@ void V8_Fatal(const char* format, ...) {
 
   fflush(stderr);
 
-  if (getenv("RECORD_REPLAY_WAIT_AT_CRASH")) {
+  if (getenv("RECORD_REPLAY_WAIT_AT_CRASH") ||
+      getenv("RECORD_REPLAY_WAIT_AT_FATAL_ERROR")) {
     BusyWait();
   }
 
