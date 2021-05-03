@@ -1262,7 +1262,8 @@ RUNTIME_FUNCTION(Runtime_RecordReplayInstrumentation) {
   return ReadOnlyRoots(isolate).undefined_value();
 }
 
-static int gNextGeneratorId = 1;
+extern int RecordReplayObjectId(Handle<Object> internal_object);
+
 static int gCurrentGeneratorId;
 
 int RecordReplayCurrentGeneratorIdRaw() {
@@ -1276,14 +1277,8 @@ RUNTIME_FUNCTION(Runtime_RecordReplayInstrumentationGenerator) {
   CONVERT_NUMBER_CHECKED(int32_t, index, Int32, args[1]);
   CONVERT_ARG_HANDLE_CHECKED(JSGeneratorObject, generator_object, 2);
 
-  const InstrumentationSite& site = GetInstrumentationSite("Generator", index);
-  if (!strcmp(site.kind_, "generator")) {
-    CHECK(IsMainThread());
-    generator_object->set_record_replay_id(++gNextGeneratorId);
-  }
-
   CHECK(!gCurrentGeneratorId);
-  gCurrentGeneratorId = generator_object->record_replay_id();
+  gCurrentGeneratorId = RecordReplayObjectId(generator_object);
 
   OnInstrumentation(isolate, function, index);
 

@@ -3446,7 +3446,7 @@ static Local<v8::debug::WeakMap> GetObjectIdMapForContext(v8::Isolate* isolate, 
 
 static int gNextObjectId = 1;
 
-static int RecordReplayObjectId(Handle<Object> internal_object) {
+int RecordReplayObjectId(Handle<Object> internal_object) {
   CHECK(IsMainThread());
   v8::Isolate* isolate = v8::Isolate::GetCurrent();
 
