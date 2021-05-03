@@ -171,7 +171,8 @@ RUNTIME_FUNCTION(Runtime_ThrowInvalidTypedArrayAlignment) {
 }
 
 extern void RecordReplayOnExceptionUnwind(Isolate* isolate);
-extern uint64_t* RecordReplayProgressCounter();
+
+extern uint64_t* gProgressCounter;
 
 static uint64_t gLastExceptionUnwindProgress;
 
@@ -189,9 +190,9 @@ RUNTIME_FUNCTION(Runtime_UnwindAndFindExceptionHandler) {
   // frame unwind instead of an initial throw and we can ignore it.
   if (recordreplay::IsRecordingOrReplaying() &&
       IsMainThread() &&
-      *RecordReplayProgressCounter() != gLastExceptionUnwindProgress) {
+      *gProgressCounter != gLastExceptionUnwindProgress) {
     RecordReplayOnExceptionUnwind(isolate);
-    gLastExceptionUnwindProgress = *RecordReplayProgressCounter();
+    gLastExceptionUnwindProgress = *gProgressCounter;
   }
 
   return isolate->UnwindAndFindHandler();

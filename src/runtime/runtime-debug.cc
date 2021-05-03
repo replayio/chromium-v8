@@ -960,18 +960,15 @@ RUNTIME_FUNCTION(Runtime_ProfileCreateSnapshotDataBlob) {
   return ReadOnlyRoots(isolate).undefined_value();
 }
 
-extern uint64_t* RecordReplayProgressCounter();
+extern uint64_t* gProgressCounter;
+extern bool gRecordReplayAssertValues;
 
-static inline void RecordReplayIncrementProgressCounter() {
-  // Note: The counter can be null, depending on the thread.
-  uint64_t* counter = RecordReplayProgressCounter();
-  if (counter) {
-    ++*counter;
-  }
-}
+// Define this to check preconditions for using record/replay opcodes.
+//#define RECORD_REPLAY_CHECK_OPCODES
+
+#ifdef RECORD_REPLAY_CHECK_OPCODES
 
 extern bool RecordReplayIgnoreScript(Script script);
-extern bool ShouldEmitRecordReplayAssertValue();
 
 extern "C" bool V8RecordReplayHasDivergedFromRecording();
 
@@ -980,7 +977,25 @@ static inline bool RecordReplayBytecodeAllowed() {
       && (!recordreplay::AreEventsDisallowed() || V8RecordReplayHasDivergedFromRecording());
 }
 
+#else // !RECORD_REPLAY_CHECK_OPCODES
+
+static inline bool RecordReplayIgnoreScript(Script script) {
+  return false;
+}
+
+static inline bool RecordReplayBytecodeAllowed() {
+  return true;
+}
+
+#endif // !RECORD_REPLAY_CHECK_OPCODES
+
 RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
+  ++*gProgressCounter;
+
+  if (!gRecordReplayAssertValues) {
+    return ReadOnlyRoots(isolate).undefined_value();
+  }
+
   HandleScope scope(isolate);
   DCHECK_EQ(1, args.length());
   CONVERT_ARG_HANDLE_CHECKED(JSFunction, function, 0);
@@ -989,36 +1004,25 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
   Handle<Script> script(Script::cast(shared->script()), isolate);
   CHECK(!RecordReplayIgnoreScript(*script));
 
-  if (!RecordReplayBytecodeAllowed()) {
-    Script::PositionInfo info;
-    Script::GetPositionInfo(script, shared->StartPosition(), &info, Script::WITH_OFFSET);
+  Script::PositionInfo info;
+  Script::GetPositionInfo(script, shared->StartPosition(), &info, Script::WITH_OFFSET);
 
-    if (script->name().IsUndefined()) {
-      recordreplay::Diagnostic("RecordReplayAssertExecutionProgress not allowed <none>:%d:%d",
-                               info.line + 1, info.column);
-    } else {
-      std::unique_ptr<char[]> name = String::cast(script->name()).ToCString();
-      recordreplay::Diagnostic("RecordReplayAssertExecutionProgress not allowed %s:%d:%d",
-                               name.get(), info.line + 1, info.column);
-    }
+  std::string name;
+  if (script->name().IsUndefined()) {
+    name = "<none>";
+  } else {
+    std::unique_ptr<char[]> name_raw = String::cast(script->name()).ToCString();
+    name = name_raw.get();
+  }
+
+  if (!RecordReplayBytecodeAllowed()) {
+    recordreplay::Diagnostic("RecordReplayAssertExecutionProgress not allowed %s:%d:%d",
+                             name.c_str(), info.line + 1, info.column);
   }
   CHECK(RecordReplayBytecodeAllowed());
 
-  RecordReplayIncrementProgressCounter();
-
-  if (ShouldEmitRecordReplayAssertValue()) {
-    Script::PositionInfo info;
-    Script::GetPositionInfo(script, shared->StartPosition(), &info, Script::WITH_OFFSET);
-
-    if (script->name().IsUndefined()) {
-      recordreplay::Assert("ExecutionProgress <none>:%d:%d",
-                          info.line + 1, info.column);
-    } else {
-      std::unique_ptr<char[]> name = String::cast(script->name()).ToCString();
-      recordreplay::Assert("ExecutionProgress %s:%d:%d",
-                          name.get(), info.line + 1, info.column);
-    }
-  }
+  recordreplay::Assert("ExecutionProgress %s:%d:%d",
+                       name.c_str(), info.line + 1, info.column);
 
   return ReadOnlyRoots(isolate).undefined_value();
 }
@@ -1104,7 +1108,7 @@ int RegisterAssertValueSite(const std::string& desc, int source_position) {
 extern std::string RecordReplayBasicValueContents(Handle<Object> value);
 
 RUNTIME_FUNCTION(Runtime_RecordReplayAssertValue) {
-  CHECK(ShouldEmitRecordReplayAssertValue());
+  CHECK(gRecordReplayAssertValues);
   CHECK(RecordReplayBytecodeAllowed());
 
   HandleScope scope(isolate);
@@ -1251,7 +1255,13 @@ static inline void OnInstrumentation(Isolate* isolate,
                          site.bytecode_offset_);
 }
 
+extern bool gRecordReplayInstrumentationEnabled;
+
 RUNTIME_FUNCTION(Runtime_RecordReplayInstrumentation) {
+  if (!gRecordReplayInstrumentationEnabled) {
+    return ReadOnlyRoots(isolate).undefined_value();
+  }
+
   HandleScope scope(isolate);
   DCHECK_EQ(2, args.length());
   CONVERT_ARG_HANDLE_CHECKED(JSFunction, function, 0);
@@ -1280,7 +1290,9 @@ RUNTIME_FUNCTION(Runtime_RecordReplayInstrumentationGenerator) {
   CHECK(!gCurrentGeneratorId);
   gCurrentGeneratorId = RecordReplayObjectId(generator_object);
 
-  OnInstrumentation(isolate, function, index);
+  if (!gRecordReplayInstrumentationEnabled) {
+    OnInstrumentation(isolate, function, index);
+  }
 
   gCurrentGeneratorId = 0;
 

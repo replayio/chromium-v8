@@ -9936,7 +9936,6 @@ static void (*gRecordReplayAssert)(const char*, va_list);
 static void (*gRecordReplayAssertBytes)(const char* why, const void* ptr, size_t nbytes);
 static void (*gRecordReplayBytes)(const char* why, void* buf, size_t size);
 static uintptr_t (*gRecordReplayValue)(const char* why, uintptr_t v);
-static uint64_t* (*gRecordReplayProgressCounter)();
 static bool (*gRecordReplayAreEventsDisallowed)();
 static void (*gRecordReplayBeginPassThroughEvents)();
 static void (*gRecordReplayEndPassThroughEvents)();
@@ -10011,11 +10010,13 @@ void RecordReplayOnExceptionUnwind(Isolate* isolate) {
   }
 }
 
-static bool gHasCheckpoint;
+uint64_t* gProgressCounter;
 
-uint64_t* RecordReplayProgressCounter() {
-  CHECK(gHasCheckpoint);
-  return gRecordReplayProgressCounter();
+bool gRecordReplayInstrumentationEnabled;
+
+void RecordReplayChangeInstrument(bool enabled) {
+  CHECK(!enabled || recordreplay::IsReplaying());
+  gRecordReplayInstrumentationEnabled = enabled;
 }
 
 void RecordReplayInstrument(const char* kind, const char* function, int offset) {
@@ -10026,10 +10027,6 @@ extern char* CommandCallback(const char* command, const char* params);
 extern void ClearPauseDataCallback();
 
 bool gRecordReplayAssertValues;
-
-bool ShouldEmitRecordReplayAssertValue() {
-  return gRecordReplayAssertValues;
-}
 
 // Only finish recordings if there were interesting sources loaded
 // into the process.
@@ -10242,7 +10239,6 @@ void recordreplay::NewCheckpoint() {
   // needed to process commands which we might get from the driver.
   if (IsRecordingOrReplaying() && IsMainThread() && internal::gDefaultContext) {
     gRecordReplayNewCheckpoint();
-    internal::gHasCheckpoint = true;
   }
 }
 
@@ -10532,7 +10528,6 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   RecordReplayLoadSymbol(handle, "RecordReplayBytes", gRecordReplayBytes);
   RecordReplayLoadSymbol(handle, "RecordReplayValue", gRecordReplayValue);
   RecordReplayLoadSymbol(handle, "RecordReplayOnInstrument", gRecordReplayOnInstrument);
-  RecordReplayLoadSymbol(handle, "RecordReplayProgressCounter", gRecordReplayProgressCounter);
   RecordReplayLoadSymbol(handle, "RecordReplayAreEventsDisallowed", gRecordReplayAreEventsDisallowed);
   RecordReplayLoadSymbol(handle, "RecordReplayBeginPassThroughEvents", gRecordReplayBeginPassThroughEvents);
   RecordReplayLoadSymbol(handle, "RecordReplayEndPassThroughEvents", gRecordReplayEndPassThroughEvents);
@@ -10572,6 +10567,14 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   setCrashReasonCallback(V8RecordReplayCrashReasonCallback);
 
   gFinishRecordingOrderedLockId = (int)CreateOrderedLock("FinishRecording");
+
+  uint64_t* (*getProgressCounter)();
+  RecordReplayLoadSymbol(handle, "RecordReplayProgressCounter", getProgressCounter);
+  internal::gProgressCounter = getProgressCounter();
+
+  void (*setChangeInstrumentCallback)(void (*callback)(bool wantInstrumentation));
+  RecordReplayLoadSymbol(handle, "RecordReplaySetChangeInstrumentCallback", setChangeInstrumentCallback);
+  setChangeInstrumentCallback(internal::RecordReplayChangeInstrument);
 
   internal::gRecordReplayAssertValues = !!getenv("RECORD_REPLAY_JS_ASSERTS");
 

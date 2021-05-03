@@ -22,7 +22,7 @@ namespace internal {
 extern int RegisterAssertValueSite(const std::string& desc, int source_position);
 extern int RegisterInstrumentationSite(const char* kind, int source_position,
                                        int bytecode_offset);
-extern bool ShouldEmitRecordReplayAssertValue();
+extern bool gRecordReplayAssertValues;
 
 namespace interpreter {
 
@@ -1370,7 +1370,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayIncExecutionProgressCoun
 }
 
 BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayAssertValue(const std::string& desc) {
-  if (emit_record_replay_opcodes_ && ShouldEmitRecordReplayAssertValue()) {
+  if (emit_record_replay_opcodes_ && gRecordReplayAssertValues) {
     int index = RegisterAssertValueSite(desc, most_recent_source_position_);
     OutputRecordReplayAssertValue(index);
   }
@@ -1379,7 +1379,8 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayAssertValue(const std::s
 
 BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayInstrumentation(const char* kind,
                                                                         int source_position) {
-  if (emit_record_replay_opcodes_) {
+  // Instrumentation opcodes aren't needed when recording.
+  if (emit_record_replay_opcodes_ && recordreplay::IsReplaying()) {
     int bytecode_offset = bytecode_array_writer_.size();
     int index = RegisterInstrumentationSite(kind, source_position, bytecode_offset);
     OutputRecordReplayInstrumentation(index);
@@ -1389,6 +1390,9 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayInstrumentation(const ch
 
 BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayInstrumentationGenerator(
     const char* kind, Register generator_object) {
+  // Even though instrumentation opcodes aren't needed when recording, we still
+  // need to emit InstrumentationGenerator opcodes so that generator objects
+  // will be associated with IDs at consistent points.
   if (emit_record_replay_opcodes_) {
     int bytecode_offset = bytecode_array_writer_.size();
     int index = RegisterInstrumentationSite(kind, kNoSourcePosition, bytecode_offset);
