@@ -609,6 +609,17 @@ void Scavenger::ScavengePage(MemoryChunk* page) {
   AddPageToSweeperIfNecessary(page);
 }
 
+static std::string DescribeObject(const HeapObject& obj) {
+  InstanceType type = obj.map().instance_type();
+  switch (type) {
+#define STRINGIFY_TYPE(TYPE) case TYPE: return #TYPE;
+  INSTANCE_TYPE_LIST(STRINGIFY_TYPE)
+#undef STRINGIFY_TYPE
+  default:
+    return "<unknown>";
+  }
+}
+
 void Scavenger::Process(JobDelegate* delegate) {
   ScavengeVisitor scavenge_visitor(this);
 
@@ -619,7 +630,10 @@ void Scavenger::Process(JobDelegate* delegate) {
     ObjectAndSize object_and_size;
     while (promotion_list_.ShouldEagerlyProcessPromotionList() &&
            copied_list_.Pop(&object_and_size)) {
+      std::string desc = DescribeObject(object_and_size.first);
+      recordreplay::Print("VisitObject Start %s", desc.c_str());
       scavenge_visitor.Visit(object_and_size.first);
+      recordreplay::Print("VisitObject Done");
       done = false;
       if (delegate && ((++objects % kInterruptThreshold) == 0)) {
         if (!copied_list_.IsGlobalPoolEmpty()) {

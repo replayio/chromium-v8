@@ -72,7 +72,7 @@ BytecodeArrayBuilder::BytecodeArrayBuilder(
   }
 
   if (recordreplay::IsRecordingOrReplaying() && IsMainThread() && !record_replay_ignore) {
-    emit_record_replay_opcodes_ = true;
+    //emit_record_replay_opcodes_ = true;
   }
 }
 
