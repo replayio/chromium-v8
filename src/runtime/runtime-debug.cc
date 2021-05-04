@@ -1287,10 +1287,13 @@ RUNTIME_FUNCTION(Runtime_RecordReplayInstrumentationGenerator) {
   CONVERT_NUMBER_CHECKED(int32_t, index, Int32, args[1]);
   CONVERT_ARG_HANDLE_CHECKED(JSGeneratorObject, generator_object, 2);
 
+  // Note: RecordReplayObjectId calls have to occur in the same places when
+  // replaying as when recording (regardless of whether instrumentation is
+  // enabled) so that objects will be assigned consistent IDs.
   CHECK(!gCurrentGeneratorId);
   gCurrentGeneratorId = RecordReplayObjectId(generator_object);
 
-  if (!gRecordReplayInstrumentationEnabled) {
+  if (gRecordReplayInstrumentationEnabled) {
     OnInstrumentation(isolate, function, index);
   }
 
