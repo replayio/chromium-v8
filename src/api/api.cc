@@ -4802,8 +4802,10 @@ Maybe<PropertyAttribute> v8::Object::GetRealNamedPropertyAttributes(
 Local<v8::Object> v8::Object::Clone() {
   auto self = i::Handle<i::JSObject>::cast(Utils::OpenHandle(this));
   auto isolate = self->GetIsolate();
+  recordreplay::Diagnostic("Object::Clone Start %p %p", *(void**)&self, isolate);
   ENTER_V8_NO_SCRIPT_NO_EXCEPTION(isolate);
   i::Handle<i::JSObject> result = isolate->factory()->CopyJSObject(self);
+  recordreplay::Diagnostic("Object::Clone Done");
   return Utils::ToLocal(result);
 }
 
