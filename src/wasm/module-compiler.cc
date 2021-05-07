@@ -55,6 +55,54 @@ namespace v8 {
 namespace internal {
 namespace wasm {
 
+struct AutoOrderedLock {
+  AutoOrderedLock(int id) : id_(id) { recordreplay::OrderedLock(id_); }
+  ~AutoOrderedLock() { recordreplay::OrderedUnlock(id_); }
+  int id_;
+};
+
+template <typename T>
+class OrderedAtomic {
+ public:
+  OrderedAtomic() {
+    ordered_lock_id_ = (int)recordreplay::CreateOrderedLock("atomic");
+  }
+
+  OrderedAtomic(T initial) : value_(initial) {
+    ordered_lock_id_ = (int)recordreplay::CreateOrderedLock("atomic");
+  }
+
+  T load(std::memory_order memory_order = std::memory_order_seq_cst) const {
+    AutoOrderedLock ordered(ordered_lock_id_);
+    return value_.load(memory_order);
+  }
+
+  void store(T v, std::memory_order memory_order = std::memory_order_seq_cst) {
+    AutoOrderedLock ordered(ordered_lock_id_);
+    value_.store(v, memory_order);
+  }
+
+  T fetch_add(T v, std::memory_order memory_order = std::memory_order_seq_cst) {
+    AutoOrderedLock ordered(ordered_lock_id_);
+    return value_.fetch_add(v, memory_order);
+  }
+
+  T fetch_sub(T v, std::memory_order memory_order = std::memory_order_seq_cst) {
+    AutoOrderedLock ordered(ordered_lock_id_);
+    return value_.fetch_sub(v, memory_order);
+  }
+
+  bool compare_exchange_weak(T& a, T b,
+                             std::memory_order memory_order = std::memory_order_seq_cst) {
+    AutoOrderedLock ordered(ordered_lock_id_);
+    return value_.compare_exchange_weak(a, b, memory_order);
+  }
+
+ private:
+  int ordered_lock_id_;
+  std::atomic<T> value_;
+};
+
 namespace {
 
 enum class CompileMode : uint8_t { kRegular, kTiering };
@@ -120,7 +168,7 @@ class CompilationUnitQueues {
     queues_.emplace_back(std::make_unique<QueueImpl>(0));
 
     for (auto& atomic_counter : num_units_) {
-      std::atomic_init(&atomic_counter, size_t{0});
+      atomic_counter.store(0);
     }
 
     top_tier_compiled_ =
@@ -508,7 +556,7 @@ class CompilationUnitQueues {
 
   BigUnitsQueue big_units_queue_;
 
-  std::atomic<size_t> num_units_[kNumTiers];
+  OrderedAtomic<size_t> num_units_[kNumTiers];
   std::atomic<size_t> num_priority_units_{0};
   std::unique_ptr<std::atomic<bool>[]> top_tier_compiled_;
   std::atomic<int> next_queue_to_add{0};
@@ -676,7 +724,7 @@ class CompilationStateImpl {
 
   // Number of wrappers to be compiled. Initialized once, counted down in
   // {GetNextJSToWasmWrapperCompilationUnit}.
-  std::atomic<size_t> outstanding_js_to_wasm_wrappers_{0};
+  OrderedAtomic<size_t> outstanding_js_to_wasm_wrappers_{0};
   // Wrapper compilation units are stored in shared_ptrs so that they are kept
   // alive by the tasks even if the NativeModule dies.
   std::vector<std::shared_ptr<JSToWasmWrapperCompilationUnit>>
@@ -1620,14 +1668,20 @@ class BackgroundCompileJob final : public JobTask {
   }
 
   size_t GetMaxConcurrency(size_t worker_count) const override {
+    recordreplay::Assert("BackgroundCompileJob::GetMaxConcurrency Start");
     BackgroundCompileScope compile_scope(native_module_);
-    if (compile_scope.cancelled()) return 0;
+    if (compile_scope.cancelled()) {
+      recordreplay::Assert("BackgroundCompileJob::GetMaxConcurrency #1");
+      return 0;
+    }
     // NumOutstandingCompilations() does not reflect the units that running
     // workers are processing, thus add the current worker count to that number.
-    return std::min(
+    size_t rv = std::min(
         static_cast<size_t>(FLAG_wasm_num_compilation_tasks),
         worker_count +
             compile_scope.compilation_state()->NumOutstandingCompilations());
+    recordreplay::Assert("BackgroundCompileJob::GetMaxConcurrency Done %lu", rv);
+    return rv;
   }
 
  private:
@@ -1893,6 +1947,8 @@ void AsyncCompileJob::PrepareRuntimeObjects() {
 // This function assumes that it is executed in a HandleScope, and that a
 // context is set on the isolate.
 void AsyncCompileJob::FinishCompile(bool is_after_cache_hit) {
+  recordreplay::Assert("AsyncCompileJob::FinishCompile Start");
+
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("v8.wasm.detailed"),
                "wasm.FinishAsyncCompile");
   bool is_after_deserialization = !module_object_.is_null();
@@ -1973,6 +2029,8 @@ void AsyncCompileJob::FinishCompile(bool is_after_cache_hit) {
   native_module_->LogWasmCodes(isolate_, module_object_->script());
 
   FinishModule();
+
+  recordreplay::Assert("AsyncCompileJob::FinishCompile Done");
 }
 
 void AsyncCompileJob::DecodeFailed(const WasmError& error) {
@@ -2960,6 +3018,7 @@ void CompilationStateImpl::InitializeRecompilation(
 }
 
 void CompilationStateImpl::AddCallback(CompilationState::callback_t callback) {
+  recordreplay::Assert("CompilationStateImpl::AddCallback Start");
   base::MutexGuard callbacks_guard(&callbacks_mutex_);
   // Immediately trigger events that already happened.
   for (auto event : {CompilationEvent::kFinishedExportWrappers,
@@ -2967,6 +3026,7 @@ void CompilationStateImpl::AddCallback(CompilationState::callback_t callback) {
                      CompilationEvent::kFinishedTopTierCompilation,
                      CompilationEvent::kFailedCompilation}) {
     if (finished_events_.contains(event)) {
+      recordreplay::Assert("CompilationStateImpl::AddCallback #1");
       callback(event);
     }
   }
@@ -2976,6 +3036,7 @@ void CompilationStateImpl::AddCallback(CompilationState::callback_t callback) {
   if (!finished_events_.contains_any(kFinalEvents)) {
     callbacks_.emplace_back(std::move(callback));
   }
+  recordreplay::Assert("CompilationStateImpl::AddCallback Done");
 }
 
 void CompilationStateImpl::AddCompilationUnits(
@@ -3303,6 +3364,8 @@ size_t CompilationStateImpl::NumOutstandingCompilations() const {
   size_t outstanding_wrappers =
       outstanding_js_to_wasm_wrappers_.load(std::memory_order_relaxed);
   size_t outstanding_functions = compilation_unit_queues_.GetTotalSize();
+  recordreplay::Assert("CompilationStateImpl::NumOutstandingCompilations %lu %lu",
+                       outstanding_wrappers, outstanding_functions);
   return outstanding_wrappers + outstanding_functions;
 }
 

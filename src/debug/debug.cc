@@ -3225,6 +3225,10 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
   Handle<String> idStr = GetProtocolSourceId(isolate, script);
   std::unique_ptr<char[]> id = String::cast(*idStr).ToCString();
 
+  if (script->type() == Script::TYPE_WASM) {
+    return;
+  }
+
   std::string url;
   if (!script->name().IsUndefined()) {
     std::unique_ptr<char[]> name = String::cast(script->name()).ToCString();
@@ -3375,6 +3379,10 @@ typedef std::unordered_map<int, bool> ScriptIdIgnoreMap;
 static ScriptIdIgnoreMap* gShouldIgnoreScripts;
 
 static bool RecordReplayIgnoreScriptRaw(Script script) {
+  if (script.type() == Script::TYPE_WASM) {
+    return true;
+  }
+
   if (script.name().IsUndefined()) {
     return false;
   }

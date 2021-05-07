@@ -10589,7 +10589,6 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   internal::FLAG_parallel_pointer_update = false;
   internal::FLAG_parallel_scavenge = false;
   internal::FLAG_scavenge_task = false;
-  internal::FLAG_wasm_num_compilation_tasks = 0;
 
   // Incremental/compacting GC are also disabled for now. These could probably
   // be supported for now it's not worth the bother.
