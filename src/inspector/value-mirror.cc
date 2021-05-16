@@ -1203,8 +1203,6 @@ bool doesAttributeHaveObservableSideEffectOnGet(v8::Local<v8::Context> context,
 
 ValueMirror::~ValueMirror() = default;
 
-extern "C" bool V8RecordReplayHasDivergedFromRecording();
-
 // static
 bool ValueMirror::getProperties(v8::Local<v8::Context> context,
                                 v8::Local<v8::Object> object,

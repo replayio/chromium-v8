@@ -2764,7 +2764,7 @@ static void ForEachInstrumentationOp(Isolate* isolate, Handle<Script> script,
       if (!is_compiled_scope.is_compiled()) {
         if (!Compiler::Compile(isolate, candidate, Compiler::CLEAR_EXCEPTION,
                                &is_compiled_scope)) {
-          recordreplay::Print("Compiler::Compile failed, crashing.");
+          recordreplay::Diagnostic("Compiler::Compile failed, crashing.");
           IMMEDIATE_CRASH();
         } else {
           was_compiled = true;
@@ -2985,7 +2985,7 @@ Handle<Object> RecordReplayConvertLocationToFunctionOffset(Isolate* isolate,
 
     iter = gBreakpoints->find(key);
     if (iter == gBreakpoints->end()) {
-      recordreplay::Print("Unknown location for RecordReplayConvertLocationToFunctionOffset, crashing.");
+      recordreplay::Diagnostic("Unknown location for RecordReplayConvertLocationToFunctionOffset, crashing.");
       IMMEDIATE_CRASH();
     }
   }
@@ -3044,8 +3044,8 @@ static Handle<Object> RecordReplayConvertFunctionOffsetToLocation(Isolate* isola
 
       iter = gBreakpointPositions->find(key);
       if (iter == gBreakpointPositions->end()) {
-        recordreplay::Print("Unknown offset %s %d for RecordReplayConvertFunctionOffsetToLocation, crashing.",
-                            function_id.c_str(), bytecode_offset);
+        recordreplay::Diagnostic("Unknown offset %s %d for RecordReplayConvertFunctionOffsetToLocation, crashing.",
+                                 function_id.c_str(), bytecode_offset);
         IMMEDIATE_CRASH();
       }
     }
@@ -3321,7 +3321,7 @@ char* CommandCallback(const char* command, const char* params) {
 
   MaybeHandle<Object> maybeParams = JsonParser<uint8_t>::Parse(isolate, paramsStr, undefined);
   if (maybeParams.is_null()) {
-    recordreplay::Print("Error: CommandCallbackWrapper Parse %s failed", params);
+    recordreplay::Diagnostic("Error: CommandCallbackWrapper Parse %s failed", params);
     IMMEDIATE_CRASH();
   }
   Handle<Object> paramsObj = maybeParams.ToHandleChecked();

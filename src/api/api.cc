@@ -10067,7 +10067,7 @@ static bool ShouldFinishRecording() {
 // For posting tasks to the main thread.
 static Isolate* gMainThreadIsolate;
 
-void RecordReplayOnMainThreadIsolatedCreated(Isolate* isolate) {
+void RecordReplayOnMainThreadIsolateCreated(Isolate* isolate) {
   CHECK(!gMainThreadIsolate);
   gMainThreadIsolate = isolate;
 }

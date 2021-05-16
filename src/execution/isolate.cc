@@ -2924,7 +2924,7 @@ v8::PageAllocator* Isolate::page_allocator() {
   return isolate_allocator_->page_allocator();
 }
 
-extern void RecordReplayOnMainThreadIsolatedCreated(Isolate* isolate);
+extern void RecordReplayOnMainThreadIsolateCreated(Isolate* isolate);
 
 Isolate::Isolate(std::unique_ptr<i::IsolateAllocator> isolate_allocator)
     : isolate_data_(this),
@@ -2974,7 +2974,7 @@ Isolate::Isolate(std::unique_ptr<i::IsolateAllocator> isolate_allocator)
   MicrotaskQueue::SetUpDefaultMicrotaskQueue(this);
 
   if (recordreplay::IsRecordingOrReplaying() && IsMainThread()) {
-    RecordReplayOnMainThreadIsolatedCreated(this);
+    RecordReplayOnMainThreadIsolateCreated(this);
   }
 }
 
