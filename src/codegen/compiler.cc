@@ -2687,12 +2687,8 @@ Handle<Script> NewScript(
   return script;
 }
 
-MaybeHandle<SharedFunctionInfo> CompileScriptOnMainThread(
-    UnoptimizedCompileFlags flags, Handle<String> source,
-    const Compiler::ScriptDetails& script_details,
-    ScriptOriginOptions origin_options, NativesFlag natives,
-    v8::Extension* extension, Isolate* isolate,
-    IsCompiledScope* is_compiled_scope) {
+static void SetRecordReplayIgnoreByURL(UnoptimizedCompileFlags& flags,
+                                       const Compiler::ScriptDetails& script_details) {
   if (recordreplay::IsRecordingOrReplaying()) {
     Handle<Object> script_name;
     if (script_details.name_obj.ToHandle(&script_name)) {
@@ -2702,6 +2698,15 @@ MaybeHandle<SharedFunctionInfo> CompileScriptOnMainThread(
       }
     }
   }
+}
+
+MaybeHandle<SharedFunctionInfo> CompileScriptOnMainThread(
+    UnoptimizedCompileFlags flags, Handle<String> source,
+    const Compiler::ScriptDetails& script_details,
+    ScriptOriginOptions origin_options, NativesFlag natives,
+    v8::Extension* extension, Isolate* isolate,
+    IsCompiledScope* is_compiled_scope) {
+  SetRecordReplayIgnoreByURL(flags, script_details);
 
   UnoptimizedCompileState compile_state(isolate);
   ParseInfo parse_info(isolate, flags, &compile_state);
@@ -3020,6 +3025,8 @@ MaybeHandle<JSFunction> Compiler::GetWrappedFunction(
     // being omitted.
     flags.set_collect_source_positions(true);
     // flags.set_eager(compile_options == ScriptCompiler::kEagerCompile);
+
+    SetRecordReplayIgnoreByURL(flags, script_details);
 
     UnoptimizedCompileState compile_state(isolate);
     ParseInfo parse_info(isolate, flags, &compile_state);
