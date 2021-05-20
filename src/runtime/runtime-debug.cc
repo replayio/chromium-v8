@@ -989,6 +989,8 @@ static inline bool RecordReplayBytecodeAllowed() {
 
 #endif // !RECORD_REPLAY_CHECK_OPCODES
 
+extern bool gRecordReplayHasCheckpoint;
+
 RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
   ++*gProgressCounter;
 
@@ -1020,6 +1022,12 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
                              name.c_str(), info.line + 1, info.column);
   }
   CHECK(RecordReplayBytecodeAllowed());
+
+  if (!gRecordReplayHasCheckpoint) {
+    recordreplay::Diagnostic("ExecutionProgress before first checkpoint %s:%d:%d",
+                             name.c_str(), info.line + 1, info.column);
+    CHECK(gRecordReplayHasCheckpoint);
+  }
 
   recordreplay::Assert("ExecutionProgress %s:%d:%d",
                        name.c_str(), info.line + 1, info.column);

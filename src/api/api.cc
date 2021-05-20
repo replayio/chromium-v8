@@ -9178,6 +9178,8 @@ String::Value::~Value() { i::DeleteArray(str_); }
     {                                                                    \
       i::HandleScope scope(isolate);                                     \
       i::Handle<i::String> message = Utils::OpenHandle(*raw_message);    \
+      std::unique_ptr<char[]> message_str = message->ToCString();        \
+      recordreplay::Assert("CreateException %s %s", #NAME, message_str.get()); \
       i::Handle<i::JSFunction> constructor = isolate->name##_function(); \
       error = *isolate->factory()->NewError(constructor, message);       \
     }                                                                    \
@@ -10085,6 +10087,8 @@ extern "C" void V8RecordReplayGetDefaultContext(v8::Isolate* isolate, v8::Local<
   *cx = gDefaultContext->Get(isolate);
 }
 
+bool gRecordReplayHasCheckpoint;
+
 } // namespace internal
 
 bool recordreplay::IsRecordingOrReplaying() {
@@ -10238,6 +10242,7 @@ void recordreplay::NewCheckpoint() {
   // We can only create checkpoints if a context has been created. A context is
   // needed to process commands which we might get from the driver.
   if (IsRecordingOrReplaying() && IsMainThread() && internal::gDefaultContext) {
+    internal::gRecordReplayHasCheckpoint = true;
     gRecordReplayNewCheckpoint();
   }
 }

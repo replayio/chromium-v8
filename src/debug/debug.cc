@@ -3513,7 +3513,12 @@ std::string RecordReplayBasicValueContents(Handle<Object> value) {
   }
 
   if (value->IsString()) {
-    return StringPrintf("String %d", String::cast(*value).length());
+    String str = String::cast(*value);
+    if (str.length() <= 200) {
+      std::unique_ptr<char[]> name = str.ToCString();
+      return StringPrintf("String %s", name.get());
+    }
+    return StringPrintf("LongString %d", str.length());
   }
 
   if (value->IsJSObject()) {
