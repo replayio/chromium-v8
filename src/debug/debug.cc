@@ -2680,6 +2680,7 @@ static ScriptIdMap* gRecordReplayScripts;
 static int GetSourceIdProperty(Isolate* isolate, Handle<Object> obj) {
   Handle<Object> sourceIdStr = GetProperty(isolate, obj, "sourceId");
   std::unique_ptr<char[]> sourceIdText = String::cast(*sourceIdStr).ToCString();
+  recordreplay::Diagnostic("GetSourceIdProperty %s", sourceIdText.get());
   return atoi(sourceIdText.get());
 }
 
@@ -2700,7 +2701,11 @@ static MaybeHandle<Script> MaybeGetScript(Isolate* isolate, int script_id) {
 
 // Get the script from an ID.
 Handle<Script> GetScript(Isolate* isolate, int script_id) {
-  return MaybeGetScript(isolate, script_id).ToHandleChecked();
+  MaybeHandle<Script> script = MaybeGetScript(isolate, script_id);
+  if (script.is_null()) {
+    recordreplay::Diagnostic("GetScript unknown script %d", script_id);
+  }
+  return script.ToHandleChecked();
 }
 
 Handle<Object> RecordReplayGetSourceContents(Isolate* isolate, Handle<Object> params) {
@@ -3248,6 +3253,8 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
   Script::PositionInfo start_info;
   Script::GetPositionInfo(script, 0, &start_info, Script::WITH_OFFSET);
   const char* kind = (start_info.line || start_info.column) ? "inlineScript" : "scriptSource";
+
+  recordreplay::Diagnostic("OnNewSource %s %s", id.get(), kind);
 
   RecordReplayOnNewSource(isolate, id.get(), kind, url.length() ? url.c_str() : nullptr);
 
