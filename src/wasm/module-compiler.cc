@@ -1352,13 +1352,21 @@ CompilationExecutionResult ExecuteCompilationUnits(
           engine, &env.value(), wire_bytes, counters, &detected_features);
       results_to_publish.emplace_back(std::move(result));
 
+      recordreplay::Assert("ExecuteCompilationUnits #5");
+
       bool yield = delegate && delegate->ShouldYield();
+
+      recordreplay::Assert("ExecuteCompilationUnits #6 %d", yield);
 
       // (synchronized): Publish the compilation result and get the next unit.
       BackgroundCompileScope compile_scope(native_module);
-      if (compile_scope.cancelled()) return kYield;
+      if (compile_scope.cancelled()) {
+        recordreplay::Assert("ExecuteCompilationUnits #7");
+        return kYield;
+      }
 
       if (!results_to_publish.back().succeeded()) {
+        recordreplay::Assert("ExecuteCompilationUnits #8");
         compile_scope.compilation_state()->SetError();
         return kNoMoreUnits;
       }
@@ -1367,6 +1375,7 @@ CompilationExecutionResult ExecuteCompilationUnits(
       if (yield ||
           !(unit = compile_scope.compilation_state()->GetNextCompilationUnit(
                 queue, baseline_only))) {
+        recordreplay::Assert("ExecuteCompilationUnits #9");
         std::vector<std::unique_ptr<WasmCode>> unpublished_code =
             compile_scope.native_module()->AddCompiledCode(
                 VectorOf(std::move(results_to_publish)));
@@ -1375,6 +1384,7 @@ CompilationExecutionResult ExecuteCompilationUnits(
             std::move(unpublished_code));
         compile_scope.compilation_state()->OnCompilationStopped(
             detected_features);
+        recordreplay::Assert("ExecuteCompilationUnits #10");
         return yield ? kYield : kNoMoreUnits;
       }
 
@@ -1386,12 +1396,14 @@ CompilationExecutionResult ExecuteCompilationUnits(
       // contention when all threads publish at the end.
       if (unit->tier() == ExecutionTier::kTurbofan ||
           queue->ShouldPublish(static_cast<int>(results_to_publish.size()))) {
+        recordreplay::Assert("ExecuteCompilationUnits #11");
         std::vector<std::unique_ptr<WasmCode>> unpublished_code =
             compile_scope.native_module()->AddCompiledCode(
                 VectorOf(std::move(results_to_publish)));
         results_to_publish.clear();
         compile_scope.compilation_state()->SchedulePublishCompilationResults(
             std::move(unpublished_code));
+        recordreplay::Assert("ExecuteCompilationUnits #12");
       }
     }
   }
