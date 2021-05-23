@@ -2680,8 +2680,9 @@ static ScriptIdMap* gRecordReplayScripts;
 static int GetSourceIdProperty(Isolate* isolate, Handle<Object> obj) {
   Handle<Object> sourceIdStr = GetProperty(isolate, obj, "sourceId");
   std::unique_ptr<char[]> sourceIdText = String::cast(*sourceIdStr).ToCString();
-  recordreplay::Diagnostic("GetSourceIdProperty %s", sourceIdText.get());
-  return atoi(sourceIdText.get());
+  int rv = atoi(sourceIdText.get());
+  recordreplay::Diagnostic("GetSourceIdProperty %s %d", sourceIdText.get(), rv);
+  return rv;
 }
 
 // Get the script from an ID.
@@ -2710,7 +2711,9 @@ Handle<Script> GetScript(Isolate* isolate, int script_id) {
 
 Handle<Object> RecordReplayGetSourceContents(Isolate* isolate, Handle<Object> params) {
   int script_id = GetSourceIdProperty(isolate, params);
+  recordreplay::Diagnostic("RecordReplayGetSourceContents #1 %d", script_id);
   Handle<Script> script = GetScript(isolate, script_id);
+  recordreplay::Diagnostic("RecordReplayGetSourceContents #2");
 
   Script::PositionInfo info;
   Script::GetPositionInfo(script, 0, &info, Script::WITH_OFFSET);
