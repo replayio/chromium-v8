@@ -365,7 +365,7 @@ class CompilationUnitQueues {
     // compilation results. Updated (reduced, using relaxed ordering) when new
     // queues are allocated. If there is only one thread running, we can delay
     // publishing arbitrarily.
-    std::atomic<int> publish_limit{kMaxInt};
+    OrderedAtomic<int> publish_limit{kMaxInt};
 
     base::Mutex mutex;
 
@@ -1387,6 +1387,9 @@ CompilationExecutionResult ExecuteCompilationUnits(
         recordreplay::Assert("ExecuteCompilationUnits #10");
         return yield ? kYield : kNoMoreUnits;
       }
+
+      recordreplay::Assert("ExecuteCompilationUnits #10.1 %d %d",
+                           (int)unit->tier(), (int)results_to_publish.size());
 
       // Before executing a TurboFan unit, ensure to publish all previous
       // units. If we compiled Liftoff before, we need to publish them anyway
@@ -3395,7 +3398,7 @@ void CompilationStateImpl::SetError() {
 void CompilationStateImpl::WaitForCompilationEvent(
     CompilationEvent expect_event) {
   auto semaphore = std::make_shared<base::Semaphore>(0);
-  auto done = std::make_shared<std::atomic<bool>>(false);
+  auto done = std::make_shared<OrderedAtomic<bool>>(false);
   base::EnumSet<CompilationEvent> events{expect_event,
                                          CompilationEvent::kFailedCompilation};
   {
@@ -3410,11 +3413,14 @@ void CompilationStateImpl::WaitForCompilationEvent(
 
   class WaitForEventDelegate final : public JobDelegate {
    public:
-    explicit WaitForEventDelegate(std::shared_ptr<std::atomic<bool>> done)
+    explicit WaitForEventDelegate(std::shared_ptr<OrderedAtomic<bool>> done)
         : done_(std::move(done)) {}
 
     bool ShouldYield() override {
-      return done_->load(std::memory_order_relaxed);
+      recordreplay::Assert("WaitForEventDelegate::ShouldYield Start");
+      bool rv = done_->load(std::memory_order_relaxed);
+      recordreplay::Assert("WaitForEventDelegate::ShouldYield Done %d", rv);
+      return rv;
     }
 
     void NotifyConcurrencyIncrease() override { UNIMPLEMENTED(); }
@@ -3422,7 +3428,7 @@ void CompilationStateImpl::WaitForCompilationEvent(
     uint8_t GetTaskId() override { return kMainTaskId; }
 
    private:
-    std::shared_ptr<std::atomic<bool>> done_;
+    std::shared_ptr<OrderedAtomic<bool>> done_;
   };
 
   WaitForEventDelegate delegate{done};
