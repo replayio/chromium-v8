@@ -479,7 +479,6 @@ V8_WARN_UNUSED_RESULT bool WasmCode::DecRefOnPotentiallyDeadCode() {
 void WasmCode::DecrementRefCount(Vector<WasmCode* const> code_vec) {
   // Decrement the ref counter of all given code objects. Keep the ones whose
   // ref count drops to zero.
-  recordreplay::Assert("WasmCode::DecrementRefCount Start");
   WasmEngine::DeadCodeMap dead_code;
   WasmEngine* engine = nullptr;
   for (WasmCode* code : code_vec) {
@@ -491,7 +490,6 @@ void WasmCode::DecrementRefCount(Vector<WasmCode* const> code_vec) {
 
   DCHECK_EQ(dead_code.empty(), engine == nullptr);
   if (engine) engine->FreeDeadCode(dead_code);
-  recordreplay::Assert("WasmCode::DecrementRefCount Done");
 }
 
 int WasmCode::GetSourcePositionBefore(int offset) {
