@@ -3264,7 +3264,9 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
   // If this is the first script we were notified about, look for other scripts
   // that were already added without a notification. It would be nice to figure
   // out how to get notified about the other scripts and remove this...
-  if (gRecordReplayScripts->size() == 1) {
+  static bool first = true;
+  if (first) {
+    first = false;
     std::vector<Handle<Script>> scriptHandles;
     {
       Script::Iterator iterator(isolate);
@@ -3616,6 +3618,7 @@ void FunctionCallbackRecordReplayIgnoreScript(const FunctionCallbackInfo<Value>&
   i::Handle<i::Object> base = Utils::OpenHandle(*callArgs[0]);
   std::unique_ptr<char[]> name = i::String::cast(*base).ToCString();
   int script_id = atoi(name.get());
+  recordreplay::Diagnostic("FunctionCallbackRecordReplayIgnoreScript %s %d", name.get(), script_id);
 
   bool ignore = i::RecordReplayIgnoreScriptById((i::Isolate*)isolate, script_id);
 
