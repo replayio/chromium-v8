@@ -43,7 +43,7 @@ namespace base {
 
 class V8_BASE_EXPORT Mutex final {
  public:
-  Mutex();
+  Mutex(const char* ordered_name = nullptr);
   Mutex(const Mutex&) = delete;
   Mutex& operator=(const Mutex&) = delete;
   ~Mutex();

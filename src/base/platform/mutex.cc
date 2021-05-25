@@ -74,7 +74,10 @@ bool TryReleaseSharedMutex(SharedMutex* shared_mutex) {
 
 #if V8_OS_POSIX
 
-static V8_INLINE void InitializeNativeHandle(pthread_mutex_t* mutex) {
+extern "C" void V8RecordReplayAddOrderedPthreadMutex(const char* name,
+                                                     pthread_mutex_t* mutex);
+
+static V8_INLINE void InitializeNativeHandle(pthread_mutex_t* mutex, const char* ordered_name) {
   int result;
 #if defined(DEBUG)
   // Use an error checking mutex in debug mode.
@@ -90,6 +93,9 @@ static V8_INLINE void InitializeNativeHandle(pthread_mutex_t* mutex) {
   // Use a fast mutex (default attributes).
   result = pthread_mutex_init(mutex, nullptr);
 #endif  // defined(DEBUG)
+  if (ordered_name) {
+    V8RecordReplayAddOrderedPthreadMutex(ordered_name, mutex);
+  }
   DCHECK_EQ(0, result);
   USE(result);
 }
@@ -140,8 +146,8 @@ static V8_INLINE bool TryLockNativeHandle(pthread_mutex_t* mutex) {
 }
 
 
-Mutex::Mutex() {
-  InitializeNativeHandle(&native_handle_);
+Mutex::Mutex(const char* ordered_name) {
+  InitializeNativeHandle(&native_handle_, ordered_name);
 #ifdef DEBUG
   level_ = 0;
 #endif

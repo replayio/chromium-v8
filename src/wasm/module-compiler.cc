@@ -2846,7 +2846,8 @@ CompilationStateImpl::CompilationStateImpl(
                         ? CompileMode::kTiering
                         : CompileMode::kRegular),
       async_counters_(std::move(async_counters)),
-      compilation_unit_queues_(native_module->num_functions()) {}
+      compilation_unit_queues_(native_module->num_functions()),
+      publish_mutex_("CompilationStateImpl.publish_mutex_") {}
 
 void CompilationStateImpl::InitCompileJob(WasmEngine* engine) {
   DCHECK_NULL(compile_job_);
