@@ -163,7 +163,8 @@ class CompilationUnitQueues {
   };
 
   explicit CompilationUnitQueues(int num_declared_functions)
-      : num_declared_functions_(num_declared_functions) {
+      : queues_mutex_("CompilationUnitQueues.queues_mutex_"),
+        num_declared_functions_(num_declared_functions) {
     // Add one first queue, to add units to.
     queues_.emplace_back(std::make_unique<QueueImpl>(0));
 
@@ -182,14 +183,14 @@ class CompilationUnitQueues {
   Queue* GetQueueForTask(int task_id) {
     int required_queues = task_id + 1;
     {
-      base::SharedMutexGuard<base::kShared> queues_guard(&queues_mutex_);
+      base::MutexGuard queues_guard(&queues_mutex_);
       if (V8_LIKELY(static_cast<int>(queues_.size()) >= required_queues)) {
         return queues_[task_id].get();
       }
     }
 
     // Otherwise increase the number of queues.
-    base::SharedMutexGuard<base::kExclusive> queues_guard(&queues_mutex_);
+    base::MutexGuard queues_guard(&queues_mutex_);
     int num_queues = static_cast<int>(queues_.size());
     while (num_queues < required_queues) {
       int steal_from = num_queues + 1;
@@ -244,7 +245,7 @@ class CompilationUnitQueues {
     QueueImpl* queue;
     {
       int queue_to_add = next_queue_to_add.load(std::memory_order_relaxed);
-      base::SharedMutexGuard<base::kShared> queues_guard(&queues_mutex_);
+      base::MutexGuard queues_guard(&queues_mutex_);
       while (!next_queue_to_add.compare_exchange_weak(
           queue_to_add, next_task_id(queue_to_add, queues_.size()),
           std::memory_order_relaxed)) {
@@ -278,7 +279,7 @@ class CompilationUnitQueues {
   }
 
   void AddTopTierPriorityUnit(WasmCompilationUnit unit, size_t priority) {
-    base::SharedMutexGuard<base::kShared> queues_guard(&queues_mutex_);
+    base::MutexGuard queues_guard(&queues_mutex_);
     // Add to the individual queues in a round-robin fashion. No special care is
     // taken to balance them; they will be balanced by work stealing. We use
     // the same counter for this reason.
@@ -344,7 +345,7 @@ class CompilationUnitQueues {
   };
 
   struct BigUnitsQueue {
-    BigUnitsQueue() {
+    BigUnitsQueue() : mutex("BigUnitsQueue.mutex") {
       for (auto& atomic : has_units) std::atomic_init(&atomic, false);
     }
 
@@ -359,7 +360,7 @@ class CompilationUnitQueues {
 
   struct QueueImpl : public Queue {
     explicit QueueImpl(int next_steal_task_id)
-        : next_steal_task_id(next_steal_task_id) {}
+        : mutex("QueueImpl.mutex"), next_steal_task_id(next_steal_task_id) {}
 
     // Number of units after which the task processing this queue should publish
     // compilation results. Updated (reduced, using relaxed ordering) when new
@@ -417,7 +418,7 @@ class CompilationUnitQueues {
     // Try to steal from all other queues. If this succeeds, return one of the
     // stolen units.
     {
-      base::SharedMutexGuard<base::kShared> guard(&queues_mutex_);
+      base::MutexGuard guard(&queues_mutex_);
       for (size_t steal_trials = 0; steal_trials < queues_.size();
            ++steal_trials, ++steal_task_id) {
         if (steal_task_id >= static_cast<int>(queues_.size())) {
@@ -474,7 +475,7 @@ class CompilationUnitQueues {
     // Try to steal from all other queues. If this succeeds, return one of the
     // stolen units.
     {
-      base::SharedMutexGuard<base::kShared> guard(&queues_mutex_);
+      base::MutexGuard guard(&queues_mutex_);
       for (size_t steal_trials = 0; steal_trials < queues_.size();
            ++steal_trials, ++steal_task_id) {
         if (steal_task_id >= static_cast<int>(queues_.size())) {
@@ -549,7 +550,7 @@ class CompilationUnitQueues {
   }
 
   // {queues_mutex_} protectes {queues_};
-  base::SharedMutex queues_mutex_;
+  base::Mutex queues_mutex_;
   std::vector<std::unique_ptr<QueueImpl>> queues_;
 
   const int num_declared_functions_;
@@ -2847,6 +2848,8 @@ CompilationStateImpl::CompilationStateImpl(
                         : CompileMode::kRegular),
       async_counters_(std::move(async_counters)),
       compilation_unit_queues_(native_module->num_functions()),
+      mutex_("CompilationStateImpl.mutex_"),
+      callbacks_mutex_("CompilationStateImpl.callbacks_mutex_"),
       publish_mutex_("CompilationStateImpl.publish_mutex_") {}
 
 void CompilationStateImpl::InitCompileJob(WasmEngine* engine) {
