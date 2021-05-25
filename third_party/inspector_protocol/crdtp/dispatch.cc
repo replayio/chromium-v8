@@ -11,6 +11,8 @@
 #include "frontend_channel.h"
 #include "protocol_core.h"
 
+#include "include/v8.h"
+
 namespace v8_crdtp {
 // =============================================================================
 // DispatchResponse - Error status and chaining / fall through
@@ -437,15 +439,15 @@ DomainDispatcher::Callback::Callback(
 void DomainDispatcher::Callback::sendIfActive(
     std::unique_ptr<Serializable> partialMessage,
     const DispatchResponse& response) {
-  recordreplay::Assert("DomainDispatcher::Callback::sendIfActive Start");
+  v8::recordreplay::Assert("DomainDispatcher::Callback::sendIfActive Start");
   if (!backend_impl_ || !backend_impl_->get()) {
-    recordreplay::Assert("DomainDispatcher::Callback::sendIfActive #1");
+    v8::recordreplay::Assert("DomainDispatcher::Callback::sendIfActive #1");
     return;
   }
   backend_impl_->get()->sendResponse(call_id_, response,
                                      std::move(partialMessage));
   backend_impl_ = nullptr;
-  recordreplay::Assert("DomainDispatcher::Callback::sendIfActive Done");
+  v8::recordreplay::Assert("DomainDispatcher::Callback::sendIfActive Done");
 }
 
 void DomainDispatcher::Callback::fallThroughIfActive() {

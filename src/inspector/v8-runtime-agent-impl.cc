@@ -382,15 +382,15 @@ void V8RuntimeAgentImpl::callFunctionOn(
     Maybe<bool> userGesture, Maybe<bool> awaitPromise,
     Maybe<int> executionContextId, Maybe<String16> objectGroup,
     std::unique_ptr<CallFunctionOnCallback> callback) {
-  recordreplay::Assert("V8RuntimeAgentImpl::callFunctionOn Start");
+  v8::recordreplay::Assert("V8RuntimeAgentImpl::callFunctionOn Start");
   if (objectId.isJust() && executionContextId.isJust()) {
-    recordreplay::Assert("V8RuntimeAgentImpl::callFunctionOn #1");
+    v8::recordreplay::Assert("V8RuntimeAgentImpl::callFunctionOn #1");
     callback->sendFailure(Response::ServerError(
         "ObjectId must not be specified together with executionContextId"));
     return;
   }
   if (!objectId.isJust() && !executionContextId.isJust()) {
-    recordreplay::Assert("V8RuntimeAgentImpl::callFunctionOn #2");
+    v8::recordreplay::Assert("V8RuntimeAgentImpl::callFunctionOn #2");
     callback->sendFailure(Response::ServerError(
         "Either ObjectId or executionContextId must be specified"));
     return;
@@ -402,11 +402,11 @@ void V8RuntimeAgentImpl::callFunctionOn(
     InjectedScript::ObjectScope scope(m_session, objectId.fromJust());
     Response response = scope.initialize();
     if (!response.IsSuccess()) {
-      recordreplay::Assert("V8RuntimeAgentImpl::callFunctionOn #3");
+      v8::recordreplay::Assert("V8RuntimeAgentImpl::callFunctionOn #3");
       callback->sendFailure(response);
       return;
     }
-    recordreplay::Assert("V8RuntimeAgentImpl::callFunctionOn #4");
+    v8::recordreplay::Assert("V8RuntimeAgentImpl::callFunctionOn #4");
     innerCallFunctionOn(m_session, scope, scope.object(), expression,
                         std::move(optionalArguments), silent.fromMaybe(false),
                         mode, userGesture.fromMaybe(false),
@@ -420,18 +420,18 @@ void V8RuntimeAgentImpl::callFunctionOn(
                                       std::move(executionContextId.fromJust()),
                                       /* uniqueContextId */ {}, &contextId);
     if (!response.IsSuccess()) {
-      recordreplay::Assert("V8RuntimeAgentImpl::callFunctionOn #5");
+      v8::recordreplay::Assert("V8RuntimeAgentImpl::callFunctionOn #5");
       callback->sendFailure(response);
       return;
     }
     InjectedScript::ContextScope scope(m_session, contextId);
     response = scope.initialize();
     if (!response.IsSuccess()) {
-      recordreplay::Assert("V8RuntimeAgentImpl::callFunctionOn #6");
+      v8::recordreplay::Assert("V8RuntimeAgentImpl::callFunctionOn #6");
       callback->sendFailure(response);
       return;
     }
-    recordreplay::Assert("V8RuntimeAgentImpl::callFunctionOn #7");
+    v8::recordreplay::Assert("V8RuntimeAgentImpl::callFunctionOn #7");
     innerCallFunctionOn(m_session, scope, scope.context()->Global(), expression,
                         std::move(optionalArguments), silent.fromMaybe(false),
                         mode, userGesture.fromMaybe(false),
@@ -439,7 +439,7 @@ void V8RuntimeAgentImpl::callFunctionOn(
                         objectGroup.fromMaybe(""), std::move(callback));
   }
 
-  recordreplay::Assert("V8RuntimeAgentImpl::callFunctionOn Done");
+  v8::recordreplay::Assert("V8RuntimeAgentImpl::callFunctionOn Done");
 }
 
 Response V8RuntimeAgentImpl::getProperties(
