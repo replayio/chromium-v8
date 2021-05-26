@@ -970,16 +970,27 @@ InjectedScript::ObjectScope::~ObjectScope() = default;
 
 Response InjectedScript::ObjectScope::findInjectedScript(
     V8InspectorSessionImpl* session) {
+  v8::recordreplay::Assert("InjectedScript::ObjectScope::findInjectedScript Start");
   std::unique_ptr<RemoteObjectId> remoteId;
   Response response = RemoteObjectId::parse(m_remoteObjectId, &remoteId);
-  if (!response.IsSuccess()) return response;
+  if (!response.IsSuccess()) {
+    v8::recordreplay::Assert("InjectedScript::ObjectScope::findInjectedScript #1");
+    return response;
+  }
   InjectedScript* injectedScript = nullptr;
   response = session->findInjectedScript(remoteId.get(), injectedScript);
-  if (!response.IsSuccess()) return response;
+  if (!response.IsSuccess()) {
+    v8::recordreplay::Assert("InjectedScript::ObjectScope::findInjectedScript #2");
+    return response;
+  }
   m_objectGroupName = injectedScript->objectGroupName(*remoteId);
   response = injectedScript->findObject(*remoteId, &m_object);
-  if (!response.IsSuccess()) return response;
+  if (!response.IsSuccess()) {
+    v8::recordreplay::Assert("InjectedScript::ObjectScope::findInjectedScript #3");
+    return response;
+  }
   m_injectedScript = injectedScript;
+  v8::recordreplay::Assert("InjectedScript::ObjectScope::findInjectedScript Done");
   return Response::Success();
 }
 
