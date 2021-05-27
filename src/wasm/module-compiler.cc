@@ -64,12 +64,12 @@ struct AutoOrderedLock {
 template <typename T>
 class OrderedAtomic {
  public:
-  OrderedAtomic() {
-    ordered_lock_id_ = (int)recordreplay::CreateOrderedLock("atomic");
+  OrderedAtomic(const char* name = "atomic") {
+    ordered_lock_id_ = (int)recordreplay::CreateOrderedLock(name);
   }
 
-  OrderedAtomic(T initial) : value_(initial) {
-    ordered_lock_id_ = (int)recordreplay::CreateOrderedLock("atomic");
+  OrderedAtomic(T initial, const char* name = "atomic") : value_(initial) {
+    ordered_lock_id_ = (int)recordreplay::CreateOrderedLock(name);
   }
 
   T load(std::memory_order memory_order = std::memory_order_seq_cst) const {
@@ -366,7 +366,7 @@ class CompilationUnitQueues {
     // compilation results. Updated (reduced, using relaxed ordering) when new
     // queues are allocated. If there is only one thread running, we can delay
     // publishing arbitrarily.
-    OrderedAtomic<int> publish_limit{kMaxInt};
+    OrderedAtomic<int> publish_limit{kMaxInt, "publish_limit"};
 
     base::Mutex mutex;
 
@@ -725,7 +725,7 @@ class CompilationStateImpl {
 
   // Number of wrappers to be compiled. Initialized once, counted down in
   // {GetNextJSToWasmWrapperCompilationUnit}.
-  OrderedAtomic<size_t> outstanding_js_to_wasm_wrappers_{0};
+  OrderedAtomic<size_t> outstanding_js_to_wasm_wrappers_{0, "outstanding_js_to_wasm_wrappers_"};
   // Wrapper compilation units are stored in shared_ptrs so that they are kept
   // alive by the tasks even if the NativeModule dies.
   std::vector<std::shared_ptr<JSToWasmWrapperCompilationUnit>>
@@ -3402,7 +3402,7 @@ void CompilationStateImpl::SetError() {
 void CompilationStateImpl::WaitForCompilationEvent(
     CompilationEvent expect_event) {
   auto semaphore = std::make_shared<base::Semaphore>(0);
-  auto done = std::make_shared<OrderedAtomic<bool>>(false);
+  auto done = std::make_shared<OrderedAtomic<bool>>(false, "CompilationStateImpl::WaitForCompilationEvent.done");
   base::EnumSet<CompilationEvent> events{expect_event,
                                          CompilationEvent::kFailedCompilation};
   {
