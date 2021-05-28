@@ -181,6 +181,8 @@ class CompilationUnitQueues {
   }
 
   Queue* GetQueueForTask(int task_id) {
+    recordreplay::Assert("GetQueueForTask Start %d", task_id);
+
     int required_queues = task_id + 1;
     {
       base::MutexGuard queues_guard(&queues_mutex_);
@@ -192,6 +194,9 @@ class CompilationUnitQueues {
     // Otherwise increase the number of queues.
     base::MutexGuard queues_guard(&queues_mutex_);
     int num_queues = static_cast<int>(queues_.size());
+
+    recordreplay::Assert("GetQueueForTask #1 %d %d", num_queues, required_queues);
+
     while (num_queues < required_queues) {
       int steal_from = num_queues + 1;
       queues_.emplace_back(std::make_unique<QueueImpl>(steal_from));
@@ -346,13 +351,13 @@ class CompilationUnitQueues {
 
   struct BigUnitsQueue {
     BigUnitsQueue() : mutex("BigUnitsQueue.mutex") {
-      for (auto& atomic : has_units) std::atomic_init(&atomic, false);
+      for (auto& atomic : has_units) atomic.store(false);
     }
 
     base::Mutex mutex;
 
     // Can be read concurrently to check whether any elements are in the queue.
-    std::atomic<bool> has_units[kNumTiers];
+    OrderedAtomic<bool> has_units[kNumTiers];
 
     // Protected by {mutex}:
     std::priority_queue<BigUnit> units[kNumTiers];
