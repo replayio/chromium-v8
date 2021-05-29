@@ -1325,6 +1325,10 @@ CompilationExecutionResult ExecuteCompilationUnits(
   // worker threads start at 1 (thus the "+ 1").
   STATIC_ASSERT(kMainTaskId == 0);
   int task_id = delegate ? (int{delegate->GetTaskId()} + 1) : kMainTaskId;
+
+  recordreplay::Assert("ExecuteCompilationUnits #2 %d %d",
+                       task_id, delegate ? delegate->GetTaskId() : -1000);
+
   DCHECK_LE(0, task_id);
   CompilationUnitQueues::Queue* queue;
   base::Optional<WasmCompilationUnit> unit;
