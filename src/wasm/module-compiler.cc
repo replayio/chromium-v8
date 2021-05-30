@@ -1686,6 +1686,8 @@ class BackgroundCompileJob final : public JobTask {
         async_counters_(std::move(async_counters)) {}
 
   void Run(JobDelegate* delegate) override {
+    recordreplay::Assert("BackgroundCompileJob::Run %d",
+                         delegate ? delegate->GetTaskId() : -1000);
     auto engine_scope = engine_barrier_->TryLock();
     if (!engine_scope) return;
     ExecuteCompilationUnits(native_module_, async_counters_.get(), delegate,
