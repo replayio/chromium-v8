@@ -975,30 +975,38 @@ InjectedScript::ObjectScope::ObjectScope(V8InspectorSessionImpl* session,
 
 InjectedScript::ObjectScope::~ObjectScope() = default;
 
+static void RecordReplayAssertIfNotDisallowed(const char* text) {
+  if (!v8::recordreplay::AreEventsDisallowed()) {
+    v8::recordreplay::Assert("%s", text);
+  }
+}
+
 Response InjectedScript::ObjectScope::findInjectedScript(
     V8InspectorSessionImpl* session) {
-  v8::recordreplay::Assert("InjectedScript::ObjectScope::findInjectedScript Start %s",
-                           m_remoteObjectId.utf8().c_str());
+  if (!v8::recordreplay::AreEventsDisallowed()) {
+    v8::recordreplay::Assert("InjectedScript::ObjectScope::findInjectedScript Start %s",
+                             m_remoteObjectId.utf8().c_str());
+  }
   std::unique_ptr<RemoteObjectId> remoteId;
   Response response = RemoteObjectId::parse(m_remoteObjectId, &remoteId);
   if (!response.IsSuccess()) {
-    v8::recordreplay::Assert("InjectedScript::ObjectScope::findInjectedScript #1");
+    RecordReplayAssertIfNotDisallowed("InjectedScript::ObjectScope::findInjectedScript #1");
     return response;
   }
   InjectedScript* injectedScript = nullptr;
   response = session->findInjectedScript(remoteId.get(), injectedScript);
   if (!response.IsSuccess()) {
-    v8::recordreplay::Assert("InjectedScript::ObjectScope::findInjectedScript #2");
+    RecordReplayAssertIfNotDisallowed("InjectedScript::ObjectScope::findInjectedScript #2");
     return response;
   }
   m_objectGroupName = injectedScript->objectGroupName(*remoteId);
   response = injectedScript->findObject(*remoteId, &m_object);
   if (!response.IsSuccess()) {
-    v8::recordreplay::Assert("InjectedScript::ObjectScope::findInjectedScript #3");
+    RecordReplayAssertIfNotDisallowed("InjectedScript::ObjectScope::findInjectedScript #3");
     return response;
   }
   m_injectedScript = injectedScript;
-  v8::recordreplay::Assert("InjectedScript::ObjectScope::findInjectedScript Done");
+  RecordReplayAssertIfNotDisallowed("InjectedScript::ObjectScope::findInjectedScript Done");
   return Response::Success();
 }
 
