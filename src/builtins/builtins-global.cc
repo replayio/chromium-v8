@@ -82,12 +82,15 @@ BUILTIN(GlobalUnescape) {
 
 // ES6 section 18.2.1 eval (x)
 BUILTIN(GlobalEval) {
+  recordreplay::Assert("BUILTIN(GlobalEval) Start");
+
   HandleScope scope(isolate);
   Handle<Object> x = args.atOrUndefined(isolate, 1);
   Handle<JSFunction> target = args.target();
   Handle<JSObject> target_global_proxy(target->global_proxy(), isolate);
   if (!Builtins::AllowDynamicFunction(isolate, target, target_global_proxy)) {
     isolate->CountUsage(v8::Isolate::kFunctionConstructorReturnedUndefined);
+    recordreplay::Assert("BUILTIN(GlobalEval) #1");
     return ReadOnlyRoots(isolate).undefined_value();
   }
 
@@ -99,7 +102,10 @@ BUILTIN(GlobalEval) {
   std::tie(source, unhandled_object) =
       Compiler::ValidateDynamicCompilationSource(
           isolate, handle(target->native_context(), isolate), x);
-  if (unhandled_object) return *x;
+  if (unhandled_object) {
+    recordreplay::Assert("BUILTIN(GlobalEval) #2");
+    return *x;
+  }
 
   Handle<JSFunction> function;
   ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
@@ -107,6 +113,9 @@ BUILTIN(GlobalEval) {
       Compiler::GetFunctionFromValidatedString(
           handle(target->native_context(), isolate), source,
           NO_PARSE_RESTRICTION, kNoSourcePosition));
+
+  recordreplay::Assert("BUILTIN(GlobalEval) #3");
+
   RETURN_RESULT_OR_FAILURE(
       isolate,
       Execution::Call(isolate, function, target_global_proxy, 0, nullptr));
