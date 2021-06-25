@@ -3149,10 +3149,13 @@ struct HTMLParseData {
 typedef std::vector<HTMLParseData> HTMLParseDataVector;
 static HTMLParseDataVector* gHTMLParses;
 
+extern void RecordReplayAddHTMLParse(const char* url);
+
 extern "C" void V8RecordReplayHTMLParseStart(void* token, const char* url) {
   if (!gHTMLParses) {
     gHTMLParses = new HTMLParseDataVector();
   }
+  RecordReplayAddHTMLParse(url);
   gHTMLParses->emplace_back(token, url);
 }
 
