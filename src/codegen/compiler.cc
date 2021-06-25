@@ -2868,6 +2868,8 @@ MaybeHandle<SharedFunctionInfo> Compiler::GetSharedFunctionInfoForScript(
     ScriptOriginOptions origin_options, v8::Extension* extension,
     ScriptData* cached_data, ScriptCompiler::CompileOptions compile_options,
     ScriptCompiler::NoCacheReason no_cache_reason, NativesFlag natives) {
+  recordreplay::Assert("Compiler::GetSharedFunctionInfoForScript");
+
   ScriptCompileTimerScope compile_timer(isolate, no_cache_reason);
 
   if (compile_options == ScriptCompiler::kNoCompileOptions ||
@@ -2888,7 +2890,8 @@ MaybeHandle<SharedFunctionInfo> Compiler::GetSharedFunctionInfoForScript(
   // For extensions or REPL mode scripts neither do a compilation cache lookup,
   // nor put the compilation result back into the cache.
   const bool use_compilation_cache =
-      extension == nullptr && script_details.repl_mode == REPLMode::kNo;
+      extension == nullptr && script_details.repl_mode == REPLMode::kNo &&
+      !recordreplay::IsRecordingOrReplaying();
   MaybeHandle<SharedFunctionInfo> maybe_result;
   IsCompiledScope is_compiled_scope;
   if (use_compilation_cache) {
@@ -2951,6 +2954,7 @@ MaybeHandle<SharedFunctionInfo> Compiler::GetSharedFunctionInfoForScript(
 
       flags.set_is_eager(compile_options == ScriptCompiler::kEagerCompile);
 
+      recordreplay::Assert("Compiler::GetSharedFunctionInfoForScript #1");
       maybe_result = CompileScriptOnMainThread(
           flags, source, script_details, origin_options, natives, extension,
           isolate, &is_compiled_scope);

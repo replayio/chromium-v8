@@ -10636,6 +10636,9 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   internal::FLAG_incremental_marking = false;
   internal::FLAG_never_compact = true;
 
+  // The compilation cache can interfere with getting consistent script IDs.
+  internal::FLAG_compilation_cache = false;
+
   // Write out our pid to a file if specified.
   char* env = getenv("RECORD_REPLAY_PID_FILE");
   if (env) {

@@ -1288,7 +1288,7 @@ TranslatedState::TranslatedState(const JavaScriptFrame* frame)
   DeoptimizationData data =
       static_cast<const OptimizedFrame*>(frame)->GetDeoptimizationData(
           &deopt_index);
-  DCHECK(!data.is_null() && deopt_index != Safepoint::kNoDeoptimizationIndex);
+  CHECK(!data.is_null() && deopt_index != Safepoint::kNoDeoptimizationIndex);
   TranslationArrayIterator it(data.TranslationByteArray(),
                               data.TranslationIndex(deopt_index).value());
   int actual_argc = frame->GetActualArgumentCount();
