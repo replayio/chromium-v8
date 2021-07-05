@@ -9963,6 +9963,11 @@ static size_t (*gRecordReplayPaintStart)();
 static void (*gRecordReplayPaintFinished)(size_t bookmark);
 static void (*gRecordReplaySetPaintCallback)(char* (*callback)(const char*, int));
 static void (*gRecordReplayOnDebuggerStatement)();
+static void (*gRecordReplayAddMetadata)(const char* metadata);
+static void* (*gJSONCreateString)(const char*);
+static void* (*gJSONCreateObject)(size_t, const char**, void**);
+static char* (*gJSONToString)(void*);
+static void (*gJSONFree)(void*);
 
 namespace internal {
 
@@ -10064,6 +10069,32 @@ static bool ShouldFinishRecording() {
   }
 
   return true;
+}
+
+// Add metadata for the recording the first time an HTML page is parsed.
+void RecordReplayAddHTMLParse(const char* url) {
+  // Ignore uninteresting URLs.
+  if (!url || !*url || !strncmp(url, "about:", 6) || !strncmp(url, "chrome", 6)) {
+    return;
+  }
+
+  static bool gHasHTMLParse = false;
+  if (gHasHTMLParse) {
+    return;
+  }
+  gHasHTMLParse = true;
+
+  void* str = gJSONCreateString(url);
+
+  const char* property = "uri";
+  void* object = gJSONCreateObject(1, &property, &str);
+
+  char* objectStr = gJSONToString(object);
+  gRecordReplayAddMetadata(objectStr);
+
+  free(objectStr);
+  gJSONFree(str);
+  gJSONFree(object);
 }
 
 // For posting tasks to the main thread.
@@ -10558,6 +10589,11 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   RecordReplayLoadSymbol(handle, "RecordReplayPaintFinished", gRecordReplayPaintFinished);
   RecordReplayLoadSymbol(handle, "RecordReplaySetPaintCallback", gRecordReplaySetPaintCallback);
   RecordReplayLoadSymbol(handle, "RecordReplayOnDebuggerStatement", gRecordReplayOnDebuggerStatement);
+  RecordReplayLoadSymbol(handle, "RecordReplayAddMetadata", gRecordReplayAddMetadata);
+  RecordReplayLoadSymbol(handle, "RecordReplayJSONCreateString", gJSONCreateString);
+  RecordReplayLoadSymbol(handle, "RecordReplayJSONCreateObject", gJSONCreateObject);
+  RecordReplayLoadSymbol(handle, "RecordReplayJSONToString", gJSONToString);
+  RecordReplayLoadSymbol(handle, "RecordReplayJSONFree", gJSONFree);
 
   void (*setDefaultCommandCallback)(char* (*callback)(const char* command, const char* params));
   RecordReplayLoadSymbol(handle, "RecordReplaySetDefaultCommandCallback", setDefaultCommandCallback);
