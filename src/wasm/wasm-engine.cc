@@ -425,8 +425,7 @@ struct WasmEngine::NativeModuleInfo {
   int8_t num_code_gcs_triggered = 0;
 };
 
-WasmEngine::WasmEngine()
-  : code_manager_(FLAG_wasm_max_code_space * MB), mutex_("WasmEngine.mutex_") {}
+WasmEngine::WasmEngine() : code_manager_(FLAG_wasm_max_code_space * MB) {}
 
 WasmEngine::~WasmEngine() {
 #ifdef V8_ENABLE_WASM_GDB_REMOTE_DEBUGGING
