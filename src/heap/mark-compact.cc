@@ -3178,7 +3178,11 @@ class PageEvacuationJob : public v8::JobTask {
         (remaining_evacuation_items_.load(std::memory_order_relaxed) +
          kItemsPerWorker - 1) /
         kItemsPerWorker;
-    return std::min<size_t>(wanted_num_workers, evacuators_->size());
+    size_t rv = std::min<size_t>(wanted_num_workers, evacuators_->size());
+    // https://github.com/RecordReplay/backend/issues/5661
+    recordreplay::Assert("PageEvacuationJob::GetMaxConcurrency %zu %zu",
+                        rv, worker_count);
+    return rv;
   }
 
  private:
@@ -3553,6 +3557,9 @@ class PointersUpdatingJob : public v8::JobTask {
     const size_t kMaxPointerUpdateTasks = 8;
     size_t max_concurrency = std::min<size_t>(kMaxPointerUpdateTasks, items);
     DCHECK_IMPLIES(items > 0, max_concurrency > 0);
+    // https://github.com/RecordReplay/backend/issues/5661
+    recordreplay::Assert("PointersUpdatingJob::GetMaxConcurrency %zu %zu",
+                         max_concurrency, worker_count);
     return max_concurrency;
   }
 
@@ -4885,8 +4892,12 @@ class YoungGenerationMarkingJob : public v8::JobTask {
     size_t items = remaining_marking_items_.load(std::memory_order_relaxed);
     size_t num_tasks = std::max((items + 1) / kPagesPerTask,
                                 global_worklist_->GlobalPoolSize());
-    return std::min<size_t>(
+    size_t rv = std::min<size_t>(
         num_tasks, MinorMarkCompactCollector::MarkingWorklist::kMaxNumTasks);
+    // https://github.com/RecordReplay/backend/issues/5661
+    recordreplay::Assert("YoungGenerationMarkingJob::GetMaxConcurrency %zu %zu",
+                         rv, worker_count);
+    return rv;
   }
 
  private:

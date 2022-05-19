@@ -3489,8 +3489,12 @@ class CompileJSToWasmWrapperJob final : public JobTask {
     // {outstanding_units_} includes the units that other workers are currently
     // working on, so we can safely ignore the {worker_count} and just return
     // the current number of outstanding units.
-    return std::min(static_cast<size_t>(FLAG_wasm_num_compilation_tasks),
-                    outstanding_units_.load(std::memory_order_relaxed));
+    size_t rv = std::min(static_cast<size_t>(FLAG_wasm_num_compilation_tasks),
+                         outstanding_units_.load(std::memory_order_relaxed));
+    // https://github.com/RecordReplay/backend/issues/5661
+    recordreplay::Assert("CompileJSToWasmWrapperJob::GetMaxConcurrency %zu %zu",
+                         rv, worker_count);
+    return rv;
   }
 
  private:

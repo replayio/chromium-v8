@@ -10636,6 +10636,10 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   internal::FLAG_incremental_marking = false;
   internal::FLAG_never_compact = true;
 
+  // Disable wasm background compilation.
+  internal::FLAG_wasm_num_compilation_tasks = 0;
+  internal::FLAG_wasm_async_compilation = false;
+
   // The compilation cache can interfere with getting consistent script IDs.
   internal::FLAG_compilation_cache = false;
 

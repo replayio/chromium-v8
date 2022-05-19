@@ -384,7 +384,11 @@ class ConcurrentMarking::JobTask : public v8::JobTask {
   }
 
   size_t GetMaxConcurrency(size_t worker_count) const override {
-    return concurrent_marking_->GetMaxConcurrency(worker_count);
+    size_t rv = concurrent_marking_->GetMaxConcurrency(worker_count);
+    // https://github.com/RecordReplay/backend/issues/5661
+    recordreplay::Assert("ConcurrentMarking::JobTask::GetMaxConcurrency %zu %zu",
+                         rv, worker_count);
+    return rv;
   }
 
  private:
