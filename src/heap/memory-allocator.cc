@@ -180,11 +180,14 @@ class MemoryAllocator::Unmapper::UnmapFreeMemoryJob : public JobTask {
 
   size_t GetMaxConcurrency(size_t worker_count) const override {
     const size_t kTaskPerChunk = 8;
-    return std::min<size_t>(
+    size_t rv = std::min<size_t>(
         kMaxUnmapperTasks,
         worker_count +
             (unmapper_->NumberOfCommittedChunks() + kTaskPerChunk - 1) /
                 kTaskPerChunk);
+    recordreplay::Assert("MemoryAllocator::Unmapper::UnmapFreeMemoryJob::GetMaxConcurrency %zu %zu",
+                         rv, worker_count);
+    return rv;
   }
 
  private:

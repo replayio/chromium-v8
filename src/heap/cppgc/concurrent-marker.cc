@@ -93,8 +93,11 @@ void ConcurrentMarkingTask::Run(JobDelegate* job_delegate) {
 
 size_t ConcurrentMarkingTask::GetMaxConcurrency(
     size_t current_worker_count) const {
-  return WorkSizeForConcurrentMarking(concurrent_marker_.marking_worklists()) +
-         current_worker_count;
+  size_t rv = WorkSizeForConcurrentMarking(concurrent_marker_.marking_worklists()) +
+              current_worker_count;
+  recordreplay::Assert("ConcurrentMarkingTask::GetMaxConcurrency %zu %zu",
+                       rv, worker_count);
+  return rv;
 }
 
 void ConcurrentMarkingTask::ProcessWorklists(

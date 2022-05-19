@@ -579,7 +579,9 @@ class CopyAndRelocTask : public JobTask {
   }
 
   size_t GetMaxConcurrency(size_t /* worker_count */) const override {
-    return from_queue_->NumBatches();
+    size_t rv = from_queue_->NumBatches();
+    recordreplay::Assert("CopyAndRelocTask::GetMaxConcurrency %zu", rv);
+    return rv;
   }
 
  private:

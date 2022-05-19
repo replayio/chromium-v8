@@ -97,11 +97,14 @@ class Sweeper::SweeperJob final : public JobTask {
 
   size_t GetMaxConcurrency(size_t worker_count) const override {
     const size_t kPagePerTask = 2;
-    return std::min<size_t>(
+    size_t rv = std::min<size_t>(
         kMaxSweeperTasks,
         worker_count +
             (sweeper_->ConcurrentSweepingPageCount() + kPagePerTask - 1) /
                 kPagePerTask);
+    recordreplay::Assert("Sweeper::SweeperJob::GetMaxConcurrency %zu %zu",
+                        rv, worker_count);
+    return rv;
   }
 
  private:
