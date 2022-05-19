@@ -205,6 +205,7 @@ size_t ScavengerCollector::JobTask::GetMaxConcurrency(
       std::max<size_t>(remaining_memory_chunks_.load(std::memory_order_relaxed),
                        worker_count + copied_list_->GlobalPoolSize() +
                            promotion_list_->GlobalPoolSize()));
+  // https://github.com/RecordReplay/backend/issues/5661
   recordreplay::Assert("ScavengerCollector::JobTask::GetMaxConcurrency %zu %zu",
                        rv, worker_count);
   return rv;

@@ -95,6 +95,7 @@ size_t ConcurrentMarkingTask::GetMaxConcurrency(
     size_t current_worker_count) const {
   size_t rv = WorkSizeForConcurrentMarking(concurrent_marker_.marking_worklists()) +
               current_worker_count;
+  // https://github.com/RecordReplay/backend/issues/5661
   recordreplay::Assert("ConcurrentMarkingTask::GetMaxConcurrency %zu %zu",
                        rv, worker_count);
   return rv;

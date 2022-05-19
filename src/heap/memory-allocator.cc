@@ -185,6 +185,7 @@ class MemoryAllocator::Unmapper::UnmapFreeMemoryJob : public JobTask {
         worker_count +
             (unmapper_->NumberOfCommittedChunks() + kTaskPerChunk - 1) /
                 kTaskPerChunk);
+    // https://github.com/RecordReplay/backend/issues/5661
     recordreplay::Assert("MemoryAllocator::Unmapper::UnmapFreeMemoryJob::GetMaxConcurrency %zu %zu",
                          rv, worker_count);
     return rv;

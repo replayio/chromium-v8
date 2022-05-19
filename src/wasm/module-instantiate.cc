@@ -96,6 +96,7 @@ class CompileImportWrapperJob final : public JobTask {
     // Add {worker_count} to the queue size because workers might still be
     // processing units that have already been popped from the queue.
     size_t rv = std::min(flag_limit, worker_count + queue_->size());
+    // https://github.com/RecordReplay/backend/issues/5661
     recordreplay::Assert("CompileImportWrapperJob::GetMaxConcurrency %zu %zu",
                          rv, worker_count);
     return rv;
