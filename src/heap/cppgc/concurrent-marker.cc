@@ -4,6 +4,7 @@
 
 #include "src/heap/cppgc/concurrent-marker.h"
 
+#include "v8.h"
 #include "include/cppgc/platform.h"
 #include "src/heap/cppgc/heap-object-header.h"
 #include "src/heap/cppgc/heap.h"
@@ -96,8 +97,8 @@ size_t ConcurrentMarkingTask::GetMaxConcurrency(
   size_t rv = WorkSizeForConcurrentMarking(concurrent_marker_.marking_worklists()) +
               current_worker_count;
   // https://github.com/RecordReplay/backend/issues/5661
-  recordreplay::Assert("ConcurrentMarkingTask::GetMaxConcurrency %zu %zu",
-                       rv, worker_count);
+  v8::recordreplay::Assert("ConcurrentMarkingTask::GetMaxConcurrency %zu %zu",
+                           rv, current_worker_count);
   return rv;
 }
 

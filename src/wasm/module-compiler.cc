@@ -3492,8 +3492,7 @@ class CompileJSToWasmWrapperJob final : public JobTask {
     size_t rv = std::min(static_cast<size_t>(FLAG_wasm_num_compilation_tasks),
                          outstanding_units_.load(std::memory_order_relaxed));
     // https://github.com/RecordReplay/backend/issues/5661
-    recordreplay::Assert("CompileJSToWasmWrapperJob::GetMaxConcurrency %zu %zu",
-                         rv, worker_count);
+    recordreplay::Assert("CompileJSToWasmWrapperJob::GetMaxConcurrency %zu", rv);
     return rv;
   }
 
