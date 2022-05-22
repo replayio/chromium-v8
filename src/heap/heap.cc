@@ -2010,13 +2010,6 @@ GCTracer::Scope::ScopeId CollectorScopeId(GarbageCollector collector) {
 
 size_t Heap::PerformGarbageCollection(
     GarbageCollector collector, const v8::GCCallbackFlags gc_callback_flags) {
-  // For now we are completely disabling GC in the old space when recording/replaying
-  // to avoid crashes and needing to deal with non-deterministic behavior that
-  // can be triggered by sweeping.
-  if (recordreplay::IsRecordingOrReplaying() &&
-      collector == GarbageCollector::MARK_COMPACTOR) {
-    return 0;
-  }
   DisallowJavascriptExecution no_js(isolate());
 
   if (IsYoungGenerationCollector(collector)) {
