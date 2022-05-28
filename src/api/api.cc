@@ -10231,6 +10231,10 @@ bool recordreplay::AreEventsDisallowed() {
   return false;
 }
 
+extern "C" bool V8RecordReplayAreEventsDisallowed() {
+  return recordreplay::AreEventsDisallowed();
+}
+
 void recordreplay::BeginPassThroughEvents() {
   if (IsRecordingOrReplaying()) {
     gRecordReplayBeginPassThroughEvents();
