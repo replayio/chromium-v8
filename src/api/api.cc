@@ -9923,6 +9923,7 @@ std::shared_ptr<WasmStreaming> WasmStreaming::Unpack(Isolate* isolate,
 #endif  // !V8_ENABLE_WEBASSEMBLY
 
 static bool gRecordingOrReplaying;
+static void (*gRecordReplayRememberRecording)();
 static void (*gRecordReplayOnNewSource)(const char* id, const char* kind,
                                         const char* url);
 static void (*gRecordReplayOnConsoleMessage)(size_t bookmark);
@@ -10052,6 +10053,7 @@ void RecordReplayAddInterestingSource(const char* url) {
 
   if (!gRecordReplayInterestingSource) {
     gRecordReplayInterestingSource = strdup(url);
+    gRecordReplayRememberRecording();
   }
 }
 
@@ -10557,6 +10559,7 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   gRecordingOrReplaying = true;
   gMainThread = pthread_self();
 
+  RecordReplayLoadSymbol(handle, "RecordReplayRememberRecording", gRecordReplayRememberRecording);
   RecordReplayLoadSymbol(handle, "RecordReplayOnNewSource", gRecordReplayOnNewSource);
   RecordReplayLoadSymbol(handle, "RecordReplayOnConsoleMessage", gRecordReplayOnConsoleMessage);
   RecordReplayLoadSymbol(handle, "RecordReplayOnExceptionUnwind", gRecordReplayOnExceptionUnwind);
