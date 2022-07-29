@@ -10452,7 +10452,7 @@ static bool IsRecordingUnusable() {
 // Recording IDs are UUIDs, and have a fixed length.
 static char gRecordingId[40];
 
-static const char* GetRecordingId() {
+const char* recordreplay::GetRecordingId() {
   if (IsRecordingUnusable()) {
     return nullptr;
   }
@@ -10474,6 +10474,10 @@ static const char* GetRecordingId() {
   return gRecordingId;
 }
 
+extern "C" const char* V8GetRecordingId() {
+  return recordreplay::GetRecordingId();
+}
+
 extern "C" const char* V8RecordReplayCrashReasonCallback();
 
 static void DoFinishRecording() {
@@ -10484,7 +10488,7 @@ static void DoFinishRecording() {
   if (env) {
     FILE* file = fopen(env, "a");
     if (file) {
-      const char* recordingId = GetRecordingId();
+      const char* recordingId = recordreplay::GetRecordingId();
       // Include the first interesting source found when writing the
       // recording ID out, to help distinguish between different content
       // processes which Chromium will create for content from different

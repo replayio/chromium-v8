@@ -2157,10 +2157,7 @@ void Debug::OnAfterCompile(Handle<Script> script) {
 
 static void RecordReplayRegisterScript(Handle<Script> script);
 
-void Debug::ProcessCompileEvent(bool has_compile_error, Handle<Script> script) {
-  if (!has_compile_error && recordreplay::IsRecordingOrReplaying() && IsMainThread()) {
-    RecordReplayRegisterScript(script);
-  }
+void Debug::DoProcessCompileEvent(bool has_compile_error, Handle<Script> script) {
 
   // Ignore temporary scripts.
   if (script->id() == Script::kTemporaryScriptId) return;
@@ -2186,6 +2183,13 @@ void Debug::ProcessCompileEvent(bool has_compile_error, Handle<Script> script) {
   AllowJavascriptExecution allow_script(isolate_);
   debug_delegate_->ScriptCompiled(ToApiHandle<debug::Script>(script),
                                   running_live_edit_, has_compile_error);
+}
+
+void Debug::ProcessCompileEvent(bool has_compile_error, Handle<Script> script) {
+  Debug::DoProcessCompileEvent(has_compile_error, script);
+  if (!has_compile_error && recordreplay::IsRecordingOrReplaying() && IsMainThread()) {
+    RecordReplayRegisterScript(script);
+  }
 }
 
 int Debug::CurrentFrameCount() {
