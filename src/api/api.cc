@@ -6060,10 +6060,6 @@ static i::Handle<ObjectType> CreateEnvironment(
   return result;
 }
 
-namespace internal {
-static void RecordReplayOnNewContext(v8::Isolate* isolate, v8::Local<v8::Context> cx);
-}
-
 Local<Context> NewContext(
     v8::Isolate* external_isolate, v8::ExtensionConfiguration* extensions,
     v8::MaybeLocal<ObjectTemplate> global_template,
@@ -6088,9 +6084,7 @@ Local<Context> NewContext(
     if (isolate->has_pending_exception()) isolate->clear_pending_exception();
     return Local<Context>();
   }
-  Local<Context> rv = Utils::ToLocal(scope.CloseAndEscape(env));
-  internal::RecordReplayOnNewContext(external_isolate, rv);
-  return rv;
+  return Utils::ToLocal(scope.CloseAndEscape(env));
 }
 
 Local<Context> v8::Context::New(
@@ -10113,7 +10107,7 @@ void RecordReplayOnMainThreadIsolateCreated(Isolate* isolate) {
 
 static Eternal<v8::Context>* gDefaultContext;
 
-static void RecordReplayOnNewContext(v8::Isolate* isolate, v8::Local<v8::Context> cx) {
+extern "C" void V8RecordReplaySetDefaultContext(v8::Isolate* isolate, v8::Local<v8::Context> cx) {
   if (IsMainThread() && !gDefaultContext) {
     gDefaultContext = new Eternal<v8::Context>(isolate, cx);
   }
