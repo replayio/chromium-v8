@@ -10118,6 +10118,11 @@ extern "C" void V8RecordReplayGetDefaultContext(v8::Isolate* isolate, v8::Local<
   *cx = gDefaultContext->Get(isolate);
 }
 
+bool RecordReplayHasDefaultContext() {
+  CHECK(IsMainThread());
+  return !!gDefaultContext;
+}
+
 bool gRecordReplayHasCheckpoint;
 
 } // namespace internal

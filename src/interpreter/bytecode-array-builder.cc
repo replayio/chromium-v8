@@ -22,6 +22,7 @@ namespace internal {
 extern int RegisterAssertValueSite(const std::string& desc, int source_position);
 extern int RegisterInstrumentationSite(const char* kind, int source_position,
                                        int bytecode_offset);
+extern bool RecordReplayHasDefaultContext();
 extern bool gRecordReplayAssertValues;
 
 namespace interpreter {
@@ -71,7 +72,10 @@ BytecodeArrayBuilder::BytecodeArrayBuilder(
         zone->New<RegisterTransferWriter>(this));
   }
 
-  if (recordreplay::IsRecordingOrReplaying() && IsMainThread() && !record_replay_ignore) {
+  if (recordreplay::IsRecordingOrReplaying() &&
+      IsMainThread() &&
+      RecordReplayHasDefaultContext() &&
+      !record_replay_ignore) {
     emit_record_replay_opcodes_ = true;
   }
 }
