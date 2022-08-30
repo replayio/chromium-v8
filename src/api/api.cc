@@ -9970,15 +9970,21 @@ static void (*gJSONFree)(void*);
 
 namespace internal {
 
+bool gRecordReplayHasCheckpoint;
+
 void RecordReplayOnNewSource(Isolate* isolate, const char* id,
                              const char* kind, const char* url) {
   DCHECK(gRecordingOrReplaying);
-  gRecordReplayOnNewSource(id, kind, url);
+  if (gRecordReplayHasCheckpoint) {
+    gRecordReplayOnNewSource(id, kind, url);
+  }
 }
 
 void RecordReplayOnConsoleMessage(size_t bookmark) {
   DCHECK(gRecordingOrReplaying);
-  gRecordReplayOnConsoleMessage(bookmark);
+  if (gRecordReplayHasCheckpoint) {
+    gRecordReplayOnConsoleMessage(bookmark);
+  }
 }
 
 extern "C" void V8RecordReplayOnConsoleMessage(size_t bookmark) {
@@ -9998,6 +10004,10 @@ void RecordReplayOnExceptionUnwind(Isolate* isolate) {
   CHECK(gRecordingOrReplaying);
   CHECK(IsMainThread());
   CHECK(!gCurrentException);
+
+  if (!gRecordReplayHasCheckpoint) {
+    return;
+  }
 
   HandleScope scope(isolate);
 
@@ -10122,8 +10132,6 @@ bool RecordReplayHasDefaultContext() {
   CHECK(IsMainThread());
   return !!gDefaultContext;
 }
-
-bool gRecordReplayHasCheckpoint;
 
 } // namespace internal
 
@@ -10396,7 +10404,7 @@ extern "C" void* V8RecordReplayIdPointer(int id) {
 }
 
 extern "C" size_t V8RecordReplayNewBookmark() {
-  if (recordreplay::IsRecordingOrReplaying()) {
+  if (internal::gRecordReplayHasCheckpoint) {
     return gRecordReplayNewBookmark();
   }
   return 0;
@@ -10404,13 +10412,15 @@ extern "C" size_t V8RecordReplayNewBookmark() {
 
 extern "C" size_t V8RecordReplayPaintStart() {
   CHECK(recordreplay::IsRecordingOrReplaying());
-  return gRecordReplayPaintStart();
+  return internal::gRecordReplayHasCheckpoint ? gRecordReplayPaintStart() : 0;
 }
 
 extern "C" void V8RecordReplayPaintFinished(size_t bookmark) {
   CHECK(recordreplay::IsRecordingOrReplaying());
-  internal::gRecordReplayHasPaint = true;
-  gRecordReplayPaintFinished(bookmark);
+  if (bookmark) {
+    internal::gRecordReplayHasPaint = true;
+    gRecordReplayPaintFinished(bookmark);
+  }
 }
 
 extern "C" void V8RecordReplaySetPaintCallback(char* (*callback)(const char*, int)) {
@@ -10420,7 +10430,9 @@ extern "C" void V8RecordReplaySetPaintCallback(char* (*callback)(const char*, in
 
 extern "C" void V8RecordReplayOnDebuggerStatement() {
   CHECK(recordreplay::IsRecordingOrReplaying());
-  gRecordReplayOnDebuggerStatement();
+  if (internal::gRecordReplayHasCheckpoint) {
+    gRecordReplayOnDebuggerStatement();
+  }
 }
 
 template <typename Src, typename Dst>
