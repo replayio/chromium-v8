@@ -43,13 +43,31 @@ DebugStackTraceIterator::~DebugStackTraceIterator() = default;
 
 bool DebugStackTraceIterator::Done() const { return iterator_.done(); }
 
+extern bool RecordReplayHasRegisteredScript(Script script);
+
+// When recording/replaying, frames from scripts that weren't reported to the
+// recorder are ignored when iterating stack traces.
+static bool RecordReplayIgnoreFrame(const FrameSummary& summary) {
+  if (!recordreplay::IsRecordingOrReplaying()) {
+    return false;
+  }
+
+  if (!summary.IsJavaScript()) {
+    return true;
+  }
+
+  Handle<Object> script = summary.AsJavaScript().script();
+  return !RecordReplayHasRegisteredScript(Script::cast(*script));
+}
+
 void DebugStackTraceIterator::Advance() {
   while (true) {
     --inlined_frame_index_;
     for (; inlined_frame_index_ >= 0; --inlined_frame_index_) {
       // Omit functions from native and extension scripts.
-      if (FrameSummary::Get(iterator_.frame(), inlined_frame_index_)
-              .is_subject_to_debugging()) {
+      auto summary = FrameSummary::Get(iterator_.frame(), inlined_frame_index_);
+      if (summary.is_subject_to_debugging() &&
+          !RecordReplayIgnoreFrame(summary)) {
         break;
       }
       is_top_frame_ = false;

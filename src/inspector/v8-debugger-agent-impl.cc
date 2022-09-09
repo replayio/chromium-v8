@@ -1414,6 +1414,29 @@ Response V8DebuggerAgentImpl::getCallFrames(
   return currentCallFrames(out_callFrames);
 }
 
+Response V8DebuggerAgentImpl::getTopFrameLocation(Maybe<protocol::Debugger::Location>* out_location) {
+  if (!isPaused()) {
+    return Response::Success();
+  }
+
+  v8::HandleScope handles(m_isolate);
+  auto iterator = v8::debug::StackTraceIterator::Create(m_isolate);
+  if (!iterator->Done()) {
+    v8::debug::Location loc = iterator->GetSourceLocation();
+
+    v8::Local<v8::debug::Script> script = iterator->GetScript();
+    DCHECK(!script.IsEmpty());
+    *out_location =
+        protocol::Debugger::Location::create()
+            .setScriptId(String16::fromInteger(script->Id()))
+            .setLineNumber(loc.GetLineNumber())
+            .setColumnNumber(loc.GetColumnNumber())
+            .build();
+  }
+
+  return Response::Success();
+}
+
 extern "C" void V8RecordReplayGetCurrentException(v8::MaybeLocal<v8::Value>* exception);
 
 Response V8DebuggerAgentImpl::getPendingException(

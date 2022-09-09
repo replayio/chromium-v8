@@ -61,6 +61,8 @@ class OneByteStringStream {
 
 }  // namespace
 
+extern bool RecordReplayParseShouldUseEternalHandles();
+
 template <typename LocalIsolate>
 void AstRawString::Internalize(LocalIsolate* isolate) {
   DCHECK(!has_string_);
@@ -73,6 +75,16 @@ void AstRawString::Internalize(LocalIsolate* isolate) {
     TwoByteStringKey key(raw_hash_field_,
                          Vector<const uint16_t>::cast(literal_bytes_));
     set_string(isolate->factory()->InternalizeStringWithKey(&key));
+  }
+
+  if (RecordReplayParseShouldUseEternalHandles()) {
+    CHECK(IsMainThread());
+    Isolate* new_isolate = reinterpret_cast<Isolate*>(isolate);
+
+    int index = -1;
+    new_isolate->eternal_handles()->Create(new_isolate, *string(), &index);
+    Handle<Object> eternal = new_isolate->eternal_handles()->Get(index);
+    set_string(Handle<String>::cast(eternal));
   }
 }
 

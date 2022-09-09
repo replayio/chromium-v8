@@ -110,7 +110,8 @@ class ScopeIterator {
 
  private:
   Isolate* isolate_;
-  std::unique_ptr<ParseInfo> info_;
+  ParseInfo* info_ = nullptr;
+  bool info_owned_ = false;
   FrameInspector* const frame_inspector_ = nullptr;
   Handle<JSGeneratorObject> generator_;
 

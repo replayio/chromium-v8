@@ -488,6 +488,10 @@ domain Debugger
     returns
       array of CallFrame callFrames
 
+  command getTopFrameLocation
+    returns
+      optional Location location
+
   command getPendingException
     returns
       Runtime.RemoteObject exception

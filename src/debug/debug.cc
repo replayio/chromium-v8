@@ -3075,7 +3075,7 @@ static Handle<Object> RecordReplayConvertFunctionOffsetToLocation(Isolate* isola
   return rv;
 }
 
-bool RecordReplayIgnoreScript(Script script);
+bool RecordReplayHasRegisteredScript(Script script);
 
 static Handle<Object> RecordReplayCountStackFrames(Isolate* isolate,
                                                    Handle<Object> params) {
@@ -3106,7 +3106,7 @@ static Handle<Object> RecordReplayCountStackFrames(Isolate* isolate,
       }
 
       Handle<Script> script(Script::cast(shared->script()), isolate);
-      if (script->id() && !RecordReplayIgnoreScript(*script)) {
+      if (script->id() && RecordReplayHasRegisteredScript(*script)) {
         count++;
       }
     }
@@ -3219,8 +3219,16 @@ bool RecordReplayIgnoreScriptByURL(const char* url) {
   return strncmp(url, "http", 4);
 }
 
+extern bool RecordReplayHasDefaultContext();
+
+static void RecordReplayAddRegisteredScript(Script script);
+
 static void RecordReplayRegisterScript(Handle<Script> script) {
   CHECK(IsMainThread());
+
+  if (!RecordReplayHasDefaultContext()) {
+    return;
+  }
 
   if (!gRecordReplayScripts) {
     gRecordReplayScripts = new ScriptIdMap();
@@ -3267,27 +3275,7 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
 
   RecordReplayOnNewSource(isolate, id.get(), kind, url.length() ? url.c_str() : nullptr);
 
-  // If this is the first script we were notified about, look for other scripts
-  // that were already added without a notification. It would be nice to figure
-  // out how to get notified about the other scripts and remove this...
-  static bool first = true;
-  if (first) {
-    first = false;
-    std::vector<Handle<Script>> scriptHandles;
-    {
-      Script::Iterator iterator(isolate);
-      for (Script script = iterator.Next(); !script.is_null();
-           script = iterator.Next()) {
-        if (script.HasValidSource()) {
-          Handle<Script> handle(script, isolate);
-          scriptHandles.push_back(handle);
-        }
-      }
-    }
-    for (Handle<Script> handle : scriptHandles) {
-      RecordReplayRegisterScript(handle);
-    }
-  }
+  RecordReplayAddRegisteredScript(*script);
 }
 
 extern void RecordReplayOnConsoleMessage(size_t bookmark);
@@ -3393,43 +3381,21 @@ void ClearPauseDataCallback() {
   CHECK(!rv.is_null());
 }
 
-typedef std::unordered_map<int, bool> ScriptIdIgnoreMap;
-static ScriptIdIgnoreMap* gShouldIgnoreScripts;
+typedef std::unordered_set<int> ScriptIdSet;
+static ScriptIdSet* gRegisteredScripts;
 
-static bool RecordReplayIgnoreScriptRaw(Script script) {
-  if (script.type() == Script::TYPE_WASM) {
-    return true;
+static void RecordReplayAddRegisteredScript(Script script) {
+  CHECK(IsMainThread());
+  if (!gRegisteredScripts) {
+    gRegisteredScripts = new ScriptIdSet;
   }
-
-  if (script.name().IsUndefined()) {
-    return false;
-  }
-
-  std::unique_ptr<char[]> name = String::cast(script.name()).ToCString();
-  return RecordReplayIgnoreScriptByURL(name.get());
+  gRegisteredScripts->insert(script.id());
 }
 
-bool RecordReplayIgnoreScript(Script script) {
-  if (!IsMainThread()) {
-    return true;
-  }
-
-  if (!gShouldIgnoreScripts) {
-    gShouldIgnoreScripts = new ScriptIdIgnoreMap();
-  }
-  auto iter = gShouldIgnoreScripts->find(script.id());
-  if (iter != gShouldIgnoreScripts->end()) {
-    return iter->second;
-  }
-
-  bool rv = RecordReplayIgnoreScriptRaw(script);
-  (*gShouldIgnoreScripts)[script.id()] = rv;
-  return rv;
-}
-
-static bool RecordReplayIgnoreScriptById(Isolate* isolate, int script_id) {
-  Handle<Script> script = GetScript(isolate, script_id);
-  return RecordReplayIgnoreScript(*script);
+bool RecordReplayHasRegisteredScript(Script script) {
+  return IsMainThread() &&
+    gRegisteredScripts &&
+    gRegisteredScripts->find(script.id()) != gRegisteredScripts->end();
 }
 
 static std::string StringPrintf(const char* format, ...) {
@@ -3613,23 +3579,6 @@ void FunctionCallbackRecordReplaySetClearPauseDataCallback(const FunctionCallbac
 
   Isolate* v8isolate = callArgs.GetIsolate();
   i::gClearPauseDataCallback = new Eternal<Value>(v8isolate, callArgs[0]);
-}
-
-void FunctionCallbackRecordReplayIgnoreScript(const FunctionCallbackInfo<Value>& callArgs) {
-  CHECK(recordreplay::IsRecordingOrReplaying());
-  CHECK(IsMainThread());
-
-  Isolate* isolate = callArgs.GetIsolate();
-
-  i::Handle<i::Object> base = Utils::OpenHandle(*callArgs[0]);
-  std::unique_ptr<char[]> name = i::String::cast(*base).ToCString();
-  int script_id = atoi(name.get());
-  recordreplay::Diagnostic("FunctionCallbackRecordReplayIgnoreScript %s %d", name.get(), script_id);
-
-  bool ignore = i::RecordReplayIgnoreScriptById((i::Isolate*)isolate, script_id);
-
-  Local<Boolean> rv = Boolean::New(isolate, ignore);
-  callArgs.GetReturnValue().Set(rv);
 }
 
 void FunctionCallbackRecordReplayAssert(const FunctionCallbackInfo<Value>& callArgs) {
