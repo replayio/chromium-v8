@@ -968,7 +968,7 @@ extern bool gRecordReplayAssertValues;
 
 #ifdef RECORD_REPLAY_CHECK_OPCODES
 
-extern bool RecordReplayIgnoreScript(Script script);
+extern bool RecordReplayHasRegisteredScript(Script script);
 
 extern "C" bool V8RecordReplayHasDivergedFromRecording();
 
@@ -979,8 +979,8 @@ static inline bool RecordReplayBytecodeAllowed() {
 
 #else // !RECORD_REPLAY_CHECK_OPCODES
 
-static inline bool RecordReplayIgnoreScript(Script script) {
-  return false;
+static inline bool RecordReplayHasRegisteredScript(Script script) {
+  return true;
 }
 
 static inline bool RecordReplayBytecodeAllowed() {
@@ -1004,7 +1004,7 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
 
   Handle<SharedFunctionInfo> shared(function->shared(), isolate);
   Handle<Script> script(Script::cast(shared->script()), isolate);
-  CHECK(!RecordReplayIgnoreScript(*script));
+  CHECK(RecordReplayHasRegisteredScript(*script));
 
   Script::PositionInfo info;
   Script::GetPositionInfo(script, shared->StartPosition(), &info, Script::WITH_OFFSET);
@@ -1126,7 +1126,7 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertValue) {
   CONVERT_ARG_HANDLE_CHECKED(Object, value, 2);
 
   Handle<Script> script(Script::cast(function->shared().script()), isolate);
-  CHECK(!RecordReplayIgnoreScript(*script));
+  CHECK(RecordReplayHasRegisteredScript(*script));
 
   index -= BytecodeSiteOffset;
   CHECK(gAssertionSites && (size_t)index < gAssertionSites->size());
@@ -1250,7 +1250,7 @@ static inline void OnInstrumentation(Isolate* isolate,
   CHECK(RecordReplayBytecodeAllowed());
 
   Handle<Script> script(Script::cast(function->shared().script()), isolate);
-  CHECK(!RecordReplayIgnoreScript(*script));
+  CHECK(RecordReplayHasRegisteredScript(*script));
 
   InstrumentationSite& site = GetInstrumentationSite("Callback", index);
 

@@ -43,7 +43,11 @@ ScopeIterator::ScopeIterator(Isolate* isolate, FrameInspector* frame_inspector,
   TryParseAndRetrieveScopes(strategy);
 }
 
-ScopeIterator::~ScopeIterator() = default;
+ScopeIterator::~ScopeIterator() {
+  if (info_owned_) {
+    delete info_;
+  }
+}
 
 Handle<Object> ScopeIterator::GetFunctionDebugName() const {
   if (!function_.is_null()) return JSFunction::GetDebugName(function_);
@@ -198,6 +202,94 @@ class ScopeChainRetriever {
 
 }  // namespace
 
+static ParseInfo* ParseNoCache(UnoptimizedCompileFlags flags, Handle<Script> script,
+                               MaybeHandle<ScopeInfo> maybe_outer_scope,
+                               Handle<SharedFunctionInfo> shared_info,
+                               Isolate* isolate) {
+  // Even though the ParseInfo outlives this frame, this seems to only be used
+  // during the actual parse and can be a local variable.
+  UnoptimizedCompileState compile_state(isolate);
+
+  ParseInfo* info = new ParseInfo(isolate, flags, &compile_state);
+
+  const bool parse_result =
+      flags.is_toplevel()
+          ? parsing::ParseProgram(info, script, maybe_outer_scope,
+                                  isolate, parsing::ReportStatisticsMode::kNo)
+          : parsing::ParseFunction(info, shared_info, isolate,
+                                   parsing::ReportStatisticsMode::kNo);
+
+  if (!parse_result) {
+    delete info;
+    return nullptr;
+  }
+
+  return info;
+}
+
+typedef std::unordered_map<std::string, ParseInfo*> CachedParseMap;
+static CachedParseMap* gCachedParses;
+
+static bool gIsGeneratingCachedParse;
+
+// Data used in cached parses must use eternal handles instead of the current
+// handle scope, as the parsed data will outlive that handle scope.
+bool RecordReplayParseShouldUseEternalHandles() {
+  return IsMainThread() && gIsGeneratingCachedParse;
+}
+
+// When replaying the recorder might ask for the frames at many points within the
+// recording. Gathering these frames can be quite time consuming if the scope iterator
+// needs to re-parse the surrounding source repeatedly, so we use a cache. The contents
+// of the cache are never cleared.
+static ParseInfo* ParseWithCache(UnoptimizedCompileFlags flags, Handle<Script> script,
+                                 MaybeHandle<ScopeInfo> maybe_outer_scope,
+                                 Handle<SharedFunctionInfo> shared_info,
+                                 Isolate* isolate,
+                                 bool* info_owned) {
+  // Only use the cache when recording/replaying and we're handling commands
+  // sent by the recorder (in which case events are disallowed). We also don't
+  // cache when the outer scope was specified, as it isn't clear how this affects
+  // the parse results and is only used in evaluated scripts.
+  if (!recordreplay::AreEventsDisallowed() ||
+      !IsMainThread() ||
+      !maybe_outer_scope.is_null()) {
+    ParseInfo* info = ParseNoCache(flags, script, maybe_outer_scope, shared_info, isolate);
+    if (!info) {
+      return nullptr;
+    }
+    *info_owned = true;
+    return info;
+  }
+
+  std::ostringstream os;
+  os << script->id();
+  if (!flags.is_toplevel()) {
+    os << ":" << shared_info->StartPosition() << ":" << shared_info->EndPosition();
+  }
+  std::string key = os.str();
+
+  if (!gCachedParses) {
+    gCachedParses = new CachedParseMap();
+  }
+  auto iter = gCachedParses->find(key);
+  if (iter != gCachedParses->end()) {
+    *info_owned = false;
+    return iter->second;
+  }
+
+  gIsGeneratingCachedParse = true;
+
+  ParseInfo* info = ParseNoCache(flags, script, maybe_outer_scope, shared_info, isolate);
+
+  gIsGeneratingCachedParse = false;
+
+  gCachedParses->insert(std::pair<std::string, ParseInfo*>(key, info));
+
+  *info_owned = false;
+  return info;
+}
+
 void ScopeIterator::TryParseAndRetrieveScopes(ReparseStrategy strategy) {
   // Catch the case when the debugger stops in an internal function.
   Handle<SharedFunctionInfo> shared_info(function_->shared(), isolate_);
@@ -266,18 +358,10 @@ void ScopeIterator::TryParseAndRetrieveScopes(ReparseStrategy strategy) {
            scope_info->scope_type() == FUNCTION_SCOPE);
   }
 
-  UnoptimizedCompileState compile_state(isolate_);
+  info_ = ParseWithCache(flags, script, maybe_outer_scope,
+                         shared_info, isolate_, &info_owned_);
 
-  info_ = std::make_unique<ParseInfo>(isolate_, flags, &compile_state);
-
-  const bool parse_result =
-      flags.is_toplevel()
-          ? parsing::ParseProgram(info_.get(), script, maybe_outer_scope,
-                                  isolate_, parsing::ReportStatisticsMode::kNo)
-          : parsing::ParseFunction(info_.get(), shared_info, isolate_,
-                                   parsing::ReportStatisticsMode::kNo);
-
-  if (parse_result) {
+  if (info_) {
     DeclarationScope* literal_scope = info_->literal()->scope();
 
     ScopeChainRetriever scope_chain_retriever(literal_scope, function_,
