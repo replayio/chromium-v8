@@ -39,6 +39,10 @@ bool MaybeSpawnNativeContextIndependentCompilationJob(
 
 Object CompileOptimized(Isolate* isolate, Handle<JSFunction> function,
                         ConcurrencyMode mode) {
+  // The point at which optimized compilations occur can vary between recording
+  // and replaying.
+  recordreplay::AutoDisallowEvents disallow;
+
   StackLimitCheck check(isolate);
   if (check.JsHasOverflowed(kStackSpaceRequiredForCompilation * KB)) {
     return isolate->StackOverflow();
