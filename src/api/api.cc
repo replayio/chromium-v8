@@ -10572,10 +10572,60 @@ extern "C" V8_EXPORT void V8RecordReplayFinishRecording() {
   }
 }
 
+static std::vector<std::string>* gRecordReplayDisabledFeatures;
+static bool gRecordRelayDisableAllFeatures;
+
+extern "C" V8_EXPORT bool V8RecordReplayFeatureEnabled(const char* feature) {
+  if (gRecordRelayDisableAllFeatures) {
+    return false;
+  }
+  if (gRecordReplayDisabledFeatures) {
+    for (std::string disabled : *gRecordReplayDisabledFeatures) {
+      if (disabled == feature) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+static void RecordReplayInitializeDisabledFeatures() {
+  // Disabled features are specified with "," as a separator. "*" can be used to disable
+  // all features.
+  //
+  // This is used to disable functionality, typically to test the performance impact of
+  // recording-specific changes or narrow down the reason for incorrect behavior while
+  // recording.
+  const char* env = getenv("RECORD_REPLAY_DISABLE_FEATURES");
+  if (!env) {
+    return;
+  }
+
+  if (!strcmp(env, "*")) {
+    gRecordRelayDisableAllFeatures = true;
+    return;
+  }
+
+  gRecordReplayDisabledFeatures = new std::vector<std::string>();
+  while (true) {
+    const char* sep = strchr(env, ',');
+    if (sep) {
+      gRecordReplayDisabledFeatures->emplace_back(env, sep - env);
+      env = sep + 1;
+    } else {
+      if (strlen(env)) {
+        gRecordReplayDisabledFeatures->emplace_back(env);
+      }
+    }
+  }
+}
+
 static pthread_t gMainThread;
 
 void recordreplay::SetRecordingOrReplaying(void* handle) {
-  gRecordingOrReplaying = true;
+  RecordReplayInitializeDisabledFeatures();
+
+  gRecordingOrReplaying = V8RecordReplayFeatureEnabled("record-replay");
   gMainThread = pthread_self();
 
   RecordReplayLoadSymbol(handle, "RecordReplayRememberRecording", gRecordReplayRememberRecording);

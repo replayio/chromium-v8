@@ -3223,10 +3223,16 @@ extern bool RecordReplayHasDefaultContext();
 
 static void RecordReplayAddRegisteredScript(Script script);
 
+extern "C" bool V8RecordReplayFeatureEnabled(const char* feature);
+
 static void RecordReplayRegisterScript(Handle<Script> script) {
   CHECK(IsMainThread());
 
   if (!RecordReplayHasDefaultContext()) {
+    return;
+  }
+
+  if (!V8RecordReplayFeatureEnabled("register-scripts")) {
     return;
   }
 
