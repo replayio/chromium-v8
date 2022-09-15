@@ -10616,6 +10616,7 @@ static void RecordReplayInitializeDisabledFeatures() {
       if (strlen(env)) {
         gRecordReplayDisabledFeatures->emplace_back(env);
       }
+      break;
     }
   }
 }
