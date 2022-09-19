@@ -1088,6 +1088,10 @@ void RecordReplayAssertScriptedCaller(Isolate* isolate, const char* aWhy) {
   }
 }
 
+extern "C" void V8RecordReplayAssertScriptedCaller(const char* why) {
+  RecordReplayAssertScriptedCaller(Isolate::Current(), why);
+}
+
 // Assertion and instrumentation site indexes embedded in bytecodes are offset
 // by this value. This forces the bytecode emitter to always use four bytes to
 // encode the index, so that bytecode offsets will be stable between recording
