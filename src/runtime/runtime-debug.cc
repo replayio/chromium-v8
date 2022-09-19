@@ -1081,20 +1081,6 @@ static std::string GetStackLocation(Isolate* isolate) {
   return std::string(location);
 }
 
-void RecordReplayAssertScriptedCaller(Isolate* isolate, const char* aWhy) {
-  if (recordreplay::IsRecordingOrReplaying()) {
-    std::string location = GetStackLocation(isolate);
-    recordreplay::Assert("ScriptedCaller %s %s", aWhy, location.c_str());
-  }
-}
-
-extern "C" std::string V8RecordReplayGetScriptedCaller() {
-  if (recordreplay::IsRecordingOrReplaying()) {
-    return GetStackLocation(Isolate::Current());
-  }
-  return "";
-}
-
 // Assertion and instrumentation site indexes embedded in bytecodes are offset
 // by this value. This forces the bytecode emitter to always use four bytes to
 // encode the index, so that bytecode offsets will be stable between recording
@@ -1318,4 +1304,12 @@ RUNTIME_FUNCTION(Runtime_RecordReplayInstrumentationGenerator) {
 }
 
 }  // namespace internal
+
+std::string RecordReplayGetScriptedCaller() {
+  if (recordreplay::IsRecordingOrReplaying()) {
+    return GetStackLocation(Isolate::Current());
+  }
+  return "";
+}
+
 }  // namespace v8
