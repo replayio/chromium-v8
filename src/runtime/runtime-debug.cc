@@ -1088,8 +1088,11 @@ void RecordReplayAssertScriptedCaller(Isolate* isolate, const char* aWhy) {
   }
 }
 
-extern "C" void V8RecordReplayAssertScriptedCaller(const char* why) {
-  RecordReplayAssertScriptedCaller(Isolate::Current(), why);
+extern "C" std::string V8RecordReplayGetScriptedCaller() {
+  if (recordreplay::IsRecordingOrReplaying()) {
+    return GetStackLocation(Isolate::Current());
+  }
+  return "";
 }
 
 // Assertion and instrumentation site indexes embedded in bytecodes are offset
