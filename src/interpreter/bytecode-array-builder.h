@@ -465,7 +465,7 @@ class V8_EXPORT_PRIVATE BytecodeArrayBuilder final {
   // Increment the block counter at the given slot (block code coverage).
   BytecodeArrayBuilder& IncBlockCounter(int slot);
 
-  BytecodeArrayBuilder& RecordReplayIncExecutionProgressCounter();
+  BytecodeArrayBuilder& RecordReplayOnProgress();
   BytecodeArrayBuilder& RecordReplayAssertValue(const std::string& desc);
   BytecodeArrayBuilder& RecordReplayInstrumentation(const char* kind,
                                                     int source_position = kNoSourcePosition);

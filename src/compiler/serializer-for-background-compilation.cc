@@ -111,6 +111,7 @@ namespace compiler {
   V(Illegal)                         \
   V(Wide)                            \
   V(RecordReplayIncExecutionProgressCounter) \
+  V(RecordReplayNotifyActivity)      \
   V(RecordReplayInstrumentation)     \
   V(RecordReplayInstrumentationGenerator) \
   V(RecordReplayAssertValue)

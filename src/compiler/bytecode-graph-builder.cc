@@ -3702,6 +3702,14 @@ void BytecodeGraphBuilder::VisitRecordReplayIncExecutionProgressCounter() {
   environment()->RecordAfterState(node, Environment::kAttachFrameState);
 }
 
+void BytecodeGraphBuilder::VisitRecordReplayNotifyActivity() {
+  PrepareEagerCheckpoint();
+  const Operator* op = javascript()->CallRuntime(Runtime::kRecordReplayNotifyActivity);
+
+  Node* node = NewNode(op);
+  environment()->RecordAfterState(node, Environment::kAttachFrameState);
+}
+
 void BytecodeGraphBuilder::VisitRecordReplayInstrumentation() {
   PrepareEagerCheckpoint();
   Node* closure = GetFunctionClosure();

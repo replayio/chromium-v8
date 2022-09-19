@@ -1035,6 +1035,13 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
   return ReadOnlyRoots(isolate).undefined_value();
 }
 
+extern "C" void V8RecordReplayNotifyActivity();
+
+RUNTIME_FUNCTION(Runtime_RecordReplayNotifyActivity) {
+  V8RecordReplayNotifyActivity();
+  return ReadOnlyRoots(isolate).undefined_value();
+}
+
 static std::string GetStackLocation(Isolate* isolate) {
   char location[1024];
   strcpy(location, "<no frame>");
