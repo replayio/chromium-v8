@@ -1307,7 +1307,7 @@ RUNTIME_FUNCTION(Runtime_RecordReplayInstrumentationGenerator) {
 
 std::string RecordReplayGetScriptedCaller() {
   if (recordreplay::IsRecordingOrReplaying()) {
-    return GetStackLocation(Isolate::Current());
+    return internal::GetStackLocation(internal::Isolate::Current());
   }
   return "";
 }
