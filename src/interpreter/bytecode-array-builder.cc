@@ -194,7 +194,7 @@ void BytecodeArrayBuilder::WriteJump(BytecodeNode* node, BytecodeLabel* label) {
 
 void BytecodeArrayBuilder::WriteJumpLoop(BytecodeNode* node,
                                          BytecodeLoopHeader* loop_header) {
-  RecordReplayIncExecutionProgressCounter();
+  RecordReplayOnProgress();
   AttachOrEmitDeferredSourceInfo(node);
   bytecode_array_writer_.WriteJumpLoop(node, loop_header);
 }
@@ -1366,9 +1366,11 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::IncBlockCounter(
   return *this;
 }
 
-BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayIncExecutionProgressCounter() {
+BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayOnProgress() {
   if (emit_record_replay_opcodes_) {
     OutputRecordReplayIncExecutionProgressCounter();
+  } else if (recordreplay::IsReplaying()) {
+    OutputRecordReplayNotifyActivity();
   }
   return *this;
 }

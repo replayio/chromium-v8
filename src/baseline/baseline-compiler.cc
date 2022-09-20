@@ -2318,6 +2318,10 @@ void BaselineCompiler::VisitRecordReplayIncExecutionProgressCounter() {
               __ FunctionOperand());
 }
 
+void BaselineCompiler::VisitRecordReplayNotifyActivity() {
+  CallRuntime(Runtime::kRecordReplayNotifyActivity);
+}
+
 void BaselineCompiler::VisitRecordReplayInstrumentation() {
   uint32_t index = Index(0);
   CallRuntime(Runtime::kRecordReplayInstrumentation,

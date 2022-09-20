@@ -9962,6 +9962,7 @@ static size_t (*gRecordReplayPaintStart)();
 static void (*gRecordReplayPaintFinished)(size_t bookmark);
 static void (*gRecordReplaySetPaintCallback)(char* (*callback)(const char*, int));
 static void (*gRecordReplayOnDebuggerStatement)();
+static void (*gRecordReplayNotifyActivity)();
 static void (*gRecordReplayAddMetadata)(const char* metadata);
 static void* (*gJSONCreateString)(const char*);
 static void* (*gJSONCreateObject)(size_t, const char**, void**);
@@ -10395,7 +10396,7 @@ extern "C" int V8RecordReplayPointerId(const void* ptr) {
 }
 
 void* recordreplay::IdPointer(int id) {
-  CHECK(IsRecordingOrReplaying());
+  DCHECK(IsRecordingOrReplaying());
   return gRecordReplayIdPointer(id);
 }
 
@@ -10411,12 +10412,12 @@ extern "C" size_t V8RecordReplayNewBookmark() {
 }
 
 extern "C" size_t V8RecordReplayPaintStart() {
-  CHECK(recordreplay::IsRecordingOrReplaying());
+  DCHECK(recordreplay::IsRecordingOrReplaying());
   return internal::gRecordReplayHasCheckpoint ? gRecordReplayPaintStart() : 0;
 }
 
 extern "C" void V8RecordReplayPaintFinished(size_t bookmark) {
-  CHECK(recordreplay::IsRecordingOrReplaying());
+  DCHECK(recordreplay::IsRecordingOrReplaying());
   if (bookmark) {
     internal::gRecordReplayHasPaint = true;
     gRecordReplayPaintFinished(bookmark);
@@ -10424,15 +10425,19 @@ extern "C" void V8RecordReplayPaintFinished(size_t bookmark) {
 }
 
 extern "C" void V8RecordReplaySetPaintCallback(char* (*callback)(const char*, int)) {
-  CHECK(recordreplay::IsRecordingOrReplaying());
+  DCHECK(recordreplay::IsRecordingOrReplaying());
   gRecordReplaySetPaintCallback(callback);
 }
 
 extern "C" void V8RecordReplayOnDebuggerStatement() {
-  CHECK(recordreplay::IsRecordingOrReplaying());
+  DCHECK(recordreplay::IsRecordingOrReplaying());
   if (internal::gRecordReplayHasCheckpoint) {
     gRecordReplayOnDebuggerStatement();
   }
+}
+
+extern "C" void V8RecordReplayNotifyActivity() {
+  gRecordReplayNotifyActivity();
 }
 
 template <typename Src, typename Dst>
@@ -10666,6 +10671,7 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   RecordReplayLoadSymbol(handle, "RecordReplayPaintFinished", gRecordReplayPaintFinished);
   RecordReplayLoadSymbol(handle, "RecordReplaySetPaintCallback", gRecordReplaySetPaintCallback);
   RecordReplayLoadSymbol(handle, "RecordReplayOnDebuggerStatement", gRecordReplayOnDebuggerStatement);
+  RecordReplayLoadSymbol(handle, "RecordReplayNotifyActivity", gRecordReplayNotifyActivity);
   RecordReplayLoadSymbol(handle, "RecordReplayAddMetadata", gRecordReplayAddMetadata);
   RecordReplayLoadSymbol(handle, "RecordReplayJSONCreateString", gJSONCreateString);
   RecordReplayLoadSymbol(handle, "RecordReplayJSONCreateObject", gJSONCreateObject);

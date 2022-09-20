@@ -1428,7 +1428,7 @@ void BytecodeGenerator::GenerateBytecodeBody() {
   }
 
   if (recordreplay::IsRecordingOrReplaying()) {
-    builder()->RecordReplayIncExecutionProgressCounter();
+    builder()->RecordReplayOnProgress();
 
     int num_parameters = closure_scope()->num_parameters();
     for (int i = 0; i < num_parameters; i++) {
@@ -1888,7 +1888,7 @@ void BytecodeGenerator::BuildTryCatch(
   // Unlike in gecko, we need to increment the progress counter at catch
   // blocks so we can detect when exceptions are initially thrown vs. being
   // rethrown. See Runtime_UnwindAndFindExceptionHandler.
-  builder()->RecordReplayIncExecutionProgressCounter();
+  builder()->RecordReplayOnProgress();
 
   builder()->RecordReplayAssertValue("BeginCatch");
 
@@ -1954,7 +1954,7 @@ void BytecodeGenerator::BuildTryFinally(
   Register message = context;  // Reuse register.
 
   // See BuildTryCatch for why we increment the progress counter here.
-  builder()->RecordReplayIncExecutionProgressCounter();
+  builder()->RecordReplayOnProgress();
   builder()->RecordReplayAssertValue("BeginFinally");
 
   // Clear message object as we enter the finally block.
@@ -4366,7 +4366,7 @@ void BytecodeGenerator::BuildSuspendPoint(int position) {
   // [[input_or_debug_pos]] slot of the generator object.
   builder()->ResumeGenerator(generator_object(), registers);
 
-  builder()->RecordReplayIncExecutionProgressCounter();
+  builder()->RecordReplayOnProgress();
   builder()->RecordReplayInstrumentationGenerator("entry", generator_object());
 }
 
