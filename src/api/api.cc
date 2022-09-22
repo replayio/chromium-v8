@@ -9957,7 +9957,12 @@ static void* (*gRecordReplayIdPointer)(int id);
 static void (*gRecordReplayFinishRecording)();
 static char* (*gGetRecordingId)();
 static char* (*gGetUnusableRecordingReason)();
-static size_t (*gRecordReplayNewBookmark)();
+static uint64_t (*gRecordReplayNewBookmark)();
+static void (*gRecordReplayOnNetworkRequest)(const char* id, const char* kind, uint64_t bookmark);
+static void (*gRecordReplayOnNetworkRequestEvent)(const char* id);
+static void (*gRecordReplayOnNetworkStreamStart)(const char* id, const char* kind, const char* parentId);
+static void (*gRecordReplayOnNetworkStreamData)(const char* id, size_t offset, size_t length, uint64_t bookmark);
+static void (*gRecordReplayOnNetworkStreamEnd)(const char* id, size_t length);
 static size_t (*gRecordReplayPaintStart)();
 static void (*gRecordReplayPaintFinished)(size_t bookmark);
 static void (*gRecordReplaySetPaintCallback)(char* (*callback)(const char*, int));
@@ -10429,11 +10434,36 @@ extern "C" void* V8RecordReplayIdPointer(int id) {
   return recordreplay::IdPointer(id);
 }
 
-extern "C" size_t V8RecordReplayNewBookmark() {
+extern "C" uint64_t V8RecordReplayNewBookmark() {
   if (internal::gRecordReplayHasCheckpoint) {
     return gRecordReplayNewBookmark();
   }
   return 0;
+}
+
+extern "C" void V8RecordReplayOnNetworkRequest(const char* id, const char* kind, uint64_t bookmark) {
+  CHECK(recordreplay::IsRecordingOrReplaying());
+  gRecordReplayOnNetworkRequest(id, kind, bookmark);
+}
+
+extern "C" void V8RecordReplayOnNetworkRequestEvent(const char* id) {
+  CHECK(recordreplay::IsRecordingOrReplaying());
+  gRecordReplayOnNetworkRequestEvent(id);
+}
+
+extern "C" void V8RecordReplayOnNetworkStreamStart(const char* id, const char* kind, const char* parentId) {
+  CHECK(recordreplay::IsRecordingOrReplaying());
+  gRecordReplayOnNetworkStreamStart(id, kind, parentId);
+}
+
+extern "C" void V8RecordReplayOnNetworkStreamData(const char* id, size_t offset, size_t length, uint64_t bookmark) {
+  CHECK(recordreplay::IsRecordingOrReplaying());
+  gRecordReplayOnNetworkStreamData(id, offset, length, bookmark);
+}
+
+extern "C" void V8RecordReplayOnNetworkStreamEnd(const char* id, size_t length) {
+  CHECK(recordreplay::IsRecordingOrReplaying());
+  gRecordReplayOnNetworkStreamEnd(id, length);
 }
 
 extern "C" size_t V8RecordReplayPaintStart() {
@@ -10692,6 +10722,11 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   RecordReplayLoadSymbol(handle, "RecordReplayGetRecordingId", gGetRecordingId);
   RecordReplayLoadSymbol(handle, "RecordReplayGetUnusableRecordingReason", gGetUnusableRecordingReason);
   RecordReplayLoadSymbol(handle, "RecordReplayNewBookmark", gRecordReplayNewBookmark);
+  RecordReplayLoadSymbol(handle, "RecordReplayOnNetworkRequest", gRecordReplayOnNetworkRequest);
+  RecordReplayLoadSymbol(handle, "RecordReplayOnNetworkRequestEvent", gRecordReplayOnNetworkRequestEvent);
+  RecordReplayLoadSymbol(handle, "RecordReplayOnNetworkStreamStart", gRecordReplayOnNetworkStreamStart);
+  RecordReplayLoadSymbol(handle, "RecordReplayOnNetworkStreamData", gRecordReplayOnNetworkStreamData);
+  RecordReplayLoadSymbol(handle, "RecordReplayOnNetworkStreamEnd", gRecordReplayOnNetworkStreamEnd);
   RecordReplayLoadSymbol(handle, "RecordReplayPaintStart", gRecordReplayPaintStart);
   RecordReplayLoadSymbol(handle, "RecordReplayPaintFinished", gRecordReplayPaintFinished);
   RecordReplayLoadSymbol(handle, "RecordReplaySetPaintCallback", gRecordReplaySetPaintCallback);
