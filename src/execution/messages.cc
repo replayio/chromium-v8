@@ -73,7 +73,7 @@ void MessageHandler::DefaultMessageReport(Isolate* isolate,
   }
 }
 
-extern "C" size_t V8RecordReplayNewBookmark();
+extern "C" uint64_t V8RecordReplayNewBookmark();
 
 Handle<JSMessageObject> MessageHandler::MakeMessageObject(
     Isolate* isolate, MessageTemplate message, const MessageLocation* location,
