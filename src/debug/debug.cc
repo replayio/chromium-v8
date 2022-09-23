@@ -3216,7 +3216,9 @@ static Handle<Object> RecordReplayCurrentGeneratorId(Isolate* isolate, Handle<Ob
 extern void RecordReplayAddInterestingSource(const char* url);
 
 bool RecordReplayIgnoreScriptByURL(const char* url) {
-  return strncmp(url, "http", 4);
+  // Watch out for the special script used by chromium for injecting record/replay
+  // specific logic.
+  return !strcmp(url, "record-replay-internal");
 }
 
 extern bool RecordReplayHasDefaultContext();
