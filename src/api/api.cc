@@ -10300,6 +10300,31 @@ extern "C" void V8RecordReplayNewCheckpoint() {
   recordreplay::NewCheckpoint();
 }
 
+// The BrowserEvent callback junction is a support for communicating
+// events that occur in the browser outside of the v8 codebase.
+// This is necessary because chrome's architecture takes pains to
+// isolate components that are even running on the same process.
+// The initial user for this API is the network inspector agent,
+// which communicates network events to the backend.
+
+// `payload` should be the serialized json data for the event.
+typedef void (*RecordReplayBrowserEventCallback)(const char* name, const char* payload);
+static RecordReplayBrowserEventCallback gBrowserEventCallback = nullptr;
+
+extern "C" void V8RecordReplayBrowserEvent(const char* name, const char* payload) {
+  assert(recordreplay::IsRecordingOrReplaying());
+  if (gBrowserEventCallback) {
+    gBrowserEventCallback(name, payload);
+  }
+}
+
+extern "C" void V8RecordReplayRegisterBrowserEventCallback(
+    RecordReplayBrowserEventCallback callback) {
+  assert(recordreplay::IsRecordingOrReplaying());
+  assert(!gBrowserEventCallback);
+  gBrowserEventCallback = callback;
+}
+
 size_t recordreplay::CreateOrderedLock(const char* name) {
   if (IsRecordingOrReplaying()) {
     return gRecordReplayCreateOrderedLock(name);
