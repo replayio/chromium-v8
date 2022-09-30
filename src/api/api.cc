@@ -10443,27 +10443,37 @@ extern "C" uint64_t V8RecordReplayNewBookmark() {
 
 extern "C" void V8RecordReplayOnNetworkRequest(const char* id, const char* kind, uint64_t bookmark) {
   CHECK(recordreplay::IsRecordingOrReplaying());
-  gRecordReplayOnNetworkRequest(id, kind, bookmark);
+  if (internal::gRecordReplayHasCheckpoint) {
+    gRecordReplayOnNetworkRequest(id, kind, bookmark);
+  }
 }
 
 extern "C" void V8RecordReplayOnNetworkRequestEvent(const char* id) {
   CHECK(recordreplay::IsRecordingOrReplaying());
-  gRecordReplayOnNetworkRequestEvent(id);
+  if (internal::gRecordReplayHasCheckpoint) {
+    gRecordReplayOnNetworkRequestEvent(id);
+  }
 }
 
 extern "C" void V8RecordReplayOnNetworkStreamStart(const char* id, const char* kind, const char* parentId) {
   CHECK(recordreplay::IsRecordingOrReplaying());
-  gRecordReplayOnNetworkStreamStart(id, kind, parentId);
+  if (internal::gRecordReplayHasCheckpoint) {
+    gRecordReplayOnNetworkStreamStart(id, kind, parentId);
+  }
 }
 
 extern "C" void V8RecordReplayOnNetworkStreamData(const char* id, size_t offset, size_t length, uint64_t bookmark) {
   CHECK(recordreplay::IsRecordingOrReplaying());
-  gRecordReplayOnNetworkStreamData(id, offset, length, bookmark);
+  if (internal::gRecordReplayHasCheckpoint) {
+    gRecordReplayOnNetworkStreamData(id, offset, length, bookmark);
+  }
 }
 
 extern "C" void V8RecordReplayOnNetworkStreamEnd(const char* id, size_t length) {
   CHECK(recordreplay::IsRecordingOrReplaying());
-  gRecordReplayOnNetworkStreamEnd(id, length);
+  if (internal::gRecordReplayHasCheckpoint) {
+    gRecordReplayOnNetworkStreamEnd(id, length);
+  }
 }
 
 extern "C" size_t V8RecordReplayPaintStart() {
