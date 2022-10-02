@@ -1696,8 +1696,6 @@ class V8_NODISCARD OffThreadParseInfoScope {
 }  // namespace
 
 void BackgroundCompileTask::Run() {
-  recordreplay::Assert("BackgroundCompileTask::Run Start");
-
   TimedHistogramScope timer(timer_);
   base::Optional<OffThreadParseInfoScope> off_thread_scope(
       base::in_place, info_.get(), worker_thread_runtime_call_stats_,
@@ -1773,8 +1771,6 @@ void BackgroundCompileTask::Run() {
       info_.reset();
     }
   }
-
-  recordreplay::Assert("BackgroundCompileTask::Run Done");
 }
 
 MaybeHandle<SharedFunctionInfo> BackgroundCompileTask::GetOuterFunctionSfi(
@@ -2870,8 +2866,6 @@ MaybeHandle<SharedFunctionInfo> Compiler::GetSharedFunctionInfoForScript(
     ScriptOriginOptions origin_options, v8::Extension* extension,
     ScriptData* cached_data, ScriptCompiler::CompileOptions compile_options,
     ScriptCompiler::NoCacheReason no_cache_reason, NativesFlag natives) {
-  recordreplay::Assert("Compiler::GetSharedFunctionInfoForScript");
-
   ScriptCompileTimerScope compile_timer(isolate, no_cache_reason);
 
   if (compile_options == ScriptCompiler::kNoCompileOptions ||
@@ -2956,7 +2950,6 @@ MaybeHandle<SharedFunctionInfo> Compiler::GetSharedFunctionInfoForScript(
 
       flags.set_is_eager(compile_options == ScriptCompiler::kEagerCompile);
 
-      recordreplay::Assert("Compiler::GetSharedFunctionInfoForScript #1");
       maybe_result = CompileScriptOnMainThread(
           flags, source, script_details, origin_options, natives, extension,
           isolate, &is_compiled_scope);

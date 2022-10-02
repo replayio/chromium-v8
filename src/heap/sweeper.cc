@@ -102,9 +102,6 @@ class Sweeper::SweeperJob final : public JobTask {
         worker_count +
             (sweeper_->ConcurrentSweepingPageCount() + kPagePerTask - 1) /
                 kPagePerTask);
-    // https://github.com/RecordReplay/backend/issues/5661
-    recordreplay::Assert("Sweeper::SweeperJob::GetMaxConcurrency %zu %zu",
-                        rv, worker_count);
     return rv;
   }
 
