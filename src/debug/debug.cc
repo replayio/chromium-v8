@@ -3057,8 +3057,10 @@ static Handle<Object> RecordReplayConvertFunctionOffsetToLocation(Isolate* isola
   }
 
   // If there wasn't an offset or an unexpected unknown offset was encountered,
-  // fallback to the position of the function itself.
-  if (!line && !column) {
+  // fallback to the position of the function itself. Note that if we successfully
+  // looked up a breakpoint position the line will not be zero because it is 1-indexed,
+  // see GetInstrumentationSiteLocation.
+  if (!line) {
     Script::PositionInfo info;
     Script::GetPositionInfo(script, function_source_position, &info, Script::WITH_OFFSET);
 
