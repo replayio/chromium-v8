@@ -705,23 +705,19 @@ void InjectedScript::setLastEvaluationResult(v8::Local<v8::Value> result) {
 Response InjectedScript::resolveCallArgument(
     protocol::Runtime::CallArgument* callArgument,
     v8::Local<v8::Value>* result) {
-  v8::recordreplay::Assert("InjectedScript::resolveCallArgument Start");
   if (callArgument->hasObjectId()) {
     std::unique_ptr<RemoteObjectId> remoteObjectId;
     Response response =
         RemoteObjectId::parse(callArgument->getObjectId(""), &remoteObjectId);
     if (!response.IsSuccess()) {
-      v8::recordreplay::Assert("InjectedScript::resolveCallArgument #1");
       return response;
     }
     if (remoteObjectId->contextId() != m_context->contextId() ||
         remoteObjectId->isolateId() != m_context->inspector()->isolateId()) {
-      v8::recordreplay::Assert("InjectedScript::resolveCallArgument #2");
       return Response::ServerError(
           "Argument should belong to the same JavaScript world as target "
           "object");
     }
-    v8::recordreplay::Assert("InjectedScript::resolveCallArgument #3");
     return findObject(*remoteObjectId, result);
   }
   if (callArgument->hasValue() || callArgument->hasUnserializableValue()) {
@@ -747,7 +743,6 @@ Response InjectedScript::resolveCallArgument(
              ->compileAndRunInternalScript(
                  m_context->context(), toV8String(m_context->isolate(), value))
              .ToLocal(result)) {
-      v8::recordreplay::Assert("InjectedScript::resolveCallArgument #4");
       return Response::ServerError(
           "Couldn't parse value object in call argument");
     }
@@ -975,38 +970,24 @@ InjectedScript::ObjectScope::ObjectScope(V8InspectorSessionImpl* session,
 
 InjectedScript::ObjectScope::~ObjectScope() = default;
 
-static void RecordReplayAssertIfNotDisallowed(const char* text) {
-  if (!v8::recordreplay::AreEventsDisallowed()) {
-    v8::recordreplay::Assert("%s", text);
-  }
-}
-
 Response InjectedScript::ObjectScope::findInjectedScript(
     V8InspectorSessionImpl* session) {
-  if (!v8::recordreplay::AreEventsDisallowed()) {
-    v8::recordreplay::Assert("InjectedScript::ObjectScope::findInjectedScript Start %s",
-                             m_remoteObjectId.utf8().c_str());
-  }
   std::unique_ptr<RemoteObjectId> remoteId;
   Response response = RemoteObjectId::parse(m_remoteObjectId, &remoteId);
   if (!response.IsSuccess()) {
-    RecordReplayAssertIfNotDisallowed("InjectedScript::ObjectScope::findInjectedScript #1");
     return response;
   }
   InjectedScript* injectedScript = nullptr;
   response = session->findInjectedScript(remoteId.get(), injectedScript);
   if (!response.IsSuccess()) {
-    RecordReplayAssertIfNotDisallowed("InjectedScript::ObjectScope::findInjectedScript #2");
     return response;
   }
   m_objectGroupName = injectedScript->objectGroupName(*remoteId);
   response = injectedScript->findObject(*remoteId, &m_object);
   if (!response.IsSuccess()) {
-    RecordReplayAssertIfNotDisallowed("InjectedScript::ObjectScope::findInjectedScript #3");
     return response;
   }
   m_injectedScript = injectedScript;
-  RecordReplayAssertIfNotDisallowed("InjectedScript::ObjectScope::findInjectedScript Done");
   return Response::Success();
 }
 

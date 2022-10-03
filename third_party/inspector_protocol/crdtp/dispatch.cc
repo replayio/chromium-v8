@@ -439,15 +439,12 @@ DomainDispatcher::Callback::Callback(
 void DomainDispatcher::Callback::sendIfActive(
     std::unique_ptr<Serializable> partialMessage,
     const DispatchResponse& response) {
-  v8::recordreplay::Assert("DomainDispatcher::Callback::sendIfActive Start");
   if (!backend_impl_ || !backend_impl_->get()) {
-    v8::recordreplay::Assert("DomainDispatcher::Callback::sendIfActive #1");
     return;
   }
   backend_impl_->get()->sendResponse(call_id_, response,
                                      std::move(partialMessage));
   backend_impl_ = nullptr;
-  v8::recordreplay::Assert("DomainDispatcher::Callback::sendIfActive Done");
 }
 
 void DomainDispatcher::Callback::fallThroughIfActive() {

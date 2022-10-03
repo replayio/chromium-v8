@@ -889,7 +889,6 @@ v8::Local<GeneratorObject> GeneratorObject::Cast(v8::Local<v8::Value> value) {
 MaybeLocal<v8::Value> EvaluateGlobal(v8::Isolate* isolate,
                                      v8::Local<v8::String> source,
                                      EvaluateGlobalMode mode, bool repl) {
-  recordreplay::Assert("EvaluateGlobal");
   i::Isolate* internal_isolate = reinterpret_cast<i::Isolate*>(isolate);
   PREPARE_FOR_DEBUG_INTERFACE_EXECUTION_WITH_ISOLATE(internal_isolate, Value);
   i::REPLMode repl_mode = repl ? i::REPLMode::kYes : i::REPLMode::kNo;

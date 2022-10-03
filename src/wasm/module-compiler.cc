@@ -181,8 +181,6 @@ class CompilationUnitQueues {
   }
 
   Queue* GetQueueForTask(int task_id) {
-    recordreplay::Assert("GetQueueForTask Start %d", task_id);
-
     int required_queues = task_id + 1;
     {
       base::MutexGuard queues_guard(&queues_mutex_);
@@ -194,8 +192,6 @@ class CompilationUnitQueues {
     // Otherwise increase the number of queues.
     base::MutexGuard queues_guard(&queues_mutex_);
     int num_queues = static_cast<int>(queues_.size());
-
-    recordreplay::Assert("GetQueueForTask #1 %d %d", num_queues, required_queues);
 
     while (num_queues < required_queues) {
       int steal_from = num_queues + 1;
@@ -1326,9 +1322,6 @@ CompilationExecutionResult ExecuteCompilationUnits(
   STATIC_ASSERT(kMainTaskId == 0);
   int task_id = delegate ? (int{delegate->GetTaskId()} + 1) : kMainTaskId;
 
-  recordreplay::Assert("ExecuteCompilationUnits #2 %d %d",
-                       task_id, delegate ? delegate->GetTaskId() : -1000);
-
   DCHECK_LE(0, task_id);
   CompilationUnitQueues::Queue* queue;
   base::Optional<WasmCompilationUnit> unit;
@@ -1362,21 +1355,15 @@ CompilationExecutionResult ExecuteCompilationUnits(
           engine, &env.value(), wire_bytes, counters, &detected_features);
       results_to_publish.emplace_back(std::move(result));
 
-      recordreplay::Assert("ExecuteCompilationUnits #5");
-
       bool yield = delegate && delegate->ShouldYield();
-
-      recordreplay::Assert("ExecuteCompilationUnits #6 %d", yield);
 
       // (synchronized): Publish the compilation result and get the next unit.
       BackgroundCompileScope compile_scope(native_module);
       if (compile_scope.cancelled()) {
-        recordreplay::Assert("ExecuteCompilationUnits #7");
         return kYield;
       }
 
       if (!results_to_publish.back().succeeded()) {
-        recordreplay::Assert("ExecuteCompilationUnits #8");
         compile_scope.compilation_state()->SetError();
         return kNoMoreUnits;
       }
@@ -1385,7 +1372,6 @@ CompilationExecutionResult ExecuteCompilationUnits(
       if (yield ||
           !(unit = compile_scope.compilation_state()->GetNextCompilationUnit(
                 queue, baseline_only))) {
-        recordreplay::Assert("ExecuteCompilationUnits #9");
         std::vector<std::unique_ptr<WasmCode>> unpublished_code =
             compile_scope.native_module()->AddCompiledCode(
                 VectorOf(std::move(results_to_publish)));
@@ -1394,12 +1380,8 @@ CompilationExecutionResult ExecuteCompilationUnits(
             std::move(unpublished_code));
         compile_scope.compilation_state()->OnCompilationStopped(
             detected_features);
-        recordreplay::Assert("ExecuteCompilationUnits #10");
         return yield ? kYield : kNoMoreUnits;
       }
-
-      recordreplay::Assert("ExecuteCompilationUnits #10.1 %d %d",
-                           (int)unit->tier(), (int)results_to_publish.size());
 
       // Before executing a TurboFan unit, ensure to publish all previous
       // units. If we compiled Liftoff before, we need to publish them anyway
@@ -1409,14 +1391,12 @@ CompilationExecutionResult ExecuteCompilationUnits(
       // contention when all threads publish at the end.
       if (unit->tier() == ExecutionTier::kTurbofan ||
           queue->ShouldPublish(static_cast<int>(results_to_publish.size()))) {
-        recordreplay::Assert("ExecuteCompilationUnits #11");
         std::vector<std::unique_ptr<WasmCode>> unpublished_code =
             compile_scope.native_module()->AddCompiledCode(
                 VectorOf(std::move(results_to_publish)));
         results_to_publish.clear();
         compile_scope.compilation_state()->SchedulePublishCompilationResults(
             std::move(unpublished_code));
-        recordreplay::Assert("ExecuteCompilationUnits #12");
       }
     }
   }
@@ -1686,8 +1666,6 @@ class BackgroundCompileJob final : public JobTask {
         async_counters_(std::move(async_counters)) {}
 
   void Run(JobDelegate* delegate) override {
-    recordreplay::Assert("BackgroundCompileJob::Run %d",
-                         delegate ? delegate->GetTaskId() : -1000);
     auto engine_scope = engine_barrier_->TryLock();
     if (!engine_scope) return;
     ExecuteCompilationUnits(native_module_, async_counters_.get(), delegate,
@@ -1695,20 +1673,16 @@ class BackgroundCompileJob final : public JobTask {
   }
 
   size_t GetMaxConcurrency(size_t worker_count) const override {
-    recordreplay::Assert("BackgroundCompileJob::GetMaxConcurrency Start");
     BackgroundCompileScope compile_scope(native_module_);
     if (compile_scope.cancelled()) {
-      recordreplay::Assert("BackgroundCompileJob::GetMaxConcurrency #1");
       return 0;
     }
     // NumOutstandingCompilations() does not reflect the units that running
     // workers are processing, thus add the current worker count to that number.
-    size_t rv = std::min(
+    return std::min(
         static_cast<size_t>(FLAG_wasm_num_compilation_tasks),
         worker_count +
             compile_scope.compilation_state()->NumOutstandingCompilations());
-    recordreplay::Assert("BackgroundCompileJob::GetMaxConcurrency Done %lu", rv);
-    return rv;
   }
 
  private:
@@ -1974,8 +1948,6 @@ void AsyncCompileJob::PrepareRuntimeObjects() {
 // This function assumes that it is executed in a HandleScope, and that a
 // context is set on the isolate.
 void AsyncCompileJob::FinishCompile(bool is_after_cache_hit) {
-  recordreplay::Assert("AsyncCompileJob::FinishCompile Start");
-
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("v8.wasm.detailed"),
                "wasm.FinishAsyncCompile");
   bool is_after_deserialization = !module_object_.is_null();
@@ -2056,8 +2028,6 @@ void AsyncCompileJob::FinishCompile(bool is_after_cache_hit) {
   native_module_->LogWasmCodes(isolate_, module_object_->script());
 
   FinishModule();
-
-  recordreplay::Assert("AsyncCompileJob::FinishCompile Done");
 }
 
 void AsyncCompileJob::DecodeFailed(const WasmError& error) {
@@ -3048,7 +3018,6 @@ void CompilationStateImpl::InitializeRecompilation(
 }
 
 void CompilationStateImpl::AddCallback(CompilationState::callback_t callback) {
-  recordreplay::Assert("CompilationStateImpl::AddCallback Start");
   base::MutexGuard callbacks_guard(&callbacks_mutex_);
   // Immediately trigger events that already happened.
   for (auto event : {CompilationEvent::kFinishedExportWrappers,
@@ -3056,7 +3025,6 @@ void CompilationStateImpl::AddCallback(CompilationState::callback_t callback) {
                      CompilationEvent::kFinishedTopTierCompilation,
                      CompilationEvent::kFailedCompilation}) {
     if (finished_events_.contains(event)) {
-      recordreplay::Assert("CompilationStateImpl::AddCallback #1");
       callback(event);
     }
   }
@@ -3066,7 +3034,6 @@ void CompilationStateImpl::AddCallback(CompilationState::callback_t callback) {
   if (!finished_events_.contains_any(kFinalEvents)) {
     callbacks_.emplace_back(std::move(callback));
   }
-  recordreplay::Assert("CompilationStateImpl::AddCallback Done");
 }
 
 void CompilationStateImpl::AddCompilationUnits(
@@ -3394,8 +3361,6 @@ size_t CompilationStateImpl::NumOutstandingCompilations() const {
   size_t outstanding_wrappers =
       outstanding_js_to_wasm_wrappers_.load(std::memory_order_relaxed);
   size_t outstanding_functions = compilation_unit_queues_.GetTotalSize();
-  recordreplay::Assert("CompilationStateImpl::NumOutstandingCompilations %lu %lu",
-                       outstanding_wrappers, outstanding_functions);
   return outstanding_wrappers + outstanding_functions;
 }
 
@@ -3432,10 +3397,7 @@ void CompilationStateImpl::WaitForCompilationEvent(
         : done_(std::move(done)) {}
 
     bool ShouldYield() override {
-      recordreplay::Assert("WaitForEventDelegate::ShouldYield Start");
-      bool rv = done_->load(std::memory_order_relaxed);
-      recordreplay::Assert("WaitForEventDelegate::ShouldYield Done %d", rv);
-      return rv;
+      return done_->load(std::memory_order_relaxed);
     }
 
     void NotifyConcurrencyIncrease() override { UNIMPLEMENTED(); }
@@ -3489,11 +3451,8 @@ class CompileJSToWasmWrapperJob final : public JobTask {
     // {outstanding_units_} includes the units that other workers are currently
     // working on, so we can safely ignore the {worker_count} and just return
     // the current number of outstanding units.
-    size_t rv = std::min(static_cast<size_t>(FLAG_wasm_num_compilation_tasks),
+    return std::min(static_cast<size_t>(FLAG_wasm_num_compilation_tasks),
                          outstanding_units_.load(std::memory_order_relaxed));
-    // https://github.com/RecordReplay/backend/issues/5661
-    recordreplay::Assert("CompileJSToWasmWrapperJob::GetMaxConcurrency %zu", rv);
-    return rv;
   }
 
  private:

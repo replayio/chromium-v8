@@ -95,11 +95,7 @@ class CompileImportWrapperJob final : public JobTask {
         static_cast<size_t>(std::max(1, FLAG_wasm_num_compilation_tasks));
     // Add {worker_count} to the queue size because workers might still be
     // processing units that have already been popped from the queue.
-    size_t rv = std::min(flag_limit, worker_count + queue_->size());
-    // https://github.com/RecordReplay/backend/issues/5661
-    recordreplay::Assert("CompileImportWrapperJob::GetMaxConcurrency %zu %zu",
-                         rv, worker_count);
-    return rv;
+    return std::min(flag_limit, worker_count + queue_->size());
   }
 
   void Run(JobDelegate* delegate) override {

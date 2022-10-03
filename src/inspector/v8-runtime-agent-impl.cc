@@ -116,8 +116,6 @@ void innerCallFunctionOn(
     bool silent, WrapMode wrapMode, bool userGesture, bool awaitPromise,
     const String16& objectGroup,
     std::unique_ptr<V8RuntimeAgentImpl::CallFunctionOnCallback> callback) {
-  v8::recordreplay::Assert("innerCallFunctionOn Start");
-
   V8InspectorImpl* inspector = session->inspector();
 
   std::unique_ptr<v8::Local<v8::Value>[]> argv = nullptr;
@@ -129,12 +127,9 @@ void innerCallFunctionOn(
     argv.reset(new v8::Local<v8::Value>[argc]);
     for (int i = 0; i < argc; ++i) {
       v8::Local<v8::Value> argumentValue;
-      v8::recordreplay::Assert("innerCallFunctionOn #1");
       Response response = scope.injectedScript()->resolveCallArgument(
           (*arguments)[i].get(), &argumentValue);
-      v8::recordreplay::Assert("innerCallFunctionOn #2");
       if (!response.IsSuccess()) {
-        v8::recordreplay::Assert("innerCallFunctionOn #2.1");
         callback->sendFailure(response);
         return;
       }
@@ -142,27 +137,21 @@ void innerCallFunctionOn(
     }
   }
 
-  v8::recordreplay::Assert("innerCallFunctionOn #3");
-
   if (silent) scope.ignoreExceptionsAndMuteConsole();
   if (userGesture) scope.pretendUserGesture();
 
   // Temporarily enable allow evals for inspector.
   scope.allowCodeGenerationFromStrings();
 
-  v8::recordreplay::Assert("innerCallFunctionOn #4");
-
   v8::MaybeLocal<v8::Value> maybeFunctionValue;
   v8::Local<v8::Script> functionScript;
   if (inspector
           ->compileScript(scope.context(), "(" + expression + ")", String16())
           .ToLocal(&functionScript)) {
-    v8::recordreplay::Assert("innerCallFunctionOn #5");
     v8::MicrotasksScope microtasksScope(inspector->isolate(),
                                         v8::MicrotasksScope::kRunMicrotasks);
     maybeFunctionValue = functionScript->Run(scope.context());
   }
-  v8::recordreplay::Assert("innerCallFunctionOn #6");
   // Re-initialize after running client's code, as it could have destroyed
   // context or session.
   Response response = scope.initialize();
@@ -172,7 +161,6 @@ void innerCallFunctionOn(
   }
 
   if (scope.tryCatch().HasCaught()) {
-    v8::recordreplay::Assert("innerCallFunctionOn #7");
     wrapEvaluateResultAsync(scope.injectedScript(), maybeFunctionValue,
                             scope.tryCatch(), objectGroup, WrapMode::kNoPreview,
                             callback.get());
@@ -182,13 +170,10 @@ void innerCallFunctionOn(
   v8::Local<v8::Value> functionValue;
   if (!maybeFunctionValue.ToLocal(&functionValue) ||
       !functionValue->IsFunction()) {
-    v8::recordreplay::Assert("innerCallFunctionOn #8");
     callback->sendFailure(Response::ServerError(
         "Given expression does not evaluate to a function"));
     return;
   }
-
-  v8::recordreplay::Assert("innerCallFunctionOn #9");
 
   v8::MaybeLocal<v8::Value> maybeResultValue;
   {
@@ -201,13 +186,11 @@ void innerCallFunctionOn(
   // context or session.
   response = scope.initialize();
   if (!response.IsSuccess()) {
-    v8::recordreplay::Assert("innerCallFunctionOn #10");
     callback->sendFailure(response);
     return;
   }
 
   if (!awaitPromise || scope.tryCatch().HasCaught()) {
-    v8::recordreplay::Assert("innerCallFunctionOn #11");
     wrapEvaluateResultAsync(scope.injectedScript(), maybeResultValue,
                             scope.tryCatch(), objectGroup, wrapMode,
                             callback.get());
@@ -218,8 +201,6 @@ void innerCallFunctionOn(
       session, maybeResultValue, objectGroup, wrapMode, false /* replMode */,
       EvaluateCallbackWrapper<V8RuntimeAgentImpl::CallFunctionOnCallback>::wrap(
           std::move(callback)));
-
-  v8::recordreplay::Assert("innerCallFunctionOn Done");
 }
 
 Response ensureContext(V8InspectorImpl* inspector, int contextGroupId,
@@ -382,15 +363,12 @@ void V8RuntimeAgentImpl::callFunctionOn(
     Maybe<bool> userGesture, Maybe<bool> awaitPromise,
     Maybe<int> executionContextId, Maybe<String16> objectGroup,
     std::unique_ptr<CallFunctionOnCallback> callback) {
-  v8::recordreplay::Assert("V8RuntimeAgentImpl::callFunctionOn Start");
   if (objectId.isJust() && executionContextId.isJust()) {
-    v8::recordreplay::Assert("V8RuntimeAgentImpl::callFunctionOn #1");
     callback->sendFailure(Response::ServerError(
         "ObjectId must not be specified together with executionContextId"));
     return;
   }
   if (!objectId.isJust() && !executionContextId.isJust()) {
-    v8::recordreplay::Assert("V8RuntimeAgentImpl::callFunctionOn #2");
     callback->sendFailure(Response::ServerError(
         "Either ObjectId or executionContextId must be specified"));
     return;
@@ -402,11 +380,9 @@ void V8RuntimeAgentImpl::callFunctionOn(
     InjectedScript::ObjectScope scope(m_session, objectId.fromJust());
     Response response = scope.initialize();
     if (!response.IsSuccess()) {
-      v8::recordreplay::Assert("V8RuntimeAgentImpl::callFunctionOn #3");
       callback->sendFailure(response);
       return;
     }
-    v8::recordreplay::Assert("V8RuntimeAgentImpl::callFunctionOn #4");
     innerCallFunctionOn(m_session, scope, scope.object(), expression,
                         std::move(optionalArguments), silent.fromMaybe(false),
                         mode, userGesture.fromMaybe(false),
@@ -420,26 +396,21 @@ void V8RuntimeAgentImpl::callFunctionOn(
                                       std::move(executionContextId.fromJust()),
                                       /* uniqueContextId */ {}, &contextId);
     if (!response.IsSuccess()) {
-      v8::recordreplay::Assert("V8RuntimeAgentImpl::callFunctionOn #5");
       callback->sendFailure(response);
       return;
     }
     InjectedScript::ContextScope scope(m_session, contextId);
     response = scope.initialize();
     if (!response.IsSuccess()) {
-      v8::recordreplay::Assert("V8RuntimeAgentImpl::callFunctionOn #6");
       callback->sendFailure(response);
       return;
     }
-    v8::recordreplay::Assert("V8RuntimeAgentImpl::callFunctionOn #7");
     innerCallFunctionOn(m_session, scope, scope.context()->Global(), expression,
                         std::move(optionalArguments), silent.fromMaybe(false),
                         mode, userGesture.fromMaybe(false),
                         awaitPromise.fromMaybe(false),
                         objectGroup.fromMaybe(""), std::move(callback));
   }
-
-  v8::recordreplay::Assert("V8RuntimeAgentImpl::callFunctionOn Done");
 }
 
 Response V8RuntimeAgentImpl::getProperties(
