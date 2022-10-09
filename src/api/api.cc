@@ -10659,14 +10659,28 @@ extern "C" V8_EXPORT bool V8RecordReplayFeatureEnabled(const char* feature) {
   return true;
 }
 
-static void RecordReplayInitializeDisabledFeatures() {
-  // Disabled features are specified with "," as a separator. "*" can be used to disable
-  // all features.
-  //
-  // This is used to disable functionality, typically to test the performance impact of
-  // recording-specific changes or narrow down the reason for incorrect behavior while
-  // recording.
+// Disabled features are specified with "," as a separator. "*" can be used to disable
+// all features.
+//
+// This is used to disable functionality, typically to test the performance impact of
+// recording-specific changes or narrow down the reason for incorrect behavior while
+// recording.
+static const char* GetDisabledFeatureSpecifier() {
   const char* env = getenv("RECORD_REPLAY_DISABLE_FEATURES");
+  if (env) {
+    return env;
+  }
+
+  // Diagnostic for problems replaying in certain environments.
+  if (getenv("EBAY_TEST_ENVIRONMENT")) {
+    return "record-replay";
+  }
+
+  return nullptr;
+}
+
+static void RecordReplayInitializeDisabledFeatures() {
+  const char* env = GetDisabledFeatureSpecifier();
   if (!env) {
     return;
   }
