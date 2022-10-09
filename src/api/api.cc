@@ -10685,6 +10685,8 @@ static void RecordReplayInitializeDisabledFeatures() {
     return;
   }
 
+  fprintf(stderr, "RecordReplayDisabledFeatures %s\n", env);
+
   if (!strcmp(env, "*")) {
     gRecordRelayDisableAllFeatures = true;
     return;
