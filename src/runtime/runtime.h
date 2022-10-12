@@ -521,6 +521,7 @@ namespace internal {
   F(EnableCodeLoggingForTesting, 0, 1)        \
   F(EnsureFeedbackVectorForFunction, 1, 1)    \
   F(FinalizeOptimization, 0, 1)               \
+  F(ForceFlush, 1, 1)                         \
   F(GetCallable, 0, 1)                        \
   F(GetInitializerFunction, 1, 1)             \
   F(GetOptimizationStatus, 1, 1)              \
