@@ -10643,12 +10643,8 @@ extern "C" V8_EXPORT void V8RecordReplayFinishRecording() {
 }
 
 static std::vector<std::string>* gRecordReplayDisabledFeatures;
-static bool gRecordRelayDisableAllFeatures;
 
 extern "C" V8_EXPORT bool V8RecordReplayFeatureEnabled(const char* feature) {
-  if (gRecordRelayDisableAllFeatures) {
-    return false;
-  }
   if (gRecordReplayDisabledFeatures) {
     for (std::string disabled : *gRecordReplayDisabledFeatures) {
       if (disabled == feature) {
@@ -10659,8 +10655,7 @@ extern "C" V8_EXPORT bool V8RecordReplayFeatureEnabled(const char* feature) {
   return true;
 }
 
-// Disabled features are specified with "," as a separator. "*" can be used to disable
-// all features.
+// Disabled features are specified with "," as a separator.
 //
 // This is used to disable functionality, typically to test the performance impact of
 // recording-specific changes or narrow down the reason for incorrect behavior while
@@ -10673,7 +10668,7 @@ static const char* GetDisabledFeatureSpecifier() {
 
   // Diagnostic for problems replaying in certain environments.
   if (getenv("EBAY_TEST_ENVIRONMENT")) {
-    return "checkpoints";
+    return "no-interrupts";
   }
 
   return nullptr;
@@ -10686,11 +10681,6 @@ static void RecordReplayInitializeDisabledFeatures() {
   }
 
   fprintf(stderr, "RecordReplayDisabledFeatures %s\n", env);
-
-  if (!strcmp(env, "*")) {
-    gRecordRelayDisableAllFeatures = true;
-    return;
-  }
 
   gRecordReplayDisabledFeatures = new std::vector<std::string>();
   while (true) {
