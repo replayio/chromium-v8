@@ -6,6 +6,7 @@
 #define V8_OBJECTS_MANAGED_H_
 
 #include <memory>
+#include "include/v8.h"  // For replay.
 #include "src/execution/isolate.h"
 #include "src/handles/handles.h"
 #include "src/heap/factory.h"
@@ -37,6 +38,19 @@ struct ManagedPtrDestructor {
 // the template parameter.
 V8_EXPORT_PRIVATE void ManagedObjectFinalizer(
     const v8::WeakCallbackInfo<void>& data);
+
+// When recording or replaying, whether a {Managed}'s GC finalizer that runs
+// with events disallowed leaves its destructor to the isolate's teardown, so
+// that {Managed} destructors only run with events allowed.
+V8_EXPORT_PRIVATE bool ManagedFinalizersDeferredWhenEventsDisallowed();
+
+#if V8_ENABLE_WEBASSEMBLY
+namespace wasm {
+}  // namespace wasm
+#endif  // V8_ENABLE_WEBASSEMBLY
+
+#if V8_ENABLE_WEBASSEMBLY
+#endif  // V8_ENABLE_WEBASSEMBLY
 
 // {Managed<T>} is essentially a {std::shared_ptr<T>} allocated on the heap
 // that can be used to manage the lifetime of C++ objects that are shared
@@ -102,6 +116,11 @@ class Managed : public Foreign {
   // to actually delete the shared pointer and decrement the shared refcount.
   static void Destructor(void* ptr) {
     auto shared_ptr_ptr = reinterpret_cast<std::shared_ptr<CppType>*>(ptr);
+    // Not the shared pointer's use count: other isolates share the object
+    // (e.g. a wasm NativeModule shared with workers) and release their
+    // references on their own threads, which nothing orders with this one,
+    // so the count differs when replaying.
+    recordreplay::Assert("Managed::Destructor");
     delete shared_ptr_ptr;
   }
 };
