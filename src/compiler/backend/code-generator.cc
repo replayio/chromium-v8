@@ -479,6 +479,8 @@ base::OwnedVector<byte> CodeGenerator::GetProtectedInstructionsData() {
 }
 
 MaybeHandle<Code> CodeGenerator::FinalizeCode() {
+  replayio::AutoDisallowEvents disallow("CodeGenerator::FinalizeCode");
+
   if (result_ != kSuccess) {
     masm()->AbortedCodeGeneration();
     return {};
