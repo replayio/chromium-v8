@@ -134,6 +134,11 @@ class FailureMessage {
 
 }  // namespace
 
+const char* gCrashReason;
+
+extern "C" const char* V8RecordReplayCrashReasonCallback() {
+  return gCrashReason;
+}
 #ifdef DEBUG
 void V8_Fatal(const char* file, int line, const char* format, ...) {
 #else
