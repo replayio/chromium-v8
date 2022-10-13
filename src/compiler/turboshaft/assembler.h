@@ -2840,6 +2840,12 @@ class TurboshaftAssemblerOpInterface
         isolate, context, {string});
   }
 #endif  // V8_INTL_SUPPORT
+  V<Tagged> CallRuntime_RecordReplayTargetProgressReached(
+      Isolate* isolate, OpIndex frame_state, V<Context> context) {
+    return CallRuntime<
+        typename RuntimeCallDescriptor::RecordReplayTargetProgressReached>(
+        isolate, frame_state, context, {});
+  }
   V<Tagged> CallRuntime_TerminateExecution(Isolate* isolate,
                                            OpIndex frame_state,
                                            V<Context> context) {
