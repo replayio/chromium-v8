@@ -30,7 +30,8 @@ class ThreadLocalTop {
   // TODO(all): This is not particularly beautiful. We should probably
   // refactor this to really consist of just Addresses and 32-bit
   // integer fields.
-  static constexpr uint32_t kSizeInBytes = 29 * kSystemPointerSize;
+  static constexpr uint32_t kSizeInBytes = 31 * kSystemPointerSize;
+  static constexpr int kReplayMaxJsFrameDepth = 1024;
 
   // Does early low-level initialization that does not depend on the
   // isolate being present.
@@ -206,9 +207,29 @@ class ThreadLocalTop {
   // on the secondary stack, during execution on the central stack.
   Address secondary_stack_sp_;
   Address secondary_stack_limit_;
+  int replay_js_frame_depth_;
+
+  // Was the "thread in wasm" flag when recording/replaying: generated code
+  // cached the address of a thread_local, which a forked replaying process
+  // respawning its threads would leave dangling, so Initialize pointed the
+  // cached address here instead. Upstream deleted g_thread_in_wasm_code and
+  // thread_in_wasm_flag_address_ entirely at M140, so nothing reads or writes
+  // this slot any more. It is kept, rather than removed, because
+  // ThreadLocalTop's size is part of the API surface below and of every
+  // isolate offset after it; removing it is a separate change that needs the
+  // driver side measured first.
+  Address replay_thread_in_wasm_flag_;
 };
 
 static_assert(ThreadLocalTop::kSizeInBytes == sizeof(ThreadLocalTop));
+
+// Record/replay: include/v8-internal.h keeps its own hand-maintained copy of
+// this size for embedders, and every isolate offset after it depends on the
+// two agreeing -- when they do not, mksnapshot fails a layout CHECK and no
+// snapshot can be produced, with nothing failing to compile. The fork adds
+// slots here, so tie them together: a mismatch is now a compile error.
+static_assert(Internals::kThreadLocalTopSize ==
+              static_cast<int>(ThreadLocalTop::kSizeInBytes));
 
 }  // namespace internal
 }  // namespace v8
