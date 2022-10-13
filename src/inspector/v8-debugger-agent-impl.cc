@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -37,6 +38,7 @@
 #include "src/inspector/v8-runtime-agent-impl.h"
 #include "src/inspector/v8-stack-trace-impl.h"
 #include "src/inspector/v8-value-utils.h"
+#include "src/base/replayio.h"
 
 namespace v8_inspector {
 
@@ -354,16 +356,25 @@ String16 scopeType(v8::debug::ScopeIterator::ScopeType type) {
 
 Response buildScopes(v8::Isolate* isolate, v8::debug::ScopeIterator* iterator,
                      InjectedScript* injectedScript,
+                     const String16& objectGroup,
                      std::unique_ptr<Array<Scope>>* scopes) {
   *scopes = std::make_unique<Array<Scope>>();
   if (!injectedScript) return Response::Success();
   if (iterator->Done()) return Response::Success();
 
   for (; !iterator->Done(); iterator->Advance()) {
+    // Replay builds the scopes of every frame on the stack at each exception
+    // and console message, and building a scope object makes handles for each
+    // of its bindings. A deep stack in a module with many bindings would
+    // otherwise keep millions of handles alive, which every scavenge visits.
+    std::optional<v8::HandleScope> recordReplayHandles;
+    if (v8::recordreplay::IsRecordingOrReplaying()) {
+      recordReplayHandles.emplace(isolate);
+    }
     std::unique_ptr<RemoteObject> object;
-    Response result =
-        injectedScript->wrapObject(iterator->GetObject(), kBacktraceObjectGroup,
-                                   WrapOptions({WrapMode::kIdOnly}), &object);
+    Response result = injectedScript->wrapObject(
+        iterator->GetObject(), objectGroup, WrapOptions({WrapMode::kIdOnly}),
+        &object);
     if (!result.IsSuccess()) return result;
 
     auto scope = Scope::create()
@@ -479,6 +490,7 @@ V8DebuggerAgentImpl::V8DebuggerAgentImpl(
       m_debugger(m_inspector->debugger()),
       m_session(session),
       m_enableState(kDisabled),
+      m_replay_owned(session->replayOwned()),
       m_state(state),
       m_frontend(frontendChannel),
       m_isolate(m_inspector->isolate()) {
@@ -580,6 +592,9 @@ Response V8DebuggerAgentImpl::disable() {
 }
 
 void V8DebuggerAgentImpl::restore() {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::restore");
   DCHECK(m_enableState == kDisabled);
   if (!m_state->booleanProperty(DebuggerAgentState::debuggerEnabled, false)) {
     return;
@@ -629,6 +644,9 @@ Response V8DebuggerAgentImpl::setBreakpointsActive(bool active) {
 }
 
 Response V8DebuggerAgentImpl::setSkipAllPauses(bool skip) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::setSkipAllPauses");
   m_state->setBoolean(DebuggerAgentState::skipAllPauses, skip);
   updateSkipAllPauses();
   return Response::Success();
@@ -1539,6 +1557,9 @@ void V8DebuggerAgentImpl::clearBreakDetails() {
 void V8DebuggerAgentImpl::schedulePauseOnNextStatement(
     const String16& breakReason,
     std::unique_ptr<protocol::DictionaryValue> data) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::schedulePauseOnNextStatement");
   if (isPaused() || !acceptsPause(false) || !m_breakpointsActive) return;
   if (m_breakReason.empty()) {
     m_debugger->setPauseOnNextCall(true, m_session->contextGroupId());
@@ -1547,6 +1568,9 @@ void V8DebuggerAgentImpl::schedulePauseOnNextStatement(
 }
 
 void V8DebuggerAgentImpl::cancelPauseOnNextStatement() {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::cancelPauseOnNextStatement");
   if (isPaused() || !acceptsPause(false) || !m_breakpointsActive) return;
   if (m_breakReason.size() == 1) {
     m_debugger->setPauseOnNextCall(false, m_session->contextGroupId());
@@ -1576,6 +1600,9 @@ Response V8DebuggerAgentImpl::pause() {
 }
 
 Response V8DebuggerAgentImpl::resume(std::optional<bool> terminateOnResume) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::resume");
   if (!isPaused()) return Response::ServerError(kDebuggerNotPaused);
   if (terminateOnResume.value_or(false) &&
       m_session->clientTrustLevel() != V8Inspector::kFullyTrusted) {
@@ -1596,6 +1623,9 @@ Response V8DebuggerAgentImpl::stepOver(
         inSkipList,
     std::unique_ptr<protocol::Array<protocol::Debugger::LocationRange>>
         inEnterRanges) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::stepOver");
   if (!isPaused()) return Response::ServerError(kDebuggerNotPaused);
 
   // Only update the lists once both are valid.
@@ -1742,6 +1772,34 @@ Response V8DebuggerAgentImpl::evaluateOnCallFrame(
   return scope.injectedScript()->wrapEvaluateResult(
       maybeResultValue, scope.tryCatch(), objectGroup.value_or(""), wrapOptions,
       throwOnSideEffect.value_or(false), result, exceptionDetails);
+}
+
+// [replay] Always offer `arguments`, even if not usually available.
+//   -> https://linear.app/replay/issue/RUN-1061#comment-fc1c3ee4
+v8::MaybeLocal<v8::Value> V8DebuggerAgentImpl::getArgumentsOfCallFrame(
+    const String16& callFrameId) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::getArgumentsOfCallFrame");
+  InjectedScript::CallFrameScope scope(m_session, callFrameId);
+  Response response = scope.initialize();
+  if (!response.IsSuccess()) {
+    v8::MaybeLocal<v8::Value> emptyValue;
+    return emptyValue;
+  }
+
+  int frameOrdinal = static_cast<int>(scope.frameOrdinal());
+  auto it = v8::debug::StackTraceIterator::Create(m_isolate, frameOrdinal);
+  if (it->Done()) {
+    // could not find frame
+    v8::MaybeLocal<v8::Value> emptyValue;
+    return emptyValue;
+  }
+
+  {
+    V8InspectorImpl::EvaluateScope evaluateScope(scope);
+    return it->GetFrameArguments();
+  }
 }
 
 Response V8DebuggerAgentImpl::setVariableValue(
@@ -1907,7 +1965,59 @@ Response V8DebuggerAgentImpl::setBlackboxedRanges(
   return Response::Success();
 }
 
+Response V8DebuggerAgentImpl::getCallFrames(
+    std::optional<int> maxFrames, std::optional<bool> noContents,
+    std::optional<String16> objectGroup,
+    std::unique_ptr<protocol::Array<protocol::Debugger::CallFrame>>* out_callFrames) {
+  return currentCallFrames(std::move(maxFrames), std::move(noContents),
+                           std::move(objectGroup), out_callFrames);
+}
+
+Response V8DebuggerAgentImpl::getTopFrameLocation(std::unique_ptr<protocol::Debugger::Location>* out_location) {
+  if (!isPaused()) {
+    return Response::Success();
+  }
+
+  v8::HandleScope handles(m_isolate);
+  auto iterator = v8::debug::StackTraceIterator::Create(m_isolate);
+  if (!iterator->Done()) {
+    v8::debug::Location loc = iterator->GetSourceLocation();
+
+    v8::Local<v8::debug::Script> script = iterator->GetScript();
+    DCHECK(!script.IsEmpty());
+    *out_location =
+        protocol::Debugger::Location::create()
+            .setScriptId(String16::fromInteger(script->Id()))
+            .setLineNumber(loc.GetLineNumber())
+            .setColumnNumber(loc.GetColumnNumber())
+            .build();
+  }
+
+  return Response::Success();
+}
+
+extern "C" void V8RecordReplayGetCurrentException(v8::MaybeLocal<v8::Value>* exception);
+
+Response V8DebuggerAgentImpl::getPendingException(
+    std::optional<String16> objectGroup, std::unique_ptr<RemoteObject>* out_exception) {
+  v8::MaybeLocal<v8::Value> maybe_exception;
+  V8RecordReplayGetCurrentException(&maybe_exception);
+
+  if(!maybe_exception.IsEmpty()) {
+    v8::Local<v8::Context> context = m_isolate->GetCurrentContext();
+    v8::Local<v8::Value> exception = maybe_exception.ToLocalChecked();
+    std::unique_ptr<RemoteObject> obj =
+        m_session->wrapObject(context, exception, objectGroup.value_or(""), false);
+
+    *out_exception = std::move(obj);
+  }
+
+  return Response::Success();
+}
+
 Response V8DebuggerAgentImpl::currentCallFrames(
+    std::optional<int> maxFrames, std::optional<bool> noContentsRaw,
+    std::optional<String16> objectGroup,
     std::unique_ptr<Array<CallFrame>>* result) {
   if (!isPaused()) {
     *result = std::make_unique<Array<CallFrame>>();
@@ -1917,7 +2027,10 @@ Response V8DebuggerAgentImpl::currentCallFrames(
   *result = std::make_unique<Array<CallFrame>>();
   auto iterator = v8::debug::StackTraceIterator::Create(m_isolate);
   int frameOrdinal = 0;
+  bool noContents = noContentsRaw.has_value() && noContentsRaw.value();
   for (; !iterator->Done(); iterator->Advance(), frameOrdinal++) {
+    if (maxFrames.has_value() && frameOrdinal >= maxFrames.value())
+      break;
     int contextId = iterator->GetContextId();
     std::shared_ptr<InjectedScript> injectedScript;
     std::shared_ptr<InspectedContext> inspectedContext;
@@ -1930,19 +2043,25 @@ Response V8DebuggerAgentImpl::currentCallFrames(
 
     v8::debug::Location loc = iterator->GetSourceLocation();
 
+    Response res = Response::Success();
+
     std::unique_ptr<Array<Scope>> scopes;
-    auto scopeIterator = iterator->GetScopeIterator();
-    Response res = buildScopes(m_isolate, scopeIterator.get(),
-                               injectedScript.get(), &scopes);
-    if (!res.IsSuccess()) return res;
+    if (noContents) {
+      scopes = std::make_unique<Array<Scope>>();
+    } else {
+      auto scopeIterator = iterator->GetScopeIterator();
+      res = buildScopes(m_isolate, scopeIterator.get(), injectedScript.get(),
+                        objectGroup.value_or(kBacktraceObjectGroup), &scopes);
+      if (!res.IsSuccess()) return res;
+    }
 
     std::unique_ptr<RemoteObject> protocolReceiver;
-    if (injectedScript) {
+    if (injectedScript && !noContents) {
       v8::Local<v8::Value> receiver;
       if (iterator->GetReceiver().ToLocal(&receiver)) {
-        res = injectedScript->wrapObject(receiver, kBacktraceObjectGroup,
-                                         WrapOptions({WrapMode::kIdOnly}),
-                                         &protocolReceiver);
+        res = injectedScript->wrapObject(
+            receiver, objectGroup.value_or(kBacktraceObjectGroup),
+            WrapOptions({WrapMode::kIdOnly}), &protocolReceiver);
         if (!res.IsSuccess()) return res;
       }
     }
@@ -1967,6 +2086,7 @@ Response V8DebuggerAgentImpl::currentCallFrames(
                          m_isolate, iterator->GetFunctionDebugName()))
                      .setLocation(std::move(location))
                      .setUrl(String16())
+                     .setContextId(contextId)
                      .setScopeChain(std::move(scopes))
                      .setThis(std::move(protocolReceiver))
                      .setCanBeRestarted(iterator->CanBeRestarted())
@@ -1985,9 +2105,9 @@ Response V8DebuggerAgentImpl::currentCallFrames(
     v8::Local<v8::Value> returnValue = iterator->GetReturnValue();
     if (!returnValue.IsEmpty() && injectedScript) {
       std::unique_ptr<RemoteObject> value;
-      res =
-          injectedScript->wrapObject(returnValue, kBacktraceObjectGroup,
-                                     WrapOptions({WrapMode::kIdOnly}), &value);
+      res = injectedScript->wrapObject(
+          returnValue, objectGroup.value_or(kBacktraceObjectGroup),
+          WrapOptions({WrapMode::kIdOnly}), &value);
       if (!res.IsSuccess()) return res;
       frame->setReturnValue(std::move(value));
     }
@@ -2017,6 +2137,13 @@ V8DebuggerAgentImpl::currentExternalStackTrace() {
 }
 
 bool V8DebuggerAgentImpl::isPaused() const {
+  // Replay's pause scripts inspect the stack (Debugger.getCallFrames,
+  // Debugger.evaluateOnCallFrame) at replay points where V8 isn't stopped in
+  // the debugger. The recording has to behave the same, or a session's
+  // Debugger events would differ between the recording and the replay.
+  if (v8::recordreplay::IsRecordingOrReplaying()) {
+    return true;
+  }
   return m_debugger->isPausedInContextGroup(m_session->contextGroupId());
 }
 
@@ -2253,7 +2380,7 @@ void V8DebuggerAgentImpl::didPauseOnInstrumentation(
   std::unique_ptr<protocol::DictionaryValue> breakAuxData;
 
   std::unique_ptr<Array<CallFrame>> protocolCallFrames;
-  Response response = currentCallFrames(&protocolCallFrames);
+  Response response = currentCallFrames(std::optional<int>(), std::optional<bool>(), std::optional<String16>(), &protocolCallFrames);
   if (!response.IsSuccess()) {
     protocolCallFrames = std::make_unique<Array<CallFrame>>();
   }
@@ -2403,7 +2530,7 @@ void V8DebuggerAgentImpl::didPause(
   }
 
   std::unique_ptr<Array<CallFrame>> protocolCallFrames;
-  Response response = currentCallFrames(&protocolCallFrames);
+  Response response = currentCallFrames(std::optional<int>(), std::optional<bool>(), std::optional<String16>(), &protocolCallFrames);
   if (!response.IsSuccess()) {
     protocolCallFrames = std::make_unique<Array<CallFrame>>();
   }
@@ -2421,6 +2548,9 @@ void V8DebuggerAgentImpl::didContinue() {
 void V8DebuggerAgentImpl::breakProgram(
     const String16& breakReason,
     std::unique_ptr<protocol::DictionaryValue> data) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::breakProgram");
   if (!enabled() || m_skipAllPauses || !m_debugger->canBreakProgram()) return;
   std::vector<BreakReason> currentScheduledReason;
   currentScheduledReason.swap(m_breakReason);
@@ -2479,6 +2609,9 @@ void V8DebuggerAgentImpl::reset() {
 }
 
 void V8DebuggerAgentImpl::ScriptCollected(const V8DebuggerScript* script) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::ScriptCollected");
   DCHECK_NE(m_scripts.find(script->scriptId()), m_scripts.end());
   std::vector<uint8_t> bytecode;
 #if V8_ENABLE_WEBASSEMBLY
@@ -2550,4 +2683,16 @@ void V8DebuggerAgentImpl::stop() {
   disable();
   m_enableState = kStopping;
 }
+
+std::unique_ptr<protocol::Runtime::RemoteObject>
+V8DebuggerAgentImpl::wrapObject(int context_id, v8::Local<v8::Value> val) {
+  std::shared_ptr<InjectedScript> injectedScript;
+  m_session->findInjectedScript(context_id, injectedScript);
+
+  std::unique_ptr<protocol::Runtime::RemoteObject> rv;
+  injectedScript->wrapObject(val, kBacktraceObjectGroup,
+                             WrapOptions({WrapMode::kIdOnly, {}}), &rv);
+  return rv;
+}
+
 }  // namespace v8_inspector
