@@ -57,4 +57,15 @@ struct RecordReplayWarningField {
 
 // Use this to wrap Asserts on non-trivial data, to avoid the
 // overhead of argument evaluation when Asserts are disabled.
+#define REPLAY_ASSERT(format, ...) \
+  if (recordreplay::HasAsserts()) \
+    recordreplay::Assert(format, ##__VA_ARGS__); \
+  static_assert(true, "require semicolon")
+
+// Same as |REPLAY_ASSERT| but won't Assert when Events are disallowed.
+#define REPLAY_ASSERT_MAYBE_EVENTS_DISALLOWED(format, ...) \
+  if (recordreplay::HasAsserts() && !recordreplay::AreEventsDisallowed()) \
+    recordreplay::Assert(format, ##__VA_ARGS__); \
+  static_assert(true, "require semicolon")
+
 #endif  // INCLUDE_REPLAYIO_MACROS_H_
