@@ -3559,6 +3559,17 @@ Isolate::Isolate(std::unique_ptr<i::IsolateAllocator> isolate_allocator)
   InitializeDefaultEmbeddedBlob();
 
   MicrotaskQueue::SetUpDefaultMicrotaskQueue(this);
+
+  record_replay_api_interrupts_ordered_lock_id_ = (int)recordreplay::CreateOrderedLock("APIInterrupts");
+
+  if (recordreplay::IsRecordingOrReplaying() && IsMainThread()) {
+    RecordReplayOnMainThreadIsolateCreated(this);
+  }
+
+  if (RecordReplayShouldCallOnPromiseHook()) {
+    promise_hook_flags_ =
+      PromiseHookFields::HasIsolatePromiseHook::encode(true);
+  }
 }
 
 replayio::ReplayIsolateData* Isolate::EnsureReplayData() {
@@ -5228,7 +5239,7 @@ void Isolate::UpdatePromiseHookProtector() {
 void Isolate::PromiseHookStateUpdated() {
   promise_hook_flags_ =
     (promise_hook_flags_ & PromiseHookFields::HasContextPromiseHook::kMask) |
-    PromiseHookFields::HasIsolatePromiseHook::encode(promise_hook_) |
+    PromiseHookFields::HasIsolatePromiseHook::encode(promise_hook_ || RecordReplayShouldCallOnPromiseHook()) |
     PromiseHookFields::HasAsyncEventDelegate::encode(async_event_delegate_) |
     PromiseHookFields::IsDebugActive::encode(debug()->is_active());
 
@@ -5588,9 +5599,16 @@ void Isolate::RunAllPromiseHooks(PromiseHookType type,
   }
 }
 
+extern void RecordReplayOnPromiseHook(Isolate* isolate, PromiseHookType type,
+                                      Handle<JSPromise> promise, Handle<Object> parent);
+
 void Isolate::RunPromiseHook(PromiseHookType type, Handle<JSPromise> promise,
                              Handle<Object> parent) {
   if (!HasIsolatePromiseHooks()) return;
+  if (RecordReplayShouldCallOnPromiseHook()) {
+    RecordReplayOnPromiseHook(this, type, promise, parent);
+    if (!promise_hook_) return;
+  }
   DCHECK(promise_hook_ != nullptr);
   promise_hook_(type, v8::Utils::PromiseToLocal(promise),
                 v8::Utils::ToLocal(parent));

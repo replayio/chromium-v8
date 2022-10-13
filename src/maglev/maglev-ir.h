@@ -296,6 +296,8 @@ class MergePointInterpreterFrameState;
   V(IncreaseInterruptBudget)                \
   V(ReduceInterruptBudgetForLoop)           \
   V(ReduceInterruptBudgetForReturn)         \
+  V(ReplayIncrementAndCheckJsFrameDepth)    \
+  V(ReplayDecrementJsFrameDepth)            \
   V(ThrowReferenceErrorIfHole)              \
   V(ThrowSuperNotCalledIfHole)              \
   V(ThrowSuperAlreadyCalledIfNotHole)       \
@@ -6768,6 +6770,36 @@ class ReduceInterruptBudgetForReturn
 
  private:
   const int amount_;
+};
+
+class ReplayIncrementAndCheckJsFrameDepth
+    : public FixedInputNodeT<0, ReplayIncrementAndCheckJsFrameDepth> {
+  using Base = FixedInputNodeT<0, ReplayIncrementAndCheckJsFrameDepth>;
+
+ public:
+  explicit ReplayIncrementAndCheckJsFrameDepth(uint64_t bitfield) : Base(bitfield) {}
+
+  static constexpr OpProperties kProperties = OpProperties::Writing() |
+                                              OpProperties::Throw() |
+                                              OpProperties::DeferredCall();
+
+  int MaxCallStackArgs() const;
+  void SetValueLocationConstraints();
+  void GenerateCode(MaglevAssembler*, const ProcessingState&);
+  void PrintParams(std::ostream&, MaglevGraphLabeller*) const {}
+};
+
+class ReplayDecrementJsFrameDepth : public FixedInputNodeT<0, ReplayDecrementJsFrameDepth> {
+  using Base = FixedInputNodeT<0, ReplayDecrementJsFrameDepth>;
+
+ public:
+  explicit ReplayDecrementJsFrameDepth(uint64_t bitfield) : Base(bitfield) {}
+
+  static constexpr OpProperties kProperties = OpProperties::Writing();
+
+  void SetValueLocationConstraints();
+  void GenerateCode(MaglevAssembler*, const ProcessingState&);
+  void PrintParams(std::ostream&, MaglevGraphLabeller*) const {}
 };
 
 class ThrowReferenceErrorIfHole

@@ -1707,6 +1707,11 @@ Type Typer::Visitor::TypeDateNow(Node* node) { return Type::Number(); }
 Type Typer::Visitor::TypeDoubleArrayMin(Node* node) { return Type::Number(); }
 
 Type Typer::Visitor::TypeDoubleArrayMax(Node* node) { return Type::Number(); }
+Type Typer::Visitor::TypeIncrementAndCheckProgressCounter(Node* node) { return Type::Any(); }
+
+Type Typer::Visitor::TypeReplayDecrementJsFrameDepth(Node* node) {
+  return Type::Any();
+}
 
 Type Typer::Visitor::TypeUnsigned32Divide(Node* node) {
   Type lhs = Operand(node, 0);
