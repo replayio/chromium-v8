@@ -12,6 +12,7 @@
 #include "include/v8-persistent-handle.h"
 #include "include/v8-promise.h"
 #include "include/v8-wasm.h"
+#include "include/v8.h"  // For replay.
 #include "src/api/api-arguments.h"
 #include "src/api/api-inl.h"
 #include "src/api/api-natives.h"
@@ -824,6 +825,8 @@ void WasmStreamingCallbackForTesting(
 
   std::shared_ptr<v8::WasmStreaming> streaming =
       v8::WasmStreaming::Unpack(info.GetIsolate(), info.DataV2());
+  REPLAY_ASSERT("WasmStreamingCallbackForTesting use_count %ld",
+                streaming.use_count());
 
   // We don't check the buffer length up front, to allow d8 to test that the
   // streaming decoder implementation handles overly large inputs correctly.
@@ -854,6 +857,8 @@ void WasmStreamingPromiseFailedCallback(
   DCHECK(ValidateCallbackInfo(info));
   std::shared_ptr<v8::WasmStreaming> streaming =
       v8::WasmStreaming::Unpack(info.GetIsolate(), info.DataV2());
+  REPLAY_ASSERT("WasmStreamingPromiseFailedCallback use_count %ld",
+                streaming.use_count());
   if (!streaming) return;
   streaming->Abort(info[0]);
 }
