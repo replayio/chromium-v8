@@ -4657,6 +4657,12 @@ MaybeHandle<Object> JSPromise::Resolve(DirectHandle<JSPromise> promise,
     return Fulfill(promise, resolution_recv);
   }
 
+  if (RecordReplayShouldCallOnPromiseHook()) {
+    // Fulfillment of this promise is delayed by adopted resolution.
+    // Ref: Promise/A+ 2.3.2
+    AddPromiseDependencyGraphAdoption(isolate, Cast<Object>(promise), resolution_obj);
+  }
+
   // 13. Let job be NewPromiseResolveThenableJob(promise, resolution,
   //                                             thenAction).
   DirectHandle<NativeContext> then_context;

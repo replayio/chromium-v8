@@ -369,6 +369,17 @@ ProcessResult MaglevGraphOptimizer::VisitReduceInterruptBudgetForReturn() {
   return ProcessResult::kContinue;
 }
 
+// The progress nodes must survive every graph pass: dropping one loses a
+// progress increment and the replay diverges. kContinue keeps the node, which
+// is also what every unoptimised upstream visitor in this file returns.
+ProcessResult MaglevGraphOptimizer::VisitReplayIncrementAndCheckJsFrameDepth() {
+  return ProcessResult::kContinue;
+}
+
+ProcessResult MaglevGraphOptimizer::VisitReplayDecrementJsFrameDepth() {
+  return ProcessResult::kContinue;
+}
+
 ProcessResult MaglevGraphOptimizer::VisitThrowReferenceErrorIfHole() {
   // TODO(b/424157317): Optimize.
   return ProcessResult::kContinue;
