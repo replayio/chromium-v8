@@ -653,6 +653,16 @@ size_t CpuProfiler::GetEstimatedMemoryUsage() const {
   return code_observer_->GetEstimatedMemoryUsage();
 }
 
+namespace {
+
+// Refused before any profile or sampler exists, so the recording stays usable;
+// see StartProcessorIfNotStarted.
+bool IsCpuProfilingUnsupported() {
+  return recordreplay::IsRecordingOrReplaying("no-cpu-profiler");
+}
+
+}  // namespace
+
 CpuProfilingResult CpuProfiler::StartProfiling(
     CpuProfilingOptions options,
     std::unique_ptr<DiscardedSamplesDelegate> delegate) {
@@ -662,6 +672,10 @@ CpuProfilingResult CpuProfiler::StartProfiling(
 CpuProfilingResult CpuProfiler::StartProfiling(
     const char* title, CpuProfilingOptions options,
     std::unique_ptr<DiscardedSamplesDelegate> delegate) {
+  if (IsCpuProfilingUnsupported()) {
+    return {0, CpuProfilingStatus::kErrorNotSupported};
+  }
+
   auto sample_context_extractor = options.sample_context_extractor();
   CpuProfilingResult result =
       profiles_->StartProfiling(title, std::move(options), std::move(delegate));
@@ -709,6 +723,9 @@ CpuProfilingResult CpuProfiler::StartProfiling(
 CpuProfilingResult CpuProfiler::StartProfiling(
     Tagged<String> title, CpuProfilingOptions options,
     std::unique_ptr<DiscardedSamplesDelegate> delegate) {
+  if (IsCpuProfilingUnsupported()) {
+    return {0, CpuProfilingStatus::kErrorNotSupported};
+  }
   return StartProfiling(profiles_->GetName(title), std::move(options),
                         std::move(delegate));
 }
@@ -729,6 +746,11 @@ void CpuProfiler::StartProcessorIfNotStarted(
     symbolizer_ =
         std::make_unique<Symbolizer>(code_observer_->instruction_stream_map());
   }
+
+  // Samples are taken wherever the profiler thread's signals interrupt this
+  // thread, and the replay can't send them at the same points, so a recording
+  // with CPU profiles can't be replayed.
+  recordreplay::InvalidateRecording("CPU profiler started");
 
   base::TimeDelta sampling_interval = ComputeSamplingInterval();
   processor_.reset(new SamplingEventsProcessor(
