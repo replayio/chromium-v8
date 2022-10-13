@@ -12,6 +12,7 @@
 #include "src/heap/heap-layout-inl.h"
 #include "src/heap/heap-write-barrier-inl.h"
 #include "src/objects/smi-inl.h"
+#include "src/replay/finalization-registry.h"
 
 // Has to be the last include (doesn't have include guards):
 #include "src/objects/object-macros.h"
@@ -109,6 +110,8 @@ bool JSFinalizationRegistry::RemoveUnregisterToken(
       switch (removal_mode) {
         case kRemoveMatchedCellsFromRegistry:
           weak_cell->RemoveFromFinalizationRegistryCells(isolate);
+          replayio::ReplayFinalizationRegistries::OnUnregisterCell(
+              isolate, *this, weak_cell);
           break;
         case kKeepMatchedCellsInRegistry:
           // Do nothing.
@@ -219,6 +222,13 @@ void WeakCell::set_key_list_next(Tagged<UnionOf<WeakCell, Undefined>> value,
   key_list_next_.store(this, value, mode);
 }
 
+int WeakCell::record_replay_id() const {
+  return record_replay_id_.load().value();
+}
+void WeakCell::set_record_replay_id(int value) {
+  record_replay_id_.store(this, Smi::FromInt(value));
+}
+
 Tagged<HeapObject> WeakCell::relaxed_target() const {
   return target_.Relaxed_Load();
 }
@@ -325,6 +335,8 @@ void JSWeakRef::set_target(Tagged<Union<JSReceiver, Symbol, Undefined>> value,
   WriteBarrier::ForValue(*this, RawMaybeWeakField(kTargetOffset), value, mode);
 #endif  // !V8_DISABLE_WRITE_BARRIERS
 }
+
+SMI_ACCESSORS(JSWeakRef, record_replay_id, kRecordReplayIdOffset)
 
 }  // namespace internal
 }  // namespace v8

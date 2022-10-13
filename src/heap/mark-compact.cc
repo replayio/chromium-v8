@@ -10,6 +10,7 @@
 #include <memory>
 #include <optional>
 
+#include "include/v8.h"
 #include "src/base/bits.h"
 #include "src/base/logging.h"
 #include "src/base/platform/mutex.h"
@@ -90,6 +91,7 @@
 #include "src/objects/string-forwarding-table-inl.h"
 #include "src/objects/transitions-inl.h"
 #include "src/objects/visitors.h"
+#include "src/replay/weak-refs.h"
 #include "src/sandbox/indirect-pointer-tag.h"
 #include "src/snapshot/shared-heap-serializer.h"
 #include "src/tasks/cancelable-task.h"
@@ -2176,12 +2178,19 @@ void MarkCompactCollector::MarkTransitiveClosureLinear() {
   // Update visitor to directly add new ephemerons to key_to_values_.
   marking_visitor_->SetKeyToValues(&key_to_values_);
 
+  const bool record_replay = recordreplay::IsRecordingOrReplaying();
+  size_t ephemerons_processed = 0;
   Ephemeron ephemeron;
   while (local_weak_objects()->next_ephemerons_local.Pop(&ephemeron)) {
     if (ApplyEphemeronSemantics(ephemeron.key, ephemeron.value) ==
         EphemeronResult::kUnresolved) {
       auto it = key_to_values_.try_emplace(ephemeron.key).first;
       it->second.push_back(ephemeron.value);
+    }
+
+    // This pass opens no GC scopes, and the ephemerons can number millions.
+    if (V8_UNLIKELY(record_replay && ++ephemerons_processed % 0x10000 == 0)) {
+      recordreplay::NotifyActivity();
     }
   }
 
@@ -2247,6 +2256,7 @@ std::pair<size_t, size_t> MarkCompactCollector::ProcessMarkingWorklist(
   const auto start = v8::base::TimeTicks::Now();
   PtrComprCageBase cage_base(isolate);
 
+  const bool record_replay = recordreplay::IsRecordingOrReplaying();
   if (parallel_marking_ && UseBackgroundThreadsInCycle()) {
     heap_->concurrent_marking()->RescheduleJobIfNeeded(
         GarbageCollector::MARK_COMPACTOR, TaskPriority::kUserBlocking);
@@ -2295,6 +2305,10 @@ std::pair<size_t, size_t> MarkCompactCollector::ProcessMarkingWorklist(
     }
     bytes_processed += visited_size;
     objects_processed++;
+    // Marking a large heap opens no further GC scopes.
+    if (V8_UNLIKELY(record_replay && objects_processed % 0x10000 == 0)) {
+      recordreplay::NotifyActivity();
+    }
     static_assert(base::bits::IsPowerOfTwo(kDeadlineCheckInterval),
                   "kDeadlineCheckInterval must be power of 2");
     // The below check is an optimized version of
@@ -3986,6 +4000,7 @@ void MarkCompactCollector::ClearJSWeakRefs() {
     if (MarkingHelper::IsUnmarkedAndNotAlwaysLive(
             heap_, non_atomic_marking_state_, target)) {
       weak_ref->set_target(ReadOnlyRoots(isolate).undefined_value());
+      replayio::ReplayWeakRefs::OnTargetCleared(isolate, weak_ref);
     } else {
       // The value of the JSWeakRef is alive.
       ObjectSlot slot = weak_ref->RawField(JSWeakRef::kTargetOffset);
@@ -4004,6 +4019,9 @@ void MarkCompactCollector::ClearJSWeakRefs() {
     if (MarkingHelper::IsUnmarkedAndNotAlwaysLive(
             heap_, non_atomic_marking_state_, target)) {
       DCHECK(Object::CanBeHeldWeakly(target));
+      // When replaying, marking keeps the targets of tracked cells alive (see
+      // VisitWeakCell), so the GC never clears one.
+      DCHECK(!recordreplay::IsReplaying() || weak_cell->record_replay_id() == 0);
       // The value of the WeakCell is dead.
       Tagged<JSFinalizationRegistry> finalization_registry =
           Cast<JSFinalizationRegistry>(weak_cell->finalization_registry());
@@ -4771,7 +4789,7 @@ class PageEvacuationJob : public v8::JobTask {
     SetCurrentIsolateScope isolate_scope(collector_->heap()->isolate());
 
     Evacuator* evacuator = (*evacuators_)[delegate->GetTaskId()].get();
-    if (delegate->IsJoiningThread()) {
+    if (!delegate || delegate->IsJoiningThread()) {
       TRACE_GC_WITH_FLOW(tracer_, GCTracer::Scope::MC_EVACUATE_COPY_PARALLEL,
                          trace_id_, TRACE_EVENT_FLAG_FLOW_IN);
       ProcessItems(delegate, evacuator);

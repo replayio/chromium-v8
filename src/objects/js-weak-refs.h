@@ -128,6 +128,11 @@ V8_OBJECT class WeakCell : public HeapObjectLayout {
 
   class BodyDescriptor;
 
+  // Record/replay: see js-weak-refs.tq. Torque generates these for the
+  // registry and the weak ref, but this class spells its layout out by hand.
+  inline int record_replay_id() const;
+  inline void set_record_replay_id(int value);
+
   // Provide relaxed load access to target field.
   inline Tagged<HeapObject> relaxed_target() const;
 
@@ -161,6 +166,8 @@ V8_OBJECT class WeakCell : public HeapObjectLayout {
   TaggedMember<UnionOf<WeakCell, Undefined>> next_;
   TaggedMember<UnionOf<WeakCell, Undefined>> key_list_prev_;
   TaggedMember<UnionOf<WeakCell, Undefined>> key_list_next_;
+  // Record/replay: last, matching the field's position in js-weak-refs.tq.
+  TaggedMember<Smi> record_replay_id_;
 } V8_OBJECT_END;
 
 // TODO(42202654): Revise `JSWeakRef` to use `TaggedMember`s once `JSObject`
@@ -171,9 +178,16 @@ class JSWeakRef : public JSObject {
 
   static constexpr int kTargetOffset = JSObject::kHeaderSize;
   static constexpr int kTargetOffsetEnd = kTargetOffset + kTaggedSize - 1;
-  static constexpr int kHeaderSize = kTargetOffsetEnd + 1;
+  // Record/replay: see js-weak-refs.tq. M141 spells this class's layout out
+  // by hand, so the field Torque declares after target needs its offset and
+  // accessors here; src/builtins/weak-ref.tq stores it at that offset.
+  static constexpr int kRecordReplayIdOffset = kTargetOffsetEnd + 1;
+  static constexpr int kRecordReplayIdOffsetEnd =
+      kRecordReplayIdOffset + kTaggedSize - 1;
+  static constexpr int kHeaderSize = kRecordReplayIdOffsetEnd + 1;
 
   DECL_ACCESSORS(target, Tagged<Union<JSReceiver, Symbol, Undefined>>)
+  DECL_INT_ACCESSORS(record_replay_id)
   DECL_PRINTER(JSWeakRef)
   EXPORT_DECL_VERIFIER(JSWeakRef)
 
