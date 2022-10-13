@@ -360,6 +360,16 @@ void ValueSerializer::WriteRawBytes(const void* source, size_t length) {
 }
 
 Maybe<uint8_t*> ValueSerializer::ReserveRawBytes(size_t bytes) {
+  if (recordreplay::HasAsserts()) {
+    recordreplay::AssertBufferAllocationState* bufferAssertsState =
+      recordreplay::AutoAssertBufferAllocations::GetState();
+    if (bufferAssertsState) {
+      recordreplay::Diagnostic("ValueSerializer::ReserveRawBytes");
+      recordreplay::Assert("[%s] ValueSerializer::ReserveRawBytes %zu",
+        bufferAssertsState->issueLabel.c_str(),
+        bytes);
+    }
+  }
   size_t old_size = buffer_size_;
   size_t new_size = old_size + bytes;
   if (V8_UNLIKELY(new_size > buffer_capacity_)) {
@@ -412,6 +422,8 @@ void ValueSerializer::WriteUint64(uint64_t value) {
 }
 
 std::pair<uint8_t*, size_t> ValueSerializer::Release() {
+  REPLAY_ASSERT_MAYBE_EVENTS_DISALLOWED(
+    "[TT-1403] V8ScriptValueSerializer::Serialize %zu", buffer_size_);
   auto result = std::make_pair(buffer_, buffer_size_);
   buffer_ = nullptr;
   buffer_size_ = 0;
@@ -433,6 +445,13 @@ Maybe<bool> ValueSerializer::WriteObject(Handle<Object> object) {
   if (V8_UNLIKELY(out_of_memory_)) return ThrowIfOutOfMemory();
 
   if (object->IsSmi()) {
+    if (recordreplay::IsRecordingOrReplaying("ValueSerializer")) {
+      // [TT-1403] Boxed numbers can be JIT'ed into SMIs.
+      // → Never take the optimized path to avoid divergence instead.
+      WriteTag(SerializationTag::kDouble);
+      WriteDouble(Smi::cast(*object).value());
+      return ThrowIfOutOfMemory();
+    }
     WriteSmi(Smi::cast(*object));
     return ThrowIfOutOfMemory();
   }
@@ -523,8 +542,24 @@ void ValueSerializer::WriteString(Handle<String> string) {
   DCHECK(flat.IsFlat());
   if (flat.IsOneByte()) {
     base::Vector<const uint8_t> chars = flat.ToOneByteVector();
-    WriteTag(SerializationTag::kOneByteString);
-    WriteOneByteString(chars);
+
+    // Whether a string has a one or two byte representation can vary when
+    // replaying due to JIT and other VM behavior. Only write out strings
+    // as two bytes to ensure serialized buffers have a consistent size.
+    if (recordreplay::IsRecordingOrReplaying("values", "ValueSerializer::WriteString")) {
+      base::ScopedVector<base::uc16> new_chars(chars.length());
+      for (int i = 0; i < chars.length(); i++)
+        new_chars[i] = chars[i];
+      uint32_t byte_length = new_chars.length() * sizeof(base::uc16);
+      // The existing reading code expects 16-byte strings to be aligned.
+      if ((buffer_size_ + 1 + BytesNeededForVarint(byte_length)) & 1)
+        WriteTag(SerializationTag::kPadding);
+      WriteTag(SerializationTag::kTwoByteString);
+      WriteTwoByteString(new_chars);
+    } else {
+      WriteTag(SerializationTag::kOneByteString);
+      WriteOneByteString(chars);
+    }
   } else if (flat.IsTwoByte()) {
     base::Vector<const base::uc16> chars = flat.ToUC16Vector();
     uint32_t byte_length = chars.length() * sizeof(base::uc16);
@@ -629,7 +664,10 @@ Maybe<bool> ValueSerializer::WriteJSReceiver(Handle<JSReceiver> receiver) {
 Maybe<bool> ValueSerializer::WriteJSObject(Handle<JSObject> object) {
   DCHECK(!object->map().IsCustomElementsReceiverMap());
   const bool can_serialize_fast =
+    // [TT-492] Slow path all serialization so we're guaranteed to always match.
+    !recordreplay::IsRecordingOrReplaying("ValueSerializer") &&
       object->HasFastProperties(isolate_) && object->elements().length() == 0;
+
   if (!can_serialize_fast) return WriteJSObjectSlow(object);
 
   Handle<Map> map(object->map(), isolate_);
@@ -701,8 +739,11 @@ Maybe<bool> ValueSerializer::WriteJSArray(Handle<JSArray> array) {
   // count the elements, but would need to take care to note which indices
   // existed (as only indices which were enumerable own properties at this point
   // should be serialized).
+
   const bool should_serialize_densely =
-      array->HasFastElements(cage_base) && !array->HasHoleyElements(cage_base);
+    // [TT-492] Slow-path all serialization to avoid JIT- or GC-related divergences.
+    !recordreplay::IsRecordingOrReplaying("values", "ValueSerializer::WriteJSArray") &&
+    array->HasFastElements(cage_base) && !array->HasHoleyElements(cage_base);
 
   if (should_serialize_densely) {
     DCHECK_LE(length, static_cast<uint32_t>(FixedArray::kMaxLength));
@@ -1188,6 +1229,16 @@ Maybe<bool> ValueSerializer::ThrowDataCloneError(MessageTemplate index,
     isolate_->PromoteScheduledException();
   }
   return Nothing<bool>();
+}
+
+// FIXME surely there is a utility somewhere we can use instead?
+inline int HashBytes(const void* aPtr, size_t aSize) {
+  int hash = 0;
+  uint8_t* ptr = (uint8_t*)aPtr;
+  for (size_t i = 0; i < aSize; i++) {
+    hash = (((hash << 5) - hash) + ptr[i]) | 0;
+  }
+  return hash;
 }
 
 ValueDeserializer::ValueDeserializer(Isolate* isolate,
