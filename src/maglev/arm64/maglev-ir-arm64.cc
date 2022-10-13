@@ -6,6 +6,7 @@
 #include "src/codegen/arm64/assembler-arm64-inl.h"
 #include "src/codegen/arm64/register-arm64.h"
 #include "src/codegen/interface-descriptors-inl.h"
+#include "src/execution/thread-local-top.h"
 #include "src/maglev/arm64/maglev-assembler-arm64-inl.h"
 #include "src/maglev/maglev-assembler-inl.h"
 #include "src/maglev/maglev-graph-processor.h"
@@ -14,6 +15,7 @@
 #include "src/maglev/maglev-ir.h"
 #include "src/objects/feedback-cell.h"
 #include "src/objects/js-function.h"
+#include "src/runtime/runtime.h"
 
 namespace v8 {
 namespace internal {
@@ -748,6 +750,55 @@ void ReduceInterruptBudgetForReturn::GenerateCode(
     MaglevAssembler* masm, const ProcessingState& state) {
   GenerateReduceInterruptBudget(masm, this, ReduceInterruptBudgetType::kReturn,
                                 amount());
+}
+
+int ReplayIncrementAndCheckJsFrameDepth::MaxCallStackArgs() const {
+  return 0;
+}
+void ReplayIncrementAndCheckJsFrameDepth::SetValueLocationConstraints() {
+  set_temporaries_needed(2);
+}
+void ReplayIncrementAndCheckJsFrameDepth::GenerateCode(
+    MaglevAssembler* masm, const ProcessingState& state) {
+  MaglevAssembler::ScratchRegisterScope temps(masm);
+  Register address = temps.Acquire();
+  Register depth = temps.Acquire().W();
+  ExternalReference depth_ref = ExternalReference::Create(
+      IsolateAddressId::kReplayJsFrameDepthAddress, masm->isolate());
+  MemOperand depth_operand = __ ExternalReferenceAsOperand(depth_ref, address);
+  // There is no read-modify-write memory form here, so the increment x64 does
+  // on the operand itself is a load, an add and a store. The store happens
+  // before the check, as it does on x64, so an overflowing frame leaves the
+  // depth incremented.
+  __ Ldr(depth, depth_operand);
+  __ Add(depth, depth, Immediate(1));
+  __ Str(depth, depth_operand);
+  __ Cmp(depth, Immediate(ThreadLocalTop::kReplayMaxJsFrameDepth));
+  __ JumpToDeferredIf(
+      ge,
+      [](MaglevAssembler* masm, ReplayIncrementAndCheckJsFrameDepth* node) {
+        __ Move(kContextRegister, masm->native_context().object());
+        __ CallRuntime(Runtime::kThrowStackOverflow, 0);
+        masm->DefineExceptionHandlerAndLazyDeoptPoint(node);
+        __ Abort(AbortReason::kUnexpectedReturnFromThrow);
+      },
+      this);
+}
+
+void ReplayDecrementJsFrameDepth::SetValueLocationConstraints() {
+  set_temporaries_needed(2);
+}
+void ReplayDecrementJsFrameDepth::GenerateCode(MaglevAssembler* masm,
+                                               const ProcessingState& state) {
+  MaglevAssembler::ScratchRegisterScope temps(masm);
+  Register address = temps.Acquire();
+  Register depth = temps.Acquire().W();
+  ExternalReference depth_ref = ExternalReference::Create(
+      IsolateAddressId::kReplayJsFrameDepthAddress, masm->isolate());
+  MemOperand depth_operand = __ ExternalReferenceAsOperand(depth_ref, address);
+  __ Ldr(depth, depth_operand);
+  __ Sub(depth, depth, Immediate(1));
+  __ Str(depth, depth_operand);
 }
 
 // ---
