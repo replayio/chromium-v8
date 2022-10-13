@@ -184,6 +184,11 @@ class FailureMessage {
 
 }  // namespace
 
+const char* gCrashReason;
+
+extern "C" const char* V8RecordReplayCrashReasonCallback() {
+  return gCrashReason;
+}
 #if V8_LOGGING_LEVEL == 2
 void V8_Fatal(const char* file, int line, const char* format, ...) {
 #else
