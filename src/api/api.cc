@@ -2718,6 +2718,17 @@ i::ScriptDetails GetScriptDetails(
 
 }  // namespace
 
+namespace internal {
+
+static std::set<int>* gScriptsWithReplacedContents;
+
+bool IsRecordReplayReplacedScript(int script_id) {
+  return gScriptsWithReplacedContents &&
+         gScriptsWithReplacedContents->count(script_id);
+}
+
+} // namespace internal
+
 MaybeLocal<UnboundScript> ScriptCompiler::CompileUnboundInternal(
     Isolate* v8_isolate, Source* source, CompileOptions options,
     NoCacheReason no_cache_reason) {
