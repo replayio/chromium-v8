@@ -89,6 +89,131 @@ class Platform;
 bool IsMainThread();
 
 // Static container class for record/replay methods.
+class V8_EXPORT recordreplay {
+  public:
+
+static void SetRecordingOrReplaying(void* handle);
+static bool IsRecordingOrReplaying(const char* feature = nullptr,
+                                   const char* subfeature = nullptr);
+static bool IsRecording();
+static bool IsReplaying();
+static const char* GetRecordingId();
+
+static bool IsARMRecording();
+
+static bool FeatureEnabled(const char* feature, const char* subfeature = nullptr);
+static bool HasDisabledFeatures();
+
+static char* ReadAssetFileContents(const char* path, size_t* size);
+static void Print(const char* format, ...);
+static void Diagnostic(const char* format, ...);
+static void CommandDiagnostic(const char* format, ...);
+static void CommandDiagnosticTrace(const char* format, ...);
+// Adds a warning about unexpected behavior to the recording. kind names the
+// condition, fields hold the details that differ between occurrences.
+static void Warning(const char* kind,
+                    std::initializer_list<RecordReplayWarningField> fields = {});
+static void Trace(const char* format, ...);
+static void Crash(const char* format, ...);
+static bool HadMismatch();
+static bool HasAsserts();
+static void AssertRaw(const char* format, ...);
+static void Assert(const char* format, ...);
+static void AssertMaybeEventsDisallowed(const char* format, ...);
+static void AssertBytes(const char* why, const void* buf, size_t size);
+static bool AreAssertsDisabled();
+
+static uintptr_t RecordReplayValue(const char* why, uintptr_t v);
+static void RecordReplayBytes(const char* why, void* buf, size_t size);
+static void RecordReplayString(const char* why, std::string& str);
+
+static size_t CreateOrderedLock(const char* name);
+static void OrderedLock(int lock);
+static void OrderedUnlock(int lock);
+
+static void InvalidateRecording(const char* why);
+static void NewCheckpoint();
+static void NewCheckpointFlushed();
+
+static void BeginPassThroughEvents();
+static void EndPassThroughEvents();
+static bool AreEventsPassedThrough(const char* why = nullptr);
+
+static void BeginDisallowEvents();
+static void BeginDisallowEventsWithLabel(const char* label);
+static void EndDisallowEvents();
+
+// A "why" string should be used whenever there are substantive behavior changes
+// resulting from this check.
+static bool AreEventsDisallowed(const char* why = nullptr);
+
+// A "why" string should be used whenever there are substantive behavior changes
+// resulting from this check.
+static bool IsInReplayCode(const char* why = nullptr);
+
+static void EnterReplayCode();
+static void ExitReplayCode();
+
+static bool HasDivergedFromRecording();
+static bool AllowSideEffects();
+
+// Long running work that doesn't advance the progress counter calls this
+// regularly, so replay hang detection sees the process is busy.
+static void NotifyActivity();
+
+static int NewDependencyGraphNode(const char* json);
+static void AddDependencyGraphEdge(int source, int target, const char* json);
+static void BeginDependencyExecution(int node);
+static void EndDependencyExecution();
+
+struct AutoDependencyExecution {
+  AutoDependencyExecution(int node) {
+    BeginDependencyExecution(node);
+  }
+  ~AutoDependencyExecution() {
+    EndDependencyExecution();
+  }
+};
+
+static void BeginAssertBufferAllocations(const char* issueLabel = "");
+static void EndAssertBufferAllocations();
+
+struct AutoOrderedLock {
+  AutoOrderedLock(int id) : id_(id) { OrderedLock(id_); }
+  ~AutoOrderedLock() { OrderedUnlock(id_); }
+  int id_;
+};
+
+struct AutoAssertMaybeEventsDisallowed {
+  AutoAssertMaybeEventsDisallowed(const char* format, ...);
+  ~AutoAssertMaybeEventsDisallowed();
+  std::string msg_;
+};
+
+struct AssertBufferAllocationState {
+  size_t enabled = 0;
+  std::string issueLabel = "";
+};
+
+
+// RAII class to enable recording assertions on dynamic-length buffer 
+// allocations. Used to track down the allocation causing mismatched message 
+// sizes when replaying.
+// TODO: Merge this with the similar `AuxtoRecordReplayAssertBufferAllocations`
+// in mojo/public/cpp/bindings/lib/buffer.cc (for main-thread only).
+struct AutoAssertBufferAllocations {
+  static AssertBufferAllocationState* GetState();
+
+  AutoAssertBufferAllocations(const char* issueLabel = "");
+  ~AutoAssertBufferAllocations();
+};
+
+static void RegisterPointer(const char* name, const void* ptr);
+static void UnregisterPointer(const void* ptr);
+static int PointerId(const void* ptr);
+static void* IdPointer(int id);
+
+}; // class recordreplay
 
 }  // namespace v8
 
