@@ -72,6 +72,18 @@
 namespace v8 {
 namespace internal {
 
+extern MaybeHandle<Script> MaybeGetScript(Isolate* isolate, int script_id);
+extern Handle<Script> GetScript(Isolate* isolate, int script_id);
+
+extern int gReplaceSourceContentsScriptId;
+extern bool gReplaceSourceContentsInstrumented;
+extern bool gReplaceSourceContentsAssertValues;
+extern void MarkRecordReplayReplacedScript(int script_id);
+extern bool RecordReplayIsDisallowedScriptId(int script_id);
+
+extern MaybeHandle<String>
+ReplayingReplaceScriptContents(Isolate* isolate, Handle<String> source);
+
 namespace {
 
 constexpr bool IsOSR(BytecodeOffset osr_offset) { return !osr_offset.IsNone(); }
@@ -624,6 +636,10 @@ bool UseAsmWasm(FunctionLiteral* literal, bool asm_wasm_broken) {
   // invalid module instantiation attempts are off limit forever.
   if (asm_wasm_broken) return false;
 
+  // Instrumentation added when recording/replaying requires that scripts be
+  // compiled in the regular way.
+  if (recordreplay::IsRecordingOrReplaying("no-asm-wasm")) return false;
+
   // In stress mode we want to run the validator on everything.
   if (v8_flags.stress_validate_asm) return true;
 
@@ -808,6 +824,16 @@ ExecuteSingleUnoptimizedCompilationJob(
     // through to standard unoptimized compile.
   }
 #endif
+  // Replay: a compile emits instrumentation exactly when the script it compiles
+  // into is instrumented. Checked where reading the script is safe: the main
+  // thread, or the thread that just created the script.
+  if (recordreplay::IsRecordingOrReplaying("emit-opcodes") && !script.is_null() &&
+      (IsMainThread() || parse_info->flags().is_toplevel())) {
+    CHECK_EQ(!parse_info->flags().record_replay_ignore(),
+             script->record_replay_instrumented());
+    CHECK_EQ(parse_info->flags().record_replay_assert_values(),
+             script->record_replay_assert_values());
+  }
   std::unique_ptr<UnoptimizedCompilationJob> job(
       interpreter::Interpreter::NewCompilationJob(
           parse_info, literal, script, allocator, eager_inner_literals,
@@ -1621,6 +1647,17 @@ DeferredFinalizationJobData::DeferredFinalizationJobData(
     : function_handle_(isolate->heap()->NewPersistentHandle(function_handle)),
       job_(std::move(job)) {}
 
+extern bool RecordReplayIsMainThreadIsolate(Isolate* isolate);
+extern bool RecordReplayAssertValues();
+// Whether the code handing V8 a script's source on the main thread leaves it
+// uninstrumented: Replay's own code, or code running with events disallowed.
+// The script this compile creates keeps that decision for all of its compiles
+// (ParseInfo::CreateScript, RecordReplayInheritCompileFlags).
+static bool RecordReplayMainThreadIgnoresCompile() {
+  return recordreplay::AreEventsDisallowed("CompileFlags") ||
+         recordreplay::IsInReplayCode("CompileFlags");
+}
+
 BackgroundCompileTask::BackgroundCompileTask(
     ScriptStreamingData* streamed_data, Isolate* isolate, ScriptType type,
     ScriptCompiler::CompileOptions options,
@@ -1652,6 +1689,34 @@ BackgroundCompileTask::BackgroundCompileTask(
   } else {
     DCHECK_NULL(compile_hint_callback);
     DCHECK_NULL(compile_hint_callback_data);
+  }
+
+  // Streamed scripts compile on a background thread: decide here, where
+  // streaming starts. That is the main thread, except for inline scripts Blink
+  // precompiles on its HTML scanner's thread, which are the page's own. Only the
+  // main thread's isolate is instrumented.
+  if (recordreplay::IsRecordingOrReplaying()) {
+    if (!RecordReplayIsMainThreadIsolate(isolate) ||
+        (IsMainThread() && RecordReplayMainThreadIgnoresCompile())) {
+      flags_.set_record_replay_ignore(true);
+    } else if (RecordReplayAssertValues()) {
+      flags_.set_record_replay_assert_values(true);
+    }
+  }
+}
+
+static void SetRecordReplayFlags(UnoptimizedCompileFlags& flags) {
+  if (!recordreplay::IsRecordingOrReplaying()) {
+    return;
+  }
+
+  if (!IsMainThread() || RecordReplayMainThreadIgnoresCompile()) {
+    flags.set_record_replay_ignore(true);
+    return;
+  }
+
+  if (RecordReplayAssertValues()) {
+    flags.set_record_replay_assert_values(true);
   }
 }
 
@@ -1834,6 +1899,14 @@ class MergeAssumptionChecker final : public ObjectVisitor {
 
 bool BackgroundCompileTask::is_streaming_compilation() const {
   return function_literal_id_ == kFunctionLiteralIdTopLevel;
+}
+
+// For use when checking that record/replay opcodes are only emitted
+// for the main thread.
+static std::atomic<size_t> gNumRunningBackgroundCompileTasks;
+
+size_t NumRunningBackgroundCompileTasks() {
+  return gNumRunningBackgroundCompileTasks;
 }
 
 void BackgroundCompileTask::Run() {
@@ -2879,6 +2952,8 @@ MaybeHandle<JSFunction> Compiler::GetFunctionFromEval(
     DCHECK(!flags.is_module());
     flags.set_parse_restriction(restriction);
 
+    SetRecordReplayFlags(flags);
+
     UnoptimizedCompileState compile_state;
     ReusableUnoptimizedCompileState reusable_state(isolate);
     ParseInfo parse_info(isolate, flags, &compile_state, &reusable_state);
@@ -3343,12 +3418,30 @@ Handle<Script> NewScript(
 }
 
 MaybeHandle<SharedFunctionInfo> CompileScriptOnMainThread(
-    const UnoptimizedCompileFlags flags, Handle<String> source,
+    UnoptimizedCompileFlags flags, Handle<String> source,
     const ScriptDetails& script_details, NativesFlag natives,
     v8::Extension* extension, Isolate* isolate,
     MaybeHandle<Script> maybe_script, IsCompiledScope* is_compiled_scope,
     CompileHintCallback compile_hint_callback = nullptr,
     void* compile_hint_callback_data = nullptr) {
+  SetRecordReplayFlags(flags);
+  if (recordreplay::IsRecordingOrReplaying()) {
+    if (Handle<Script> existing; maybe_script.ToHandle(&existing)) {
+      // Compiling into an existing script (a cached script that lost its
+      // top-level function, or a cache hit the replay recompiles).
+      RecordReplayInheritCompileFlags(flags, *existing);
+    } else if (gReplaceSourceContentsScriptId) {
+      // The script replacing the contents of another one is that script.
+      flags.set_record_replay_ignore(!gReplaceSourceContentsInstrumented);
+      flags.set_record_replay_assert_values(gReplaceSourceContentsAssertValues);
+    } else if (natives == EXTENSION_CODE) {
+      // V8 extensions (e.g. --expose-gc's) are the embedder's code, run when
+      // every context is created, like Replay's own scripts.
+      flags.set_record_replay_ignore(true);
+      flags.set_record_replay_assert_values(false);
+    }
+  }
+
   UnoptimizedCompileState compile_state;
   ReusableUnoptimizedCompileState reusable_state(isolate);
   ParseInfo parse_info(isolate, flags, &compile_state, &reusable_state);
@@ -3552,6 +3645,59 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
     maybe_script = lookup_result.script();
     maybe_result = lookup_result.toplevel_sfi();
     is_compiled_scope = lookup_result.is_compiled_scope();
+    // Replaying turns the compilation cache off (api.cc), so a script the
+    // replay compiles into is only ever one the recording found (below).
+    CHECK(!recordreplay::IsReplaying() || maybe_script.is_null());
+
+    // The compilation cache isn't enabled when replaying, but we still need
+    // to record/replay whether a script was found when recording so that the
+    // same scripts are created at the same points. The SFI will need to be
+    // recompiled when replaying but that's fine when the right script ID is used.
+    if (recordreplay::IsRecordingOrReplaying("values") &&
+        !recordreplay::AreEventsDisallowed() &&
+        IsMainThread() &&
+        !gReplaceSourceContentsScriptId) {
+      int script_id = v8::UnboundScript::kNoScriptId;
+      if (Handle<Script> script;
+          recordreplay::IsRecording() && maybe_script.ToHandle(&script)) {
+        script_id = script->id();
+        CHECK(script_id != v8::UnboundScript::kNoScriptId);
+
+        // Scripts created with events disallowed have ids the replay may not
+        // create (Isolate::GetNextScriptId): compile a new script instead.
+        // Not known to happen.
+        const bool disallowed_id = RecordReplayIsDisallowedScriptId(script_id);
+        if (disallowed_id) {
+          recordreplay::Warning("CompilationCacheHitOnDisallowedScript",
+                                {{"scriptId", script_id}});
+        }
+
+        // Make sure the script has been registered, if it hasn't then we won't
+        // be able to find it when replaying.
+        if (disallowed_id || MaybeGetScript(isolate, script_id).is_null()) {
+          maybe_script = MaybeHandle<Script>();
+          maybe_result = MaybeHandle<SharedFunctionInfo>();
+          is_compiled_scope = IsCompiledScope();
+          script_id = v8::UnboundScript::kNoScriptId;
+        }
+      }
+      script_id = (int)recordreplay::RecordReplayValue("GetSharedFunctionInfoForScriptImpl script_id", script_id);
+      if (recordreplay::IsReplaying() && script_id != v8::UnboundScript::kNoScriptId) {
+        maybe_script = GetScript(isolate, script_id);
+      }
+    } else if (recordreplay::IsRecording() &&
+               recordreplay::IsRecordingOrReplaying("values") &&
+               !IsMainThread()) {
+      // Off the main thread whether the lookup found a script isn't recorded,
+      // and the replay doesn't use the cache, so don't use what it found when
+      // recording either: the replay would create a script the recording
+      // didn't, as when a worker imports the same script twice or an audio
+      // worklet loads the same module again.
+      maybe_script = MaybeHandle<Script>();
+      maybe_result = MaybeHandle<SharedFunctionInfo>();
+      is_compiled_scope = IsCompiledScope();
+    }
+
     if (!maybe_result.is_null()) {
       compile_timer.set_hit_isolate_cache();
     } else if (can_consume_code_cache) {
@@ -3766,6 +3912,8 @@ MaybeHandle<JSFunction> Compiler::GetWrappedFunction(
     flags.set_collect_source_positions(true);
     flags.set_is_eager(compile_options == ScriptCompiler::kEagerCompile);
 
+    SetRecordReplayFlags(flags);
+
     UnoptimizedCompileState compile_state;
     ReusableUnoptimizedCompileState reusable_state(isolate);
     ParseInfo parse_info(isolate, flags, &compile_state, &reusable_state);
@@ -3823,7 +3971,11 @@ Compiler::GetSharedFunctionInfoForStreamedScript(
   // Check if compile cache already holds the SFI, if so no need to finalize
   // the code compiled on the background thread.
   CompilationCache* compilation_cache = isolate->compilation_cache();
-  {
+
+  // For now we don't support using the compilation cache with streamed scripts,
+  // due to the lack of support for handling the case when the script is present
+  // but not the top level SFI.
+  if (!recordreplay::IsRecordingOrReplaying("no-streamed-script-cache")) {
     TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("v8.compile"),
                  "V8.StreamingFinalization.CheckCache");
     CompilationCacheScript::LookupResult lookup_result =
