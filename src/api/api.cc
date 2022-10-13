@@ -2468,6 +2468,13 @@ i::ScriptDetails GetScriptDetails(
 
 namespace internal {
 
+// If we are compiling a script while replaying that replaces another one,
+// the ID of the script being replaced. Main thread only.
+int gReplaceSourceContentsScriptId;
+// The decisions made for the script whose contents are being replaced: the
+// replacing script has its id, so it gets its decisions too.
+bool gReplaceSourceContentsInstrumented;
+bool gReplaceSourceContentsAssertValues;
 static std::set<int>* gScriptsWithReplacedContents;
 
 bool IsRecordReplayReplacedScript(int script_id) {
@@ -12302,6 +12309,11 @@ void RecordReplayOnExceptionUnwind(Isolate* isolate) {
         Handle<SharedFunctionInfo> shared(summary.function()->shared(), isolate);
         Handle<Object> script(shared->script(), isolate);
         if (IsScript(*script)) {
+          Handle<Script> casted_script = Cast<Script>(script);
+          if (!RecordReplayHasRegisteredScript(*casted_script)) {
+            // Don't repor errors from unregistered.
+            return;
+          }
         }
       }
     }
@@ -13001,6 +13013,7 @@ void recordreplay::NewCheckpoint() {
     internal::gRecordReplayHasCheckpoint = true;
     gRecordReplayNewCheckpoint();
     if (first) {
+      internal::RecordReplayRegisterScriptsBeforeFirstCheckpoint();
     }
   }
 }
@@ -13020,6 +13033,7 @@ void recordreplay::NewCheckpointFlushed() {
     internal::gRecordReplayHasCheckpoint = true;
     gRecordReplayNewCheckpointFlushed();
     if (first) {
+      internal::RecordReplayRegisterScriptsBeforeFirstCheckpoint();
     }
   }
 }
@@ -13727,6 +13741,7 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
     }
   }
 
+  i::RecordReplayInitInstrumentationState();
 }
 
 extern "C" void V8SetRecordingOrReplaying(void* handle) {
