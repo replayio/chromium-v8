@@ -452,6 +452,7 @@ Tagged<Boolean> Heap::ToBoolean(bool condition) {
 }
 
 int Heap::NextScriptId() {
+  recordreplay::OrderedLock(script_ordered_lock_id_);
   FullObjectSlot last_script_id_slot(&roots_table()[RootIndex::kLastScriptId]);
   Tagged<Smi> last_id = Cast<Smi>(last_script_id_slot.Relaxed_Load());
   Tagged<Smi> new_id, last_id_before_cas;
@@ -472,6 +473,11 @@ int Heap::NextScriptId() {
         Cast<Smi>(last_script_id_slot.Relaxed_CompareAndSwap(last_id, new_id));
   } while (last_id != last_id_before_cas);
 
+  recordreplay::OrderedUnlock(script_ordered_lock_id_);
+  // Parenthesized against turboshaft's function-like Assert macro, which is in
+  // effect over the headers define-assembler-macros.inc includes (this one among
+  // them, through factory-inl.h; see wasm-in-js-inlining-reducer-inl.h).
+  (recordreplay::Assert)("Heap::NextScriptId %d", new_id.value());
   return new_id.value();
 }
 
