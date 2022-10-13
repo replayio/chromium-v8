@@ -51,6 +51,15 @@ V8_OBJECT class JSFinalizationRegistry : public JSObject {
   inline int flags() const;
   inline void set_flags(int value);
 
+  // Record/replay: see js-weak-refs.tq. M149 made this class
+  // @cppObjectLayoutDefinition, so Torque generates neither the field nor
+  // its accessors and the layout is spelled out by hand below.
+  inline int record_replay_id() const;
+  inline void set_record_replay_id(int value);
+  inline Tagged<Object> record_replay_cells() const;
+  inline void set_record_replay_cells(
+      Tagged<Object> value, WriteBarrierMode mode = UPDATE_WRITE_BARRIER);
+
   DECL_PRINTER(JSFinalizationRegistry)
   EXPORT_DECL_VERIFIER(JSFinalizationRegistry)
 
@@ -119,6 +128,12 @@ V8_OBJECT class JSFinalizationRegistry : public JSObject {
   TaggedMember<UnionOf<WeakCell, Undefined>> active_cells_;
   TaggedMember<UnionOf<WeakCell, Undefined>> cleared_cells_;
   TaggedMember<Object> key_map_;
+  // Record/replay: between key_map and next_dirty, matching the field order
+  // in js-weak-refs.tq -- Torque still computes offsets from that list and
+  // the generated layout asserts are off for this class, so a different
+  // position here is a silent layout mismatch. See defect DV8-060.
+  TaggedMember<Smi> record_replay_id_;
+  TaggedMember<Object> record_replay_cells_;
   TaggedMember<UnionOf<JSFinalizationRegistry, Undefined>> next_dirty_;
   TaggedMember<Smi> flags_ V8_TQ_TYPE(SmiTagged<FinalizationRegistryFlags>);
 
@@ -168,6 +183,11 @@ V8_OBJECT class WeakCell : public HeapObject {
 
   class BodyDescriptor;
 
+  // Record/replay: see js-weak-refs.tq. From M149 Torque generates these for
+  // none of the three weak-ref classes -- all spell their layout out by hand.
+  inline int record_replay_id() const;
+  inline void set_record_replay_id(int value);
+
   // Provide relaxed load access to target field.
   inline Tagged<HeapObject> relaxed_target() const;
 
@@ -199,6 +219,8 @@ V8_OBJECT class WeakCell : public HeapObject {
   TaggedMember<UnionOf<WeakCell, Undefined>> next_;
   TaggedMember<UnionOf<WeakCell, Undefined>> key_list_prev_;
   TaggedMember<UnionOf<WeakCell, Undefined>> key_list_next_;
+  // Record/replay: last, matching the field's position in js-weak-refs.tq.
+  TaggedMember<Smi> record_replay_id_;
 
   friend class JSFinalizationRegistry;
   friend class MarkCompactCollector;
@@ -218,6 +240,12 @@ V8_OBJECT class JSWeakRef : public JSObject {
   inline void set_target(Tagged<UnionOf<Symbol, JSReceiver, Undefined>> value,
                          WriteBarrierMode mode = UPDATE_WRITE_BARRIER);
 
+  // Record/replay: see js-weak-refs.tq. M149 made this class
+  // @cppObjectLayoutDefinition, so Torque generates neither the field nor
+  // its accessors and the layout is spelled out by hand below.
+  inline int record_replay_id() const;
+  inline void set_record_replay_id(int value);
+
   DECL_PRINTER(JSWeakRef)
   EXPORT_DECL_VERIFIER(JSWeakRef)
 
@@ -225,6 +253,8 @@ V8_OBJECT class JSWeakRef : public JSObject {
 
  public:
   TaggedMember<UnionOf<Symbol, JSReceiver, Undefined>> target_;
+  // Record/replay: last, matching the field's position in js-weak-refs.tq.
+  TaggedMember<Smi> record_replay_id_;
 } V8_OBJECT_END;
 
 }  // namespace internal
