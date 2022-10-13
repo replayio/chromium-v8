@@ -89,6 +89,23 @@ ScopeIterator::ScopeIterator(Isolate* isolate,
   TryParseAndRetrieveScopes();
 }
 
+namespace {
+
+// The context of |function| on the chain starting at |context|, or an empty
+// context if the chain doesn't hold it.
+Tagged<Context> RecordReplayFunctionContext(Tagged<Context> context,
+                                            const DebugScriptScope& closure_scope,
+                                            Tagged<JSFunction> function) {
+  if (!closure_scope.needs_context()) return function->context();
+  while (context->scope_info() != function->shared()->scope_info()) {
+    if (IsNativeContext(context)) return {};
+    context = context->previous();
+  }
+  return context;
+}
+
+}  // namespace
+
 void ScopeIterator::Restart() {
   DCHECK_NOT_NULL(frame_inspector_);
   function_ = frame_inspector_->GetFunction();
@@ -101,7 +118,60 @@ void ScopeIterator::Restart() {
   if (ignore_nested_scopes_) UnwindToClosureContext();
   UnwrapEvaluationContext();
   seen_script_scope_ = false;
+  // Keep describing only the function scope when TryParseAndRetrieveScopes
+  // fell back to it, see there.
+  if (recordreplay::IsRecordingOrReplaying() && closure_scope_index_ != -1 &&
+      start_scope_index_ == closure_scope_index_ &&
+      closure_scope().is_function_scope()) {
+    Tagged<Context> context =
+        RecordReplayFunctionContext(*context_, closure_scope(), *function_);
+    context_ =
+        context.is_null() ? Handle<Context>() : handle(context, isolate_);
+  }
 }
+
+namespace {
+
+// Whether |context| starts with the contexts that the scopes from
+// |start_scope_index| up to |closure_scope_index| create, which holds while
+// execution is inside all of those scopes.
+//
+// M156 replaced the AST `Scope*` chain with indices into a serialized scope
+// tree, so the walk is by index and the termination test is an index
+// comparison rather than pointer identity. `parent()` yields an optional, so
+// the loop also stops if `closure_scope_index` is not an ancestor of
+// `start_scope_index`; the pointer version would have run off the chain.
+bool RecordReplayContextsMatchScopes(
+    DirectHandle<DebugScriptScopeInfo> debug_scope_info, int start_scope_index,
+    int closure_scope_index, Tagged<Context> context,
+    Tagged<SharedFunctionInfo> shared) {
+  DisallowGarbageCollection no_gc;
+  DebugScriptScope closure_scope =
+      DebugScriptScope::FromIndex(debug_scope_info, closure_scope_index);
+  for (std::optional<DebugScriptScope> scope =
+           DebugScriptScope::FromIndex(debug_scope_info, start_scope_index);
+       scope.has_value() && scope->scope_index() != closure_scope_index;
+       scope = scope->parent()) {
+    if (!scope->needs_context()) continue;
+    if (IsNativeContext(context) ||
+        context->scope_info()->scope_type() != scope->scope_type()) {
+      return false;
+    }
+    const int variable_count = scope->variable_count();
+    for (int i = 0; i < variable_count; i++) {
+      DebugVariableInfo var = scope->variable(i);
+      if (var.location == VariableLocation::CONTEXT &&
+          context->scope_info()->ContextSlotIndex(var.name) != var.index) {
+        return false;
+      }
+    }
+    context = context->previous();
+  }
+  return !closure_scope.needs_context() ||
+         context->scope_info() == shared->scope_info();
+}
+
+}  // namespace
 
 void ScopeIterator::TryParseAndRetrieveScopes() {
   // Catch the case when the debugger stops in an internal function.
@@ -160,6 +230,25 @@ void ScopeIterator::TryParseAndRetrieveScopes() {
   }
 
   UnwrapEvaluationContext();
+
+  // While recording or replaying, frames are also described at points the
+  // debugger doesn't pause at, such as the implicit catch handler that rejects
+  // an async function's promise. That handler has no source position of its
+  // own, so the frame reports the last position before it, which can be inside
+  // blocks and catch clauses whose contexts are gone. Describe only the
+  // function scope then, as at a return.
+  if (recordreplay::IsRecordingOrReplaying() && closure_scope_index_ != -1 &&
+      closure_scope().is_function_scope() &&
+      !RecordReplayContextsMatchScopes(debug_scope_info_, start_scope_index_,
+                                       closure_scope_index_, *context_,
+                                       *shared_info)) {
+    current_scope_index_ = closure_scope_index_;
+    start_scope_index_ = current_scope_index_;
+    Tagged<Context> context =
+        RecordReplayFunctionContext(*context_, closure_scope(), *function_);
+    context_ =
+        context.is_null() ? Handle<Context>() : handle(context, isolate_);
+  }
 }
 
 void ScopeIterator::UnwindToClosureContext() {
@@ -915,6 +1004,10 @@ bool ScopeIterator::VisitLocals(const Visitor& visitor, Mode mode,
           value = isolate_->factory()->tdz_hole_value();
           break;
         }
+        // This index is sometimes out of range when gathering state using the
+        // Record Replay driver.
+        if (index >= context_->length()) continue;
+
         DCHECK_EQ(context_->scope_info()->ContextSlotIndex(*name), index);
         // Context::get() only DCHECKs the index. Make sure a context that is
         // out of sync with the parsed scope can't cause an out-of-bounds read.
