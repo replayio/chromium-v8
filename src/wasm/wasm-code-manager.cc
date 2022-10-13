@@ -10,6 +10,7 @@
 #include <numeric>
 #include <optional>
 
+#include "include/replayio.h"
 #include "src/base/atomicops.h"
 #include "src/base/build_config.h"
 #include "src/base/iterator.h"
@@ -1021,6 +1022,22 @@ uint32_t NativeModule::DisassembleForLcov(
   return coverage_file_writer.GetLineCount();
 }
 
+namespace {
+// A NativeModule shared between isolates (posted to workers, or compiled from
+// the same bytes through the NativeModuleCache) is deleted by whichever holder
+// drops the last reference, on its own thread, which nothing orders with the
+// other holders. When recording or replaying, that can be a different thread
+// in each, so deleting it must not record anything on that thread.
+void DeleteNativeModule(NativeModule* native_module) {
+  std::optional<replayio::AutoDisallowEvents> disallow;
+  if (recordreplay::IsRecordingOrReplaying("wasm-native-module-sharing",
+                                         "DeleteNativeModule")) {
+    disallow.emplace("wasm::DeleteNativeModule");
+  }
+  delete native_module;
+}
+}  // namespace
+
 NativeModule::NativeModule(WasmEnabledFeatures enabled_features,
                            WasmDetectedFeatures detected_features,
                            CompileTimeImports compile_imports,
@@ -1041,7 +1058,7 @@ NativeModule::NativeModule(WasmEnabledFeatures enabled_features,
   // there.
   DCHECK_NOT_NULL(shared_this);
   DCHECK_NULL(*shared_this);
-  shared_this->reset(this);
+  shared_this->reset(this, DeleteNativeModule);
   compilation_state_ = CompilationState::New(*shared_this, detected_features);
   compilation_state_->InitCompileJob();
   DCHECK_NOT_NULL(module_);
