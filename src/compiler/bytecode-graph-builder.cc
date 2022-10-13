@@ -5,6 +5,7 @@
 #include "src/compiler/bytecode-graph-builder.h"
 
 #include "src/ast/ast.h"
+#include "src/codegen/external-reference.h"
 #include "src/codegen/source-position-table.h"
 #include "src/codegen/tick-counter.h"
 #include "src/common/assert-scope.h"
@@ -20,6 +21,7 @@
 #include "src/compiler/operator-properties.h"
 #include "src/compiler/simplified-operator.h"
 #include "src/compiler/state-values-utils.h"
+#include "src/execution/thread-local-top.h"
 #include "src/interpreter/bytecode-array-iterator.h"
 #include "src/interpreter/bytecode-flags.h"
 #include "src/interpreter/bytecodes.h"
@@ -30,9 +32,11 @@
 
 namespace v8 {
 namespace internal {
+
 extern bool gRecordReplayAssertProgress;
 extern int gRecordReplayCheckProgress;
 extern bool gRecordReplayInstrumentationEnabled;
+
 namespace compiler {
 
 class BytecodeGraphBuilder {
