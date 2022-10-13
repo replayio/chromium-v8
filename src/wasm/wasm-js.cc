@@ -11,6 +11,7 @@
 #include "include/v8-persistent-handle.h"
 #include "include/v8-promise.h"
 #include "include/v8-wasm.h"
+#include "include/v8.h"  // For replay.
 #include "src/api/api-inl.h"
 #include "src/api/api-natives.h"
 #include "src/base/logging.h"
@@ -556,6 +557,8 @@ void WasmStreamingCallbackForTesting(
 
   std::shared_ptr<v8::WasmStreaming> streaming =
       v8::WasmStreaming::Unpack(info.GetIsolate(), info.Data());
+  REPLAY_ASSERT("WasmStreamingCallbackForTesting use_count %ld",
+                streaming.use_count());
 
   bool is_shared = false;
   i::wasm::ModuleWireBytes bytes =
@@ -574,6 +577,8 @@ void WasmStreamingPromiseFailedCallback(
   DCHECK(i::ValidateCallbackInfo(info));
   std::shared_ptr<v8::WasmStreaming> streaming =
       v8::WasmStreaming::Unpack(info.GetIsolate(), info.Data());
+  REPLAY_ASSERT("WasmStreamingPromiseFailedCallback use_count %ld",
+                streaming.use_count());
   streaming->Abort(info[0]);
 }
 
