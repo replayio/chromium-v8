@@ -7106,6 +7106,11 @@ Reduction JSCallReducer::ReduceStringPrototypeConcat(Node* node) {
 }
 
 Reduction JSCallReducer::ReducePromiseConstructor(Node* node) {
+  if (recordreplay::IsRecordingOrReplaying(
+        "disable-v8-optimize-promises",
+        "JSCallReducer::ReducePromiseConstructor"))
+    return NoChange();
+
   PromiseBuiltinReducerAssembler a(this, node);
 
   // We only inline when we have the executor.
@@ -7190,6 +7195,11 @@ Node* JSCallReducer::CreateClosureFromBuiltinSharedFunctionInfo(
 
 // ES section #sec-promise.prototype.finally
 Reduction JSCallReducer::ReducePromisePrototypeFinally(Node* node) {
+  if (recordreplay::IsRecordingOrReplaying(
+        "disable-v8-optimize-promises",
+        "JSCallReducer::ReducePromisePrototypeFinally"))
+    return NoChange();
+
   JSCallNode n(node);
   CallParameters const& p = n.Parameters();
   int arity = p.arity_without_implicit_args();
@@ -7307,6 +7317,11 @@ Reduction JSCallReducer::ReducePromisePrototypeFinally(Node* node) {
 }
 
 Reduction JSCallReducer::ReducePromisePrototypeThen(Node* node) {
+  if (recordreplay::IsRecordingOrReplaying(
+        "disable-v8-optimize-promises",
+        "JSCallReducer::ReducePromisePrototypeThen"))
+    return NoChange();
+
   JSCallNode n(node);
   CallParameters const& p = n.Parameters();
   if (p.speculation_mode() == SpeculationMode::kDisallowSpeculation) {
