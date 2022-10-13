@@ -938,5 +938,49 @@ RUNTIME_FUNCTION(Runtime_ProfileCreateSnapshotDataBlob) {
   return ReadOnlyRoots(isolate).undefined_value();
 }
 
+extern uint64_t* gProgressCounter;
+extern bool gRecordReplayAssertProgress;
+// When gRecordReplayAssertProgress is set we keep track of all the progress
+// made on the main thread and associate it with main-thread assertions using
+// the recorder's assert data callbacks API. Each progress advancement is
+// associated with a single 64 bit value encoding the script ID and location
+// within that script of the function which executed.
+static std::vector<uint64_t>* gProgressData;
+
+RecordReplayScrubDivergentProgressScope::
+    RecordReplayScrubDivergentProgressScope()
+    : active_(false), start_progress_(0), start_data_size_(0) {
+  if (!recordreplay::IsRecordingOrReplaying() || !IsMainThread()) return;
+  if (!recordreplay::AreEventsDisallowed()) return;
+  if (recordreplay::HasDivergedFromRecording()) return;
+  active_ = true;
+  start_progress_ = *gProgressCounter;
+  start_data_size_ = gProgressData ? gProgressData->size() : 0;
+}
+
+RecordReplayScrubDivergentProgressScope::
+    ~RecordReplayScrubDivergentProgressScope() {
+  if (!active_) return;
+  if (recordreplay::HasDivergedFromRecording()) return;
+  if (start_progress_ >= *gProgressCounter) return;
+  // [RUN-1988] Divergent path advanced PC via instrumented user code.
+  *gProgressCounter = start_progress_;
+  if (start_data_size_ == 0) {
+    if (gProgressData) {
+      delete gProgressData;
+      gProgressData = nullptr;
+    }
+  } else if (gProgressData && gProgressData->size() > start_data_size_) {
+    gProgressData->resize(start_data_size_);
+  }
+}
+
+std::string GetScriptName(Handle<Script> script) {
+  if (script.is_null() || !script->name().IsString()) {
+    return "(anonymous script)";
+  }
+  return String::cast(script->name()).ToCString().get();
+}
+
 }  // namespace internal
 }  // namespace v8
