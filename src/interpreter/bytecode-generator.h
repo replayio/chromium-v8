@@ -58,6 +58,9 @@ class BytecodeGenerator final : public AstVisitor<BytecodeGenerator> {
   void VisitDeclarations(Declaration::List* declarations);
   void VisitStatements(const ZonePtrList<Statement>* statments);
 
+  // [RUN-3317] Shift breakpoint from |stmt| to |expr|, if |expr| exists.
+  void ReplayExpressionShiftedSetStatementPosition(Statement* stmt, Expression* expr);
+
  private:
   class AccumulatorPreservingScope;
   class ContextScope;
@@ -552,6 +555,11 @@ class BytecodeGenerator final : public AstVisitor<BytecodeGenerator> {
   int suspend_count_;
   // TODO(solanes): assess if we can move loop_depth_ into LoopScope.
   int loop_depth_;
+
+  // Whether we've emitted an opcode to track the 'this' object after
+  // seeing an assignment to one of its properties. This is emitted at
+  // most once per function.
+  bool record_replay_has_track_this_ = false;
 
   LoopScope* current_loop_scope_;
 
