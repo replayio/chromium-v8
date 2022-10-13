@@ -669,6 +669,11 @@ class Heap final {
   V8_EXPORT_PRIVATE uint64_t external_memory_soft_limit();
   V8_EXPORT_PRIVATE uint64_t UpdateExternalMemory(int64_t delta);
 
+  // Record/replay: upstream's external-memory GC decision, extracted verbatim
+  // out of UpdateExternalMemory() so the stack-guard hook can reach it too.
+  // See defect DV8-048.
+  void HandleExternalMemoryPressure(LocalHeap* local_heap, uint64_t total_after);
+
   uint64_t backing_store_bytes() const;
 
   void CompactWeakArrayLists();
@@ -932,8 +937,19 @@ class Heap final {
           gc_notify_updated_slot,
       WriteBarrierMode write_barrier_mode = UPDATE_WRITE_BARRIER);
 
-  MaybeDirectHandle<JSFinalizationRegistry>
-  DequeueDirtyJSFinalizationRegistry();
+  // Record/replay: the dirty list holds both registries whose cleanup is
+  // driven by the recording ("tracked", see src/replay/finalization-registry.h)
+  // and registries with the default handling. These look only at the
+  // registries of one kind. The first returns whether the list has such a
+  // registry, the second removes and returns the first one.
+  enum class RecordReplayTracking { kTracked, kUntracked };
+
+  // Called at each progress interrupt when recording/replaying.
+  void RecordReplayOnProgressInterrupt();
+  bool RecordReplayHasDirtyJSFinalizationRegistries(
+      RecordReplayTracking tracking);
+  MaybeHandle<JSFinalizationRegistry>
+  RecordReplayDequeueDirtyJSFinalizationRegistry(RecordReplayTracking tracking);
 
   // Called from Heap::NotifyContextDisposed to remove all
   // FinalizationRegistries with {context} from the dirty list when the context
@@ -1024,6 +1040,12 @@ class Heap final {
 
   // Invoked when GC was requested via the stack guard.
   void HandleGCRequest();
+
+  // Record/replay: runs the external-memory GC decision at the next stack guard
+  // interrupt, for callers where a GC isn't safe. V8 14.8 deleted
+  // HandleExternalMemoryInterrupt(), which this used to name; the decision now
+  // lives in HandleExternalMemoryPressure(). See defect DV8-048.
+  void RecordReplayRequestExternalMemoryPressureReport();
 
   // ===========================================================================
   // Iterators. ================================================================
@@ -1895,6 +1917,8 @@ class Heap final {
   void CompleteArrayBufferSweeping();
 
   bool InvokeNearHeapLimitCallback();
+  // Runs the last near-heap-limit callback and applies the limit it returns.
+  bool CallNearHeapLimitCallback();
 
   void InvokeIncrementalMarkingPrologueCallbacks();
   void InvokeIncrementalMarkingEpilogueCallbacks();
@@ -2371,6 +2395,12 @@ class Heap final {
 
   std::unique_ptr<CollectionBarrier> collection_barrier_;
 
+  std::atomic<bool> record_replay_external_memory_pressure_requested_{false};
+
+  // Record/replay: near-heap-limit callback calls since the last progress
+  // interrupt when recording, see InvokeNearHeapLimitCallback.
+  size_t record_replay_near_heap_limit_calls_ = 0;
+
   int ignore_local_gc_requests_depth_ = 0;
 
   int gc_callbacks_depth_ = 0;
@@ -2452,6 +2482,9 @@ class Heap final {
 
   const uint8_t* gc_tracing_category_enabled_ = nullptr;
   size_t notify_context_disposed_counter_ = 1;
+
+  // For ordering allocations of new script IDs.
+  int script_ordered_lock_id_ = 0;
 
   // Classes in "heap" can be friends.
   friend class ActivateMemoryReducerTask;
