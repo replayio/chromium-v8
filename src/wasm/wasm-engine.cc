@@ -4,6 +4,7 @@
 
 #include "src/wasm/wasm-engine.h"
 
+#include "include/v8.h"  // For replay.
 #include "src/base/functional.h"
 #include "src/base/platform/time.h"
 #include "src/common/globals.h"
@@ -184,10 +185,47 @@ std::vector<std::shared_ptr<NativeModule>>* native_modules_kept_alive_for_pgo;
 
 }  // namespace
 
+NativeModuleCache::NativeModuleCache() {
+  // Created with the engine, once, on the thread that initializes V8 and
+  // before any isolate exists, so the ordered lock is created at the same
+  // point when recording and replaying. The record/replay mode relies on wasm
+  // compiling synchronously, so that no compile job holds a module without a
+  // {Managed} and the streaming entry points aren't used, and on {Managed}
+  // destructors only running with events allowed. Without those the cache
+  // keeps its upstream behavior.
+  if (v8_flags.wasm_native_module_cache_enabled &&
+      !v8_flags.wasm_async_compilation &&
+      recordreplay::IsRecordingOrReplaying("wasm-native-module-sharing",
+                                           "NativeModuleCache") &&
+      ManagedFinalizersDeferredWhenEventsDisallowed()) {
+    ordered_lock_id_ =
+        static_cast<int>(recordreplay::CreateOrderedLock("NativeModuleCache"));
+    CHECK_NE(ordered_lock_id_, 0);
+  }
+}
+
 std::shared_ptr<NativeModule> NativeModuleCache::MaybeGetNativeModule(
     ModuleOrigin origin, base::Vector<const uint8_t> wire_bytes) {
   if (!v8_flags.wasm_native_module_cache_enabled) return nullptr;
   if (origin != kWasmOrigin) return nullptr;
+  if (record_replay_mode()) {
+    recordreplay::AutoOrderedLock ordered_lock(ordered_lock_id_);
+    base::MutexGuard lock(&mutex_);
+    NativeModuleCache::Key key{PrefixHash(wire_bytes), wire_bytes};
+    auto it = map_.find(key);
+    if (it == map_.end()) {
+      map_.emplace(key, base::nullopt);
+      return nullptr;
+    }
+    // Another thread is compiling the same bytes: compile them too rather
+    // than wait for it, {Update} keeps whichever module comes first.
+    if (!it->second.has_value()) return nullptr;
+    // {held_modules_} keeps every cached module alive.
+    std::shared_ptr<NativeModule> native_module = it->second.value().lock();
+    DCHECK_NOT_NULL(native_module);
+    DCHECK_EQ(native_module->wire_bytes(), wire_bytes);
+    return native_module;
+  }
   base::MutexGuard lock(&mutex_);
   size_t prefix_hash = PrefixHash(wire_bytes);
   NativeModuleCache::Key key{prefix_hash, wire_bytes};
@@ -250,6 +288,8 @@ std::shared_ptr<NativeModule> NativeModuleCache::Update(
   base::Vector<const uint8_t> wire_bytes = native_module->wire_bytes();
   DCHECK(!wire_bytes.empty());
   size_t prefix_hash = PrefixHash(native_module->wire_bytes());
+  base::Optional<recordreplay::AutoOrderedLock> ordered_lock;
+  if (record_replay_mode()) ordered_lock.emplace(ordered_lock_id_);
   base::MutexGuard lock(&mutex_);
   map_.erase(Key{prefix_hash, {}});
   const Key key{prefix_hash, wire_bytes};
@@ -272,6 +312,9 @@ std::shared_ptr<NativeModule> NativeModuleCache::Update(
         key, base::Optional<std::weak_ptr<NativeModule>>(native_module));
     USE(p);
     DCHECK(p.second);
+    if (record_replay_mode()) {
+      held_modules_.emplace(native_module.get(), HeldModule{native_module, 0});
+    }
   }
   cache_cv_.NotifyAll();
   return native_module;
@@ -282,10 +325,51 @@ void NativeModuleCache::Erase(NativeModule* native_module) {
   if (native_module->module()->origin != kWasmOrigin) return;
   // Happens in some tests where bytes are set directly.
   if (native_module->wire_bytes().empty()) return;
+  // A module is only freed once {RemoveHolder} has dropped it from the cache,
+  // and erasing it again here, at a point that depends on which thread drops
+  // the last reference, could erase a newer module for the same bytes.
+  if (record_replay_mode()) return;
   base::MutexGuard lock(&mutex_);
   size_t prefix_hash = PrefixHash(native_module->wire_bytes());
   map_.erase(Key{prefix_hash, native_module->wire_bytes()});
   cache_cv_.NotifyAll();
+}
+
+void NativeModuleCache::AddHolder(NativeModule* native_module) {
+  if (!record_replay_mode()) return;
+  recordreplay::AutoOrderedLock ordered_lock(ordered_lock_id_);
+  base::MutexGuard lock(&mutex_);
+  auto it = held_modules_.find(native_module);
+  if (it != held_modules_.end()) it->second.holders++;
+}
+
+void NativeModuleCache::RemoveHolder(NativeModule* native_module) {
+  if (!record_replay_mode()) return;
+  // The {Managed} removing itself still holds a reference, so dropping the
+  // cache's never deletes the module here; it is dropped after unlocking all
+  // the same.
+  std::shared_ptr<NativeModule> released;
+  {
+    recordreplay::AutoOrderedLock ordered_lock(ordered_lock_id_);
+    base::MutexGuard lock(&mutex_);
+    auto it = held_modules_.find(native_module);
+    if (it == held_modules_.end()) return;
+    // {Update} adds a module before any {Managed} can hold it.
+    DCHECK_GT(it->second.holders, 0);
+    if (--it->second.holders > 0) return;
+    released = std::move(it->second.native_module);
+    held_modules_.erase(it);
+    map_.erase(Key{PrefixHash(native_module->wire_bytes()),
+                   native_module->wire_bytes()});
+  }
+}
+
+void ManagedNativeModuleAdded(NativeModule* native_module) {
+  GetWasmEngine()->native_module_cache_.AddHolder(native_module);
+}
+
+void ManagedNativeModuleRemoved(NativeModule* native_module) {
+  GetWasmEngine()->native_module_cache_.RemoveHolder(native_module);
 }
 
 // static
