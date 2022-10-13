@@ -140,9 +140,9 @@ std::shared_ptr<InjectedScript> InspectedContext::getInjectedScript(
 }
 
 std::shared_ptr<InjectedScript> InspectedContext::createInjectedScript(
-    int sessionId) {
+    int sessionId, bool replayOwned) {
   std::shared_ptr<InjectedScript> injectedScript =
-      std::make_shared<InjectedScript>(this, sessionId);
+      std::make_shared<InjectedScript>(this, sessionId, replayOwned);
   CHECK(m_injectedScripts.find(sessionId) == m_injectedScripts.end());
   m_injectedScripts[sessionId] = injectedScript;
   return injectedScript;
