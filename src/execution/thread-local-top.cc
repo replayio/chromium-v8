@@ -3,6 +3,8 @@
 // found in the LICENSE file.
 
 #include "src/execution/thread-local-top.h"
+
+#include "include/v8.h"
 #include "src/execution/isolate.h"
 #include "src/execution/simulator.h"
 
@@ -37,6 +39,8 @@ void ThreadLocalTop::Clear() {
   current_embedder_state_ = nullptr;
   failed_access_check_callback_ = nullptr;
   thread_in_wasm_flag_address_ = kNullAddress;
+  replay_js_frame_depth_ = 0;
+  replay_thread_in_wasm_flag_ = 0;
 }
 
 void ThreadLocalTop::Initialize(Isolate* isolate) {
@@ -46,6 +50,16 @@ void ThreadLocalTop::Initialize(Isolate* isolate) {
 #if V8_ENABLE_WEBASSEMBLY
   thread_in_wasm_flag_address_ = reinterpret_cast<Address>(
       trap_handler::GetThreadInWasmThreadLocalAddress());
+  // A forked replaying process respawns its threads, and their thread_locals
+  // then live elsewhere, so generated code storing through the cached address
+  // would write to memory the thread no longer owns, which can be unmapped by
+  // then. Only the trap handler relies on the flag, and it is not enabled
+  // when recording/replaying.
+  if (recordreplay::IsRecordingOrReplaying() &&
+      !trap_handler::IsTrapHandlerEnabled()) {
+    thread_in_wasm_flag_address_ =
+        reinterpret_cast<Address>(&replay_thread_in_wasm_flag_);
+  }
 #endif  // V8_ENABLE_WEBASSEMBLY
 #ifdef USE_SIMULATOR
   simulator_ = Simulator::current(isolate);
