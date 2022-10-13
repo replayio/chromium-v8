@@ -530,6 +530,8 @@ void CodeGenerator::PrepareCodeOnBackground(LocalIsolate* local_isolate) {
 }
 
 MaybeHandle<Code> CodeGenerator::BuildCodeObject(LocalIsolate* local_isolate) {
+  replayio::AutoDisallowEvents disallow("CodeGenerator::FinalizeCode");
+
   if (result_ != kSuccess) {
     masm()->AbortedCodeGeneration();
     return {};
