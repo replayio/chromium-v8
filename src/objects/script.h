@@ -215,6 +215,12 @@ V8_OBJECT class Script : public Struct {
     using DeserializedBit = ProduceCompileHintsBit::Next<bool, 1>;
     using OuterLanguageModeBit = DeserializedBit::Next<LanguageMode, 1>;
     using IsEmbeddedBit = OuterLanguageModeBit::Next<bool, 1>;
+    // Replay: appended AFTER upstream's last bit so upstream's own shifts
+    // are undisturbed. The fork's append point becomes a SPLICE point one
+    // hop after every upstream append -- see DV8-105.
+    using RecordReplayInstrumentedBit = IsEmbeddedBit::Next<bool, 1>;
+    using RecordReplayAssertValuesBit =
+        RecordReplayInstrumentedBit::Next<bool, 1>;
 
     BIT_FIELD_GROUP_ACCESSORS(compilation_kind, CompilationKindBits)
     BIT_FIELD_GROUP_ACCESSORS(compilation_state, CompilationStateBit)
@@ -225,6 +231,10 @@ V8_OBJECT class Script : public Struct {
     BIT_FIELD_GROUP_ACCESSORS(deserialized, DeserializedBit)
     BIT_FIELD_GROUP_ACCESSORS(outer_language_mode, OuterLanguageModeBit)
     BIT_FIELD_GROUP_ACCESSORS(is_embedded, IsEmbeddedBit)
+    BIT_FIELD_GROUP_ACCESSORS(record_replay_instrumented,
+                              RecordReplayInstrumentedBit)
+    BIT_FIELD_GROUP_ACCESSORS(record_replay_assert_values,
+                              RecordReplayAssertValuesBit)
   };
 
   // Read/write the raw 'flags' field. This uses relaxed atomic loads/stores
@@ -254,6 +264,18 @@ V8_OBJECT class Script : public Struct {
   // evaluate and therefore has different semantics, e.g. re-declaring let.
   inline bool is_repl_mode() const;
   inline void set_is_repl_mode(bool value);
+
+  // [record_replay_instrumented]: whether the script's bytecode has
+  // record/replay instrumentation. Decided when the script is created
+  // (ParseInfo::CreateScript), from the compile that creates it.
+  inline bool record_replay_instrumented() const;
+  inline void set_record_replay_instrumented(bool value);
+
+  // [record_replay_assert_values]: whether the script's instrumented bytecode
+  // also asserts the values it loads. Decided along with
+  // record_replay_instrumented.
+  inline bool record_replay_assert_values() const;
+  inline void set_record_replay_assert_values(bool value);
 
   // [origin_options]: optional attributes set by the embedder via ScriptOrigin,
   // and used by the embedder to make decisions about the script. V8 just passes

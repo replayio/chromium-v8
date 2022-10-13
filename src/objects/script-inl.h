@@ -294,6 +294,22 @@ void Script::set_is_repl_mode(bool value) {
   set_flags(flags().with_is_repl_mode(value));
 }
 
+bool Script::record_replay_instrumented() const {
+  return flags().record_replay_instrumented();
+}
+
+void Script::set_record_replay_instrumented(bool value) {
+  set_flags(flags().with_record_replay_instrumented(value));
+}
+
+bool Script::record_replay_assert_values() const {
+  return flags().record_replay_assert_values();
+}
+
+void Script::set_record_replay_assert_values(bool value) {
+  set_flags(flags().with_record_replay_assert_values(value));
+}
+
 ScriptOriginOptions Script::origin_options() {
   return ScriptOriginOptions(flags().origin_options());
 }
