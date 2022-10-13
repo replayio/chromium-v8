@@ -204,6 +204,24 @@ struct runtime : CallDescriptorBuilder {
     static constexpr Operator::Properties kProperties = Operator::kNoDeopt;
   };
 
+  struct RecordReplayTargetProgressReached
+      : public Descriptor<RecordReplayTargetProgressReached> {
+    static constexpr auto kFunction =
+        Runtime::kRecordReplayTargetProgressReached;
+    using Arguments = NoArguments;
+    using returns_t = V<Object>;
+
+    // The call lazily deoptimizes this code when what runs at the target
+    // progress discards it, so it needs the frame state. V8 14.3 renamed this
+    // member from kNeedsFrameState; it is also what the CallRuntime overloads'
+    // `requires` clauses select on, so the old spelling matched neither.
+    static constexpr bool kCanTriggerLazyDeopt = true;
+    // Deliberately NOT upstream's kNoDeopt for its own TerminateExecution:
+    // the call cannot throw, which is why LazyDeoptOnThrow::kNo is inert for
+    // it (see D053). A rename must not revisit that behaviour choice.
+    static constexpr Operator::Properties kProperties = Operator::kNoThrow;
+  };
+
   struct TerminateExecution : public Descriptor<TerminateExecution> {
     static constexpr auto kFunction = Runtime::kTerminateExecution;
     using Arguments = NoArguments;
