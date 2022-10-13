@@ -898,7 +898,6 @@ bool operator==(AssertNotNullParameters const& lhs,
   V(StringCodePointAt, Operator::kNoProperties, 2, 1)     \
   V(StringFromCodePointAt, Operator::kNoProperties, 2, 1) \
   V(StringSubstring, Operator::kNoProperties, 3, 1)       \
-  V(DateNow, Operator::kNoProperties, 0, 1)               \
   V(DoubleArrayMax, Operator::kNoProperties, 1, 1)        \
   V(DoubleArrayMin, Operator::kNoProperties, 1, 1)
 
@@ -2227,6 +2226,29 @@ const Operator* SimplifiedOperatorBuilder::TransitionAndStoreNonNumberElement(
       IrOpcode::kTransitionAndStoreNonNumberElement,
       Operator::kNoDeopt | Operator::kNoThrow,
       "TransitionAndStoreNonNumberElement", 3, 1, 1, 0, 1, 0, parameters);
+}
+
+const Operator* SimplifiedOperatorBuilder::DateNow() {
+  return zone()->New<Operator>(IrOpcode::kDateNow,
+                               Operator::kNoDeopt | Operator::kNoThrow,
+                               "DateNow",
+                               0, 1, 1, 1, 1, 0);
+}
+
+const Operator* SimplifiedOperatorBuilder::IncrementAndCheckProgressCounter() {
+  // The value inputs are the frame state for after the progress bytecode,
+  // where the call at the target progress lazily deoptimizes to, and the
+  // context the call runs in.
+  return zone()->New<Operator>(IrOpcode::kIncrementAndCheckProgressCounter,
+                               Operator::kNoThrow,
+                               "IncrementAndCheckProgressCounter",
+                               2, 1, 0, 1, 1, 0);
+}
+
+const Operator* SimplifiedOperatorBuilder::ReplayDecrementJsFrameDepth() {
+  return zone()->New<Operator>(IrOpcode::kReplayDecrementJsFrameDepth,
+                               Operator::kNoDeopt | Operator::kNoThrow,
+                               "ReplayDecrementJsFrameDepth", 0, 1, 0, 1, 1, 0);
 }
 
 const Operator* SimplifiedOperatorBuilder::FastApiCall(
