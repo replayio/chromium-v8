@@ -80,6 +80,23 @@ ScopeIterator::ScopeIterator(Isolate* isolate,
   TryParseAndRetrieveScopes(ReparseStrategy::kFunctionLiteral);
 }
 
+namespace {
+
+// The context of |function| on the chain starting at |context|, or an empty
+// context if the chain doesn't hold it.
+Context RecordReplayFunctionContext(Context context,
+                                    DeclarationScope* closure_scope,
+                                    JSFunction function) {
+  if (!closure_scope->NeedsContext()) return function.context();
+  while (context.scope_info() != function.shared().scope_info()) {
+    if (context.IsNativeContext()) return Context();
+    context = context.previous();
+  }
+  return context;
+}
+
+}  // namespace
+
 void ScopeIterator::Restart() {
   DCHECK_NOT_NULL(frame_inspector_);
   function_ = frame_inspector_->GetFunction();
@@ -89,6 +106,16 @@ void ScopeIterator::Restart() {
   UnwrapEvaluationContext();
   seen_script_scope_ = false;
   calculate_blocklists_ = false;
+  // Keep describing only the function scope when TryParseAndRetrieveScopes
+  // fell back to it, see there.
+  if (recordreplay::IsRecordingOrReplaying() &&
+      closure_scope_ && start_scope_ == closure_scope_ &&
+      closure_scope_->is_function_scope()) {
+    Context context =
+        RecordReplayFunctionContext(*context_, closure_scope_, *function_);
+    context_ =
+        context.is_null() ? Handle<Context>() : handle(context, isolate_);
+  }
 }
 
 namespace {
@@ -194,6 +221,33 @@ class ScopeChainRetriever {
     return position_fits_start && position_fits_end;
   }
 };
+
+// Whether |context| starts with the contexts that the scopes from |start_scope|
+// up to |closure_scope| create, which holds while execution is inside all of
+// those scopes.
+bool RecordReplayContextsMatchScopes(Scope* start_scope,
+                                     DeclarationScope* closure_scope,
+                                     Context context,
+                                     SharedFunctionInfo shared) {
+  DisallowGarbageCollection no_gc;
+  for (Scope* scope = start_scope; scope != closure_scope;
+       scope = scope->outer_scope()) {
+    if (!scope->NeedsContext()) continue;
+    if (context.IsNativeContext() ||
+        context.scope_info().scope_type() != scope->scope_type()) {
+      return false;
+    }
+    for (Variable* var : *scope->locals()) {
+      if (var->location() == VariableLocation::CONTEXT &&
+          context.scope_info().ContextSlotIndex(var->name()) != var->index()) {
+        return false;
+      }
+    }
+    context = context.previous();
+  }
+  return !closure_scope->NeedsContext() ||
+         context.scope_info() == shared.scope_info();
+}
 
 }  // namespace
 
@@ -304,6 +358,24 @@ void ScopeIterator::TryParseAndRetrieveScopes(ReparseStrategy strategy) {
 
     MaybeCollectAndStoreLocalBlocklists();
     UnwrapEvaluationContext();
+
+    // While recording or replaying, frames are also described at points the
+    // debugger doesn't pause at, such as the implicit catch handler that
+    // rejects an async function's promise. That handler has no source position
+    // of its own, so the frame reports the last position before it, which can
+    // be inside blocks and catch clauses whose contexts are gone. Describe only
+    // the function scope then, as at a return.
+    if (recordreplay::IsRecordingOrReplaying() &&
+        scope_info->scope_type() == FUNCTION_SCOPE && closure_scope_ &&
+        !RecordReplayContextsMatchScopes(start_scope_, closure_scope_,
+                                         *context_, *shared_info)) {
+      current_scope_ = closure_scope_;
+      start_scope_ = current_scope_;
+      Context context =
+          RecordReplayFunctionContext(*context_, closure_scope_, *function_);
+      context_ = context.is_null() ? Handle<Context>()
+                                   : handle(context, isolate_);
+    }
   } else {
     // A failed reparse indicates that the preparser has diverged from the
     // parser, that the preparse data given to the initial parse was faulty, or
@@ -922,6 +994,9 @@ bool ScopeIterator::VisitLocals(const Visitor& visitor, Mode mode,
       case VariableLocation::CONTEXT:
         if (mode == Mode::STACK) continue;
         DCHECK(var->IsContextSlot());
+        // This index is sometimes out of range when gathering state using the
+        // Record Replay driver.
+        if (index >= context_->length()) continue;
 
         // We know of at least one open bug where the context and scope chain
         // don't match (https://crbug.com/753338).
