@@ -119,6 +119,7 @@
 #include "src/profiler/profile-generator-inl.h"
 #include "src/profiler/tick-sample.h"
 #include "src/regexp/regexp-utils.h"
+#include "src/replay/replayio.h"
 #include "src/runtime/runtime.h"
 #include "src/sandbox/external-pointer.h"
 #include "src/sandbox/sandbox.h"
@@ -2534,6 +2535,13 @@ i::ScriptDetails GetScriptDetails(
 
 namespace internal {
 
+// If we are compiling a script while replaying that replaces another one,
+// the ID of the script being replaced. Main thread only.
+int gReplaceSourceContentsScriptId;
+// The decisions made for the script whose contents are being replaced: the
+// replacing script has its id, so it gets its decisions too.
+bool gReplaceSourceContentsInstrumented;
+bool gReplaceSourceContentsAssertValues;
 static std::set<int>* gScriptsWithReplacedContents;
 
 bool IsRecordReplayReplacedScript(int script_id) {
@@ -10792,6 +10800,8 @@ typedef char* (CommandCallbackRaw)(const char* params);
         (void (*aCallback)(bool aTrackObjects)))                              \
   Macro(RecordReplaySetPossibleBreakpointsCallback,                           \
         (void (*aCallback)(const char*)))                                     \
+  Macro(RecordReplaySetCurrentGeneratorIdCallback, (int (*aCallback)()))     \
+  Macro(RecordReplaySetCountStackFramesCallback, (size_t (*aCallback)()))     \
   Macro(RecordReplaySetAssertDataCallbacks,                                   \
         (void (*aGetData)(void**, size_t*),                                   \
          char* (*aOnMismatch)(void*, size_t, void*, size_t),                  \
@@ -10904,6 +10914,11 @@ void RecordReplayOnExceptionUnwind(Isolate* isolate) {
         Handle<SharedFunctionInfo> shared(summary.function()->shared(), isolate);
         Handle<Object> script(shared->script(), isolate);
         if (script->IsScript()) {
+          Handle<Script> casted_script = Handle<Script>::cast(script);
+          if (!RecordReplayHasRegisteredScript(*casted_script)) {
+            // Don't repor errors from unregistered.
+            return;
+          }
         }
       }
     }
@@ -10999,6 +11014,8 @@ void RecordReplayInstrument(const char* kind, const char* function, int function
 
 extern void TrackObjectsCallback(bool track_objects);
 extern void RecordReplayGetPossibleBreakpointsCallback(const char* source_id);
+extern int RecordReplayCurrentGeneratorIdRaw();
+extern size_t RecordReplayCountStackFramesCallback();
 
 extern void RecordReplayCallbackAssertGetData(void** pbuf, size_t* psize);
 extern char* RecordReplayCallbackAssertOnDataMismatch(void* recorded, size_t recorded_size,
@@ -11012,10 +11029,6 @@ bool gRecordReplayAssertValues;
 
 bool gRecordReplayAssertProgress;
 bool gRecordReplayAssertTrackedObjects;
-
-// Enable reporting the dependency graph while replaying.
-// This is on by default.
-bool gRecordReplayEnableDependencyGraph;
 
 // Use V8's GC as upstream does while recording/replaying.
 // This is on by default and controlled by the v8-flags-gc feature.
@@ -11601,6 +11614,7 @@ void recordreplay::NewCheckpoint() {
     internal::gRecordReplayHasCheckpoint = true;
     gRecordReplayNewCheckpoint();
     if (first) {
+      internal::RecordReplayRegisterScriptsBeforeFirstCheckpoint();
     }
   }
 }
@@ -11620,6 +11634,7 @@ void recordreplay::NewCheckpointFlushed() {
     internal::gRecordReplayHasCheckpoint = true;
     gRecordReplayNewCheckpointFlushed();
     if (first) {
+      internal::RecordReplayRegisterScriptsBeforeFirstCheckpoint();
     }
   }
 }
@@ -11784,14 +11799,60 @@ extern "C" DLLEXPORT bool V8RecordReplayAllowSideEffects() {
   return recordreplay::AllowSideEffects();
 }
 
+// Whether dependency graph instrumentation runs, whether the graph is updated,
+// and whether promises are reported: see DependencyGraphInstrumented,
+// DependencyGraphEnabled and RecordReplayReportsPromises. Set once by
+// InitializeDependencyGraph, so the checks make no driver calls.
+static bool gDependencyGraphInstrumented;
+static bool gDependencyGraphEnabled;
+static bool gDependencyGraphReportsPromises;
+
+static void InitializeDependencyGraph() {
+  // Recorded: the flag selects promise builtin paths (TT-1361), and the driver
+  // can disable the feature when replaying only (REPLAYING_DISABLE_FEATURES).
+  bool dependency_graph = recordreplay::FeatureEnabled("dependency-graph");
+  gDependencyGraphInstrumented =
+      recordreplay::IsRecordingOrReplaying() &&
+      recordreplay::RecordReplayValue("DependencyGraphInstrumented",
+                                      dependency_graph);
+  i::gRecordReplayAssertDependencyGraph =
+      !!getenv("RECORD_REPLAY_DEPENDENCY_GRAPH_ASSERTS");
+  // Asserted updates follow the recording: with dependency graph asserts, the
+  // graph is updated as when recording, whatever the replay-time feature.
+  gDependencyGraphEnabled =
+      gDependencyGraphInstrumented &&
+      ((recordreplay::IsReplaying() && dependency_graph) ||
+       i::gRecordReplayAssertDependencyGraph);
+  gDependencyGraphReportsPromises =
+      gDependencyGraphEnabled ||
+      (gDependencyGraphInstrumented && i::gRecordReplayAssertTrackedObjects);
+}
+
+bool recordreplay::DependencyGraphInstrumented() {
+  return gDependencyGraphInstrumented && IsMainThread();
+}
+
+bool recordreplay::DependencyGraphEnabled() {
+  return gDependencyGraphEnabled && IsMainThread();
+}
+
+namespace internal {
+
+// Whether RecordReplayOnPromiseHook and AddPromiseDependencyGraphAdoption are
+// called: while the graph is updated, and while tracked object asserts are on,
+// as those include the object IDs the calls assign to promises.
+bool RecordReplayReportsPromises() {
+  return gDependencyGraphReportsPromises && IsMainThread();
+}
+
+}  // namespace internal
+
 extern "C" DLLEXPORT bool V8RecordReplayUpdateDependencyGraph() {
-  return i::gRecordReplayEnableDependencyGraph
-      && (recordreplay::IsReplaying() || i::gRecordReplayAssertDependencyGraph)
-      && IsMainThread();
+  return recordreplay::DependencyGraphEnabled();
 }
 
 extern "C" DLLEXPORT int V8RecordReplayNewDependencyGraphNode(const char* json) {
-  if (V8RecordReplayUpdateDependencyGraph()) {
+  if (recordreplay::DependencyGraphEnabled()) {
     int id = gRecordReplayNewDependencyGraphNode(json);
     if (i::gRecordReplayAssertDependencyGraph) {
       recordreplay::Assert("NewDependencyGraphNode id=%d %s",
@@ -11807,7 +11868,7 @@ int recordreplay::NewDependencyGraphNode(const char* json) {
 }
 
 extern "C" DLLEXPORT void V8RecordReplayAddDependencyGraphEdge(int source, int target, const char* json) {
-  if (V8RecordReplayUpdateDependencyGraph()) {
+  if (recordreplay::DependencyGraphEnabled()) {
     gRecordReplayAddDependencyGraphEdge(source, target, json);
     if (i::gRecordReplayAssertDependencyGraph) {
       recordreplay::Assert("NewDependencyGraphEdge source=%d target=%d %s",
@@ -11832,7 +11893,7 @@ extern "C" int V8RecordReplayDependencyGraphExecutionNode() {
 }
 
 extern "C" DLLEXPORT void V8RecordReplayBeginDependencyExecution(int node) {
-  if (V8RecordReplayUpdateDependencyGraph()) {
+  if (recordreplay::DependencyGraphEnabled()) {
     if (!gDependencyGraphExecutionStack) {
       gDependencyGraphExecutionStack = new std::vector<int>();
     }
@@ -11849,7 +11910,7 @@ void recordreplay::BeginDependencyExecution(int node) {
 }
 
 extern "C" DLLEXPORT void V8RecordReplayEndDependencyExecution() {
-  if (V8RecordReplayUpdateDependencyGraph()) {
+  if (recordreplay::DependencyGraphEnabled()) {
     gDependencyGraphExecutionStack->pop_back();
     gRecordReplayEndDependencyExecution();
     if (i::gRecordReplayAssertDependencyGraph) {
@@ -12251,6 +12312,8 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
   gRecordReplayEnableProgressCheckpoints();
   gRecordReplaySetTrackObjectsCallback(i::TrackObjectsCallback);
   gRecordReplaySetPossibleBreakpointsCallback(i::RecordReplayGetPossibleBreakpointsCallback);
+  gRecordReplaySetCurrentGeneratorIdCallback(i::RecordReplayCurrentGeneratorIdRaw);
+  gRecordReplaySetCountStackFramesCallback(i::RecordReplayCountStackFramesCallback);
 
   // Remember whether this recording was made on ARM.
 #if V8_TARGET_ARCH_ARM64
@@ -12273,11 +12336,7 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
                                         i::RecordReplayCallbackAssertDescribeData);
   }
 
-  // Currently the dependency graph is enabled by default.
-  i::gRecordReplayEnableDependencyGraph =
-    V8RecordReplayFeatureEnabled("dependency-graph", nullptr);
-
-  i::gRecordReplayAssertDependencyGraph = !!getenv("RECORD_REPLAY_DEPENDENCY_GRAPH_ASSERTS");
+  InitializeDependencyGraph();
 
   // Disable wasm background compilation.
   if (V8RecordReplayFeatureEnabled("disable-v8-flags-wasm-compilation-tasks", nullptr)) {
@@ -12327,6 +12386,7 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
     }
   }
 
+  i::RecordReplayInitInstrumentationState();
 }
 
 extern "C" void V8SetRecordingOrReplaying(void* handle) {

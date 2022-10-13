@@ -103,6 +103,8 @@ class MaglevGraphVerifier {
       case Opcode::kSmiConstant:
       case Opcode::kIncreaseInterruptBudget:
       case Opcode::kReduceInterruptBudget:
+      case Opcode::kReplayIncrementAndCheckJsFrameDepth:
+      case Opcode::kReplayDecrementJsFrameDepth:
         // No input.
         DCHECK_EQ(node->input_count(), 0);
         break;

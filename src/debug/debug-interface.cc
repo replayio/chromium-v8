@@ -31,6 +31,11 @@
 #include "src/api/api-macros.h"
 
 namespace v8 {
+
+namespace internal {
+extern bool RecordReplayIsDisallowedScriptId(int script_id);
+}  // namespace internal
+
 namespace debug {
 
 void SetContextId(Local<Context> context, int id) {
@@ -185,8 +190,7 @@ void ClearBreakOnNextFunctionCall(Isolate* isolate) {
   i_isolate->debug()->ClearBreakOnNextFunctionCall();
 }
 
-MaybeLocal<Array> GetInternalProperties(Isolate* v8_isolate,
-                                        Local<Value> value) {
+MaybeLocal<Array> GetInternalProperties(Isolate* v8_isolate, Local<Value> value) {
   i::Isolate* isolate = reinterpret_cast<i::Isolate*>(v8_isolate);
   ENTER_V8_NO_SCRIPT_NO_EXCEPTION(isolate);
   i::Handle<i::Object> val = Utils::OpenHandle(*value);
@@ -927,6 +931,13 @@ void GetLoadedScripts(Isolate* v8_isolate,
       if (script.type() != i::Script::TYPE_NORMAL) continue;
 #endif  // V8_ENABLE_WEBASSEMBLY
       if (!script.HasValidSource()) continue;
+      // Scripts created with events disallowed (e.g. the replay's own) don't
+      // exist on the other side of the recording, so a client enumerating the
+      // loaded scripts (Debugger.enable) mustn't see them.
+      if (recordreplay::IsRecordingOrReplaying() &&
+          i::RecordReplayIsDisallowedScriptId(script.id())) {
+        continue;
+      }
       i::HandleScope handle_scope(isolate);
       i::Handle<i::Script> script_handle(script, isolate);
       scripts.emplace_back(v8_isolate, ToApiHandle<Script>(script_handle));
@@ -1401,7 +1412,8 @@ void RecordAsyncStackTaggingCreateTaskCall(v8::Isolate* v8_isolate) {
 }
 
 std::unique_ptr<PropertyIterator> PropertyIterator::Create(
-    Local<Context> context, Local<Object> object, bool skip_indices) {
+    Local<Context> context, Local<Object> object, bool skip_indices,
+    const v8::KeyIterationParams* params) {
   internal::Isolate* isolate =
       reinterpret_cast<i::Isolate*>(object->GetIsolate());
   if (isolate->is_execution_terminating()) {
@@ -1410,7 +1422,7 @@ std::unique_ptr<PropertyIterator> PropertyIterator::Create(
   CallDepthScope<false> call_depth_scope(isolate, context);
 
   auto result = i::DebugPropertyIterator::Create(
-      isolate, Utils::OpenHandle(*object), skip_indices);
+      isolate, Utils::OpenHandle(*object), skip_indices, params);
   if (!result) {
     DCHECK(isolate->has_pending_exception());
     call_depth_scope.Escape();

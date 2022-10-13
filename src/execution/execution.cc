@@ -27,7 +27,6 @@ extern bool gRecordReplayIsRecordingOrReplaying;
 extern bool gRecordReplayHasCheckpoint;
 extern void RecordReplayBeforeInvoke(Isolate* isolate, Handle<JSFunction> function);
 extern uint64_t* gProgressCounter;
-extern bool gRecordReplayEnableDependencyGraph;
 extern std::string GetScriptName(Handle<Script> script);
 
 namespace {
@@ -396,9 +395,8 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
     }
 #endif
 
-    if (recordreplay::IsReplaying() &&
-        IsMainThread() &&
-        gRecordReplayEnableDependencyGraph &&
+    if (recordreplay::DependencyGraphEnabled() &&
+        recordreplay::IsReplaying() &&
         !recordreplay::AreEventsDisallowed() &&
         V8RecordReplayDependencyGraphExecutionNode() == 0 &&
         function->shared().script().IsScript()) {
@@ -428,6 +426,16 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
       // always produce name clashes with themselves.
       function->set_context(*context);
     }
+  }
+
+  // Replay: JS of an instrumented script about to run before the first
+  // checkpoint can start the recording, before entering it.
+  if (V8_UNLIKELY(gRecordReplayIsRecordingOrReplaying) &&
+      !gRecordReplayHasCheckpoint && params.target->IsJSFunction() &&
+      AllowJavascriptExecution::IsAllowed(isolate) &&
+      ThrowOnJavascriptExecution::IsAllowed(isolate) &&
+      DumpOnJavascriptExecution::IsAllowed(isolate)) {
+    RecordReplayBeforeInvoke(isolate, Handle<JSFunction>::cast(params.target));
   }
 
   // Entering JavaScript.

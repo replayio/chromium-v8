@@ -72,6 +72,7 @@
 #include "src/objects/objects-body-descriptors-inl.h"
 #include "src/objects/objects-inl.h"
 #include "src/objects/property-details.h"
+#include "src/replay/replayio.h"
 #include "src/roots/roots.h"
 #include "src/snapshot/deserializer.h"
 #include "src/utils/identity-map.h"
@@ -5471,7 +5472,6 @@ void JSPromise::set_async_task_id(int id) {
 }
 
 
-extern bool RecordReplayShouldCallOnPromiseHook();
 void AddPromiseDependencyGraphAdoption(Isolate* isolate, Handle<Object> promise, Handle<Object> adoption);
 
 // static
@@ -5627,6 +5627,12 @@ MaybeHandle<Object> JSPromise::Resolve(Handle<JSPromise> promise,
   if (!then_action->IsCallable()) {
     // a. Return FulfillPromise(promise, resolution).
     return Fulfill(promise, resolution);
+  }
+
+  if (RecordReplayReportsPromises()) {
+    // Fulfillment of this promise is delayed by adopted resolution.
+    // Ref: Promise/A+ 2.3.2
+    AddPromiseDependencyGraphAdoption(isolate, Handle<Object>::cast(promise), resolution);
   }
 
   // 13. Let job be NewPromiseResolveThenableJob(promise, resolution,

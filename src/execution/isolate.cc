@@ -100,6 +100,7 @@
 #include "src/profiler/tracing-cpu-profiler.h"
 #include "src/regexp/regexp-stack.h"
 #include "src/replay/replay-isolate-data.h"
+#include "src/replay/replayio.h"
 #include "src/snapshot/embedded/embedded-data-inl.h"
 #include "src/snapshot/embedded/embedded-file-writer-interface.h"
 #include "src/snapshot/read-only-deserializer.h"
@@ -3576,7 +3577,6 @@ v8::PageAllocator* Isolate::page_allocator() const {
 }
 
 extern void RecordReplayOnMainThreadIsolateCreated(Isolate* isolate);
-extern bool RecordReplayShouldCallOnPromiseHook();
 
 Isolate::Isolate(std::unique_ptr<i::IsolateAllocator> isolate_allocator,
                  bool is_shared)
@@ -3627,6 +3627,12 @@ Isolate::Isolate(std::unique_ptr<i::IsolateAllocator> isolate_allocator,
   InitializeDefaultEmbeddedBlob();
 
   MicrotaskQueue::SetUpDefaultMicrotaskQueue(this);
+
+  record_replay_api_interrupts_ordered_lock_id_ = (int)recordreplay::CreateOrderedLock("APIInterrupts");
+
+  if (recordreplay::IsRecordingOrReplaying() && IsMainThread()) {
+    RecordReplayOnMainThreadIsolateCreated(this);
+  }
 }
 
 replayio::ReplayIsolateData* Isolate::EnsureReplayData() {
@@ -4707,6 +4713,13 @@ bool Isolate::Init(SnapshotData* startup_snapshot_data,
   DCHECK_IMPLIES(heap()->new_space(), (heap()->new_space()->Size() == 0) &&
                                           (heap()->gc_count() == 0));
 
+  // Force the promise hook once the roots exist, so that the promise hook
+  // protector is invalidated with it: optimized code must not inline promise
+  // operations that skip the hook.
+  if (recordreplay::DependencyGraphInstrumented()) {
+    PromiseHookStateUpdated();
+  }
+
   initialized_ = true;
 
   return true;
@@ -5140,7 +5153,7 @@ void Isolate::UpdatePromiseHookProtector() {
 void Isolate::PromiseHookStateUpdated() {
   promise_hook_flags_ =
     (promise_hook_flags_ & PromiseHookFields::HasContextPromiseHook::kMask) |
-    PromiseHookFields::HasIsolatePromiseHook::encode(promise_hook_) |
+    PromiseHookFields::HasIsolatePromiseHook::encode(promise_hook_ || recordreplay::DependencyGraphInstrumented()) |
     PromiseHookFields::HasAsyncEventDelegate::encode(async_event_delegate_) |
     PromiseHookFields::IsDebugActive::encode(debug()->is_active());
 
@@ -5498,10 +5511,17 @@ void Isolate::RunAllPromiseHooks(PromiseHookType type,
   }
 }
 
+extern void RecordReplayOnPromiseHook(Isolate* isolate, PromiseHookType type,
+                                      Handle<JSPromise> promise, Handle<Object> parent);
+
 void Isolate::RunPromiseHook(PromiseHookType type, Handle<JSPromise> promise,
                              Handle<Object> parent) {
   if (!HasIsolatePromiseHooks()) return;
-  DCHECK(promise_hook_ != nullptr);
+  if (RecordReplayReportsPromises()) {
+    RecordReplayOnPromiseHook(this, type, promise, parent);
+  }
+  DCHECK(promise_hook_ || recordreplay::DependencyGraphInstrumented());
+  if (!promise_hook_) return;
   promise_hook_(type, v8::Utils::PromiseToLocal(promise),
                 v8::Utils::ToLocal(parent));
 }
@@ -5691,8 +5711,10 @@ void Isolate::CountUsage(v8::Isolate::UseCounterFeature feature, int count) {
 }
 
 // Start disallowed script IDs at a value that won't conflict with regular IDs,
-// which start at one and increment from there.
-static const int kFirstDisallowedScriptId = 1 << 30;
+// which start at one and increment from there. Script IDs are Smis, which
+// only have 31 bits with pointer compression.
+static constexpr int kFirstDisallowedScriptId = 1 << 29;
+static_assert(kFirstDisallowedScriptId <= Smi::kMaxValue);
 static int gNextDisallowedScriptId = kFirstDisallowedScriptId;
 
 bool RecordReplayIsDisallowedScriptId(int script_id) {
