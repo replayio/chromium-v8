@@ -18,6 +18,15 @@
 
 namespace v8 {
 namespace internal {
+
+extern int RegisterAssertValueSite(const std::string& desc, int source_position);
+extern int RegisterInstrumentationSite(const char* kind, int source_position,
+                                       int bytecode_offset);
+extern bool RecordReplayShouldEmitOpcodes(bool record_replay_ignore);
+extern bool gRecordReplayAssertTrackedObjects;
+
+extern size_t NumRunningBackgroundCompileTasks();
+
 namespace interpreter {
 
 class RegisterTransferWriter final
@@ -42,6 +51,7 @@ class RegisterTransferWriter final
 
 BytecodeArrayBuilder::BytecodeArrayBuilder(
     Zone* zone, int parameter_count, int locals_count,
+    bool record_replay_ignore, bool record_replay_assert_values,
     FeedbackVectorSpec* feedback_vector_spec,
     SourcePositionTableBuilder::RecordingMode source_position_mode)
     : zone_(zone),
@@ -63,6 +73,18 @@ BytecodeArrayBuilder::BytecodeArrayBuilder(
         zone, &register_allocator_, fixed_register_count(), parameter_count,
         zone->New<RegisterTransferWriter>(this));
   }
+
+  if (RecordReplayShouldEmitOpcodes(record_replay_ignore)) {
+    emit_record_replay_opcodes_ = true;
+    emit_record_replay_assert_values_ = record_replay_assert_values;
+
+    // Record/replay opcodes can only be emitted for scripts that run on the
+    // main thread. If we aren't on the main thread, this must have been
+    // triggered by a background compile task.
+    if (!IsMainThread()) {
+      CHECK(NumRunningBackgroundCompileTasks() != 0);
+    }
+  }
 }
 
 Register BytecodeArrayBuilder::Parameter(int parameter_index) const {
@@ -83,6 +105,7 @@ Register BytecodeArrayBuilder::Local(int index) const {
 
 template <typename IsolateT>
 Handle<BytecodeArray> BytecodeArrayBuilder::ToBytecodeArray(IsolateT* isolate) {
+  RecordReplayFlushPendingBreakpoints();
   DCHECK(RemainderOfBlockIsDead());
   DCHECK(!bytecode_generated_);
   bytecode_generated_ = true;
@@ -117,6 +140,7 @@ int BytecodeArrayBuilder::CheckBytecodeMatches(Tagged<BytecodeArray> bytecode) {
 template <typename IsolateT>
 Handle<ByteArray> BytecodeArrayBuilder::ToSourcePositionTable(
     IsolateT* isolate) {
+  RecordReplayFlushPendingBreakpoints();
   DCHECK(RemainderOfBlockIsDead());
 
   return bytecode_array_writer_.ToSourcePositionTable(isolate);
@@ -131,6 +155,7 @@ template EXPORT_TEMPLATE_DEFINE(V8_EXPORT_PRIVATE)
 
 BytecodeSourceInfo BytecodeArrayBuilder::CurrentSourcePosition(
     Bytecode bytecode) {
+  RecordReplayFlushPendingBreakpoints();
   BytecodeSourceInfo source_position;
   if (latest_source_info_.is_valid()) {
     // Statement positions need to be emitted immediately.  Expression
@@ -167,6 +192,7 @@ void BytecodeArrayBuilder::AttachOrEmitDeferredSourceInfo(BytecodeNode* node) {
 }
 
 void BytecodeArrayBuilder::Write(BytecodeNode* node) {
+  RecordReplayFlushPendingBreakpoints();
   AttachOrEmitDeferredSourceInfo(node);
   bytecode_array_writer_.Write(node);
 }
@@ -178,6 +204,7 @@ void BytecodeArrayBuilder::WriteJump(BytecodeNode* node, BytecodeLabel* label) {
 
 void BytecodeArrayBuilder::WriteJumpLoop(BytecodeNode* node,
                                          BytecodeLoopHeader* loop_header) {
+  RecordReplayOnProgress();
   AttachOrEmitDeferredSourceInfo(node);
   bytecode_array_writer_.WriteJumpLoop(node, loop_header);
 }
@@ -740,6 +767,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::LoadGlobal(const AstRawString* name,
       OutputLdaGlobal(name_index, feedback_slot);
       break;
   }
+  RecordReplayAssertValue(std::string("LoadGlobal " + name->to_string()));
   return *this;
 }
 
@@ -791,6 +819,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::LoadLookupSlot(
       OutputLdaLookupSlot(name_index);
       break;
   }
+  RecordReplayAssertValue(std::string("LoadLookupSlot " + name->to_string()));
   return *this;
 }
 
@@ -838,6 +867,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::LoadNamedProperty(
     Register object, const AstRawString* name, int feedback_slot) {
   size_t name_index = GetConstantPoolEntry(name);
   OutputGetNamedProperty(object, name_index, feedback_slot);
+  RecordReplayAssertValue(std::string("GetNamedProperty ") + name->to_string());
   return *this;
 }
 
@@ -851,6 +881,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::LoadNamedPropertyFromSuper(
 BytecodeArrayBuilder& BytecodeArrayBuilder::LoadKeyedProperty(
     Register object, int feedback_slot) {
   OutputGetKeyedProperty(object, feedback_slot);
+  RecordReplayAssertValue("LoadKeyedProperty");
   return *this;
 }
 
@@ -895,12 +926,15 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::SetNamedProperty(
 BytecodeArrayBuilder& BytecodeArrayBuilder::SetNamedProperty(
     Register object, const AstRawString* name, int feedback_slot,
     LanguageMode language_mode) {
+  RecordReplayAssertValue(std::string("SetNamedProperty " + name->to_string()));
+
   size_t name_index = GetConstantPoolEntry(name);
   return SetNamedProperty(object, name_index, feedback_slot, language_mode);
 }
 
 BytecodeArrayBuilder& BytecodeArrayBuilder::DefineNamedOwnProperty(
     Register object, const AstRawString* name, int feedback_slot) {
+  RecordReplayAssertValue(std::string("DefineNamedOwnProperty " + name->to_string()));
   size_t name_index = GetConstantPoolEntry(name);
   // Ensure that the store operation is in sync with the IC slot kind.
   DCHECK_EQ(
@@ -913,6 +947,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::DefineNamedOwnProperty(
 BytecodeArrayBuilder& BytecodeArrayBuilder::SetKeyedProperty(
     Register object, Register key, int feedback_slot,
     LanguageMode language_mode) {
+  RecordReplayAssertValue("SetKeyedProperty");
   // Ensure that language mode is in sync with the IC slot kind.
   DCHECK_EQ(GetLanguageModeFromSlotKind(feedback_vector_spec()->GetKind(
                 FeedbackVector::ToSlot(feedback_slot))),
@@ -1111,6 +1146,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::Bind(BytecodeLabel* label) {
   // jump generated already. For backwards jumps, use BindLoopHeader.
   if (!label->has_referrer_jump()) return *this;
 
+  RecordReplayFlushPendingBreakpoints();
   // Flush the register optimizer when binding a label to ensure all
   // expected registers are valid when jumping to this label.
   if (register_optimizer_) {
@@ -1123,6 +1159,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::Bind(BytecodeLabel* label) {
 
 BytecodeArrayBuilder& BytecodeArrayBuilder::Bind(
     BytecodeLoopHeader* loop_header) {
+  RecordReplayFlushPendingBreakpoints();
   // Flush the register optimizer when starting a loop to ensure all expected
   // registers are valid when jumping to the loop header.
   if (register_optimizer_) {
@@ -1135,6 +1172,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::Bind(
 
 BytecodeArrayBuilder& BytecodeArrayBuilder::Bind(BytecodeJumpTable* jump_table,
                                                  int case_value) {
+  RecordReplayFlushPendingBreakpoints();
   // Flush the register optimizer when binding a jump table entry to ensure
   // all expected registers are valid when jumping to this location.
   if (register_optimizer_) {
@@ -1147,6 +1185,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::Bind(BytecodeJumpTable* jump_table,
 
 BytecodeArrayBuilder& BytecodeArrayBuilder::MarkHandler(
     int handler_id, HandlerTable::CatchPrediction catch_prediction) {
+  RecordReplayFlushPendingBreakpoints();
   // The handler starts a new basic block, and any reasonable try block won't
   // let control fall through into it.
   DCHECK_IMPLIES(register_optimizer_,
@@ -1160,6 +1199,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::MarkHandler(
 
 BytecodeArrayBuilder& BytecodeArrayBuilder::MarkTryBegin(int handler_id,
                                                          Register context) {
+  RecordReplayFlushPendingBreakpoints();
   // Flush registers to make sure everything visible to the handler is
   // materialized.
   if (register_optimizer_) register_optimizer_->Flush();
@@ -1170,6 +1210,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::MarkTryBegin(int handler_id,
 }
 
 BytecodeArrayBuilder& BytecodeArrayBuilder::MarkTryEnd(int handler_id) {
+  RecordReplayFlushPendingBreakpoints();
   if (register_optimizer_) {
     register_optimizer_->ResetTypeHintForAccumulator();
   }
@@ -1370,6 +1411,187 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::IncBlockCounter(
   return *this;
 }
 
+BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayOnProgress() {
+  if (emit_record_replay_opcodes_) {
+    OutputRecordReplayIncExecutionProgressCounter();
+  } else if (recordreplay::IsReplaying()) {
+    OutputRecordReplayNotifyActivity();
+  }
+  return *this;
+}
+
+BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayAssertValue(const std::string& desc) {
+  if (emit_record_replay_assert_values_) {
+    CHECK(emit_record_replay_opcodes_);
+    int index = RegisterAssertValueSite(desc, most_recent_source_position_);
+    OutputRecordReplayAssertValue(index);
+  }
+  return *this;
+}
+
+int BytecodeArrayBuilder::RecordReplayRegisterInstrumentationSite(
+    const char* kind, int source_position) {
+  if (!strcmp(kind, "breakpoint") && source_position != kNoSourcePosition &&
+      record_replay_instrumentation_site_locations_.find(source_position) !=
+          record_replay_instrumentation_site_locations_.end()) {
+    // Don't insert a breakpoint at the same location more than once.
+    return -1;
+  }
+  record_replay_instrumentation_site_locations_.insert(source_position);
+
+  // some of the instrumentations bypass the above location-based deduplication mechanism (mainly the ones added with kNoSourcePosition)
+  // so to ensure unique function indices to be used for all registered instrumentation sites
+  // we use a dedicated counter for this
+  int function_index = ++record_replay_instrumentation_site_counter_;
+  return RegisterInstrumentationSite(kind, source_position, function_index);
+}
+
+bool BytecodeArrayBuilder::EmitRecordReplayInstrumentationOpcodes() const {
+  // Instrumentation opcodes aren't needed when recording, except when we are asserting
+  // encountered values and need consistent IDs for these objects when recording.
+  // Generator instrumentation will create persistent object IDs.
+  return emit_record_replay_opcodes_ && (recordreplay::IsReplaying() || gRecordReplayAssertTrackedObjects);
+}
+
+BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayInstrumentation(
+    const char* kind, int source_position) {
+  if (EmitRecordReplayInstrumentationOpcodes()) {
+    int index = RecordReplayRegisterInstrumentationSite(kind, source_position);
+    if (index >= 0) {
+      OutputRecordReplayInstrumentation(index);
+    }
+  }
+  return *this;
+}
+
+void BytecodeArrayBuilder::RecordReplayDeferBreakpoint(int site_position) {
+  if (!EmitRecordReplayInstrumentationOpcodes()) return;
+  int index =
+      RecordReplayRegisterInstrumentationSite("breakpoint", site_position);
+  if (index < 0) return;
+  // CurrentSourcePosition() hands this bytecode any pending position.
+  static_assert(!Bytecodes::IsWithoutExternalSideEffects(
+      Bytecode::kRecordReplayInstrumentation));
+  record_replay_pending_breakpoints_.push_back({index, latest_source_info_});
+  latest_source_info_.set_invalid();
+}
+
+void BytecodeArrayBuilder::RecordReplayWritePendingBreakpoints() {
+  // Write() flushes the queue again, so swap it out first. Nothing written here
+  // queues breakpoints, so this never nests.
+  DCHECK(record_replay_writing_breakpoints_.empty());
+  record_replay_writing_breakpoints_.swap(record_replay_pending_breakpoints_);
+  for (const RecordReplayPendingBreakpoint& breakpoint :
+       record_replay_writing_breakpoints_) {
+    BytecodeNode node(BytecodeNode::RecordReplayInstrumentation(
+        breakpoint.source_info, static_cast<uint32_t>(breakpoint.site_index)));
+    Write(&node);
+  }
+  record_replay_writing_breakpoints_.clear();
+}
+
+bool BytecodeArrayBuilder::RecordReplayMaybePopPendingBreakpoints(
+    int scope_start) {
+  if (V8_LIKELY(record_replay_pending_breakpoints_.empty())) return false;
+  DCHECK(record_replay_popped_breakpoints_.empty());
+  // Nothing has taken upstream's pending position since the last breakpoint
+  // was queued, so its statement position is the last breakpoint's, or one set
+  // afterwards without a breakpoint.
+  const BytecodeSourceInfo& pending_statement =
+      latest_source_info_.is_statement()
+          ? latest_source_info_
+          : record_replay_pending_breakpoints_.back().source_info;
+  if (!pending_statement.is_statement() ||
+      pending_statement.source_position() < scope_start) {
+    return false;
+  }
+  auto first = record_replay_pending_breakpoints_.end();
+  while (first != record_replay_pending_breakpoints_.begin() &&
+         (first - 1)->source_info.is_valid() &&
+         (first - 1)->source_info.source_position() >= scope_start) {
+    --first;
+  }
+  record_replay_popped_breakpoints_.assign(
+      first, record_replay_pending_breakpoints_.end());
+  record_replay_pending_breakpoints_.erase(
+      first, record_replay_pending_breakpoints_.end());
+  return !record_replay_popped_breakpoints_.empty();
+}
+
+void BytecodeArrayBuilder::RecordReplayPushPoppedBreakpoints() {
+  if (V8_LIKELY(record_replay_popped_breakpoints_.empty())) return;
+  record_replay_pending_breakpoints_.insert(
+      record_replay_pending_breakpoints_.end(),
+      record_replay_popped_breakpoints_.begin(),
+      record_replay_popped_breakpoints_.end());
+  record_replay_popped_breakpoints_.clear();
+}
+
+BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayInstrumentationGenerator(
+    const char* kind, Register generator_object) {
+  if (EmitRecordReplayInstrumentationOpcodes()) {
+    int index =
+        RecordReplayRegisterInstrumentationSite(kind, kNoSourcePosition);
+    if (index >= 0) {
+      OutputRecordReplayInstrumentationGenerator(index, generator_object);
+    }
+  }
+  return *this;
+}
+
+BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayInstrumentationReturn(
+    const char* kind, Register return_value, int source_position) {
+  if (EmitRecordReplayInstrumentationOpcodes()) {
+    int index =
+        RecordReplayRegisterInstrumentationSite(kind, source_position);
+    if (index >= 0) {
+      OutputRecordReplayInstrumentationReturn(index, return_value);
+    }
+  }
+  return *this;
+}
+
+BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayTrackObjectId(Register object) {
+  if (emit_record_replay_opcodes_) {
+    OutputRecordReplayTrackObjectId(object);
+  }
+  return *this;
+}
+
+BytecodeArrayBuilder& BytecodeArrayBuilder::ReplayOnFrameEnter() {
+  if (emit_record_replay_opcodes_) {
+    OutputReplayIncJsFrameDepth();
+  }
+  RecordReplayInstrumentation("main");
+  return *this;
+}
+
+BytecodeArrayBuilder& BytecodeArrayBuilder::ReplayOnFrameEnterGenerator(
+    Register generator_object) {
+  if (emit_record_replay_opcodes_) {
+    OutputReplayIncJsFrameDepth();
+  }
+  RecordReplayInstrumentationGenerator("generator", generator_object);
+  return *this;
+}
+
+BytecodeArrayBuilder& BytecodeArrayBuilder::ReplayOnFrameExit() {
+  if (emit_record_replay_opcodes_) {
+    OutputReplayDecJsFrameDepth();
+  }
+  RecordReplayInstrumentation("exit");
+  return *this;
+}
+
+BytecodeArrayBuilder& BytecodeArrayBuilder::ReplayOnFrameReturn(
+    Register return_value) {
+  if (emit_record_replay_opcodes_) {
+    OutputReplayDecJsFrameDepth();
+  }
+  RecordReplayInstrumentationReturn("exit", return_value);
+  return *this;
+}
+
 BytecodeArrayBuilder& BytecodeArrayBuilder::ForInEnumerate(Register receiver) {
   OutputForInEnumerate(receiver);
   return *this;
@@ -1447,6 +1669,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::CallProperty(Register callable,
   } else {
     OutputCallProperty(callable, args, args.register_count(), feedback_slot);
   }
+  RecordReplayAssertValue("CallProperty");
   return *this;
 }
 
@@ -1462,6 +1685,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::CallUndefinedReceiver(
     OutputCallUndefinedReceiver(callable, args, args.register_count(),
                                 feedback_slot);
   }
+  RecordReplayAssertValue("CallUndefinedReceiver");
   return *this;
 }
 
@@ -1469,6 +1693,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::CallAnyReceiver(Register callable,
                                                             RegisterList args,
                                                             int feedback_slot) {
   OutputCallAnyReceiver(callable, args, args.register_count(), feedback_slot);
+  RecordReplayAssertValue("CallAnyReceiver");
   return *this;
 }
 
@@ -1476,6 +1701,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::CallWithSpread(Register callable,
                                                            RegisterList args,
                                                            int feedback_slot) {
   OutputCallWithSpread(callable, args, args.register_count(), feedback_slot);
+  RecordReplayAssertValue("CallWithSpread");
   return *this;
 }
 
@@ -1483,6 +1709,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::Construct(Register constructor,
                                                       RegisterList args,
                                                       int feedback_slot_id) {
   OutputConstruct(constructor, args, args.register_count(), feedback_slot_id);
+  RecordReplayAssertValue("Construct");
   return *this;
 }
 
@@ -1664,6 +1891,7 @@ uint32_t BytecodeArrayBuilder::GetOutputRegisterListOperand(
 }
 
 void BytecodeArrayBuilder::EmitFunctionStartSourcePosition(int position) {
+  RecordReplayFlushPendingBreakpoints();
   bytecode_array_writer_.SetFunctionEntrySourcePosition(position);
   // Force an expression position to make sure we have one. If the next bytecode
   // overwrites it, it’s fine since it would mean we have a source position
