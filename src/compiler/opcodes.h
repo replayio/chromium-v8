@@ -460,6 +460,8 @@
   V(FastApiCall)                        \
   V(FindOrderedHashMapEntry)            \
   V(FindOrderedHashMapEntryForInt32Key) \
+  V(IncrementAndCheckProgressCounter)   \
+  V(ReplayDecrementJsFrameDepth)              \
   V(FindOrderedHashSetEntry)            \
   V(InitializeImmutableInObject)        \
   V(LoadDataViewElement)                \

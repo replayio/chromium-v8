@@ -24,6 +24,7 @@
 #include "src/codegen/macro-assembler-inl.h"
 #include "src/common/globals.h"
 #include "src/execution/frame-constants.h"
+#include "src/execution/thread-local-top.h"
 #include "src/heap/local-factory-inl.h"
 #include "src/interpreter/bytecode-array-iterator.h"
 #include "src/interpreter/bytecode-flags.h"
@@ -61,6 +62,10 @@
 
 namespace v8 {
 namespace internal {
+
+extern bool gRecordReplayAssertProgress;
+extern int gRecordReplayCheckProgress;
+
 namespace baseline {
 
 template <typename IsolateT>
@@ -2274,6 +2279,160 @@ void BaselineCompiler::VisitIncBlockCounter() {
   SaveAccumulatorScope accumulator_scope(&basm_);
   CallBuiltin<Builtin::kIncBlockCounter>(__ FunctionOperand(),
                                          IndexAsSmi(0));  // coverage array slot
+}
+
+void BaselineCompiler::VisitRecordReplayIncExecutionProgressCounter() {
+  // The progress calls return the accumulator, which is live after
+  // ResumeGenerator and at the start of catch blocks.
+#if V8_TARGET_ARCH_X64
+  // Assertions and checks on progress need the VM call. Otherwise increment
+  // the counter inline and only call into the VM at the target progress.
+  if (!gRecordReplayAssertProgress && !gRecordReplayCheckProgress) {
+    Label done;
+    {
+      BaselineAssembler::ScratchRegisterScope scratch_scope(&basm_);
+      Register address = scratch_scope.AcquireScratch();
+      Register counter = scratch_scope.AcquireScratch();
+      masm_.Move(address, ExternalReference::record_replay_progress_counter());
+      masm_.movq(counter, Operand(address, 0));
+      masm_.incq(counter);
+      masm_.movq(Operand(address, 0), counter);
+      masm_.Move(address, ExternalReference::record_replay_target_progress());
+      masm_.cmpq(counter, Operand(address, 0));
+      masm_.j(not_equal, &done);
+    }
+    CallRuntime(Runtime::kRecordReplayBaselineTargetProgressReached,
+                kInterpreterAccumulatorRegister);
+    __ Bind(&done);
+    return;
+  }
+#elif V8_TARGET_ARCH_ARM64
+  if (!gRecordReplayAssertProgress && !gRecordReplayCheckProgress) {
+    Label done;
+    {
+      BaselineAssembler::ScratchRegisterScope scratch_scope(&basm_);
+      Register address = scratch_scope.AcquireScratch();
+      Register counter = scratch_scope.AcquireScratch();
+      masm_.Mov(address,
+                Operand(ExternalReference::record_replay_progress_counter()));
+      masm_.Ldr(counter, MemOperand(address));
+      masm_.Add(counter, counter, Operand(1));
+      masm_.Str(counter, MemOperand(address));
+      masm_.Mov(address,
+                Operand(ExternalReference::record_replay_target_progress()));
+      masm_.Ldr(address, MemOperand(address));
+      masm_.Cmp(counter, address);
+      masm_.B(ne, &done);
+    }
+    CallRuntime(Runtime::kRecordReplayBaselineTargetProgressReached,
+                kInterpreterAccumulatorRegister);
+    __ Bind(&done);
+    return;
+  }
+#endif
+  CallRuntime(Runtime::kRecordReplayBaselineExecutionProgress,
+              __ FunctionOperand(), kInterpreterAccumulatorRegister);
+}
+
+void BaselineCompiler::VisitReplayIncJsFrameDepth() {
+#if V8_TARGET_ARCH_X64
+  BaselineAssembler::ScratchRegisterScope scratch_scope(&basm_);
+  Register scratch = scratch_scope.AcquireScratch();
+  ExternalReference depth_ref = ExternalReference::Create(
+      IsolateAddressId::kReplayJsFrameDepthAddress, masm_.isolate());
+  Operand depth = masm_.ExternalReferenceAsOperand(depth_ref, scratch);
+  masm_.incl(depth);
+  masm_.cmpl(depth, Immediate(ThreadLocalTop::kReplayMaxJsFrameDepth));
+  Label done;
+  masm_.j(less, &done);
+  CallRuntime(Runtime::kThrowStackOverflow);
+  __ Trap();
+  __ Bind(&done);
+#elif V8_TARGET_ARCH_ARM64
+  Label done;
+  {
+    BaselineAssembler::ScratchRegisterScope scratch_scope(&basm_);
+    Register address = scratch_scope.AcquireScratch();
+    Register depth = scratch_scope.AcquireScratch().W();
+    masm_.Mov(address, Operand(ExternalReference::Create(
+                           IsolateAddressId::kReplayJsFrameDepthAddress,
+                           masm_.isolate())));
+    masm_.Ldr(depth, MemOperand(address));
+    masm_.Add(depth, depth, Operand(1));
+    masm_.Str(depth, MemOperand(address));
+    masm_.Cmp(depth, Operand(ThreadLocalTop::kReplayMaxJsFrameDepth));
+    masm_.B(lt, &done);
+  }
+  CallRuntime(Runtime::kThrowStackOverflow);
+  __ Trap();
+  __ Bind(&done);
+#else
+  FATAL("ReplayIncJsFrameDepth Baseline lowering is x64/arm64 only");
+#endif
+}
+
+void BaselineCompiler::VisitReplayDecJsFrameDepth() {
+#if V8_TARGET_ARCH_X64
+  BaselineAssembler::ScratchRegisterScope scratch_scope(&basm_);
+  Register scratch = scratch_scope.AcquireScratch();
+  ExternalReference depth_ref = ExternalReference::Create(
+      IsolateAddressId::kReplayJsFrameDepthAddress, masm_.isolate());
+  Operand depth = masm_.ExternalReferenceAsOperand(depth_ref, scratch);
+  masm_.decl(depth);
+#elif V8_TARGET_ARCH_ARM64
+  BaselineAssembler::ScratchRegisterScope scratch_scope(&basm_);
+  Register address = scratch_scope.AcquireScratch();
+  Register depth = scratch_scope.AcquireScratch().W();
+  masm_.Mov(address, Operand(ExternalReference::Create(
+                         IsolateAddressId::kReplayJsFrameDepthAddress,
+                         masm_.isolate())));
+  masm_.Ldr(depth, MemOperand(address));
+  masm_.Sub(depth, depth, Operand(1));
+  masm_.Str(depth, MemOperand(address));
+#else
+  FATAL("ReplayDecJsFrameDepth Baseline lowering is x64/arm64 only");
+#endif
+}
+
+void BaselineCompiler::VisitRecordReplayNotifyActivity() {
+  // Returns the accumulator, see VisitRecordReplayIncExecutionProgressCounter.
+  CallRuntime(Runtime::kRecordReplayBaselineNotifyActivity,
+              kInterpreterAccumulatorRegister);
+}
+
+// The instrumentation calls return the accumulator, see
+// VisitRecordReplayIncExecutionProgressCounter.
+void BaselineCompiler::VisitRecordReplayInstrumentation() {
+  uint32_t index = Index(0);
+  CallRuntime(Runtime::kRecordReplayBaselineInstrumentation,
+              __ FunctionOperand(), Smi::FromInt(index),
+              kInterpreterAccumulatorRegister);
+}
+
+void BaselineCompiler::VisitRecordReplayInstrumentationGenerator() {
+  uint32_t index = Index(0);
+  CallRuntime(Runtime::kRecordReplayBaselineInstrumentationGenerator,
+              __ FunctionOperand(), Smi::FromInt(index), RegisterOperand(1),
+              kInterpreterAccumulatorRegister);
+}
+
+void BaselineCompiler::VisitRecordReplayInstrumentationReturn() {
+  uint32_t index = Index(0);
+  CallRuntime(Runtime::kRecordReplayBaselineInstrumentationReturn,
+              __ FunctionOperand(), Smi::FromInt(index), RegisterOperand(1),
+              kInterpreterAccumulatorRegister);
+}
+
+void BaselineCompiler::VisitRecordReplayAssertValue() {
+  SaveAccumulatorScope accumulator_scope(&basm_);
+  CallRuntime(Runtime::kRecordReplayAssertValue,
+              __ FunctionOperand(), Smi::FromInt(Index(0)),
+              kInterpreterAccumulatorRegister);
+}
+
+void BaselineCompiler::VisitRecordReplayTrackObjectId() {
+  SaveAccumulatorScope accumulator_scope(&basm_);
+  CallRuntime(Runtime::kRecordReplayTrackObjectId, RegisterOperand(0));
 }
 
 void BaselineCompiler::VisitAbort() {
