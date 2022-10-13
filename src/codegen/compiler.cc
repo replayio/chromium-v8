@@ -1682,6 +1682,7 @@ DeferredFinalizationJobData::DeferredFinalizationJobData(
 
 extern bool RecordReplayIsMainThreadIsolate(Isolate* isolate);
 extern bool RecordReplayAssertValues();
+
 // Whether the code handing V8 a script's source on the main thread leaves it
 // uninstrumented: Replay's own code, or code running with events disallowed.
 // The script this compile creates keeps that decision for all of its compiles
@@ -1997,6 +1998,8 @@ void BackgroundCompileTask::RunOnMainThread(Isolate* isolate) {
 
 void BackgroundCompileTask::Run(
     LocalIsolate* isolate, ReusableUnoptimizedCompileState* reusable_state) {
+  gNumRunningBackgroundCompileTasks++;
+
   TimedHistogramScope timer(
       timer_, nullptr,
       compilation_details_
@@ -2114,6 +2117,8 @@ void BackgroundCompileTask::Run(
   outer_function_sfi_ = isolate->heap()->NewPersistentMaybeHandle(maybe_result);
   DCHECK(isolate->heap()->ContainsPersistentHandle(script_.location()));
   persistent_handles_ = isolate->heap()->DetachPersistentHandles();
+
+  gNumRunningBackgroundCompileTasks--;
 }
 
 // A class which traverses the constant pools of newly compiled
@@ -2612,6 +2617,12 @@ Handle<SharedFunctionInfo> BackgroundMergeTask::CompleteMergeInForeground(
   DirectHandle<Script> old_script = cached_script_.ToHandleChecked();
   ConstantPoolPointerForwarder forwarder(
       isolate, isolate->main_thread_local_heap(), old_script);
+  // Replay: functions compiled into new_script move to old_script. Merges only
+  // follow consuming a code cache, which Blink doesn't do when recording or
+  // replaying ("no-compile-cache"); a deserialized script carries the bit of
+  // the process that produced the cache.
+  CHECK_EQ(old_script->record_replay_instrumented(),
+           new_script->record_replay_instrumented());
 
   // Find infos that didn't exist during the background work, but do now. This
   // means a re-merge is necessary. Potential references to the new script's SFI
@@ -3310,7 +3321,12 @@ bool Compiler::FinalizeBackgroundCompileTask(BackgroundCompileTask* task,
 void Compiler::CompileOptimized(Isolate* isolate,
                                 DirectHandle<JSFunction> function,
                                 ConcurrencyMode mode, CodeKind code_kind) {
+  // The point at which optimized compilations occur can vary between recording
+  // and replaying.
+  replayio::AutoDisallowEvents disallow("Compiler::CompileOptimized");
+
   function->TraceOptimizationStatus("^%s", CodeKindToString(code_kind));
+
   DCHECK(CodeKindIsOptimizedJSFunction(code_kind));
   DCHECK(AllowCompilation::IsAllowed(isolate));
 
@@ -3515,6 +3531,46 @@ MaybeDirectHandle<JSFunction> Compiler::GetFunctionFromEval(
     }
   }
   CHECK(is_compiled_scope.is_compiled());
+
+  // See if we need to use replaced source contents while replaying, in which
+  // case we need to compile the new source in the same way we did above and
+  // replace the result.
+  MaybeHandle<String> new_source = ReplayingReplaceScriptContents(isolate, source);
+  if (!new_source.is_null()) {
+    MaybeHandle<ScopeInfo> maybe_outer_scope_info;
+    if (!IsNativeContext(*context)) {
+      maybe_outer_scope_info = handle(context->scope_info(), isolate);
+    }
+
+    UnoptimizedCompileFlags flags = UnoptimizedCompileFlags::ForToplevelCompile(
+        isolate, true, language_mode, REPLMode::kNo, ScriptType::kClassic,
+        v8_flags.lazy_eval, script->id());
+    flags.set_is_eval(true);
+    flags.set_parsing_while_debugging(parsing_while_debugging);
+    DCHECK(!flags.is_module());
+    flags.set_parse_restriction(restriction);
+
+    // The script replacing the contents of `script` is that script.
+    RecordReplayInheritCompileFlags(flags, *script);
+
+    UnoptimizedCompileState compile_state;
+    ReusableUnoptimizedCompileState reusable_state(isolate);
+    ParseInfo parse_info(isolate, flags, &compile_state, &reusable_state);
+    parse_info.set_parameters_end_pos(parameters_end_pos);
+
+    Handle<Script> new_script = parse_info.CreateScript(
+        isolate, new_source.ToHandleChecked(), kNullMaybeHandle,
+        OriginOptionsForEval(outer_info->script(), parsing_while_debugging));
+
+    Handle<SharedFunctionInfo> new_shared_info =
+      v8::internal::CompileToplevel(&parse_info, new_script,
+                                    maybe_outer_scope_info, isolate,
+                                    &is_compiled_scope)
+        .ToHandleChecked();
+
+    MarkRecordReplayReplacedScript(new_script->id());
+    result = Factory::JSFunctionBuilder{isolate, new_shared_info, context}.Build();
+  }
 
   return result;
 }
@@ -4210,13 +4266,22 @@ MaybeDirectHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
       maybe_result = CompileScriptOnBothBackgroundAndMainThread(
           source, script_details, isolate, &is_compiled_scope);
     } else {
+      int script_id = UnboundScript::kNoScriptId;
+      if (Handle<Script> script; maybe_script.ToHandle(&script)) {
+        script_id = script->id();
+      }
+      if (gReplaceSourceContentsScriptId) {
+        script_id = gReplaceSourceContentsScriptId;
+      }
+
       UnoptimizedCompileFlags flags =
           UnoptimizedCompileFlags::ForToplevelCompile(
               isolate, natives == NOT_NATIVES_CODE, language_mode,
               script_details.repl_mode,
               script_details.origin_options.IsModule() ? ScriptType::kModule
                                                        : ScriptType::kClassic,
-              v8_flags.lazy);
+              v8_flags.lazy,
+              script_id);
 
       flags.set_is_eager(compile_options & ScriptCompiler::kEagerCompile);
       flags.set_compile_hints_magic_enabled(
@@ -4224,10 +4289,6 @@ MaybeDirectHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
       flags.set_compile_hints_per_function_magic_enabled(
           compile_options &
           ScriptCompiler::kFollowCompileHintsPerFunctionMagicComment);
-
-      if (DirectHandle<Script> script; maybe_script.ToHandle(&script)) {
-        flags.set_script_id(script->id());
-      }
 
       maybe_result = CompileScriptOnMainThread(
           flags, source, script_details, natives, extension, isolate,
@@ -4576,6 +4637,10 @@ template DirectHandle<SharedFunctionInfo> Compiler::GetSharedFunctionInfo(
 MaybeHandle<Code> Compiler::CompileOptimizedOSR(
     Isolate* isolate, DirectHandle<JSFunction> function,
     BytecodeOffset osr_offset, ConcurrencyMode mode, CodeKind code_kind) {
+  // The point at which optimized compilations occur can vary between recording
+  // and replaying.
+  replayio::AutoDisallowEvents disallow("Compiler::CompileOptimizedOSR");
+
   DCHECK(IsOSR(osr_offset));
 
   if (V8_UNLIKELY(isolate->serializer_enabled())) return {};
