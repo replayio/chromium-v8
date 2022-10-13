@@ -8756,7 +8756,8 @@ enum class SetAsArrayKind {
 
 i::DirectHandle<i::JSArray> MapAsArray(i::Isolate* i_isolate,
                                        i::Tagged<i::Object> table_obj,
-                                       int offset, MapAsArrayKind kind) {
+                                       int offset, MapAsArrayKind kind,
+                                       const KeyIterationParams* params = KeyIterationParams::Default()) {
   i::Factory* factory = i_isolate->factory();
   i::DirectHandle<i::OrderedHashMap> table(
       i::Cast<i::OrderedHashMap>(table_obj), i_isolate);
@@ -8765,8 +8766,10 @@ i::DirectHandle<i::JSArray> MapAsArray(i::Isolate* i_isolate,
   const bool collect_values =
       kind == MapAsArrayKind::kEntries || kind == MapAsArrayKind::kValues;
   int capacity = table->UsedCapacity();
-  int max_length =
-      (capacity - offset) * ((collect_keys && collect_values) ? 2 : 1);
+  
+  auto page_size = params->PageSize(capacity - offset);
+  int max_length = page_size * ((collect_keys && collect_values) ? 2 : 1);
+
   i::DirectHandle<i::FixedArray> result = factory->NewFixedArray(max_length);
   uint32_t result_index = 0;
   {
@@ -8779,9 +8782,11 @@ i::DirectHandle<i::JSArray> MapAsArray(i::Isolate* i_isolate,
       if (key == hash_table_hole) continue;
       if (collect_keys) result->set(result_index++, key);
       if (collect_values) result->set(result_index++, table->ValueAt(entry));
+
+      if (*params && result_index == max_length) break;
     }
   }
-  DCHECK_GE(max_length, result_index);
+  CHECK_GE(max_length, result_index);
   if (result_index == 0) return factory->NewJSArray(0);
   result->RightTrim(i_isolate, result_index);
   return factory->NewJSArrayWithElements(result, i::PACKED_ELEMENTS,
@@ -8790,13 +8795,13 @@ i::DirectHandle<i::JSArray> MapAsArray(i::Isolate* i_isolate,
 
 }  // namespace
 
-Local<Array> Map::AsArray() const {
+Local<Array> Map::AsArray(const v8::KeyIterationParams* params) const {
   auto obj = Utils::OpenDirectHandle(this);
   i::Isolate* i_isolate = i::Isolate::Current();
   ApiRuntimeCallStatsScope rcs_scope(i_isolate, RCCId::kAPI_Map_AsArray);
   EnterV8NoScriptNoExceptionScope api_scope(i_isolate);
   return Utils::ToLocal(
-      MapAsArray(i_isolate, obj->table(), 0, MapAsArrayKind::kEntries));
+      MapAsArray(i_isolate, obj->table(), 0, MapAsArrayKind::kEntries, params));
 }
 
 Local<v8::Set> v8::Set::New(Isolate* v8_isolate) {
@@ -8860,14 +8865,18 @@ Maybe<bool> Set::Delete(Local<Context> context, Local<Value> key) {
 namespace {
 i::DirectHandle<i::JSArray> SetAsArray(i::Isolate* i_isolate,
                                        i::Tagged<i::Object> table_obj,
-                                       int offset, SetAsArrayKind kind) {
+                                       int offset, SetAsArrayKind kind,
+                                       const KeyIterationParams* params = KeyIterationParams::Default()) {
   i::Factory* factory = i_isolate->factory();
   i::DirectHandle<i::OrderedHashSet> table(
       i::Cast<i::OrderedHashSet>(table_obj), i_isolate);
   // Elements skipped by |offset| may already be deleted.
   int capacity = table->UsedCapacity();
   const bool collect_key_values = kind == SetAsArrayKind::kEntries;
-  int max_length = (capacity - offset) * (collect_key_values ? 2 : 1);
+  
+  auto page_size = params->PageSize(capacity - offset);
+  int max_length = page_size * (collect_key_values ? 2 : 1);
+
   if (max_length == 0) return factory->NewJSArray(0);
   i::DirectHandle<i::FixedArray> result = factory->NewFixedArray(max_length);
   uint32_t result_index = 0;
@@ -8881,6 +8890,8 @@ i::DirectHandle<i::JSArray> SetAsArray(i::Isolate* i_isolate,
       if (key == hash_table_hole) continue;
       result->set(result_index++, key);
       if (collect_key_values) result->set(result_index++, key);
+      
+      if (result_index == max_length) break;
     }
   }
   DCHECK_GE(max_length, result_index);
@@ -8891,13 +8902,13 @@ i::DirectHandle<i::JSArray> SetAsArray(i::Isolate* i_isolate,
 }
 }  // namespace
 
-Local<Array> Set::AsArray() const {
+Local<Array> Set::AsArray(const v8::KeyIterationParams* params) const {
   auto obj = Utils::OpenDirectHandle(this);
   i::Isolate* i_isolate = i::Isolate::Current();
   ApiRuntimeCallStatsScope rcs_scope(i_isolate, RCCId::kAPI_Set_AsArray);
   EnterV8NoScriptNoExceptionScope api_scope(i_isolate);
   return Utils::ToLocal(
-      SetAsArray(i_isolate, obj->table(), 0, SetAsArrayKind::kValues));
+      SetAsArray(i_isolate, obj->table(), 0, SetAsArrayKind::kValues, params));
 }
 
 MaybeLocal<Promise::Resolver> Promise::Resolver::New(Local<Context> context) {
@@ -9067,6 +9078,7 @@ Promise::PromiseState Promise::State() {
 }
 
 void Promise::MarkAsHandled() {
+  recordreplay::Assert("[TT-1029-1030] Promise::MarkAsHandled");
   auto promise = Utils::OpenDirectHandle(this);
   i::Isolate* i_isolate = i::Isolate::Current();
   if (!promise->has_handler() &&
@@ -11638,18 +11650,21 @@ Maybe<bool> Exception::CaptureStackTrace(Local<Context> context,
   return Just(true);
 }
 
-v8::MaybeLocal<v8::Array> v8::Object::PreviewEntries(bool* is_key_value) {
+v8::MaybeLocal<v8::Array> v8::Object::PreviewEntries(
+    bool* is_key_value, const v8::KeyIterationParams* params) {
   auto object = Utils::OpenDirectHandle(this);
   i::Isolate* i_isolate = i::Isolate::Current();
   if (i_isolate->is_execution_terminating()) return {};
   if (IsMap()) {
     *is_key_value = true;
-    return Map::Cast(this)->AsArray();
+    return Map::Cast(this)->AsArray(params);
   }
   if (IsSet()) {
     *is_key_value = false;
-    return Set::Cast(this)->AsArray();
+    return Set::Cast(this)->AsArray(params);
   }
+
+
 
   Isolate* v8_isolate = reinterpret_cast<Isolate*>(i_isolate);
   EnterV8NoScriptNoExceptionScope api_scope(i_isolate);
@@ -11665,7 +11680,7 @@ v8::MaybeLocal<v8::Array> v8::Object::PreviewEntries(bool* is_key_value) {
     *is_key_value = kind == MapAsArrayKind::kEntries;
     if (!it->HasMore()) return v8::Array::New(v8_isolate);
     return Utils::ToLocal(
-        MapAsArray(i_isolate, it->table(), i::Smi::ToInt(it->index()), kind));
+        MapAsArray(i_isolate, it->table(), i::Smi::ToInt(it->index()), kind, params));
   }
   if (i::IsJSSetIterator(*object)) {
     auto it = i::Cast<i::JSSetIterator>(object);
