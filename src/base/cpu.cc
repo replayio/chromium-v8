@@ -56,6 +56,8 @@
 #include <windows.h>
 #endif
 
+#include "v8.h"
+
 namespace v8 {
 namespace base {
 
@@ -63,6 +65,19 @@ namespace base {
 
 // Define __cpuid() for non-MSVC libraries.
 #if !V8_LIBC_MSVCRT
+
+template <typename Dst, typename Src>
+inline void BitwiseCast(const Src src, Dst* dst) {
+  static_assert(sizeof(Src) == sizeof(Dst), "size mismatch");
+  memcpy((void*)dst, (const void*)&src, sizeof(Src));
+}
+
+template <typename Dst, typename Src>
+inline Dst BitwiseCast(const Src src) {
+  Dst temp;
+  BitwiseCast(src, &temp);
+  return temp;
+}
 
 static V8_INLINE void __cpuid(int cpu_info[4], int info_type) {
 // Clear ecx to align with __cpuid() of MSVC:
