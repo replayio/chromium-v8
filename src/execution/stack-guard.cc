@@ -302,6 +302,11 @@ Tagged<Object> StackGuard::HandleInterrupts(InterruptLevel level) {
   isolate_->heap()->VerifyNewSpaceTop();
 #endif
 
+  // Interrupts must happen at deterministic points, ignore them when code is running
+  // while events are disallowed, such as during command callbacks.
+  if (recordreplay::AreEventsDisallowed())
+    return ReadOnlyRoots(isolate_).undefined_value();
+
   if (v8_flags.verify_predictable) {
     // Advance synthetic time by making a time request.
     isolate_->heap()->MonotonicallyIncreasingTimeInMs();
@@ -316,6 +321,7 @@ Tagged<Object> StackGuard::HandleInterrupts(InterruptLevel level) {
 
   if (TestAndClear(&interrupt_flags, TERMINATE_EXECUTION)) {
     TRACE_EVENT0("v8.execute", "V8.TerminateExecution");
+    recordreplay::InvalidateRecording("Terminate execution from execution interrupt");
     return isolate_->TerminateExecution();
   }
 
