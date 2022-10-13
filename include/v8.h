@@ -17,7 +17,9 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <string>
 
+#include <initializer_list>
 #include <memory>
 
 #include "cppgc/common.h"
@@ -62,6 +64,8 @@
 #include "v8-wasm.h"               // NOLINT(build/include_directory)
 #include "v8config.h"              // NOLINT(build/include_directory)
 
+#include "replayio-macros.h"
+
 // We reserve the V8_* prefix for macros defined in V8 public API and
 // assume there are no name conflicts with the embedder's code.
 
@@ -82,6 +86,9 @@ class Platform;
  * \example process.cc
  */
 
+bool IsMainThread();
+
+// Static container class for record/replay methods.
 
 }  // namespace v8
 
