@@ -4,6 +4,8 @@
 
 #include "src/objects/js-weak-refs.h"
 
+#include "src/replay/finalization-registry.h"  // For replay.
+
 #include "src/execution/execution.h"
 #include "src/objects/js-weak-refs-inl.h"
 
@@ -61,8 +63,26 @@ Maybe<bool> JSFinalizationRegistry::Cleanup(
   //    cell.[[WeakRefTarget]] is empty, an implementation may perform the
   //    following steps:
   bool key_map_may_need_shrink = false;
-  while (finalization_registry->NeedsCleanup()) {
+  while (true) {
     HandleScope scope(isolate);
+
+    // V8 13.3 moved this loop here from the Torque
+    // FinalizationRegistryCleanupLoop, whose condition was while (true): the
+    // replay's GC never clears a tracked cell, so NeedsCleanup() is false until
+    // NextCell clears the one the recording names. Ask the recording first and
+    // keep upstream's condition as the loop's terminator -- for an untracked
+    // registry NextCell returns true, so the two together are exactly
+    // upstream's while (NeedsCleanup()).
+    // NextCell is fork-owned and takes a Handle (its other caller is the
+    // runtime wrapper, where Arguments::at() still yields one at M133); a
+    // DirectHandle does not convert back, so re-wrap here rather than change a
+    // fork signature that upstream may move again.
+    if (!replayio::ReplayFinalizationRegistries::NextCell(
+            isolate,
+            Handle<JSFinalizationRegistry>(*finalization_registry, isolate))) {
+      break;
+    }
+    if (!finalization_registry->NeedsCleanup()) break;
 
     // a. Choose any such cell.
     // b. Remove cell from finalizationRegistry.[[Cells]].
