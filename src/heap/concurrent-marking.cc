@@ -520,6 +520,8 @@ void ConcurrentMarking::TryScheduleJob(GarbageCollector garbage_collector,
     return;
   }
 
+  replayio::AutoDisallowEvents disallow("ConcurrentMarking::ScheduleJob");
+
   if (v8_flags.concurrent_marking_high_priority_threads) {
     priority = TaskPriority::kUserBlocking;
   }

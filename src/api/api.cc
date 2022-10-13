@@ -11462,6 +11462,16 @@ void RecordReplayOnTargetProgressReached() {
   gRecordReplayProgressReached();
 }
 
+static void RecordReplayProgressInterruptCallback() {
+  CHECK(IsMainThread());
+  Isolate* isolate = Isolate::Current();
+  isolate->heap()->RecordReplayOnProgressInterrupt();
+  // The memory reducer triggers progress interrupts too.
+  if (recordreplay::IsRecordingOrReplaying("interrupts")) {
+    isolate->RecordReplayInvokeApiInterruptCallbacksAtProgress();
+  }
+}
+
 void RecordReplayInstrument(const char* kind, const char* function, int function_index) {
   gRecordReplayOnInstrument(kind, function, function_index);
 }
@@ -12716,6 +12726,7 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
 
   gRecordReplaySetChangeInstrumentCallback(i::RecordReplayChangeInstrument);
   gRecordReplaySetProgressCallback(i::RecordReplaySetTargetProgress);
+  gRecordReplaySetProgressInterruptCallback(i::RecordReplayProgressInterruptCallback);
   gRecordReplayEnableProgressCheckpoints();
   gRecordReplaySetTrackObjectsCallback(i::TrackObjectsCallback);
   gRecordReplaySetPossibleBreakpointsCallback(i::RecordReplayGetPossibleBreakpointsCallback);
