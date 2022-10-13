@@ -760,6 +760,11 @@ template <typename ConcreteVisitor>
 size_t MarkingVisitorBase<ConcreteVisitor>::VisitJSWeakRef(
     Tagged<Map> map, Tagged<JSWeakRef> weak_ref,
     MaybeObjectSize maybe_object_size) {
+  // When replaying, the recording decides when deref() stops returning the
+  // target.
+  if (record_replay_is_replaying_) {
+    VisitPointer(weak_ref, ObjectSlot(&weak_ref->target_));
+  }
   if (IsHeapObject(weak_ref->target())) {
     Tagged<HeapObject> target = Cast<HeapObject>(weak_ref->target());
     SynchronizePageAccess(target);
@@ -786,6 +791,25 @@ size_t MarkingVisitorBase<ConcreteVisitor>::VisitWeakCell(
     MaybeObjectSize maybe_object_size) {
   Tagged<HeapObject> target = weak_cell->relaxed_target();
   Tagged<HeapObject> unregister_token = weak_cell->relaxed_unregister_token();
+  // When replaying, the recording decides when a tracked cell is cleared.
+  if (record_replay_is_replaying_ && weak_cell->record_replay_id() != 0) {
+    // V8 14.1 made WeakCell hand-written (V8_OBJECT class WeakCell :
+    // HeapObjectLayout), so Torque no longer generates an offset constant for
+    // its target and the qualified name does not resolve -- upstream itself has
+    // 0 uses of it. Upstream's own idiom builds the slot from the TaggedMember's
+    // address (scavenger.cc:278,2418); access is legal because WeakCell declares
+    // `template <typename ConcreteVisitor> friend class MarkingVisitorBase`.
+    // The JSWeakRef sites above are NOT affected either, but at this base
+    // the reason is no longer the one DV8-056 gives: upstream made
+    // JSWeakRef hand-written too at M149 (M148 is the last base where it
+    // is TorqueGeneratedJSWeakRef). Those two sites are unaffected because
+    // they already spell the slot &weak_ref->target_, the same
+    // TaggedMember-address idiom, which a hand-written class supports.
+    // kTargetOffset is gone as a class member tree-wide at M150; the only
+    // surviving spelling is SuperSpreadArgs::kTargetOffsetFromEnd, a
+    // different symbol. See defects DV8-056, DV8-060 and DV8-071.
+    VisitPointer(weak_cell, ObjectSlot(&weak_cell->target_));
+  }
   SynchronizePageAccess(target);
   SynchronizePageAccess(unregister_token);
   if (MarkingHelper::IsMarkedOrAlwaysLive(

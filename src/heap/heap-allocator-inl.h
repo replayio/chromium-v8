@@ -9,6 +9,7 @@
 // Include the non-inl header before the rest of the headers.
 
 #include "src/base/logging.h"
+#include "src/base/replayio.h"
 #include "src/common/assert-scope.h"
 #include "src/common/globals.h"
 #include "src/heap/heap.h"
@@ -263,6 +264,7 @@ HeapAllocator::AllocateRawWith(int size, AllocationType allocation,
   }
 
   return AllocateRawSlowPath(mode, size, allocation, origin, alignment, hint);
+
 }
 
 }  // namespace internal

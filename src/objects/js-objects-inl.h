@@ -876,6 +876,13 @@ void JSMessageObject::set_stack_trace(
   stack_trace_.store(this, value, mode);
 }
 
+int JSMessageObject::record_replay_bookmark() const {
+  return record_replay_bookmark_.load().value();
+}
+void JSMessageObject::set_record_replay_bookmark(int value) {
+  record_replay_bookmark_.store(this, Smi::FromInt(value));
+}
+
 DEF_GETTER(JSObject, GetElementsKind, ElementsKind) {
   ElementsKind kind = map()->elements_kind();
 #if VERIFY_HEAP && DEBUG

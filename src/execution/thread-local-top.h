@@ -30,7 +30,8 @@ class ThreadLocalTop {
   // TODO(all): This is not particularly beautiful. We should probably
   // refactor this to really consist of just Addresses and 32-bit
   // integer fields.
-  static constexpr uint32_t kSizeInBytes = 30 * kSystemPointerSize;
+  static constexpr uint32_t kSizeInBytes = 32 * kSystemPointerSize;
+  static constexpr int kReplayMaxJsFrameDepth = 1024;
 
   // Does early low-level initialization that does not depend on the
   // isolate being present.
@@ -206,9 +207,30 @@ class ThreadLocalTop {
   // on the secondary stack, during execution on the central stack.
   Address secondary_stack_sp_;
   Address secondary_stack_limit_;
+  int replay_js_frame_depth_;
+
+  // Was the "thread in wasm" flag when recording/replaying, redirecting
+  // ThreadLocalTop::thread_in_wasm_flag_address_ at a slot that survives a
+  // forked replaying process respawning its threads. Upstream removed
+  // thread_in_wasm_flag_address_ at M140, so nothing in v8 reads this any
+  // more and only Clear() writes it. The slot is KEPT deliberately: it is one
+  // of the two the fork adds to ThreadLocalTop, so removing it would change
+  // kSizeInBytes and the API-mirrored Internals::kThreadLocalTopSize, and the
+  // record/replay driver can read the layout by offset from outside this
+  // repository. See DV8-044 (owner ruling) and DV8-001.
+  // Pointer-sized because the arm64 generic JS-to-wasm wrapper stored 64 bits.
+  Address replay_thread_in_wasm_flag_;
 };
 
 static_assert(ThreadLocalTop::kSizeInBytes == sizeof(ThreadLocalTop));
+
+// Record/replay: include/v8-internal.h keeps its own hand-maintained copy of
+// this size for embedders, and every isolate offset after it depends on the
+// two agreeing -- when they do not, mksnapshot fails a layout CHECK and no
+// snapshot can be produced, with nothing failing to compile. The fork adds
+// slots here, so tie them together: a mismatch is now a compile error.
+static_assert(Internals::kThreadLocalTopSize ==
+              static_cast<int>(ThreadLocalTop::kSizeInBytes));
 
 }  // namespace internal
 }  // namespace v8
