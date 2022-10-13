@@ -8,6 +8,8 @@
 #include "src/execution/microtask-queue.h"
 #include "src/objects/js-promise-inl.h"
 
+#include "src/base/replayio.h"
+
 namespace v8 {
 namespace internal {
 
@@ -141,6 +143,7 @@ RUNTIME_FUNCTION(Runtime_RejectPromise) {
   Handle<JSPromise> promise = args.at<JSPromise>(0);
   Handle<Object> reason = args.at(1);
   Handle<Boolean> debug_event = args.at<Boolean>(2);
+
   return *JSPromise::Reject(promise, reason,
                             Object::BooleanValue(*debug_event, isolate));
 }
