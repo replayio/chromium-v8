@@ -8,6 +8,7 @@
 #include "src/base/logging.h"
 #include "src/common/assert-scope.h"
 #include "src/common/globals.h"
+#include "src/base/replayio.h"
 #include "src/heap/heap-allocator.h"
 #include "src/heap/large-spaces.h"
 #include "src/heap/local-heap.h"
@@ -279,6 +280,15 @@ auto HeapAllocator::AllocateRawWithRetryOrFailSlowPath(
 template <typename Function>
 V8_WARN_UNUSED_RESULT auto HeapAllocator::CustomAllocateWithRetryOrFail(
     Function&& Allocate, AllocationType allocation) {
+  // The third entry point into the retry logic, added in V8 13.5 and reached
+  // off the main thread: FactoryBase<LocalFactory>::NewJSDispatchHandle, from
+  // background code-cache deserialization. The two slow-path wrappers in
+  // heap-allocator.cc bracket the same logic for the same reason -- a thread
+  // that fails to allocate requests a GC from the main thread and waits for
+  // it, and events must not run while it does.
+  replayio::AutoDisallowEvents disallow(
+      "HeapAllocator::CustomAllocateWithRetryOrFail");
+
   return *AllocateRawWithRetryOrFailSlowPath(Allocate, Allocate, allocation);
 }
 
