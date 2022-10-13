@@ -4,6 +4,8 @@
 
 #include "src/execution/thread-local-top.h"
 
+
+#include "include/v8.h"
 #include "src/base/sanitizer/msan.h"
 #include "src/execution/isolate.h"
 #include "src/execution/simulator.h"
@@ -42,6 +44,8 @@ void ThreadLocalTop::Clear() {
   failed_access_check_callback_ = nullptr;
   central_stack_limit_ = kNullAddress;
   central_stack_sp_ = kNullAddress;
+  replay_js_frame_depth_ = 0;
+  replay_thread_in_wasm_flag_ = 0;
 }
 
 void ThreadLocalTop::Initialize(Isolate* isolate) {
