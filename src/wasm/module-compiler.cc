@@ -544,7 +544,18 @@ class CompilationStateImpl {
                        std::shared_ptr<Counters> async_counters,
                        DynamicTiering dynamic_tiering);
   ~CompilationStateImpl() {
-    if (compile_job_->IsValid()) compile_job_->CancelAndDetach();
+    if (!compile_job_->IsValid()) return;
+    // A NativeModule shared between isolates is deleted with events disallowed
+    // (see DeleteNativeModule), where the job's state can't be ordered. When
+    // there are no compilation tasks (as while recording or replaying), no
+    // worker ever ran the job, so there is nothing to order its cancellation
+    // with.
+    base::Optional<replayio::AutoPassThroughEvents> pass_through;
+    if (recordreplay::AreEventsDisallowed() &&
+        v8_flags.wasm_num_compilation_tasks == 0) {
+      pass_through.emplace();
+    }
+    compile_job_->CancelAndDetach();
   }
 
   // Call right after the constructor, after the {compilation_state_} field in
@@ -1374,6 +1385,8 @@ void TransitiveTypeFeedbackProcessor::ProcessFunction(int func_index) {
 }
 
 void TriggerTierUp(WasmInstanceObject instance, int func_index) {
+  replayio::AutoDisallowEvents disallow("wasm::TriggerTierUp");
+
   NativeModule* native_module = instance.module_object().native_module();
   CompilationStateImpl* compilation_state =
       Impl(native_module->compilation_state());
