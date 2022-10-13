@@ -29,7 +29,8 @@ class ThreadLocalTop {
   // TODO(all): This is not particularly beautiful. We should probably
   // refactor this to really consist of just Addresses and 32-bit
   // integer fields.
-  static constexpr uint32_t kSizeInBytes = 25 * kSystemPointerSize;
+  static constexpr uint32_t kSizeInBytes = 27 * kSystemPointerSize;
+  static constexpr int kReplayMaxJsFrameDepth = 1024;
 
   // Does early low-level initialization that does not depend on the
   // isolate being present.
@@ -146,9 +147,22 @@ class ThreadLocalTop {
 
   // Address of the thread-local "thread in wasm" flag.
   Address thread_in_wasm_flag_address_;
+  int replay_js_frame_depth_;
+
+  // The "thread in wasm" flag when recording/replaying, see Initialize.
+  // Pointer-sized because the arm64 generic JS-to-wasm wrapper stores 64 bits.
+  Address replay_thread_in_wasm_flag_;
 };
 
 static_assert(ThreadLocalTop::kSizeInBytes == sizeof(ThreadLocalTop));
+
+// Record/replay: include/v8-internal.h keeps its own hand-maintained copy of
+// this size for embedders, and every isolate offset after it depends on the
+// two agreeing -- when they do not, mksnapshot fails a layout CHECK and no
+// snapshot can be produced, with nothing failing to compile. The fork adds
+// slots here, so tie them together: a mismatch is now a compile error.
+static_assert(Internals::kThreadLocalTopSize ==
+              static_cast<int>(ThreadLocalTop::kSizeInBytes));
 
 }  // namespace internal
 }  // namespace v8
