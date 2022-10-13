@@ -8,6 +8,7 @@
 #include "src/codegen/x64/assembler-x64.h"
 #include "src/codegen/x64/register-x64.h"
 #include "src/common/globals.h"
+#include "src/execution/thread-local-top.h"
 #include "src/maglev/maglev-assembler-inl.h"
 #include "src/maglev/maglev-assembler.h"
 #include "src/maglev/maglev-graph-processor.h"
@@ -19,6 +20,7 @@
 #include "src/objects/instance-type.h"
 #include "src/objects/js-function.h"
 #include "src/objects/swiss-name-dictionary.h"
+#include "src/runtime/runtime.h"
 
 namespace v8 {
 namespace internal {
@@ -1149,6 +1151,42 @@ void ReduceInterruptBudgetForReturn::GenerateCode(
                                 ReduceInterruptBudgetType::kReturn, amount());
 }
 
+int ReplayIncrementAndCheckJsFrameDepth::MaxCallStackArgs() const {
+  return 0;
+}
+void ReplayIncrementAndCheckJsFrameDepth::SetValueLocationConstraints() {
+  set_temporaries_needed(1);
+}
+void ReplayIncrementAndCheckJsFrameDepth::GenerateCode(
+    MaglevAssembler* masm, const ProcessingState& state) {
+  Register scratch = regalloc_info()->general_temporaries().first();
+  ExternalReference depth_ref = ExternalReference::Create(
+      IsolateFieldId::kReplayJsFrameDepth, masm->isolate());
+  MemOperand depth = __ ExternalReferenceAsOperand(depth_ref, scratch);
+  __ incl(depth);
+  __ cmpl(depth, Immediate(ThreadLocalTop::kReplayMaxJsFrameDepth));
+  __ JumpToDeferredIf(
+      greater_equal,
+      [](MaglevAssembler* masm, ReplayIncrementAndCheckJsFrameDepth* node) {
+        __ Move(kContextRegister, masm->native_context().object());
+        __ CallRuntime(Runtime::kThrowStackOverflow, 0);
+        masm->DefineExceptionHandlerAndLazyDeoptPoint(node);
+        __ Abort(AbortReason::kUnexpectedReturnFromThrow);
+      },
+      this);
+}
+
+void ReplayDecrementJsFrameDepth::SetValueLocationConstraints() {
+  set_temporaries_needed(1);
+}
+void ReplayDecrementJsFrameDepth::GenerateCode(MaglevAssembler* masm,
+                                               const ProcessingState& state) {
+  Register scratch = regalloc_info()->general_temporaries().first();
+  ExternalReference depth_ref = ExternalReference::Create(
+      IsolateFieldId::kReplayJsFrameDepth, masm->isolate());
+  MemOperand depth = __ ExternalReferenceAsOperand(depth_ref, scratch);
+  __ decl(depth);
+}
 // ---
 // Control nodes
 // ---

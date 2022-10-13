@@ -189,8 +189,7 @@ void ClearBreakOnNextFunctionCall(Isolate* isolate) {
   i_isolate->debug()->ClearBreakOnNextFunctionCall();
 }
 
-MaybeLocal<Array> GetInternalProperties(Isolate* v8_isolate,
-                                        Local<Value> value) {
+MaybeLocal<Array> GetInternalProperties(Isolate* v8_isolate, Local<Value> value) {
   i::Isolate* isolate = reinterpret_cast<i::Isolate*>(v8_isolate);
   EnterV8NoScriptNoExceptionScope api_scope(isolate);
   i::DirectHandle<i::Object> val = Utils::OpenDirectHandle(*value);
@@ -1514,7 +1513,8 @@ void SetIsolateId(v8::Isolate* v8_isolate, uint64_t id) {
 }
 
 std::unique_ptr<PropertyIterator> PropertyIterator::Create(
-    Local<Context> context, Local<Object> object, bool skip_indices) {
+    Local<Context> context, Local<Object> object, bool skip_indices,
+    const v8::KeyIterationParams* params) {
   i::Isolate* isolate = reinterpret_cast<i::Isolate*>(i::Isolate::Current());
   if (isolate->is_execution_terminating()) {
     return nullptr;
@@ -1522,7 +1522,7 @@ std::unique_ptr<PropertyIterator> PropertyIterator::Create(
   CallDepthScope<false> call_depth_scope(isolate, context);
 
   return i::DebugPropertyIterator::Create(
-      isolate, Utils::OpenDirectHandle(*object), skip_indices);
+      isolate, Utils::OpenDirectHandle(*object), skip_indices, params);
 }
 
 }  // namespace debug
