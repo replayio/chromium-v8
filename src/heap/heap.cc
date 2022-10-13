@@ -132,6 +132,7 @@
 #include "src/objects/visitors.h"
 #include "src/profiler/heap-profiler.h"
 #include "src/regexp/regexp.h"
+#include "src/replay/gc-poll.h"
 #include "src/snapshot/embedded/embedded-data.h"
 #include "src/snapshot/serializer-deserializer.h"
 #include "src/snapshot/snapshot.h"
@@ -302,7 +303,8 @@ Heap::Heap()
                          "v8::Heap", this, perfetto::ThreadTrack::Current())
                          .disable_sibling_merge()),
       gc_tracing_category_enabled_(TRACE_EVENT_API_GET_CATEGORY_GROUP_ENABLED(
-          TRACE_DISABLED_BY_DEFAULT("v8.gc"))) {
+          TRACE_DISABLED_BY_DEFAULT("v8.gc"))),
+      script_ordered_lock_id_((int)recordreplay::CreateOrderedLock("Heap.script_ordered_lock_id_")) {
 #if defined(V8_USE_PERFETTO)
   if (perfetto::Tracing::IsInitialized()) {
     // Because the track may not get any events of its own it must manually emit
@@ -1199,6 +1201,20 @@ void Heap::HandleGCRequest() {
     CollectGarbage(NEW_SPACE,
                    GarbageCollectionReason::kFinalizeConcurrentMinorMS);
   }
+  if (record_replay_external_memory_pressure_requested_.exchange(
+          false, std::memory_order_relaxed)) {
+    // Entry point restored after V8 14.8 deleted the function this called; see
+    // Heap::HandleExternalMemoryPressure above and defect DV8-048. Note that
+    // UpdateExternalMemory(0) is NOT a substitute: it early-returns for
+    // delta <= 0, before the decision block.
+    HandleExternalMemoryPressure(LocalHeap::Current(), external_memory());
+  }
+}
+
+void Heap::RecordReplayRequestExternalMemoryPressureReport() {
+  record_replay_external_memory_pressure_requested_.store(
+      true, std::memory_order_relaxed);
+  isolate()->stack_guard()->RequestGC();
 }
 
 namespace {
@@ -1290,6 +1306,7 @@ void FreeCachesOnMemoryPressure(Isolate* isolate,
 }  // anonymous namespace
 
 void Heap::CollectAllAvailableGarbage(GarbageCollectionReason gc_reason) {
+  replayio::AutoDisallowEvents disallow("Heap::CollectAllAvailableGarbage");
   // Min and max number of attempts for GC. The method will continue with more
   // GCs until the root set is stable.
   static constexpr int kMaxNumberOfAttempts = 7;
@@ -1436,6 +1453,8 @@ void Heap::CollectGarbage(
     const v8::GCCallbackFlags gc_callback_flags,
     PerformHeapLimitCheck perform_heap_limit_check,
     PerformIneffectiveMarkCompactCheck check_ineffective_mark_compact) {
+  replayio::AutoDisallowEvents disallow("Heap::CollectGarbage");
+
   CHECK(isolate_->IsOnCentralStack());
   // Any handles that are created during GC (eg during API callbacks)
   // should be in a fresh handle scope that is torn down before the GC
@@ -1794,6 +1813,9 @@ int Heap::NotifyContextDisposed(bool has_dependent_context) {
     }
     if (memory_reducer_) {
       memory_reducer_->NotifyPossibleGarbage();
+      if (recordreplay::IsRecordingOrReplaying()) {
+        memory_reducer_->RecordReplayPostRequestedTimer();
+      }
     }
   } else if (v8_flags.idle_gc_on_context_disposal &&
              !v8_flags.single_generation) {
@@ -1819,6 +1841,8 @@ void Heap::StartIncrementalMarking(GCFlags gc_flags,
                                    const char* reason) {
   DCHECK(incremental_marking()->IsStopped());
   DCHECK_EQ(isolate(), Isolate::TryGetCurrent());
+
+  replayio::AutoDisallowEvents disallow("Heap::StartIncrementalMarking");
 
   if (gc_callbacks_depth_ > 0) {
     // Do not start incremental marking while invoking GC callbacks.
@@ -1939,6 +1963,7 @@ void Heap::StartIncrementalMarkingOnInterrupt() {
 void Heap::StartIncrementalMarkingIfAllocationLimitIsReached(
     LocalHeap* local_heap, GCFlags gc_flags,
     const GCCallbackFlags gc_callback_flags) {
+  replayio::AutoDisallowEvents disallow("Heap::StartIncrementalMarkingIfAllocationLimitIsReached");
   if (incremental_marking()->IsStopped() &&
       incremental_marking()->CanAndShouldBeStarted()) {
     auto [limit, reason] = IncrementalMarkingLimitReached();
@@ -2286,6 +2311,11 @@ void Heap::PerformGarbageCollection(GarbageCollector collector,
 
   if (collector == GarbageCollector::MARK_COMPACTOR) {
     MarkCompact();
+    // This GC sweeps the external pointer table, which is what a pending
+    // report was for. Its GC_REQUEST may also have been cleared by
+    // IncrementalMarking::Stop().
+    record_replay_external_memory_pressure_requested_.store(
+        false, std::memory_order_relaxed);
   } else if (collector == GarbageCollector::MINOR_MARK_SWEEPER) {
     MinorMarkSweep();
   } else {
@@ -2482,6 +2512,8 @@ void Heap::CompleteSweepingYoung(CompleteSweepingReason reason) {
 }
 
 void Heap::EnsureSweepingCompletedForObject(Tagged<HeapObject> object) {
+  replayio::AutoDisallowEvents disallow("Heap::EnsureSweepingCompletedForObject");
+
   if (!sweeping_in_progress()) return;
 
   MemoryChunk* chunk = MemoryChunk::FromHeapObject(object);
@@ -3669,6 +3701,7 @@ void Heap::ActivateMemoryReducerIfNeededOnMainThread() {
   const int kMinCommittedMemory = 7 * NormalPage::kPageSize;
   if (ms_count_ == 0 && CommittedMemory() > kMinCommittedMemory &&
       isolate()->is_backgrounded()) {
+    replayio::AutoDisallowEvents disallow("Heap::ActivateMemoryReducerIfNeeded");
     memory_reducer_->NotifyPossibleGarbage();
   }
 }
@@ -4039,6 +4072,8 @@ void Heap::CheckMemoryPressure() {
 }
 
 void Heap::CollectGarbageOnMemoryPressure() {
+  replayio::AutoDisallowEvents disallow("Heap::CollectGarbageOnMemoryPressure");
+
   const int kGarbageThresholdInBytes = 8 * MB;
   const double kGarbageThresholdAsFractionOfTotalMemory = 0.1;
   // This constant is the maximum response time in RAIL performance model.
@@ -4075,6 +4110,8 @@ void Heap::CollectGarbageOnMemoryPressure() {
 
 void Heap::MemoryPressureNotification(MemoryPressureLevel level,
                                       bool is_isolate_locked) {
+  replayio::AutoDisallowEvents disallow("Heap::MemoryPressureNotification");
+
   TRACE_EVENT("devtools.timeline,v8", "V8.MemoryPressureNotification", "level",
               static_cast<int>(level));
   MemoryPressureLevel previous =
@@ -4139,23 +4176,54 @@ void Heap::AutomaticallyRestoreInitialHeapLimit(double threshold_percent) {
       limits()->initial_max_old_generation_size() * threshold_percent;
 }
 
+extern void RecordReplayTriggerProgressInterrupt();
+
+// When recording/replaying, a GC reaches the heap limit at different points
+// when replaying than when recording, as the heap's contents and the GC's
+// timings differ, and callbacks request interrupts that must run at the same
+// point on both sides (the inspector's break on the heap limit). Here the GC
+// only raises the limit and counts the call, and the callbacks run at the next
+// progress interrupt, which this triggers when recording: there,
+// RecordReplayOnProgressInterrupt records the count and runs them as many
+// times on both sides, with events allowed (e.g. so the ordered lock
+// RequestInterrupt takes is ordered). Only the main thread has progress
+// interrupts.
 bool Heap::InvokeNearHeapLimitCallback() {
   if (!near_heap_limit_callbacks_.empty()) {
+    if (recordreplay::IsRecordingOrReplaying("interrupts") &&
+        v8::IsMainThread()) {
+      record_replay_near_heap_limit_calls_++;
+      if (recordreplay::IsRecording()) {
+        RecordReplayTriggerProgressInterrupt();
+      }
+      size_t heap_limit =
+          std::min(2 * limits()->max_old_generation_size(),
+                   kAllocatorLimitOnMaxOldGenerationSize);
+      if (heap_limit > limits()->max_old_generation_size()) {
+        limits()->SetMaximumSizes(heap_limit, physical_memory());
+        return true;
+      }
+      return false;
+    }
     AllowGarbageCollection allow_gc;
     TRACE_GC(tracer(), GCTracer::Scope::HEAP_EXTERNAL_NEAR_HEAP_LIMIT);
-    VMState<EXTERNAL> callback_state(isolate());
-    HandleScope scope(isolate());
-    v8::NearHeapLimitCallback callback =
-        near_heap_limit_callbacks_.back().first;
-    void* data = near_heap_limit_callbacks_.back().second;
-    size_t heap_limit = callback(data, limits()->max_old_generation_size(),
-                                 limits()->initial_max_old_generation_size());
-    if (heap_limit > limits()->max_old_generation_size()) {
-      limits()->SetMaximumSizes(
-          std::min(heap_limit, kAllocatorLimitOnMaxOldGenerationSize),
-          physical_memory());
-      return true;
-    }
+    return CallNearHeapLimitCallback();
+  }
+  return false;
+}
+
+bool Heap::CallNearHeapLimitCallback() {
+  VMState<EXTERNAL> callback_state(isolate());
+  HandleScope scope(isolate());
+  v8::NearHeapLimitCallback callback = near_heap_limit_callbacks_.back().first;
+  void* data = near_heap_limit_callbacks_.back().second;
+  size_t heap_limit = callback(data, limits()->max_old_generation_size(),
+                               limits()->initial_max_old_generation_size());
+  if (heap_limit > limits()->max_old_generation_size()) {
+    limits()->SetMaximumSizes(
+        std::min(heap_limit, kAllocatorLimitOnMaxOldGenerationSize),
+        physical_memory());
+    return true;
   }
   return false;
 }
@@ -5481,6 +5549,8 @@ bool Heap::IsInputHandlingInitialized() const {
   return input_handling_state_.IsInitialized();
 }
 
+extern bool gRecordReplayEnableGCFeatures;
+
 // This predicate is called when an old generation space cannot allocated from
 // the free list and is about to add a new page. Returning false will cause a
 // major GC. It happens when the old generation allocation limit is reached and
@@ -5488,6 +5558,16 @@ bool Heap::IsInputHandlingInitialized() const {
 // - or the incremental marking is not in progress and we cannot start it.
 bool Heap::ShouldExpandOldGenerationOnSlowAllocation(LocalHeap* local_heap,
                                                      AllocationOrigin origin) {
+  replayio::AutoDisallowEvents disallow("Heap::ShouldExpandOldGenerationOnSlowAllocation");
+
+  // Always allow background threads to allocate while recording or replaying without
+  // triggering GC. Waiting on a main thread GC can introduce deadlocks if the main thread
+  // is itself waiting on an ordered lock which this thread is next in line to acquire.
+  // While recording, the BackgroundCollectionInterruptTask asking the main thread for the
+  // GC is posted with events disallowed, as an unordered task, which doesn't wake an idle
+  // main thread.
+  if (recordreplay::IsRecordingOrReplaying() && !local_heap->is_main_thread()) return true;
+
   if (always_allocate()) {
     return true;
   }
@@ -5529,7 +5609,11 @@ bool Heap::ShouldExpandOldGenerationOnSlowAllocation(LocalHeap* local_heap,
   if (incremental_marking()->IsStopped()) {
     auto [limit, reason] = IncrementalMarkingLimitReached();
 
-    if (limit == IncrementalMarkingLimit::kNoLimit) {
+    if (limit == IncrementalMarkingLimit::kNoLimit &&
+        // Incremental marking is disabled when recording/replaying with the
+        // v8-flags-gc feature disabled. Expand instead of collecting then.
+        (gRecordReplayEnableGCFeatures ||
+         !recordreplay::IsRecordingOrReplaying())) {
       // We cannot start incremental marking.
       return false;
     }
@@ -6175,6 +6259,8 @@ void Heap::NotifyBootstrapComplete() {
 void Heap::NotifyOldGenerationExpansion(
     LocalHeap* local_heap, AllocationSpace space, MutablePage* chunk_metadata,
     OldGenerationExpansionNotificationOrigin notification_origin) {
+  replayio::AutoDisallowEvents disallow("Heap::NotifyOldGenerationExpansion");
+
   // Pages created during bootstrapping may contain immortal immovable objects.
   if (!deserialization_complete()) {
     DCHECK_NE(NEW_SPACE, chunk_metadata->owner()->identity());
@@ -6250,6 +6336,8 @@ const ::heap::base::Stack& Heap::stack() const {
 }
 
 void Heap::StartTearDown() {
+  replayio::AutoDisallowEvents disallow("Heap::StartTearDown");
+
   if (cpp_heap_) {
     // This may invoke a GC in case marking is running to get us into a
     // well-defined state for tear down.
@@ -6973,6 +7061,40 @@ void Heap::RememberUnmappedPage(Address page, bool compacted) {
   remembered_unmapped_pages_index_ %= kRememberedUnmappedPages;
 }
 
+// Record/replay: upstream's external-memory GC decision, extracted verbatim from
+// UpdateExternalMemory() so the fork's stack-guard hook can reach it. V8 14.8
+// deleted Heap::HandleExternalMemoryInterrupt(), which was that hook's entry
+// point, and inlined its body here. The body below is a BYTE-IDENTICAL move of
+// upstream's block; the only added line is the AutoDisallowEvents scope, which
+// previously sat in the deleted function and so applied to both callers then as
+// it does now. See defect DV8-048.
+void Heap::HandleExternalMemoryPressure(LocalHeap* local_heap,
+                                        uint64_t total_after) {
+  replayio::AutoDisallowEvents disallow("Heap::HandleExternalMemoryPressure");
+
+  const AllocationSpace space =
+      this == local_heap->heap() ? OLD_SPACE : SHARED_SPACE;
+
+  if (ReachedHeapLimit()) {
+    CollectGarbageWithRetry(local_heap, space,
+                            GarbageCollectionReason::kExternalMemoryPressure);
+  } else if (total_after > external_memory_limit_for_interrupt()) {
+    limits()->UpdateExternalMemoryLimitForInterrupt(external_memory());
+    const GCCallbackFlags kGCCallbackFlagsForExternalMemory =
+        static_cast<GCCallbackFlags>(
+            kGCCallbackFlagSynchronousPhantomCallbackProcessing |
+            kGCCallbackFlagCollectAllExternalMemory);
+    StartIncrementalMarkingIfAllocationLimitIsReached(
+        local_heap, GCFlagsForIncrementalMarking(),
+        kGCCallbackFlagsForExternalMemory);
+    if (incremental_marking()->IsMajorMarking() &&
+        AllocationLimitOvershotByLargeMargin()) {
+      CollectGarbageWithRetry(local_heap, space,
+                              GarbageCollectionReason::kExternalMemoryPressure);
+    }
+  }
+}
+
 uint64_t Heap::UpdateExternalMemory(int64_t delta) {
   const uint64_t total_before =
       external_memory_total_.fetch_add(delta, std::memory_order_relaxed);
@@ -7004,27 +7126,7 @@ uint64_t Heap::UpdateExternalMemory(int64_t delta) {
   local_heap->allocator()->ResetMostRecentYoungAllocation();
 #endif
 
-  const AllocationSpace space =
-      this == local_heap->heap() ? OLD_SPACE : SHARED_SPACE;
-
-  if (ReachedHeapLimit()) {
-    CollectGarbageWithRetry(local_heap, space,
-                            GarbageCollectionReason::kExternalMemoryPressure);
-  } else if (total_after > external_memory_limit_for_interrupt()) {
-    limits()->UpdateExternalMemoryLimitForInterrupt(external_memory());
-    const GCCallbackFlags kGCCallbackFlagsForExternalMemory =
-        static_cast<GCCallbackFlags>(
-            kGCCallbackFlagSynchronousPhantomCallbackProcessing |
-            kGCCallbackFlagCollectAllExternalMemory);
-    StartIncrementalMarkingIfAllocationLimitIsReached(
-        local_heap, GCFlagsForIncrementalMarking(),
-        kGCCallbackFlagsForExternalMemory);
-    if (incremental_marking()->IsMajorMarking() &&
-        AllocationLimitOvershotByLargeMargin()) {
-      CollectGarbageWithRetry(local_heap, space,
-                              GarbageCollectionReason::kExternalMemoryPressure);
-    }
-  }
+  HandleExternalMemoryPressure(local_heap, total_after);
   return total_after;
 }
 
@@ -7097,8 +7199,24 @@ bool Heap::HasDirtyJSFinalizationRegistries() {
 
 void Heap::PostFinalizationRegistryCleanupTaskIfNeeded() {
   // Only one cleanup task is posted at a time.
-  if (!HasDirtyJSFinalizationRegistries() ||
-      is_finalization_registry_cleanup_task_posted_) {
+  if (is_finalization_registry_cleanup_task_posted_) return;
+  // Cleanup of record/replay tracked registries is scheduled by
+  // ReplayGCPoll::Poll instead.
+  if (!RecordReplayHasDirtyJSFinalizationRegistries(
+          RecordReplayTracking::kUntracked)) {
+    return;
+  }
+  // The cleanup of a registry without a record/replay id would run at a point
+  // which depends on when the GC ran, which differs between recording and
+  // replaying. Leave its cleared cells uncollected instead.
+  if (recordreplay::IsRecordingOrReplaying()) {
+    static bool reported = false;
+    if (!reported) {
+      reported = true;
+      recordreplay::Diagnostic(
+          "LeakMemory FinalizationRegistry cleanup: registry has no "
+          "record/replay id");
+    }
     return;
   }
   auto task = std::make_unique<FinalizationRegistryCleanupTask>(this);
@@ -7136,20 +7254,62 @@ void Heap::EnqueueDirtyJSFinalizationRegistry(
   // ProcessWeakListRoots.
 }
 
-MaybeDirectHandle<JSFinalizationRegistry>
-Heap::DequeueDirtyJSFinalizationRegistry() {
-  // Take a FinalizationRegistry from the head of the dirty list for fairness.
-  if (HasDirtyJSFinalizationRegistries()) {
-    DirectHandle<JSFinalizationRegistry> head(
-        Cast<JSFinalizationRegistry>(dirty_js_finalization_registries_list()),
-        isolate());
-    set_dirty_js_finalization_registries_list(head->next_dirty());
-    head->set_next_dirty(ReadOnlyRoots(this).undefined_value());
-    if (*head == dirty_js_finalization_registries_list_tail()) {
-      set_dirty_js_finalization_registries_list_tail(
-          ReadOnlyRoots(this).undefined_value());
+void Heap::RecordReplayOnProgressInterrupt() {
+  if (memory_reducer_) {
+    memory_reducer_->RecordReplayOnProgressInterrupt();
+  }
+  if (recordreplay::IsRecordingOrReplaying("interrupts")) {
+    size_t calls = recordreplay::RecordReplayValue(
+        "Heap::RecordReplayOnProgressInterrupt NearHeapLimitCalls",
+        record_replay_near_heap_limit_calls_);
+    record_replay_near_heap_limit_calls_ = 0;
+    for (size_t i = 0; i < calls && near_heap_limit_callbacks_.size(); i++) {
+      CallNearHeapLimitCallback();
     }
-    return head;
+  }
+}
+
+bool Heap::RecordReplayHasDirtyJSFinalizationRegistries(
+    RecordReplayTracking tracking) {
+  const bool tracked = tracking == RecordReplayTracking::kTracked;
+  Tagged<Object> current = dirty_js_finalization_registries_list();
+  while (!IsUndefined(current)) {
+    Tagged<JSFinalizationRegistry> finalization_registry =
+        Cast<JSFinalizationRegistry>(current);
+    if ((finalization_registry->record_replay_id() != 0) == tracked) return true;
+    current = finalization_registry->next_dirty();
+  }
+  return false;
+}
+
+MaybeHandle<JSFinalizationRegistry>
+Heap::RecordReplayDequeueDirtyJSFinalizationRegistry(
+    RecordReplayTracking tracking) {
+  const bool tracked = tracking == RecordReplayTracking::kTracked;
+  Isolate* isolate = this->isolate();
+  Tagged<Object> prev = ReadOnlyRoots(isolate).undefined_value();
+  Tagged<Object> current = dirty_js_finalization_registries_list();
+  while (!IsUndefined(current)) {
+    Tagged<JSFinalizationRegistry> finalization_registry =
+        Cast<JSFinalizationRegistry>(current);
+    if ((finalization_registry->record_replay_id() != 0) != tracked) {
+      prev = current;
+      current = finalization_registry->next_dirty();
+      continue;
+    }
+    if (IsUndefined(prev)) {
+      set_dirty_js_finalization_registries_list(
+          finalization_registry->next_dirty());
+    } else {
+      Cast<JSFinalizationRegistry>(prev)->set_next_dirty(
+          finalization_registry->next_dirty());
+    }
+    if (finalization_registry == dirty_js_finalization_registries_list_tail()) {
+      set_dirty_js_finalization_registries_list_tail(prev);
+    }
+    finalization_registry->set_next_dirty(
+        ReadOnlyRoots(isolate).undefined_value());
+    return handle(finalization_registry, isolate);
   }
   return {};
 }
@@ -7206,6 +7366,22 @@ void Heap::KeepDuringJob(DirectHandle<HeapObject> target) {
 
 void Heap::ClearKeptObjects() {
   set_weak_refs_keep_during_job(ReadOnlyRoots(isolate()).undefined_value());
+
+  // Cleanup of record/replay tracked registries is scheduled from here and not
+  // from the GC, so that the decision is made at a point that replays. The poll
+  // runs at every microtask checkpoint with events allowed.
+  //
+  // Tradeoff: a GC that dirties a registry inside an unordered task is not
+  // followed by such a checkpoint, so its cleanup waits for the next one, which
+  // an ordered task brings. Callbacks run later than upstream in that case;
+  // nothing diverges.
+  //
+  // If this delay ever matters, add a second poll just before the message loop
+  // goes idle (ThreadControllerWithMessagePumpImpl::DoIdleWork, which already
+  // runs identically when replaying). That needs an embedder hook from base
+  // through the Blink scheduler to the isolate, for the main thread and
+  // workers.
+  replayio::ReplayGCPoll::Poll(isolate());
 }
 
 size_t Heap::NumberOfTrackedHeapObjectTypes() {
@@ -7559,6 +7735,8 @@ void Heap::FinishSweepingIfOutOfWork(CompleteSweepingReason reason) {
 
 void Heap::EnsureSweepingCompleted(SweepingForcedFinalizationMode mode,
                                    CompleteSweepingReason reason) {
+  replayio::AutoDisallowEvents disallow("Heap::EnsureSweepingCompleted");
+
   TRACE_GC_EPOCH(tracer(), GCTracer::Scope::HEAP_ENSURE_SWEEPING_COMPLETED,
                  ThreadKind::kMain, "value", [&](perfetto::TracedValue ctx) {
                    auto dict = std::move(ctx).WriteDictionary();
@@ -7712,6 +7890,7 @@ void Heap::GCHintState::NotifyEnded(Heap* heap) {
 }
 
 int Heap::NextScriptId() {
+  recordreplay::OrderedLock(script_ordered_lock_id_);
   FullObjectSlot last_script_id_slot(&roots_table()[RootIndex::kLastScriptId]);
   Tagged<Smi> last_id = Cast<Smi>(last_script_id_slot.Relaxed_Load());
   Tagged<Smi> new_id, last_id_before_cas;
@@ -7732,6 +7911,8 @@ int Heap::NextScriptId() {
         Cast<Smi>(last_script_id_slot.Relaxed_CompareAndSwap(last_id, new_id));
   } while (last_id != last_id_before_cas);
 
+  recordreplay::OrderedUnlock(script_ordered_lock_id_);
+  recordreplay::Assert("Heap::NextScriptId %d", new_id.value());
   return new_id.value();
 }
 
