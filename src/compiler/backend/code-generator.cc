@@ -511,6 +511,8 @@ base::OwnedVector<uint8_t> CodeGenerator::GetTrappingInstructionsData() {
 }
 
 MaybeHandle<Code> CodeGenerator::FinalizeCode() {
+  replayio::AutoDisallowEvents disallow("CodeGenerator::FinalizeCode");
+
   if (result_ != kSuccess) {
     masm()->AbortedCodeGeneration();
     return {};
