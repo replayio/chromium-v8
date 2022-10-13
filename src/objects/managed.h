@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "include/v8-callbacks.h"
+#include "include/v8.h"  // For replay.
 #include "include/v8-external-memory-accounter.h"
 #include "include/v8-object.h"
 #include "include/v8config.h"
@@ -91,6 +92,19 @@ struct ManagedPtrDestructor
 // the template parameter.
 V8_EXPORT_PRIVATE void ManagedObjectFinalizer(
     const v8::WeakCallbackInfo<void>& data);
+
+// When recording or replaying, whether a {Managed}'s GC finalizer that runs
+// with events disallowed leaves its destructor to the isolate's teardown, so
+// that {Managed} destructors only run with events allowed.
+V8_EXPORT_PRIVATE bool ManagedFinalizersDeferredWhenEventsDisallowed();
+
+#if V8_ENABLE_WEBASSEMBLY
+namespace wasm {
+}  // namespace wasm
+#endif  // V8_ENABLE_WEBASSEMBLY
+
+#if V8_ENABLE_WEBASSEMBLY
+#endif  // V8_ENABLE_WEBASSEMBLY
 
 // {Managed<T>} is essentially a {std::shared_ptr<T>} allocated on the heap
 // that can be used to manage the lifetime of C++ objects that are shared
