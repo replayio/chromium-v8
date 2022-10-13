@@ -13,6 +13,8 @@
 #include "src/codegen/x64/assembler-x64.h"
 #include "src/codegen/x64/register-x64.h"
 #include "src/common/globals.h"
+#include "src/execution/thread-local-top.h"
+#include "src/runtime/runtime.h"
 #include "src/compiler/backend/instruction.h"
 #include "src/compiler/feedback-source.h"
 #include "src/compiler/js-heap-broker.h"
@@ -2548,6 +2550,43 @@ void ReduceInterruptBudget::GenerateCode(MaglevAssembler* masm,
   ZoneLabelRef done(masm);
   __ JumpToDeferredIf(less, HandleInterruptsAndTiering, done, this, scratch);
   __ bind(*done);
+}
+
+int ReplayIncrementAndCheckJsFrameDepth::MaxCallStackArgs() const {
+  return 0;
+}
+void ReplayIncrementAndCheckJsFrameDepth::SetValueLocationConstraints() {
+  set_temporaries_needed(1);
+}
+void ReplayIncrementAndCheckJsFrameDepth::GenerateCode(
+    MaglevAssembler* masm, const ProcessingState& state) {
+  Register scratch = general_temporaries().first();
+  ExternalReference depth_ref = ExternalReference::Create(
+      IsolateAddressId::kReplayJsFrameDepthAddress, masm->isolate());
+  MemOperand depth = __ ExternalReferenceAsOperand(depth_ref, scratch);
+  __ incl(depth);
+  __ cmpl(depth, Immediate(ThreadLocalTop::kReplayMaxJsFrameDepth));
+  __ JumpToDeferredIf(
+      greater_equal,
+      [](MaglevAssembler* masm, ReplayIncrementAndCheckJsFrameDepth* node) {
+        __ Move(kContextRegister, masm->native_context().object());
+        __ CallRuntime(Runtime::kThrowStackOverflow, 0);
+        masm->DefineExceptionHandlerAndLazyDeoptPoint(node);
+        __ Abort(AbortReason::kUnexpectedReturnFromThrow);
+      },
+      this);
+}
+
+void ReplayDecrementJsFrameDepth::SetValueLocationConstraints() {
+  set_temporaries_needed(1);
+}
+void ReplayDecrementJsFrameDepth::GenerateCode(MaglevAssembler* masm,
+                                               const ProcessingState& state) {
+  Register scratch = general_temporaries().first();
+  ExternalReference depth_ref = ExternalReference::Create(
+      IsolateAddressId::kReplayJsFrameDepthAddress, masm->isolate());
+  MemOperand depth = __ ExternalReferenceAsOperand(depth_ref, scratch);
+  __ decl(depth);
 }
 
 int ThrowIfNotSuperConstructor::MaxCallStackArgs() const { return 2; }
