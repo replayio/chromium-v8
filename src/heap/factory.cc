@@ -3413,7 +3413,8 @@ void Factory::ReinitializeJSGlobalProxy(Handle<JSGlobalProxy> object,
 Handle<JSMessageObject> Factory::NewJSMessageObject(
     MessageTemplate message, Handle<Object> argument, int start_position,
     int end_position, Handle<SharedFunctionInfo> shared_info,
-    int bytecode_offset, Handle<Script> script, Handle<Object> stack_frames) {
+    int bytecode_offset, Handle<Script> script, Handle<Object> stack_frames,
+    int record_replay_bookmark) {
   Handle<Map> map = message_object_map();
   Tagged<JSMessageObject> message_obj =
       Tagged<JSMessageObject>::cast(New(map, AllocationType::kYoung));
@@ -3446,6 +3447,7 @@ Handle<JSMessageObject> Factory::NewJSMessageObject(
 
   message_obj->set_stack_frames(*stack_frames, SKIP_WRITE_BARRIER);
   message_obj->set_error_level(v8::Isolate::kMessageError);
+  message_obj->set_record_replay_bookmark(record_replay_bookmark);
   return handle(message_obj, isolate());
 }
 
