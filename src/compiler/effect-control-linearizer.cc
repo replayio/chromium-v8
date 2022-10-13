@@ -11,6 +11,7 @@
 #include "src/base/bits.h"
 #include "src/base/small-vector.h"
 #include "src/codegen/code-factory.h"
+#include "src/codegen/external-reference.h"
 #include "src/codegen/interface-descriptors-inl.h"
 #include "src/codegen/machine-type.h"
 #include "src/common/globals.h"
@@ -30,6 +31,7 @@
 #include "src/compiler/node.h"
 #include "src/compiler/schedule.h"
 #include "src/compiler/string-builder-optimizer.h"
+#include "src/execution/thread-local-top.h"
 #include "src/heap/factory-inl.h"
 #include "src/objects/heap-number.h"
 #include "src/objects/instance-type-inl.h"
@@ -39,6 +41,7 @@
 #include "src/objects/ordered-hash-table.h"
 #include "src/objects/string.h"
 #include "src/objects/turbofan-types.h"
+#include "src/runtime/runtime.h"
 
 namespace v8 {
 namespace internal {
@@ -221,6 +224,8 @@ class EffectControlLinearizer {
   void LowerTransitionElementsKind(Node* node);
   Node* LowerLoadFieldByIndex(Node* node);
   Node* LowerLoadMessage(Node* node);
+  Node* LowerIncrementAndCheckProgressCounter(Node* node);
+  Node* LowerReplayDecrementJsFrameDepth(Node* node);
   Node* AdaptFastCallTypedArrayArgument(Node* node,
                                         ElementsKind expected_elements_kind,
                                         GraphAssemblerLabel<0>* bailout);
@@ -1818,6 +1823,12 @@ bool EffectControlLinearizer::TryWireInStateEffect(Node* node,
     case IrOpcode::kLoadMessage:
       if (v8_flags.turboshaft) return false;
       result = LowerLoadMessage(node);
+      break;
+    case IrOpcode::kIncrementAndCheckProgressCounter:
+      result = LowerIncrementAndCheckProgressCounter(node);
+      break;
+    case IrOpcode::kReplayDecrementJsFrameDepth:
+      result = LowerReplayDecrementJsFrameDepth(node);
       break;
     case IrOpcode::kStoreMessage:
       if (v8_flags.turboshaft) return false;
@@ -6593,6 +6604,53 @@ Node* EffectControlLinearizer::LowerLoadMessage(Node* node) {
   Node* object_pattern =
       __ LoadField(AccessBuilder::ForExternalIntPtr(), offset);
   return __ BitcastWordToTagged(object_pattern);
+}
+
+Node* EffectControlLinearizer::LowerIncrementAndCheckProgressCounter(Node* node) {
+  auto reached_target_progress = __ MakeDeferredLabel();
+  auto done = __ MakeLabel();
+
+  Node* progress_counter = __ ExternalConstant(ExternalReference::record_replay_progress_counter());
+  Node* progress_counter_value = __ Load(MachineType::Uint64(), progress_counter, 0);
+  Node* incremented_value = __ IntAdd(progress_counter_value, __ Int32Constant(1));
+
+  __ Store(StoreRepresentation(MachineRepresentation::kWord64, kNoWriteBarrier),
+           progress_counter, 0, incremented_value);
+
+  Node* target_progress = __ ExternalConstant(ExternalReference::record_replay_target_progress());
+  Node* target_progress_value = __ Load(MachineType::Uint64(), target_progress, 0);
+  Node* check = __ IntPtrEqual(incremented_value, target_progress_value);
+
+  __ GotoIf(check, &reached_target_progress);
+  __ Goto(&done);
+
+  __ Bind(&reached_target_progress);
+
+  Node* frame_state = node->InputAt(0);
+  Node* context = node->InputAt(1);
+  Runtime::FunctionId id = Runtime::kRecordReplayTargetProgressReached;
+  auto call_descriptor = Linkage::GetRuntimeCallDescriptor(
+    graph()->zone(), id, 0, Operator::kNoThrow,
+    CallDescriptor::kNeedsFrameState);
+  __ Call(call_descriptor, __ CEntryStubConstant(1),
+          __ ExternalConstant(ExternalReference::Create(id)),
+          __ Int32Constant(0), context, frame_state);
+
+  __ Goto(&done);
+  __ Bind(&done);
+
+  // It's not clear how to mark this node as not having any outputs...
+  return __ Int32Constant(0);
+}
+
+Node* EffectControlLinearizer::LowerReplayDecrementJsFrameDepth(Node* node) {
+  Node* depth_addr = __ ExternalConstant(ExternalReference::Create(
+      IsolateAddressId::kReplayJsFrameDepthAddress, isolate()));
+  Node* depth = __ Load(MachineType::Int32(), depth_addr, 0);
+  Node* decremented = __ Int32Sub(depth, __ Int32Constant(1));
+  __ Store(StoreRepresentation(MachineRepresentation::kWord32, kNoWriteBarrier),
+           depth_addr, 0, decremented);
+  return __ Int32Constant(0);
 }
 
 void EffectControlLinearizer::LowerStoreMessage(Node* node) {
