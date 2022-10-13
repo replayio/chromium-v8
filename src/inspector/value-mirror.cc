@@ -17,11 +17,16 @@
 #include "include/v8-typed-array.h"
 #include "include/v8-wasm.h"
 #include "src/base/optional.h"
+#include "src/base/replayio.h"
 #include "src/debug/debug-interface.h"
 #include "src/inspector/v8-debugger.h"
 #include "src/inspector/v8-inspector-impl.h"
 #include "src/inspector/v8-value-utils.h"
 #include "src/inspector/v8-webdriver-serializer.h"
+
+#include "v8.h"
+
+#include "src/inspector/string-util.h"
 
 namespace v8_inspector {
 
@@ -262,6 +267,13 @@ String16 descriptionForError(v8::Local<v8::Context> context,
   v8::Isolate* isolate = context->GetIsolate();
   v8::TryCatch tryCatch(isolate);
   String16 className = toProtocolString(isolate, object->GetConstructorName());
+
+  // Get("stack"|"message") can run user accessors and prepareStackTrace (see
+  // MustNotRunUserJS). Replay's own session never reads Error descriptions
+  // (previews are built in pauses), so any placeholder works.
+  if (v8::replayio::MustNotRunUserJS()) {
+    return className + " (Divergent message + stack retrieval skipped)";
+  }
 
   v8::base::Optional<String16> stack;
   {
@@ -1311,12 +1323,60 @@ std::unique_ptr<ValueMirror> createNativeSetter(v8::Local<v8::Context> context,
   return ValueMirror::create(context, function);
 }
 
+static const char* allowed_getters[] = {
+    "type",
+    "fromElement",
+    "target",
+    "isTrusted",
+    "key",
+    "clientX",
+    "clientY",
+    "altKey",
+    "button",
+    "buttons",
+    "ctrlKey",
+    "currentTarget",
+    "defaultPrevented",
+    "eventPhase",
+    "metaKey",
+    "movementX",
+    "movementY",
+    "offsetX",
+    "offsetY",
+    "pageX",
+    "pageY",
+    "screenX",
+    "screenY",
+    "shiftKey",
+    "srcElement",
+    "timeStamp",
+    "which",
+    "x",
+    "y",
+};
+
 bool doesAttributeHaveObservableSideEffectOnGet(v8::Local<v8::Context> context,
                                                 v8::Local<v8::Object> object,
                                                 v8::Local<v8::Name> name) {
   // TODO(dgozman): we should remove this, annotate more embedder properties as
   // side-effect free, and call all getters which do not produce side effects.
   if (!name->IsString()) return false;
+
+  if (v8::recordreplay::IsRecordingOrReplaying() &&
+      v8::recordreplay::AreEventsDisallowed()) {
+    // Disallow most native getters while in Replay code, since they cause
+    // unwanted crashes.
+    // -> https://linear.app/replay/issue/RUN-1478
+    for (auto allowed : allowed_getters) {
+      v8::String::Utf8Value nameRaw(context->GetIsolate(),
+                                    name.As<v8::String>());
+      if (!strcmp(allowed, *nameRaw)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   v8::Isolate* isolate = context->GetIsolate();
   if (!name.As<v8::String>()->StringEquals(toV8String(isolate, "body"))) {
     return false;
@@ -1357,7 +1417,8 @@ bool ValueMirror::getProperties(v8::Local<v8::Context> context,
                                 v8::Local<v8::Object> object,
                                 bool ownProperties, bool accessorPropertiesOnly,
                                 bool nonIndexedPropertiesOnly,
-                                PropertyAccumulator* accumulator) {
+                                PropertyAccumulator* accumulator,
+                                const v8::KeyIterationParams* params) {
   v8::Isolate* isolate = context->GetIsolate();
   v8::TryCatch tryCatch(isolate);
   v8::Local<v8::Set> set = v8::Set::New(isolate);
@@ -1380,8 +1441,25 @@ bool ValueMirror::getProperties(v8::Local<v8::Context> context,
     }
   }
 
+  // [RUN-3149] we're only interested in a subset of the properties on this
+  // object. In order to make sure we get enough own properties to satisfy
+  // expected behavior for objects, always request a much larger set of keys
+  // we will later prune returned properties down to the originally requested
+  // size.
+  const int SubsetPageSize = 100000;
+
+  v8::KeyIterationParams subsetIterationParams(SubsetPageSize, 0);
+  const v8::KeyIterationParams *keyIterationParams;
+  if (*params) {
+    // we're grabbing a subset.  use the larger subset params.
+    keyIterationParams = &subsetIterationParams;
+  } else {
+    // we're grabbing everything.  use the passed-in params.
+    keyIterationParams = params;
+  }
   auto iterator = v8::debug::PropertyIterator::Create(context, object,
-                                                      nonIndexedPropertiesOnly);
+                                                      nonIndexedPropertiesOnly,
+                                                      keyIterationParams);
   if (!iterator) {
     CHECK(tryCatch.HasCaught());
     return false;
@@ -1437,6 +1515,22 @@ bool ValueMirror::getProperties(v8::Local<v8::Context> context,
         enumerable = !(attributes & v8::PropertyAttribute::DontEnum);
         configurable = !(attributes & v8::PropertyAttribute::DontDelete);
         isAccessorProperty = getterMirror || setterMirror;
+      } else if (v8::replayio::MustNotRunUserJS() &&
+               v8::replayio::ReadingRunsUserJS(object, v8Name)) {
+        // One of V8's own accessors whose getter reaches the page, which
+        // today means an Error's own "stack" and its Error.prepareStackTrace.
+        // The iterator above does not count V8's own accessors as native ones,
+        // so taking the descriptor below would read this one by calling it.
+        // The property stays an accessor instead, for the viewer to call in a
+        // pause, where page code may run because the viewer asked for it. Only
+        // this walk is covered: a descriptor taken elsewhere while user JS
+        // must not run would still call the getter.
+        getterMirror = createNativeGetter(context, object, v8Name);
+        setterMirror = createNativeSetter(context, object, v8Name);
+        writable = !(attributes & v8::PropertyAttribute::ReadOnly);
+        enumerable = !(attributes & v8::PropertyAttribute::DontEnum);
+        configurable = !(attributes & v8::PropertyAttribute::DontDelete);
+        isAccessorProperty = true;
       } else {
         v8::TryCatch tryCatchDescriptor(isolate);
         v8::debug::PropertyDescriptor descriptor;
@@ -1508,7 +1602,8 @@ bool ValueMirror::getProperties(v8::Local<v8::Context> context,
 // static
 void ValueMirror::getInternalProperties(
     v8::Local<v8::Context> context, v8::Local<v8::Object> object,
-    std::vector<InternalPropertyMirror>* mirrors) {
+    std::vector<InternalPropertyMirror>* mirrors,
+    const v8::KeyIterationParams* params) {
   v8::Isolate* isolate = context->GetIsolate();
   v8::MicrotasksScope microtasksScope(isolate,
                                       v8::MicrotasksScope::kDoNotRunMicrotasks);
@@ -1537,7 +1632,7 @@ void ValueMirror::getInternalProperties(
       static_cast<V8InspectorImpl*>(v8::debug::GetInspector(isolate))
           ->debugger();
   v8::Local<v8::Array> properties;
-  if (debugger->internalProperties(context, object).ToLocal(&properties)) {
+  if (debugger->internalProperties(context, object, params).ToLocal(&properties)) {
     for (uint32_t i = 0; i < properties->Length(); i += 2) {
       v8::Local<v8::Value> name;
       if (!properties->Get(context, i).ToLocal(&name) || !name->IsString()) {
@@ -1668,12 +1763,14 @@ std::unique_ptr<ValueMirror> ValueMirror::create(v8::Local<v8::Context> context,
   if (value->IsSymbol()) {
     return std::make_unique<SymbolMirror>(value.As<v8::Symbol>());
   }
-  auto clientSubtype = (value->IsUndefined() || value->IsObject())
-                           ? clientFor(context)->valueSubtype(value)
-                           : nullptr;
-  if (clientSubtype) {
-    String16 subtype = toString16(clientSubtype->string());
-    return clientMirror(context, value, subtype);
+  if (!v8::recordreplay::HasDivergedFromRecording()) {
+    auto clientSubtype = (value->IsUndefined() || value->IsObject())
+                            ? clientFor(context)->valueSubtype(value)
+                            : nullptr;
+    if (clientSubtype) {
+      String16 subtype = toString16(clientSubtype->string());
+      return clientMirror(context, value, subtype);
+    }
   }
   if (value->IsUndefined()) {
     return std::make_unique<PrimitiveValueMirror>(

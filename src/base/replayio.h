@@ -22,8 +22,7 @@ inline bool CheckReplayOwned() {
 
 // Whether user JS (an accessor, toString, Symbol.toPrimitive, a callback the
 // page installed) must not run now: Replay's own code is running, so events
-// are disallowed, and the replay hasn't diverged into a pause, where user JS
-// may run because nothing it does reaches the replayed execution.
+// are disallowed, and no pause command that allows side effects is running.
 //
 // Replay's own code doesn't run the same way when recording and replaying.
 // Replay's inspector session is installed only when replaying (unless the
@@ -46,8 +45,32 @@ inline bool CheckReplayOwned() {
 // later, on demand, would still have to run in a pause.
 inline bool MustNotRunUserJS() {
   return v8::recordreplay::AreEventsDisallowed() &&
-         !v8::recordreplay::HasDivergedFromRecording();
+         (!v8::recordreplay::HasDivergedFromRecording() ||
+          !v8::recordreplay::AllowSideEffects());
 }
+
+// Whether reading |name| on |object| runs the page's code, which it must not
+// where MustNotRunUserJS() holds.
+//
+// The category is V8's own accessors installed as an object's own property.
+// DebugPropertyIterator reports those as ordinary properties rather than native
+// accessors, so a description takes a descriptor for them, and taking the
+// descriptor of an AccessorInfo reads it by calling the getter. V8 marks which
+// of its accessors that can have an effect through: in
+// ACCESSOR_INFO_LIST_GENERATOR every getter is kHasNoSideEffect but
+// error_stack's, so the only one today is an Error's own "stack", whose getter
+// formats the stack with the page's Error.prepareStackTrace. An accessor the
+// page installed is not in the category, since a description leaves a page
+// getter alone already.
+//
+// False for an Error whose stack is already stored, which the getter hands back
+// as it is, and for a page that formats stacks V8's way, where V8 builds the
+// string itself and the page's own read would get that same string. True for
+// any other accessor V8 marks as having an effect, since nothing here knows how
+// to read one safely.
+//
+// Defined in src/replay/replayio.cc.
+bool ReadingRunsUserJS(v8::Local<v8::Object> object, v8::Local<v8::Name> name);
 
 // Marks nested code as replay-owned (IsInReplayCode). Independent of
 // AutoMaybeDisallowEvents; divergent replay-owned paths use both.
