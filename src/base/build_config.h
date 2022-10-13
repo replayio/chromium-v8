@@ -29,11 +29,22 @@
 
 // PKU support (and by extension support for JIT code protections based on PKU)
 // is currently only available on x64 Linux.
-#if defined(V8_OS_LINUX) && defined(V8_HOST_ARCH_X64)
-#define V8_HAS_PKU_SUPPORT 1
-#else
+//
+// [replay] disable this to avoid dealing w/ dlsym
+// see https://linear.app/replay/issue/RUN-1085/chromium-108-crash-getkeypermission
+// V8 13.8 split this macro in two: V8_HAS_PKU_SUPPORT now gates the whole PKU
+// implementation (src/base/platform/memory-protection-key.{h,cc}) and the JIT
+// write-protect macro below is derived from it. Forcing only the derived one
+// would leave that implementation compiled in -- and 13.8 also calls into it
+// from the CPU profiler's signal handler (src/libsampler/sampler.cc). So the
+// force goes on V8_HAS_PKU_SUPPORT and upstream's derivation carries it to the
+// other macro. See defect DV8-019.
+// #if defined(V8_OS_LINUX) && defined(V8_HOST_ARCH_X64)
+// #define V8_HAS_PKU_SUPPORT 1
+// #else
+// #define V8_HAS_PKU_SUPPORT 0
+// #endif
 #define V8_HAS_PKU_SUPPORT 0
-#endif
 #define V8_HAS_PKU_JIT_WRITE_PROTECT V8_HAS_PKU_SUPPORT
 
 // pthread_jit_write_protect is only available on arm64 Mac.
