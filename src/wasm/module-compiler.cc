@@ -544,7 +544,18 @@ class CompilationStateImpl {
                        std::shared_ptr<Counters> async_counters,
                        DynamicTiering dynamic_tiering);
   ~CompilationStateImpl() {
-    if (compile_job_->IsValid()) compile_job_->CancelAndDetach();
+    if (!compile_job_->IsValid()) return;
+    // A NativeModule shared between isolates is deleted with events disallowed
+    // (see DeleteNativeModule), where the job's state can't be ordered. When
+    // there are no compilation tasks (as while recording or replaying), no
+    // worker ever ran the job, so there is nothing to order its cancellation
+    // with.
+    base::Optional<replayio::AutoPassThroughEvents> pass_through;
+    if (recordreplay::AreEventsDisallowed() &&
+        v8_flags.wasm_num_compilation_tasks == 0) {
+      pass_through.emplace();
+    }
+    compile_job_->CancelAndDetach();
   }
 
   // Call right after the constructor, after the {compilation_state_} field in
@@ -659,6 +670,10 @@ class CompilationStateImpl {
   DynamicTiering dynamic_tiering() const { return dynamic_tiering_; }
 
   Counters* counters() const { return async_counters_.get(); }
+
+  int recompilation_ordered_lock_id() const {
+    return recompilation_ordered_lock_id_;
+  }
 
   void SetWireBytesStorage(
       std::shared_ptr<WireBytesStorage> wire_bytes_storage) {
@@ -775,6 +790,14 @@ class CompilationStateImpl {
 
   // End of fields protected by {callbacks_mutex_}.
   //////////////////////////////////////////////////////////////////////////////
+
+  // Held by RecompileNativeModule when recording or replaying, see there.
+  const int recompilation_ordered_lock_id_ =
+      recordreplay::IsRecordingOrReplaying("wasm-native-module-sharing",
+                                           "RecompileNativeModule")
+          ? static_cast<int>(
+                recordreplay::CreateOrderedLock("RecompileNativeModule"))
+          : 0;
 
   // {publish_mutex_} protects {publish_queue_} and {publisher_running_}.
   base::Mutex publish_mutex_;
@@ -1387,6 +1410,8 @@ void TransitiveTypeFeedbackProcessor::ProcessFunction(int func_index) {
 }
 
 void TriggerTierUp(WasmInstanceObject instance, int func_index) {
+  replayio::AutoDisallowEvents disallow("wasm::TriggerTierUp");
+
   NativeModule* native_module = instance.module_object().native_module();
   CompilationStateImpl* compilation_state =
       Impl(native_module->compilation_state());
@@ -1994,6 +2019,14 @@ void RecompileNativeModule(NativeModule* native_module,
   // Install a callback to notify us once background recompilation finished.
   auto recompilation_finished_semaphore = std::make_shared<base::Semaphore>(0);
   auto* compilation_state = Impl(native_module->compilation_state());
+
+  // When several isolates share the module, their recompilations would share
+  // the compilation units, and how the units split between the isolates'
+  // threads depends on their timing, but compiling records calls on the
+  // thread doing it. When recording or replaying, the threads take turns, so
+  // none compiles units of another's recompilation.
+  recordreplay::AutoOrderedLock ordered_lock(
+      compilation_state->recompilation_ordered_lock_id());
 
   class RecompilationFinishedCallback : public CompilationEventCallback {
    public:
