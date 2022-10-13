@@ -13,6 +13,8 @@
 #include "src/execution/arguments-inl.h"
 #include "src/execution/frames-inl.h"
 #include "src/execution/isolate-inl.h"
+// Record/replay: for GetIsolateFromHeapObject (DV8-007, DV8-025).
+#include "src/execution/isolate-utils-inl.h"
 #include "src/objects/abstract-code-inl.h"
 #include "src/objects/js-array-buffer-inl.h"
 #include "src/objects/objects-inl.h"
@@ -233,6 +235,17 @@ RUNTIME_FUNCTION(Runtime_CompileLazy) {
           check.JsHasOverflowed(kStackSpaceRequiredForCompilation * KB))) {
     return isolate->StackOverflow();
   }
+
+  // The internal GetIsolate() this CHECK used before V8 13.8 removed
+  // NEVER_READ_ONLY_SPACE expanded to a writable-object isolate helper, which
+  // V8 14.0 removed in turn (DV8-025). This is upstream's surviving form, and it
+  // keeps what the CHECK asserts -- the function's own isolate, which
+  // Isolate::Current() would not give. A JSFunction is never in read-only space,
+  // which is exactly what NEVER_READ_ONLY_SPACE(JSReceiver) asserted, so the
+  // first CHECK restates that invariant rather than adding a new one.
+  Isolate* function_isolate;
+  CHECK(GetIsolateFromHeapObject(*function, &function_isolate));
+  CHECK(isolate == function_isolate);
 
   DirectHandle<SharedFunctionInfo> sfi(function->shared(), isolate);
 
