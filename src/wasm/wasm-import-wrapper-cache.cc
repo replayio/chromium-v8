@@ -202,6 +202,39 @@ void WasmImportWrapperCache::Free(std::vector<WasmCode*>& wrappers) {
   wrappers.clear();
 }
 
+int WasmImportWrapperCache::record_replay_ordered_lock_ = 0;
+
+WasmImportWrapperCache::WasmImportWrapperCache() {
+  // Order the acquisitions that compile or publish a wrapper, rather than the
+  // mutex itself. V8 13.0 made this cache process wide and put it on the stack
+  // walk: WasmCodeManager::LookupCode(pc) falls through to Lookup() for every
+  // pc that is in no NativeModule, so an ordered mutex would be taken by every
+  // stack walk in every program, wasm or not -- including the walks Replay's
+  // own CDP handling does with events disallowed, where there is no order to
+  // record. Recording and replaying would then disagree about whether the lock
+  // was taken at all.
+  //
+  // Only {ModificationScope} takes it, which is what the fork's ordering was
+  // for: that scope holds mutex_ while a wrapper is published, and
+  // AddWrapper() -> WasmImportWrapperHandle::set_code() is the only path that
+  // gives a handle its code.
+  //
+  // The read paths -- Lookup(), Get(), GetCompiled(), HasCodeForTesting() --
+  // take mutex_ alone and do not take this lock, deliberately (see above).
+  // V8 13.8 reshaped this cache and two things about it are recorded in defect
+  // DV8-003 rather than here: a wrapper's code is now read through
+  // WasmImportWrapperHandle::code(), a relaxed atomic load with no lock at all,
+  // and Get()'s builtin branch publishes an entry_map_ entry under mutex_
+  // WITHOUT this ordered lock -- that entry never carries compiled code, so the
+  // sentence above still holds for everything this lock was protecting.
+  //
+  // This runs once per process, from WasmEngine::InitializeOncePerProcess by
+  // way of GlobalWasmState, which is the same kind of point as
+  // NativeModuleCache's own ordered lock in wasm-engine.cc.
+  record_replay_ordered_lock_ =
+      static_cast<int>(recordreplay::CreateOrderedLock("WasmImportWrapperCache"));
+}
+
 std::optional<Builtin> WasmImportWrapperCache::BuiltinForWrapper(
     ImportCallKind kind, const wasm::CanonicalSig* sig, Suspend suspend) {
   if (kind != ImportCallKind::kJSFunction) return {};
