@@ -85,7 +85,12 @@ class WasmImportWrapperCache {
   size_t EstimateCurrentMemoryConsumption() const;
 
  private:
-  mutable base::Mutex mutex_;
+  // Ordered when recording or replaying: isolates instantiating the same
+  // module contend for it, and {ModificationScope} holds it while joining a
+  // compile job, which takes the thread pool's ordered locks. Unordered, the
+  // replay could take it in a different order than the recording and then
+  // wait for an ordered lock whose next owner is blocked on it.
+  mutable base::Mutex mutex_{"WasmImportWrapperCache.mutex_"};
   std::unordered_map<CacheKey, WasmCode*, CacheKeyHash> entry_map_;
 };
 
