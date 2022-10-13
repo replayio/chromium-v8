@@ -274,10 +274,27 @@ V8_EXPORT_PRIVATE bool ManagedFinalizersDeferredWhenEventsDisallowed();
 
 #if V8_ENABLE_WEBASSEMBLY
 namespace wasm {
+class NativeModule;
+// When recording or replaying, the NativeModuleCache keeps a cached
+// NativeModule for as long as some isolate holds it through a Managed.
+V8_EXPORT_PRIVATE void ManagedNativeModuleAdded(NativeModule* native_module);
+V8_EXPORT_PRIVATE void ManagedNativeModuleRemoved(NativeModule* native_module);
 }  // namespace wasm
 #endif  // V8_ENABLE_WEBASSEMBLY
 
+// Called when a {Managed<T>} starts and stops holding its object. Only
+// NativeModules need to know.
+template <class CppType>
+void OnManagedAdded(CppType*) {}
+template <class CppType>
+void OnManagedRemoved(CppType*) {}
 #if V8_ENABLE_WEBASSEMBLY
+inline void OnManagedAdded(wasm::NativeModule* native_module) {
+  wasm::ManagedNativeModuleAdded(native_module);
+}
+inline void OnManagedRemoved(wasm::NativeModule* native_module) {
+  wasm::ManagedNativeModuleRemoved(native_module);
+}
 #endif  // V8_ENABLE_WEBASSEMBLY
 
 // The use of {Managed<T>} is deprecated. Use {CppGCManaged<T>} instead.
