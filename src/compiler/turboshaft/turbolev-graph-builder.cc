@@ -5562,6 +5562,37 @@ class GraphBuildingNodeProcessor {
     // used as a frontend for Turboshaft.
     UNREACHABLE();
   }
+  // Record/replay: the fork's two maglev frame-depth nodes (ledger DV8-014).
+  // The fork adds them to NON_VALUE_NODE_LIST, and maglev's GraphProcessor
+  // dispatches every NODE_BASE_LIST opcode to this processor, so overloads are
+  // required here whether or not the turbolev pipeline ever runs:
+  // v8_flags.turbolev is a runtime flag and this is an ordinary translation
+  // unit, so the overload set is instantiated either way.
+  //
+  // They cannot arrive while turbolev is off, because the bytecodes they come
+  // from are only emitted when recording or replaying
+  // (BytecodeArrayBuilder::emit_record_replay_opcodes_). If turbolev is enabled
+  // for a recorded run they fire here, at graph-building time, instead of
+  // silently dropping the frame-depth accounting -- a no-op would leave
+  // Isolate's replay_js_frame_depth_ wrong with nothing to point at.
+  //
+  // A faithful lowering is not just the decrement: the increment node also
+  // compares against ThreadLocalTop::kReplayMaxJsFrameDepth and throws
+  // Runtime::kThrowStackOverflow from a deferred block with an exception
+  // handler and a lazy-deopt point (see maglev/x64/maglev-ir-x64.cc). The
+  // TurboFan/turboshaft path never had to lower the increment at all -- there
+  // it comes from the bytecode graph builder as simplified ops, which is why
+  // turboshaft/graph-builder.cc only has a case for the decrement (D043) -- so
+  // there is no fork lowering to mirror here, and writing one belongs with a
+  // build and a recording rather than with a rebase.
+  maglev::ProcessResult Process(maglev::ReplayIncrementAndCheckJsFrameDepth*,
+                                const maglev::ProcessingState&) {
+    UNREACHABLE();
+  }
+  maglev::ProcessResult Process(maglev::ReplayDecrementJsFrameDepth*,
+                                const maglev::ProcessingState&) {
+    UNREACHABLE();
+  }
   maglev::ProcessResult Process(maglev::HandleNoHeapWritesInterrupt* node,
                                 const maglev::ProcessingState&) {
     GET_FRAME_STATE_MAYBE_ABORT(frame_state, node->lazy_deopt_info());
