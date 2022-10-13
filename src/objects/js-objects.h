@@ -1506,6 +1506,10 @@ V8_OBJECT class JSMessageObject : public JSObject {
 
   class BodyDescriptor;
 
+  // when recording/replaying, a bookmark for the point where the message's
+  // exception was thrown.
+  DECL_INT_ACCESSORS(record_replay_bookmark)
+
  private:
   friend class Factory;
 
@@ -1546,6 +1550,11 @@ V8_OBJECT class JSMessageObject : public JSObject {
   TaggedMember<Smi> start_position_;
   TaggedMember<Smi> end_position_;
   TaggedMember<Smi> error_level_;
+  // when recording/replaying, a bookmark for the point where the message's
+  // exception was thrown.  Declared in js-objects.tq, but M149 added
+  // @cppObjectLayoutDefinition to this class so Torque generates neither the
+  // field nor its accessors: this class spells its layout out by hand.
+  TaggedMember<Smi> record_replay_bookmark_;
 } V8_OBJECT_END;
 
 // The [Async-from-Sync Iterator] object

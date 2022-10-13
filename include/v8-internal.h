@@ -1062,7 +1062,12 @@ class Internals {
   static const int kBuiltinTier0EntryTableSize = 7 * kApiSystemPointerSize;
   static const int kBuiltinTier0TableSize = 7 * kApiSystemPointerSize;
   static const int kLinearAllocationAreaSize = 3 * kApiSystemPointerSize;
-  static const int kThreadLocalTopSize = 29 * kApiSystemPointerSize;
+  // Record/replay: ThreadLocalTop carries two extra slots (see
+  // src/execution/thread-local-top.h), and this hand-maintained mirror of its
+  // size has to follow, or every offset after it is 16 bytes short and
+  // mksnapshot's layout CHECK fails. A static_assert in thread-local-top.h
+  // ties the two together so this cannot drift again.
+  static const int kThreadLocalTopSize = 31 * kApiSystemPointerSize;
   static const int kHandleScopeDataSize =
       2 * kApiSystemPointerSize + 2 * kApiInt32Size;
 
