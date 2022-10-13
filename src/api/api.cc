@@ -215,10 +215,22 @@ static ScriptOrigin GetScriptOriginForScript(
 
 // --- E x c e p t i o n   B e h a v i o r ---
 
+static __attribute__((noinline)) void BusyWait() {
+  fprintf(stderr, "Busy-waiting ... (pid %d)\n", getpid());
+  volatile int x = 1;
+  while (x) {}
+}
+
 // When V8 cannot allocate memory FatalProcessOutOfMemory is called. The default
 // OOM error handler is called and execution is stopped.
 void i::V8::FatalProcessOutOfMemory(i::Isolate* i_isolate, const char* location,
                                     const OOMDetails& details) {
+  gCrashReason = location;
+
+  if (getenv("RECORD_REPLAY_WAIT_AT_FATAL_ERROR")) {
+    BusyWait();
+  }
+
   char last_few_messages[Heap::kTraceRingBufferSize + 1];
   char js_stacktrace[Heap::kStacktraceBufferSize + 1];
   i::HeapStats heap_stats;
@@ -332,6 +344,9 @@ void Utils::ReportApiFailure(const char* location, const char* message) {
   if (callback == nullptr) {
     base::OS::PrintError("\n#\n# Fatal error in %s\n# %s\n#\n\n", location,
                          message);
+    if (getenv("RECORD_REPLAY_WAIT_AT_FATAL_ERROR")) {
+      BusyWait();
+    }
     base::OS::Abort();
   } else {
     callback(location, message);
@@ -2140,6 +2155,15 @@ MaybeLocal<Value> Script::Run(Local<Context> context,
   }
 #endif
   auto fun = i::Cast<i::JSFunction>(Utils::OpenHandle(this));
+
+  // TODO: IsInReplayCode (RUN-1502)
+  v8::recordreplay::AssertMaybeEventsDisallowed(
+    "JS Script::Run %d",
+    i::IsScript(fun->shared()->script())
+      ? i::Cast<i::Script>(fun->shared()->script())->id()
+      : 0
+  );
+
   i::Handle<i::Object> receiver = i_isolate->global_proxy();
   // TODO(cbruni, chromium:1244145): Remove once migrated to the context.
   i::Handle<i::Object> options(
@@ -2467,6 +2491,9 @@ MaybeLocal<Value> Module::Evaluate(Local<Context> context) {
   Utils::ApiCheck(self->status() >= i::Module::kLinked, "Module::Evaluate",
                   "Expected instantiated module");
 
+  // TODO: IsInReplayCode (RUN-1502)
+  v8::recordreplay::AssertMaybeEventsDisallowed("JS Module::Evaluate %d", ScriptId());
+
   Local<Value> result;
   has_exception = !ToLocal(i::Module::Evaluate(i_isolate, self), &result);
   RETURN_ON_FAILED_EXECUTION(Value);
@@ -2709,6 +2736,8 @@ MaybeLocal<UnboundScript> ScriptCompiler::CompileUnboundInternal(
         i::NOT_NATIVES_CODE, &source->compilation_details);
   }
 
+  maybe_function_info = i::ReplayingMaybeReplaceScript(i_isolate, maybe_function_info, script_details, str);
+
   has_exception = !maybe_function_info.ToHandle(&result);
   DCHECK_IMPLIES(!has_exception, !InReadOnlySpace(*result));
   RETURN_ON_FAILED_EXECUTION(UnboundScript);
@@ -2911,8 +2940,10 @@ i::MaybeHandle<i::SharedFunctionInfo> CompileStreamedSource(
                        origin.ColumnOffset(), origin.SourceMapUrl(),
                        origin.GetHostDefinedOptions(), origin.Options());
   i::ScriptStreamingData* data = v8_source->impl();
-  return i::Compiler::GetSharedFunctionInfoForStreamedScript(
+  i::MaybeHandle<i::SharedFunctionInfo> maybe_function_info = i::Compiler::GetSharedFunctionInfoForStreamedScript(
       i_isolate, str, script_details, data, &v8_source->compilation_details());
+
+  return i::ReplayingMaybeReplaceScript(i_isolate, maybe_function_info, script_details, str);
 }
 
 }  // namespace
@@ -3237,6 +3268,12 @@ int Message::ErrorLevel() const {
   auto self = Utils::OpenDirectHandle(this);
   DCHECK_NO_SCRIPT_NO_EXCEPTION(self->GetIsolate());
   return self->error_level();
+}
+
+extern "C" int V8GetMessageRecordReplayBookmark(v8::Local<v8::Message> message) {
+  auto self = Utils::OpenHandle(*message);
+  DCHECK_NO_SCRIPT_NO_EXCEPTION(self->GetIsolate());
+  return self->record_replay_bookmark();
 }
 
 int Message::GetStartColumn() const {
@@ -5598,6 +5635,13 @@ MaybeLocal<Value> Object::CallAsFunction(Local<Context> context,
   auto recv_obj = Utils::OpenHandle(*recv);
   static_assert(sizeof(v8::Local<v8::Value>) == sizeof(i::Handle<i::Object>));
   auto args = PrepareArguments(argc, argv);
+
+  // TODO: IsInReplayCode (RUN-1502)
+  v8::recordreplay::AssertMaybeEventsDisallowed(
+    "JS Object::CallAsFunction %d",
+    IsCodeLike(context->GetIsolate())
+  );
+
   Local<Value> result;
   has_exception = !ToLocal<Value>(
       i::Execution::Call(i_isolate, self, recv_obj, argc, args.data()),
@@ -5618,6 +5662,13 @@ MaybeLocal<Value> Object::CallAsConstructor(Local<Context> context, int argc,
   auto self = Utils::OpenHandle(this);
   static_assert(sizeof(v8::Local<v8::Value>) == sizeof(i::Handle<i::Object>));
   auto args = PrepareArguments(argc, argv);
+
+  // TODO: IsInReplayCode (RUN-1502)
+  v8::recordreplay::AssertMaybeEventsDisallowed(
+    "JS Object::CallAsConstructor %d",
+    IsCodeLike(context->GetIsolate())
+  );
+
   Local<Value> result;
   has_exception = !ToLocal<Value>(
       i::Execution::New(i_isolate, self, self, argc, args.data()), &result);
@@ -5694,6 +5745,14 @@ MaybeLocal<v8::Value> Function::Call(v8::Isolate* isolate,
   auto recv_obj = Utils::OpenHandle(*recv);
   static_assert(sizeof(v8::Local<v8::Value>) == sizeof(i::Handle<i::Object>));
   auto args = PrepareArguments(argc, argv);
+
+  // TODO: IsInReplayCode (RUN-1502)
+  // [PRO-1417] column is omitted because our instrumentation engine shifts columns but it shouldn't shift line numbers
+  v8::recordreplay::AssertMaybeEventsDisallowed(
+    "JS Function::Call %d %d",
+    ScriptId(), GetScriptLineNumber()
+  );
+
   Local<Value> result;
   has_exception = !ToLocal<Value>(
       i::Execution::Call(i_isolate, self, recv_obj, argc, args.data()),
@@ -11084,6 +11143,8 @@ void String::ValueView::CheckOneByte(bool is_one_byte) const {
         options = Utils::OpenHandle(*raw_options);                            \
       }                                                                       \
       auto message = Utils::OpenHandle(*raw_message);                         \
+      std::unique_ptr<char[]> message_str = message->ToCString();             \
+      recordreplay::AssertMaybeEventsDisallowed("CreateException %s %s", #NAME, message_str.get()); \
       i::Handle<i::JSFunction> constructor = i_isolate->name##_function();    \
       error = *i_isolate->factory()->NewError(constructor, message, options); \
     }                                                                         \
