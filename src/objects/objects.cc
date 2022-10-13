@@ -137,6 +137,8 @@
 #include "src/wasm/wasm-objects.h"
 #endif  // V8_ENABLE_WEBASSEMBLY
 
+#include "src/base/replayio.h"
+
 namespace v8 {
 namespace internal {
 
@@ -1830,6 +1832,12 @@ bool Object::IsCodeLike(Tagged<Object> obj, Isolate* isolate) {
 }
 
 void ShortPrint(Tagged<Object> obj, FILE* out) {
+  if (recordreplay::AreEventsDisallowed()) {
+    std::ostringstream os;
+    os << Brief(obj);
+    recordreplay::Print("[Object::ShortPrint] %s", os.str().c_str());
+    return;
+  }
   OFStream os(out);
   os << Brief(obj);
 }
@@ -4890,6 +4898,10 @@ void JSPromise::set_async_task_id(int id) {
   set_flags(AsyncTaskIdBits::update(flags(), id));
 }
 
+
+extern bool RecordReplayShouldCallOnPromiseHook();
+void AddPromiseDependencyGraphAdoption(Isolate* isolate, Handle<Object> promise, Handle<Object> adoption);
+
 // static
 Handle<Object> JSPromise::Fulfill(Handle<JSPromise> promise,
                                   Handle<Object> value) {
@@ -4969,7 +4981,8 @@ Handle<Object> JSPromise::Reject(Handle<JSPromise> promise,
   // 7. If promise.[[PromiseIsHandled]] is false, perform
   //    HostPromiseRejectionTracker(promise, "reject").
   if (!promise->has_handler()) {
-    isolate->ReportPromiseReject(promise, reason, kPromiseRejectWithNoHandler);
+    isolate->ReportPromiseReject(promise, reason,
+                                 kPromiseRejectWithNoHandler);
   }
 
   // 8. Return TriggerPromiseReactions(reactions, reason).
