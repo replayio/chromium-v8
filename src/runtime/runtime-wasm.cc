@@ -244,6 +244,7 @@ RUNTIME_FUNCTION(Runtime_ThrowWasmError) {
 RUNTIME_FUNCTION(Runtime_ThrowWasmStackOverflow) {
   SealHandleScope shs(isolate);
   DCHECK_LE(0, args.length());
+  recordreplay::InvalidateRecording("Stack overflow");
   return isolate->StackOverflow();
 }
 
