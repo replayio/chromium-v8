@@ -945,7 +945,19 @@ class Heap final {
       std::function<void(HeapObject object, ObjectSlot slot, Object target)>
           gc_notify_updated_slot);
 
-  MaybeHandle<JSFinalizationRegistry> DequeueDirtyJSFinalizationRegistry();
+  // Record/replay: the dirty list holds both registries whose cleanup is
+  // driven by the recording ("tracked", see src/replay/finalization-registry.h)
+  // and registries with the default handling. These look only at the
+  // registries of one kind. The first returns whether the list has such a
+  // registry, the second removes and returns the first one.
+  enum class RecordReplayTracking { kTracked, kUntracked };
+
+  // Called at each progress interrupt when recording/replaying.
+  void RecordReplayOnProgressInterrupt();
+  bool RecordReplayHasDirtyJSFinalizationRegistries(
+      RecordReplayTracking tracking);
+  MaybeHandle<JSFinalizationRegistry>
+  RecordReplayDequeueDirtyJSFinalizationRegistry(RecordReplayTracking tracking);
 
   // Called from Heap::NotifyContextDisposed to remove all
   // FinalizationRegistries with {context} from the dirty list when the context
@@ -1027,6 +1039,10 @@ class Heap final {
 
   // Invoked when GC was requested via the stack guard.
   void HandleGCRequest();
+
+  // Record/replay: runs ReportExternalMemoryPressure() at the next stack guard
+  // interrupt, for callers where a GC isn't safe.
+  void RecordReplayRequestExternalMemoryPressureReport();
 
   // ===========================================================================
   // Iterators. ================================================================
@@ -1852,6 +1868,8 @@ class Heap final {
   void EagerlyFreeExternalMemory();
 
   bool InvokeNearHeapLimitCallback();
+  // Runs the last near-heap-limit callback and applies the limit it returns.
+  bool CallNearHeapLimitCallback();
 
   void InvokeIncrementalMarkingPrologueCallbacks();
   void InvokeIncrementalMarkingEpilogueCallbacks();
@@ -2343,6 +2361,12 @@ class Heap final {
 
   std::unique_ptr<CollectionBarrier> collection_barrier_;
 
+  std::atomic<bool> record_replay_external_memory_pressure_requested_{false};
+
+  // Record/replay: near-heap-limit callback calls since the last progress
+  // interrupt when recording, see InvokeNearHeapLimitCallback.
+  size_t record_replay_near_heap_limit_calls_ = 0;
+
   int ignore_local_gc_requests_depth_ = 0;
 
   int gc_callbacks_depth_ = 0;
@@ -2383,6 +2407,9 @@ class Heap final {
 
   // This field is used only when not running with MinorMC.
   ResizeNewSpaceMode resize_new_space_mode_ = ResizeNewSpaceMode::kNone;
+
+  // For ordering allocations of new script IDs.
+  int script_ordered_lock_id_ = 0;
 
   // Classes in "heap" can be friends.
   friend class AlwaysAllocateScope;

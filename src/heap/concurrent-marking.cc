@@ -534,6 +534,8 @@ void ConcurrentMarking::ScheduleJob(GarbageCollector garbage_collector,
   DCHECK(!heap_->IsTearingDown());
   DCHECK(IsStopped());
 
+  replayio::AutoDisallowEvents disallow("ConcurrentMarking::ScheduleJob");
+
   if (v8_flags.concurrent_marking_high_priority_threads) {
     priority = TaskPriority::kUserBlocking;
   }

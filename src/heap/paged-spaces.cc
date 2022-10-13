@@ -921,6 +921,8 @@ bool PagedSpaceBase::RawRefillLabMain(int size_in_bytes,
 
   static constexpr int kMaxPagesToSweep = 1;
 
+  replayio::AutoDisallowEvents disallow("PagedSpaceBase::RawRefillLabMain");
+
   if (TryAllocationFromFreeListMain(size_in_bytes, origin)) return true;
 
   const bool is_main_thread =

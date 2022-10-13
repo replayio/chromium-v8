@@ -98,6 +98,7 @@
 #include "src/profiler/heap-profiler.h"
 #include "src/profiler/tracing-cpu-profiler.h"
 #include "src/regexp/regexp-stack.h"
+#include "src/replay/replay-isolate-data.h"
 #include "src/roots/static-roots.h"
 #include "src/snapshot/embedded/embedded-data-inl.h"
 #include "src/snapshot/embedded/embedded-file-writer-interface.h"
@@ -1523,6 +1524,8 @@ void Isolate::ReportFailedAccessCheck(Handle<JSObject> receiver) {
       v8::Utils::ToLocal(receiver), v8::ACCESS_HAS, v8::Utils::ToLocal(data));
 }
 
+extern "C" bool V8RecordReplayIsInReplayCode();
+
 bool Isolate::MayAccess(Handle<Context> accessing_context,
                         Handle<JSObject> receiver) {
   DCHECK(receiver->IsJSGlobalProxy() || receiver->IsAccessCheckNeeded());
@@ -1532,6 +1535,10 @@ bool Isolate::MayAccess(Handle<Context> accessing_context,
 
   // During bootstrapping, callback functions are not enabled yet.
   if (bootstrapper()->IsActive()) return true;
+
+  // Allow all accesses made while replay code is running.
+  if (V8RecordReplayIsInReplayCode()) return true;
+
   {
     DisallowGarbageCollection no_gc;
 
@@ -1570,7 +1577,16 @@ bool Isolate::MayAccess(Handle<Context> accessing_context,
   }
 }
 
+static bool gHasPrintedStack = false;
+
 Object Isolate::StackOverflow() {
+  if (recordreplay::IsRecordingOrReplaying() && !gHasPrintedStack) {
+    gHasPrintedStack = true;
+    std::stringstream stack;
+    PrintCurrentStackTrace(stack);
+    recordreplay::Print("Stack overflow: %s", stack.str().c_str());
+  }
+
   // Whoever calls this method should not have overflown the stack limit by too
   // much. Otherwise we risk actually running out of stack space.
   // We allow for up to 8kB overflow, because we typically allow up to 4KB
@@ -1661,12 +1677,31 @@ void Isolate::CancelTerminateExecution() {
 }
 
 void Isolate::RequestInterrupt(InterruptCallback callback, void* data) {
+  recordreplay::OrderedLock(record_replay_api_interrupts_ordered_lock_id_);
   ExecutionAccess access(this);
   api_interrupts_queue_.push(InterruptEntry(callback, data));
   stack_guard()->RequestApiInterrupt();
+  recordreplay::OrderedUnlock(record_replay_api_interrupts_ordered_lock_id_);
 }
 
+extern void RecordReplayTriggerProgressInterrupt();
+
 void Isolate::InvokeApiInterruptCallbacks() {
+  if (recordreplay::IsRecordingOrReplaying("interrupts")) {
+    // When recording, we can't invoke API interrupt callbacks at arbitrary points
+    // where we check for interrupts, as we won't be able to invoke those callbacks
+    // at the same point when replaying. Instead, after detecting that interrupts
+    // have been added to the queue we trigger an interrupt the next time the progress
+    // counter advances, and will invoke the callbacks then.
+    if (recordreplay::IsRecording() && IsMainThread()) {
+      ExecutionAccess access(this);
+      if (!api_interrupts_queue_.empty()) {
+        RecordReplayTriggerProgressInterrupt();
+      }
+    }
+    return;
+  }
+
   RCS_SCOPE(this, RuntimeCallCounterId::kInvokeApiInterruptCallbacks);
   // Note: callback below should be called outside of execution access lock.
   while (true) {
@@ -1681,6 +1716,60 @@ void Isolate::InvokeApiInterruptCallbacks() {
     HandleScope handle_scope(this);
     entry.first(reinterpret_cast<v8::Isolate*>(this), entry.second);
   }
+}
+
+void Isolate::RecordReplayInvokeApiInterruptCallbacksAtProgress() {
+  CHECK(recordreplay::IsRecordingOrReplaying("interrupts"));
+  CHECK(IsMainThread());
+
+  // A callback that advances progress without running JS (an inspector
+  // command's response adds a bookmark) reaches the progress interrupt
+  // requested for callbacks queued meanwhile. Running them there would nest
+  // every queued callback inside the previous one, thousands deep for a burst
+  // of DevTools commands, until C stack limit checks (e.g. in RegExp parsing)
+  // fail at a depth that differs between recording and replaying. The
+  // outermost invocation's loop runs them instead. JS entered from a callback
+  // (e.g. an evaluation in a debugger pause the callback started) still runs
+  // them, so they can interrupt that JS: the enclosing invocation's topmost JS
+  // frame stays on the stack, so a different topmost fp means newer JS frames.
+  Address js_fp = kNullAddress;
+  {
+    JavaScriptStackFrameIterator it(this);
+    if (!it.done()) js_fp = it.frame()->fp();
+  }
+  if (record_replay_invoking_api_interrupts_ &&
+      record_replay_api_interrupts_js_fp_ == js_fp) {
+    // The interrupt that got us here is used up. Request it again so JS the
+    // enclosing callback runs next still requests a progress interrupt for
+    // whatever is queued, instead of waiting for the callback to return.
+    stack_guard()->RequestApiInterrupt();
+    return;
+  }
+  bool was_invoking = record_replay_invoking_api_interrupts_;
+  Address previous_js_fp = record_replay_api_interrupts_js_fp_;
+  record_replay_invoking_api_interrupts_ = true;
+  record_replay_api_interrupts_js_fp_ = js_fp;
+
+  while (true) {
+    InterruptEntry entry;
+    recordreplay::OrderedLock(record_replay_api_interrupts_ordered_lock_id_);
+    {
+      ExecutionAccess access(this);
+      if (api_interrupts_queue_.empty()) {
+        recordreplay::OrderedUnlock(record_replay_api_interrupts_ordered_lock_id_);
+        break;
+      }
+      entry = api_interrupts_queue_.front();
+      api_interrupts_queue_.pop();
+    }
+    recordreplay::OrderedUnlock(record_replay_api_interrupts_ordered_lock_id_);
+    VMState<EXTERNAL> state(this);
+    HandleScope handle_scope(this);
+    entry.first(reinterpret_cast<v8::Isolate*>(this), entry.second);
+  }
+
+  record_replay_invoking_api_interrupts_ = was_invoking;
+  record_replay_api_interrupts_js_fp_ = previous_js_fp;
 }
 
 namespace {
@@ -1777,6 +1866,8 @@ Handle<JSMessageObject> Isolate::CreateMessageOrAbort(
 }
 
 Object Isolate::ThrowInternal(Object raw_exception, MessageLocation* location) {
+  recordreplay::AssertMaybeEventsDisallowed("[RUN-885] Isolate::ThrowInternal");
+
   DCHECK(!has_pending_exception());
   IF_WASM(DCHECK_IMPLIES, trap_handler::IsTrapHandlerEnabled(),
           !trap_handler::IsThreadInWasm());
@@ -1905,6 +1996,31 @@ class SetThreadInWasmFlagScope {
 #endif  // V8_ENABLE_WEBASSEMBLY
 }  // namespace
 
+static void ReplaySyncJsFrameDepth(Isolate* isolate) {
+  if (!recordreplay::IsRecordingOrReplaying("emit-opcodes")) return;
+
+  HandleScope scope(isolate);
+  int skip = static_cast<int>(
+      isolate->thread_local_top()->num_frames_above_pending_handler_);
+  int depth = 0;
+  int index = 0;
+  for (StackFrameIterator it(isolate); !it.done(); it.Advance(), index++) {
+    if (index < skip) continue;
+    StackFrame* frame = it.frame();
+    if (!frame->is_java_script()) continue;
+    std::vector<FrameSummary> summaries;
+    CommonFrame::cast(frame)->Summarize(&summaries);
+    if (summaries.empty()) {
+      depth += 1;  // SyncEmptyCount
+    } else {
+      for (const FrameSummary& summary : summaries) {
+        if (summary.IsJavaScript()) depth++;
+      }
+    }
+  }
+  isolate->set_replay_js_frame_depth(depth);
+}
+
 Object Isolate::UnwindAndFindHandler() {
   // TODO(v8:12676): Fix gcmole failures in this function.
   DisableGCMole no_gcmole;
@@ -1918,7 +2034,12 @@ Object Isolate::UnwindAndFindHandler() {
   // handler handles such non-wasm exceptions.
   SetThreadInWasmFlagScope set_thread_in_wasm_flag_scope;
 #endif  // V8_ENABLE_WEBASSEMBLY
-  Object exception = pending_exception();
+
+  // hackfix: pending_exception disappears sometimes, but we don't want to
+  // crash. - https://linear.app/replay/issue/RUN-1258/
+  Object exception = has_pending_exception()
+                         ? pending_exception()
+                         : ReadOnlyRoots(this).undefined_value();
 
   auto FoundHandler = [&](Context context, Address instruction_start,
                           intptr_t handler_offset,
@@ -1933,6 +2054,8 @@ Object Isolate::UnwindAndFindHandler() {
     thread_local_top()->pending_handler_sp_ = handler_sp;
     thread_local_top()->num_frames_above_pending_handler_ =
         num_frames_above_handler;
+
+    ReplaySyncJsFrameDepth(this);
 
     // Return and clear pending exception. The contract is that:
     // (1) the pending exception is stored in one place (no duplication), and
@@ -3081,12 +3204,27 @@ char* Isolate::RestoreThread(char* from) {
   return from + sizeof(ThreadLocalTop);
 }
 
+namespace {
+// The number of registered destructors is only the same when replaying if
+// ManagedObjectFinalizerSecondPass leaves unregistering to
+// Isolate::ReleaseSharedPtrs. Otherwise it depends on when the GC runs.
+bool ManagedPtrDestructorCountIsDeterministic() {
+  return recordreplay::IsRecordingOrReplaying("leak-references",
+                                              "ManagedPtrDestructorCount");
+}
+}  // namespace
+
 void Isolate::ReleaseSharedPtrs() {
   base::MutexGuard lock(&managed_ptr_destructors_mutex_);
+  if (ManagedPtrDestructorCountIsDeterministic()) {
+    recordreplay::Assert("Isolate::ReleaseSharedPtrs %zu",
+                         managed_ptr_destructors_count_);
+  }
   while (managed_ptr_destructors_head_) {
     ManagedPtrDestructor* l = managed_ptr_destructors_head_;
     ManagedPtrDestructor* n = nullptr;
     managed_ptr_destructors_head_ = nullptr;
+    managed_ptr_destructors_count_ = 0;
     for (; l != nullptr; l = n) {
       l->destructor_(l->shared_ptr_ptr_);
       n = l->next_;
@@ -3113,6 +3251,11 @@ void Isolate::RegisterManagedPtrDestructor(ManagedPtrDestructor* destructor) {
   }
   destructor->next_ = managed_ptr_destructors_head_;
   managed_ptr_destructors_head_ = destructor;
+  managed_ptr_destructors_count_++;
+  if (ManagedPtrDestructorCountIsDeterministic()) {
+    recordreplay::Assert("Isolate::RegisterManagedPtrDestructor %zu",
+                         managed_ptr_destructors_count_);
+  }
 }
 
 void Isolate::UnregisterManagedPtrDestructor(ManagedPtrDestructor* destructor) {
@@ -3126,6 +3269,8 @@ void Isolate::UnregisterManagedPtrDestructor(ManagedPtrDestructor* destructor) {
   if (destructor->next_) destructor->next_->prev_ = destructor->prev_;
   destructor->prev_ = nullptr;
   destructor->next_ = nullptr;
+  DCHECK_GT(managed_ptr_destructors_count_, 0u);
+  managed_ptr_destructors_count_--;
 }
 
 #if V8_ENABLE_WEBASSEMBLY
@@ -3413,6 +3558,9 @@ v8::PageAllocator* Isolate::page_allocator() const {
   return isolate_allocator_->page_allocator();
 }
 
+extern void RecordReplayOnMainThreadIsolateCreated(Isolate* isolate);
+extern bool RecordReplayShouldCallOnPromiseHook();
+
 Isolate::Isolate(std::unique_ptr<i::IsolateAllocator> isolate_allocator)
     : isolate_data_(this, isolate_allocator->GetPtrComprCageBase()),
       isolate_allocator_(std::move(isolate_allocator)),
@@ -3459,6 +3607,13 @@ Isolate::Isolate(std::unique_ptr<i::IsolateAllocator> isolate_allocator)
   InitializeDefaultEmbeddedBlob();
 
   MicrotaskQueue::SetUpDefaultMicrotaskQueue(this);
+}
+
+replayio::ReplayIsolateData* Isolate::EnsureReplayData() {
+  if (!replay_data_) {
+    replay_data_ = std::make_unique<replayio::ReplayIsolateData>();
+  }
+  return replay_data_.get();
 }
 
 void Isolate::CheckIsolateLayout() {
@@ -3600,6 +3755,10 @@ void Isolate::Deinit() {
   // We start with the heap tear down so that releasing managed objects does
   // not cause a GC.
   heap_.StartTearDown();
+
+  // Holds v8::Globals, which have to be destroyed before the global handles,
+  // and is used by the GC, which can still run before the heap tear down.
+  replay_data_.reset();
 
   // Stop concurrent tasks before destroying resources since they might still
   // use those.
@@ -4332,6 +4491,26 @@ bool Isolate::Init(SnapshotData* startup_snapshot_data,
   }
 
   if (v8_flags.lazy_compile_dispatcher) {
+    // Replay: the dispatcher compiles functions on worker threads, which post
+    // the main thread's finalize task when they finish (LazyCompileDispatcher::
+    // ScheduleIdleTaskFromAnyThread), and the main thread installs a function's
+    // bytecode in that task or, if it calls the function first, waits for the
+    // worker (FinishNow). Both depend on the workers' timing, so a recording
+    // doesn't replay reliably. Supporting it would take workers that only hand
+    // finished jobs back, with the main thread finalizing them at points that
+    // are the same when replaying (e.g. always on the first call). The flags
+    // are left as requested, so the recording is invalidated instead.
+    if (recordreplay::IsRecordingOrReplaying() && IsMainThread()) {
+      const char* flag =
+          v8_flags.parallel_compile_tasks_for_lazy
+              ? "--parallel-compile-tasks-for-lazy"
+          : v8_flags.parallel_compile_tasks_for_eager_toplevel
+              ? "--parallel-compile-tasks-for-eager-toplevel"
+              : "--lazy-compile-dispatcher";
+      std::string why =
+          std::string("V8 flag ") + flag + " is not supported when recording";
+      recordreplay::InvalidateRecording(why.c_str());
+    }
     lazy_compile_dispatcher_ = std::make_unique<LazyCompileDispatcher>(
         this, V8::GetCurrentPlatform(), v8_flags.stack_size);
   }
@@ -5619,11 +5798,19 @@ void Isolate::OnTerminationDuringRunMicrotasks() {
 
 void Isolate::SetPromiseRejectCallback(PromiseRejectCallback callback) {
   promise_reject_callback_ = callback;
+
+  recordreplay::Assert("[TT-1029-1030] Isolate::SetPromiseRejectCallback %d",
+                       !!promise_reject_callback_);
 }
 
 void Isolate::ReportPromiseReject(Handle<JSPromise> promise,
                                   Handle<Object> value,
                                   v8::PromiseRejectEvent event) {
+  v8::recordreplay::AssertMaybeEventsDisallowed(
+    "[TT-1029-1030] Isolate::ReportPromiseReject %d",
+    !!promise_reject_callback_
+  );
+
   if (promise_reject_callback_ == nullptr) return;
   promise_reject_callback_(v8::PromiseRejectMessage(
       v8::Utils::PromiseToLocal(promise), event, v8::Utils::ToLocal(value)));
@@ -5635,6 +5822,13 @@ void Isolate::SetUseCounterCallback(v8::Isolate::UseCounterCallback callback) {
 }
 
 void Isolate::CountUsage(v8::Isolate::UseCounterFeature feature) {
+  // Don't count usage when recording/replaying, as this can involve posting
+  // tasks to other threads in places that run non-deterministically
+  // (e.g. compilation).
+  if (recordreplay::IsRecordingOrReplaying("no-count-usage")) {
+    return;
+  }
+
   // The counter callback
   // - may cause the embedder to call into V8, which is not generally possible
   //   during GC.
@@ -5659,7 +5853,25 @@ void Isolate::CountUsage(v8::Isolate::UseCounterFeature feature, int count) {
   }
 }
 
-int Isolate::GetNextScriptId() { return heap()->NextScriptId(); }
+// Start disallowed script IDs at a value that won't conflict with regular IDs,
+// which start at one and increment from there.
+static const int kFirstDisallowedScriptId = 1 << 30;
+static int gNextDisallowedScriptId = kFirstDisallowedScriptId;
+
+bool RecordReplayIsDisallowedScriptId(int script_id) {
+  return script_id >= kFirstDisallowedScriptId;
+}
+
+int Isolate::GetNextScriptId() {
+  // Use a separate pool of IDs when events are disallowed, as these scripts
+  // won't be created at consistently when recording vs. replaying.
+  if (recordreplay::AreEventsDisallowed("Isolate::GetNextScriptId")) {
+    CHECK(IsMainThread());
+    return gNextDisallowedScriptId++;
+  }
+
+  return heap()->NextScriptId();
+}
 
 // static
 std::string Isolate::GetTurboCfgFileName(Isolate* isolate) {

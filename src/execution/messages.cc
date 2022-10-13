@@ -74,6 +74,9 @@ void MessageHandler::DefaultMessageReport(Isolate* isolate,
   }
 }
 
+extern Handle<Object>* gCurrentException;
+extern "C" uint64_t V8RecordReplayNewBookmark();
+
 Handle<JSMessageObject> MessageHandler::MakeMessageObject(
     Isolate* isolate, MessageTemplate message, const MessageLocation* location,
     Handle<Object> argument, Handle<FixedArray> stack_frames) {
@@ -96,9 +99,45 @@ Handle<JSMessageObject> MessageHandler::MakeMessageObject(
       stack_frames.is_null() ? Handle<Object>::cast(factory->undefined_value())
                              : Handle<Object>::cast(stack_frames);
 
+  // This code gets called when handling exceptions and
+  // |V8RecordReplayNewBookmark| might call into Replay's own JavaScript
+  // event/command handling code. We thus need to store current exception
+  // state, and then reset it after we have finished.
+  int record_replay_bookmark = 0;
+  if (!recordreplay::AreEventsDisallowed() && IsMainThread()) {
+    Handle<Object> exception;
+    if (isolate->has_pending_exception()) {
+      exception = Handle<Object>(isolate->pending_exception(), isolate);
+      isolate->clear_pending_exception();
+      gCurrentException = &exception;
+    }
+    Handle<Object> message;
+    if (isolate->has_pending_message()) {
+      message = Handle<Object>(isolate->pending_message(), isolate);
+      isolate->clear_pending_message();
+    }
+    Handle<Object> scheduledException;
+    if (isolate->has_scheduled_exception()) {
+      scheduledException = Handle<Object>(isolate->scheduled_exception(), isolate);
+      isolate->clear_scheduled_exception();
+    }
+    record_replay_bookmark = (int)V8RecordReplayNewBookmark();
+    gCurrentException = nullptr;
+    CHECK(!isolate->has_pending_exception());
+    if (!exception.is_null()) {
+      isolate->set_pending_exception(*exception);
+    }
+    if (!message.is_null()) {
+      isolate->set_pending_message(*message);
+    }
+    if (!scheduledException.is_null()) {
+      isolate->set_scheduled_exception(*scheduledException);
+    }
+  }
+
   Handle<JSMessageObject> message_obj = factory->NewJSMessageObject(
       message, argument, start, end, shared_info, bytecode_offset,
-      script_handle, stack_frames_handle);
+      script_handle, stack_frames_handle, record_replay_bookmark);
 
   return message_obj;
 }
@@ -406,7 +445,15 @@ MaybeHandle<Object> ErrorUtils::FormatStackTrace(Isolate* isolate,
     }
   }
 
-  return builder.Finish();
+  MaybeHandle<String> rv = builder.Finish();
+  if (recordreplay::IsRecordingOrReplaying("ErrorUtils::FormatStackTrace") &&
+      !recordreplay::AreEventsDisallowed()) {
+    // [PRO-1150] Replay Error.stack
+    std::string str = rv.ToHandleChecked()->ToCString().get();
+    recordreplay::RecordReplayString("ErrorUtils::FormatStackTrace", str);
+    rv = isolate->factory()->NewStringFromUtf8(base::CStrVector(str.c_str()));
+  }
+  return rv;
 }
 
 Handle<String> MessageFormatter::Format(Isolate* isolate, MessageTemplate index,
@@ -486,7 +533,16 @@ MaybeHandle<String> MessageFormatter::TryFormat(Isolate* isolate,
     }
   }
 
-  return builder.Finish();
+
+  MaybeHandle<String> rv = builder.Finish();
+  if (recordreplay::IsRecordingOrReplaying("MessageFormatter::Format") &&
+      !recordreplay::AreEventsDisallowed()) {
+    // [PRO-1150] Replay error messages.
+    std::string str = rv.ToHandleChecked()->ToCString().get();
+    recordreplay::RecordReplayString("MessageFormatter::Format", str);
+    rv = isolate->factory()->NewStringFromUtf8(base::CStrVector(str.c_str()));
+  }
+  return rv;
 }
 
 MaybeHandle<JSObject> ErrorUtils::Construct(Isolate* isolate,
@@ -729,6 +785,7 @@ bool ComputeLocation(Isolate* isolate, MessageLocation* target) {
     // information to get canonical location information.
     std::vector<FrameSummary> frames;
     it.frame()->Summarize(&frames);
+    CHECK(frames.size()); // There might not always be a frame due to RUN-1920.
     auto& summary = frames.back().AsJavaScript();
     Handle<SharedFunctionInfo> shared(summary.function()->shared(), isolate);
     Handle<Object> script(shared->script(), isolate);
@@ -1055,7 +1112,10 @@ MaybeHandle<Object> ErrorUtils::GetFormattedStack(
         FormatStackTrace(isolate, error_object,
                          handle(error_stack_data->call_site_infos(), isolate)),
         Object);
-    error_stack_data->set_formatted_stack(*formatted_stack);
+    if (!recordreplay::AreEventsDisallowed()) {
+      // [PRO-2368] Don't cache the formatted stack during replay-only invocations.
+      error_stack_data->set_formatted_stack(*formatted_stack);
+    }
     return formatted_stack;
   }
 
