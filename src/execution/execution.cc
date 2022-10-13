@@ -17,8 +17,18 @@
 #include "src/wasm/wasm-engine.h"
 #endif  // V8_ENABLE_WEBASSEMBLY
 
+extern "C" int V8RecordReplayDependencyGraphExecutionNode();
+
 namespace v8 {
 namespace internal {
+
+extern bool RecordReplayIsDivergentUserJSWithoutPause(const SharedFunctionInfo& shared);
+extern bool gRecordReplayIsRecordingOrReplaying;
+extern bool gRecordReplayHasCheckpoint;
+extern void RecordReplayBeforeInvoke(Isolate* isolate, Handle<JSFunction> function);
+extern uint64_t* gProgressCounter;
+extern bool gRecordReplayEnableDependencyGraph;
+extern std::string GetScriptName(Handle<Script> script);
 
 namespace {
 
@@ -273,9 +283,51 @@ MaybeHandle<Context> NewScriptContext(Isolate* isolate,
   return result;
 }
 
+static std::string GetFunctionScriptName(Isolate* isolate,
+                                         Handle<JSFunction> function) {
+  if (!function->shared().script().IsScript()) {
+    return "<not-script>";
+  }
+  Handle<Script> script(Script::cast(function->shared().script()), isolate);
+  return GetScriptName(script);
+}
+
+// Get a description of a function's location for logging etc.
+static std::string GetFunctionLocationInfo(Isolate* isolate, Handle<JSFunction> function) {
+  if (!function->shared().script().IsScript()) {
+    return "<not-script>";
+  }
+
+  Handle<Script> script(Script::cast(function->shared().script()), isolate);
+
+  Script::PositionInfo info;
+  Script::GetPositionInfo(script, function->shared().StartPosition(),
+                          &info, Script::OffsetFlag::kWithOffset);
+
+  std::ostringstream os;
+  os << "scriptId=" << (script.is_null() ? script->id() : -1);
+  os << " @" << GetFunctionScriptName(isolate, function) << ":"
+     << info.line + 1 << ":" << info.column;
+  return os.str();
+}
+
+// Block C++→JS entry that can run registered user JS while events are disallowed.
+static MaybeHandle<Object> RecordReplayBlockNonDeterministicUserJs(
+    Isolate* isolate, const char* kind, const std::string& detail) {
+  std::stringstream stack;
+  isolate->PrintCurrentStackTrace(stack);
+  recordreplay::Warning("NonDeterministicUserJSBlocked",
+                        {{"trigger", kind},
+                         {"progress", *gProgressCounter},
+                         {"detail", detail},
+                         {"jsStack", stack.str()}});
+  return isolate->factory()->undefined_value();
+}
+
 V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
                                                  const InvokeParams& params) {
   RCS_SCOPE(isolate, RuntimeCallCounterId::kInvoke);
+  RecordReplayScrubDivergentProgressScope scrub_divergent_progress;
   DCHECK(!params.receiver->IsJSGlobalObject());
   DCHECK_LE(params.argc, FixedArray::kMaxLength);
 
@@ -343,6 +395,21 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
       DCHECK(!params.IsScript());
     }
 #endif
+
+    if (recordreplay::IsReplaying() &&
+        IsMainThread() &&
+        gRecordReplayEnableDependencyGraph &&
+        !recordreplay::AreEventsDisallowed() &&
+        V8RecordReplayDependencyGraphExecutionNode() == 0 &&
+        function->shared().script().IsScript()) {
+      static bool show_warning = !!getenv("RECORD_REPLAY_WARN_MISSING_EXECUTION");
+      if (show_warning) {
+        std::string location = GetFunctionLocationInfo(isolate, function);
+        recordreplay::Warning("DependencyGraphMissingExecution",
+                              {{"location", location}});
+      }
+    }
+
     // Set up a ScriptContext when running scripts that need it.
     if (function->shared().needs_script_context()) {
       Handle<Context> context;
@@ -374,14 +441,47 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
     return MaybeHandle<Object>();
   }
   if (!DumpOnJavascriptExecution::IsAllowed(isolate)) {
-    V8::GetCurrentPlatform()->DumpWithoutCrashing();
+    if (recordreplay::IsRecordingOrReplaying()) {
+      std::string script_name =
+          params.target->IsJSFunction()
+              ? GetFunctionScriptName(
+                    isolate, Handle<JSFunction>::cast(params.target))
+              : "<non-function>";
+      std::string message =
+          "DisallowJavascriptExecution: blocked C++→JS entry "
+          "(DUMP_ON_FAILURE) " +
+          script_name;
+      recordreplay::Print("%s", message.c_str());
+      if (recordreplay::IsRecording()) {
+        recordreplay::Crash("%s", message.c_str());
+      }
+    } else {
+      V8::GetCurrentPlatform()->DumpWithoutCrashing();
+    }
     return isolate->factory()->undefined_value();
   }
+
+  // User JS must not run on divergent paths unless paused.
+  if (params.target->IsJSFunction()) {
+    Handle<JSFunction> function = Handle<JSFunction>::cast(params.target);
+    if (RecordReplayIsDivergentUserJSWithoutPause(function->shared())) {
+      return RecordReplayBlockNonDeterministicUserJs(
+          isolate, "JSInvoke", GetFunctionLocationInfo(isolate, function));
+    }
+  }
+
   isolate->IncrementJavascriptExecutionCounter();
 
   if (params.execution_target == Execution::Target::kCallable) {
     Handle<Context> context = isolate->native_context();
-    if (!context->script_execution_callback().IsUndefined(isolate)) {
+    if (!context->script_execution_callback().IsUndefined(isolate) &&
+        // Ignore the script execution callback entirely when recording/replaying.
+        // Non-deterministic behavior has been seen here for reasons not yet
+        // understood, and this callback is only used by chromium to prevent
+        // scripts from executing against windows in the backforward cache.
+        //
+        // See https://linear.app/replay/issue/TT-1029
+        !recordreplay::IsRecordingOrReplaying()) {
       v8::Context::AbortScriptExecutionCallback callback =
           v8::ToCData<v8::Context::AbortScriptExecutionCallback>(
               context->script_execution_callback());
