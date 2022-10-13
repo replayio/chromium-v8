@@ -668,6 +668,11 @@ namespace internal {
 #define FOR_EACH_INTRINSIC_WEAKREF(F, I)                             \
   F(JSFinalizationRegistryRegisterWeakCellWithUnregisterToken, 4, 1) \
   F(JSWeakRefAddToKeptObjects, 1, 1)                                 \
+  F(RecordReplayFinalizationRegistryConstruct, 1, 1)                 \
+  F(RecordReplayFinalizationRegistryNextCell, 1, 1)                  \
+  F(RecordReplayFinalizationRegistryRegister, 2, 1)                  \
+  F(RecordReplayWeakRefConstruct, 1, 1)                              \
+  F(RecordReplayWeakRefDeref, 1, 1)                                  \
   F(ShrinkFinalizationRegistryUnregisterTokenMap, 1, 1)
 
 #define FOR_EACH_INTRINSIC_RETURN_PAIR_IMPL(F, I) \
@@ -939,6 +944,7 @@ enum class OptimizationStatus {
   kBaseline = 1 << 15,
   kTopmostFrameIsInterpreted = 1 << 16,
   kTopmostFrameIsBaseline = 1 << 17,
+  kIsLazy = 1 << 18,
 };
 
 }  // namespace internal
