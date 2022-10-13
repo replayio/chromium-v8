@@ -395,7 +395,13 @@ DebuggableStackFrameIterator::DebuggableStackFrameIterator(Isolate* isolate)
 DebuggableStackFrameIterator::DebuggableStackFrameIterator(Isolate* isolate,
                                                            StackFrameId id)
     : DebuggableStackFrameIterator(isolate) {
-  while (!done() && frame()->id() != id) Advance();
+  if (id == NO_ID) {
+    // Support stack trace iteration when stopped by the Record Replay driver,
+    // where there is no break frame.
+    if (!done() && !IsValidFrame(iterator_.frame())) Advance();
+  } else {
+    while (!done() && frame()->id() != id) Advance();
+  }
 }
 
 void DebuggableStackFrameIterator::Advance() {
@@ -3166,6 +3172,15 @@ FrameSummaries OptimizedJSFrame::Summarize() const {
     }
 
     CHECK(data.is_null());
+
+    if (recordreplay::IsRecordingOrReplaying()) {
+      // Replay workaround: Sometimes, DeoptimizationData could not be found for an unknown reason.
+      // → Let this be a no-op instead of a crash.
+      recordreplay::Warning("MissingOptimizedFrameDeoptimizationData");
+      // Summarize returns FrameSummaries from V8 13.3 (it took an out-vector
+      // before), so the no-op is an empty result rather than a bare return.
+      return {};
+    }
     FATAL(
         "Missing deoptimization information for OptimizedJSFrame::Summarize.");
   }
