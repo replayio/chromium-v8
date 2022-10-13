@@ -5,10 +5,13 @@
 #include "src/debug/debug.h"
 
 #include <memory>
+#include <string>
+#include <unordered_map>
 #include <unordered_set>
 
 #include "src/api/api-inl.h"
 #include "src/base/platform/mutex.h"
+#include "src/base/replayio.h"
 #include "src/builtins/builtins.h"
 #include "src/codegen/compilation-cache.h"
 #include "src/codegen/compiler.h"
@@ -39,6 +42,8 @@
 #include "src/wasm/wasm-debug.h"
 #include "src/wasm/wasm-objects-inl.h"
 #endif  // V8_ENABLE_WEBASSEMBLY
+
+#include "src/objects/js-collection-inl.h"
 
 namespace v8 {
 namespace internal {
@@ -3057,5 +3062,171 @@ void Debug::NotifyDebuggerPausedEventSent() {
       scope->ElapsedTimeSinceCreation());
 }
 
+bool RecordReplayHasRegisteredScript(Script script);
+
+typedef std::unordered_set<int> ScriptIdSet;
+static ScriptIdSet* gRegisteredScripts;
+
+bool RecordReplayHasRegisteredScript(Script script) {
+  return IsMainThread() &&
+    gRegisteredScripts &&
+    gRegisteredScripts->find(script.id()) != gRegisteredScripts->end();
+}
+
+// Whether we are divergently calling into user JS without having paused first.
+bool RecordReplayIsDivergentUserJSWithoutPause(
+    const SharedFunctionInfo& shared) {
+  return replayio::MustNotRunUserJS() && shared.script().IsScript() &&
+         RecordReplayHasRegisteredScript(
+             Script::cast(shared.script()));
+}
+
+// Embedder callback for JS of an instrumented script about to run before the
+// first checkpoint, with the context of the function about to run. The embedder can start the
+// recording there, before that JS runs (see RecordReplayBeforeInvoke).
+typedef void (*RecordReplayInstrumentedScriptCallback)(
+    v8::Isolate* isolate, v8::Local<v8::Context> context);
+namespace {
+
+// Bypass Trusted Types for runtime-owned command evals.
+// Same approach as V8 Inspector InjectedScript::Scope::allowCodeGenerationFromStrings:
+// AllowCodeGenerationFromStrings(true) short-circuits before the TT callback.
+// Must target native_context: CompileGlobalEval validates against that, and
+// allow_code_gen_from_strings accessors DCHECK(IsNativeContext()).
+struct AutoAllowCodeGenerationFromStrings {
+  Handle<Context> context_;
+  bool need_restore_;
+
+  explicit AutoAllowCodeGenerationFromStrings(Isolate* isolate)
+      : context_(handle(isolate->context().native_context(), isolate)),
+        need_restore_(
+            context_->allow_code_gen_from_strings().IsFalse(isolate)) {
+    if (need_restore_) {
+      context_->set_allow_code_gen_from_strings(
+          ReadOnlyRoots(isolate).true_value());
+    }
+  }
+
+  ~AutoAllowCodeGenerationFromStrings() {
+    if (need_restore_) {
+      context_->set_allow_code_gen_from_strings(
+          ReadOnlyRoots(context_->GetIsolate()).false_value());
+    }
+  }
+};
+
+}  // namespace
+
+// When assertions are used we assign an ID to each object that is ever
+// encountered in one, so that we can determine whether consistent objects
+// are used when replaying.
+struct ContextObjectIdMap {
+  v8::Global<v8::Context> context_;
+  v8::Global<v8::Value> object_ids_;
+};
+typedef std::vector<ContextObjectIdMap> ContextObjectIdMapVector;
+static ContextObjectIdMapVector* gRecordReplayObjectIds;
+
+static Local<v8::Value> GetObjectIdMapForContext(v8::Isolate* v8_isolate, Local<v8::Context> cx) {
+  Isolate* isolate = (Isolate*)v8_isolate;
+
+  if (!gRecordReplayObjectIds) {
+    gRecordReplayObjectIds = new ContextObjectIdMapVector();
+  }
+
+  for (const auto& entry : *gRecordReplayObjectIds) {
+    if (entry.context_ == cx) {
+      return entry.object_ids_.Get(v8_isolate);
+    }
+  }
+
+  Handle<Object> object_ids = isolate->factory()->NewJSWeakMap();
+
+  ContextObjectIdMap new_entry;
+  new_entry.context_.Reset(v8_isolate, cx);
+  new_entry.object_ids_.Reset(v8_isolate, v8::Utils::ToLocal(object_ids));
+  gRecordReplayObjectIds->push_back(std::move(new_entry));
+  return gRecordReplayObjectIds->back().object_ids_.Get(v8_isolate);
+}
+
+extern bool gRecordReplayAssertTrackedObjects;
+extern int (*gGetAPIObjectIdCallback)(v8::Local<v8::Object> object);
+
+static int gNextObjectId = 1;
+
+int RecordReplayObjectId(v8::Isolate* v8_isolate, v8::Local<v8::Context> cx,
+                         v8::Local<v8::Value> v8_object, bool allow_create) {
+  CHECK(IsMainThread());
+
+  if (!v8_object->IsObject()) {
+    return 0;
+  }
+
+  if (gGetAPIObjectIdCallback) {
+    // Check for Blink objects.
+    int api_id = gGetAPIObjectIdCallback(v8_object.As<v8::Object>());
+    if (api_id) {
+      return api_id;
+    }
+  }
+
+  Isolate* isolate = (Isolate*)v8_isolate;
+  Handle<Object> object = Utils::OpenHandle(*v8_object);
+
+  // Look through all weak maps we've created, the object might not be associated
+  // with the current context.
+  if (gRecordReplayObjectIds) {
+    for (const auto& entry : *gRecordReplayObjectIds) {
+      Local<v8::Value> object_ids_val = entry.object_ids_.Get(v8_isolate);
+      Handle<JSWeakMap> object_ids = Handle<JSWeakMap>::cast(Utils::OpenHandle(*object_ids_val));
+
+      Handle<Object> existing(EphemeronHashTable::cast(object_ids->table()).Lookup(object), isolate);
+      if (!existing->IsTheHole(isolate)) {
+        v8::Local<v8::Value> id_value = v8::Utils::ToLocal(existing);
+        if (id_value->IsInt32()) {
+          int id = id_value.As<v8::Int32>()->Value();
+          if (gRecordReplayAssertTrackedObjects) {
+            recordreplay::AssertMaybeEventsDisallowed("JS ReuseObjectId %d", id);
+          }
+          return id;
+        }
+      }
+    }
+  }
+
+  if (!allow_create) {
+    return 0;
+  }
+
+  int id = gNextObjectId++;
+
+  if (gRecordReplayAssertTrackedObjects) {
+    recordreplay::AssertMaybeEventsDisallowed("JS NewObjectId %d", id);
+  }
+
+  Local<Value> id_value = v8::Integer::New(v8_isolate, id);
+
+  int32_t hash = object->GetOrCreateHash(isolate).value();
+
+  Local<v8::Value> object_ids_val = GetObjectIdMapForContext(v8_isolate, cx);
+  Handle<JSWeakMap> object_ids = Handle<JSWeakMap>::cast(Utils::OpenHandle(*object_ids_val));
+  JSWeakCollection::Set(object_ids, object, Utils::OpenHandle(*id_value), hash);
+
+  return id;
+}
+
+inline int HashBytes(const void* aPtr, size_t aSize) {
+  int hash = 0;
+  uint8_t* ptr = (uint8_t*)aPtr;
+  for (size_t i = 0; i < aSize; i++) {
+    hash = (((hash << 5) - hash) + ptr[i]) | 0;
+  }
+  return hash;
+}
+
+int (*gGetAPIObjectIdCallback)(v8::Local<v8::Object> object);
+
 }  // namespace internal
+namespace i = internal;
+
 }  // namespace v8
