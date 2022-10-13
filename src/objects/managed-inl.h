@@ -21,6 +21,7 @@ static void Destructor(void* ptr) {
   // references on their own threads, which nothing orders with this one,
   // so the count differs when replaying.
   recordreplay::Assert("Managed::Destructor");
+  if (*shared_ptr_ptr) OnManagedRemoved(shared_ptr_ptr->get());
   delete shared_ptr_ptr;
 }
 }  // namespace detail
@@ -34,6 +35,7 @@ Handle<Managed<CppType>> Managed<CppType>::From(
   static_assert(IsManagedExternalPointerType(kTag));
   reinterpret_cast<v8::Isolate*>(isolate)
       ->AdjustAmountOfExternalAllocatedMemory(estimated_size);
+  if (shared_ptr) OnManagedAdded(shared_ptr.get());
   auto destructor = new ManagedPtrDestructor(
       estimated_size, new std::shared_ptr<CppType>{std::move(shared_ptr)},
       detail::Destructor<CppType>);
@@ -56,6 +58,12 @@ Handle<TrustedManaged<CppType>> TrustedManaged<CppType>::From(
     std::shared_ptr<CppType> shared_ptr) {
   reinterpret_cast<v8::Isolate*>(isolate)
       ->AdjustAmountOfExternalAllocatedMemory(estimated_size);
+  // Both {Managed} and {TrustedManaged} register detail::Destructor<CppType>,
+  // which removes the holder, so both have to add it: a wasm instance holds its
+  // NativeModule through one of each (WasmModuleObject's {Managed} and
+  // WasmTrustedInstanceData's {TrustedManaged}, new in V8 12.8), and the
+  // cache's holder count has to match.
+  if (shared_ptr) OnManagedAdded(shared_ptr.get());
   auto destructor = new ManagedPtrDestructor(
       estimated_size, new std::shared_ptr<CppType>{std::move(shared_ptr)},
       detail::Destructor<CppType>);
