@@ -87,6 +87,8 @@ void AllocationCounter::InvokeAllocationObservers(Address soon_object,
     return;
   }
 
+  replayio::AutoDisallowEvents disallow("AllocationCounter::InvokeAllocationObservers");
+
   DCHECK(!step_in_progress_);
   DCHECK_GE(aligned_object_size, next_counter_ - current_counter_);
   DCHECK(soon_object);

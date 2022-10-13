@@ -96,6 +96,10 @@ class StatsCounter;
 
 #define EXTERNAL_REFERENCE_LIST(V)                                             \
   V(abort_with_reason, "abort_with_reason")                                    \
+  V(record_replay_progress_counter, "record_replay_progress_counter")          \
+  V(record_replay_target_progress, "record_replay_target_progress")            \
+  V(record_replay_is_recording_or_replaying,                                   \
+    "record_replay_is_recording_or_replaying")                                 \
   V(address_of_log_or_trace_osr, "v8_flags.log_or_trace_osr")                  \
   V(address_of_FLAG_harmony_regexp_unicode_sets,                               \
     "v8_flags.harmony_regexp_unicode_sets")                                    \
