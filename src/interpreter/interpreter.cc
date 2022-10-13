@@ -296,8 +296,10 @@ InterpreterCompilationJob::Status InterpreterCompilationJob::DoFinalizeJobImpl(
   if (parse_info()->literal()->shared_function_info().is_null()) {
     parse_info()->literal()->set_shared_function_info(shared_info);
   }
-  CheckAndPrintBytecodeMismatch(
-      isolate, handle(Cast<Script>(shared_info->script()), isolate), bytecodes);
+  // Record/replay instrumentation site indexes will differ when scripts
+  // are recompiled.
+  //CheckAndPrintBytecodeMismatch(
+  //    isolate, handle(Cast<Script>(shared_info->script()), isolate), bytecodes);
 #endif
 
   return SUCCEEDED;
