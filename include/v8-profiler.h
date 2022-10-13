@@ -320,7 +320,10 @@ enum CpuProfilingLoggingMode {
 enum class CpuProfilingStatus {
   kStarted,
   kAlreadyStarted,
-  kErrorTooManyProfilers
+  kErrorTooManyProfilers,
+  // Profiling is unavailable while recording or replaying (Replay feature
+  // "no-cpu-profiler").
+  kErrorNotSupported
 };
 
 /**
