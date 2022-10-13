@@ -1463,6 +1463,7 @@ extern macro IsPromiseSpeciesProtectorCellInvalid(): bool;
 extern macro IsMockArrayBufferAllocatorFlag(): bool;
 extern macro HasBuiltinSubclassingFlag(): bool;
 extern macro IsScriptContextMutableHeapNumberFlag(): bool;
+extern macro IsRecordingOrReplaying(): bool;
 extern macro IsScriptContextMutableHeapInt32Flag(): bool;
 extern macro IsPrototypeTypedArrayPrototype(
     implicit context: Context)(Map): bool;
