@@ -488,6 +488,7 @@ Tagged<Boolean> Heap::ToBoolean(bool condition) {
 }
 
 int Heap::NextScriptId() {
+  recordreplay::OrderedLock(script_ordered_lock_id_);
   FullObjectSlot last_script_id_slot(&roots_table()[RootIndex::kLastScriptId]);
   Smi last_id = Smi::cast(last_script_id_slot.Relaxed_Load());
   Smi new_id, last_id_before_cas;
@@ -508,6 +509,8 @@ int Heap::NextScriptId() {
         Smi::cast(last_script_id_slot.Relaxed_CompareAndSwap(last_id, new_id));
   } while (last_id != last_id_before_cas);
 
+  recordreplay::OrderedUnlock(script_ordered_lock_id_);
+  recordreplay::Assert("Heap::NextScriptId %d", new_id.value());
   return new_id.value();
 }
 
