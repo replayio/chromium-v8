@@ -284,6 +284,11 @@ InfoCellPair CompilationCache::LookupEval(Handle<String> source,
   InfoCellPair result;
   if (!IsEnabledScriptAndEval()) return result;
 
+  // Evaluations aren't cached when recording/replaying because new sources
+  // will not be generated on a cache hit, and sources need to be generated
+  // at deterministic points.
+  if (recordreplay::IsRecordingOrReplaying("no-eval-cache")) return result;
+
   const char* cache_type;
 
   DirectHandle<NativeContext> native_context;
@@ -293,7 +298,7 @@ InfoCellPair CompilationCache::LookupEval(Handle<String> source,
     cache_type = "eval-global";
 
   } else {
-    DCHECK_NE(position, kNoSourcePosition);
+    //DCHECK_NE(position, kNoSourcePosition);
     DirectHandle<NativeContext> native_context(context->native_context(),
                                                isolate());
     result = eval_contextual_.Lookup(source, outer_info, native_context,
@@ -330,6 +335,8 @@ void CompilationCache::PutEval(Handle<String> source,
                                int position) {
   if (!IsEnabledScriptAndEval()) return;
 
+  if (recordreplay::IsRecordingOrReplaying("no-eval-cache")) return;
+
   const char* cache_type;
   HandleScope scope(isolate());
   DirectHandle<NativeContext> native_context;
@@ -338,7 +345,7 @@ void CompilationCache::PutEval(Handle<String> source,
                      feedback_cell, position);
     cache_type = "eval-global";
   } else {
-    DCHECK_NE(position, kNoSourcePosition);
+    //DCHECK_NE(position, kNoSourcePosition);
     DirectHandle<NativeContext> native_context(context->native_context(),
                                                isolate());
     eval_contextual_.Put(source, outer_info, function_info, native_context,
