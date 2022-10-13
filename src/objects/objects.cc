@@ -134,6 +134,8 @@
 #include "src/objects/js-segments.h"
 #endif  // V8_INTL_SUPPORT
 
+#include "src/base/replayio.h"
+
 namespace v8::internal {
 
 ShouldThrow GetShouldThrow(Isolate* isolate, Maybe<ShouldThrow> should_throw) {
@@ -1777,6 +1779,12 @@ bool Object::IsCodeLike(Tagged<Object> obj, Isolate* isolate) {
 }
 
 void ShortPrint(Tagged<Object> obj, FILE* out) {
+  if (recordreplay::AreEventsDisallowed()) {
+    std::ostringstream os;
+    os << Brief(obj);
+    recordreplay::Print("[Object::ShortPrint] %s", os.str().c_str());
+    return;
+  }
   OFStream os(out);
   os << Brief(obj);
 }
@@ -4839,6 +4847,9 @@ const char* JSPromise::Status(v8::Promise::PromiseState status) {
   UNREACHABLE();
 }
 
+extern bool RecordReplayShouldCallOnPromiseHook();
+void AddPromiseDependencyGraphAdoption(Isolate* isolate, Handle<Object> promise, Handle<Object> adoption);
+
 // static
 Handle<Object> JSPromise::Fulfill(DirectHandle<JSPromise> promise,
                                   DirectHandle<Object> value) {
@@ -4918,7 +4929,8 @@ Handle<Object> JSPromise::Reject(Handle<JSPromise> promise,
   // 7. If promise.[[PromiseIsHandled]] is false, perform
   //    HostPromiseRejectionTracker(promise, "reject").
   if (!promise->has_handler()) {
-    isolate->ReportPromiseReject(promise, reason, kPromiseRejectWithNoHandler);
+    isolate->ReportPromiseReject(promise, reason,
+                                 kPromiseRejectWithNoHandler);
   }
 
   // 8. Return TriggerPromiseReactions(reactions, reason).
