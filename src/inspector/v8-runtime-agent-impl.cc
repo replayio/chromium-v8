@@ -55,6 +55,9 @@
 #include "src/inspector/v8-value-utils.h"
 #include "src/tracing/trace-event.h"
 
+#include "replayio.h"
+#include "src/base/replayio.h"
+
 namespace v8_inspector {
 
 namespace V8RuntimeAgentImplState {
@@ -234,8 +237,13 @@ Response ensureContext(V8InspectorImpl* inspector, int contextGroupId,
     v8::HandleScope handles(inspector->isolate());
     v8::Local<v8::Context> defaultContext =
         inspector->client()->ensureDefaultContextInGroup(contextGroupId);
-    if (defaultContext.IsEmpty())
+    if (defaultContext.IsEmpty()) {
+      if (v8::recordreplay::IsInReplayCode("InjectedScript::bindRemoteObjectIfNeeded")) {
+        v8::recordreplay::Warning("InspectorDefaultContextNotFound",
+                                  {{"contextGroupId", contextGroupId}});
+      }
       return Response::ServerError("Cannot find default execution context");
+    }
     *contextId = InspectedContext::contextId(defaultContext);
   }
 
@@ -314,7 +322,8 @@ V8RuntimeAgentImpl::V8RuntimeAgentImpl(
       m_frontend(FrontendChannel),
       m_inspector(session->inspector()),
       m_debuggerBarrier(debuggerBarrier),
-      m_enabled(false) {}
+      m_enabled(false),
+      m_replay_owned(session->replayOwned()) {}
 
 V8RuntimeAgentImpl::~V8RuntimeAgentImpl() = default;
 
@@ -527,6 +536,8 @@ Response V8RuntimeAgentImpl::getProperties(
     const String16& objectId, Maybe<bool> ownProperties,
     Maybe<bool> accessorPropertiesOnly, Maybe<bool> generatePreview,
     Maybe<bool> nonIndexedPropertiesOnly,
+    Maybe<protocol::Runtime::KeyIterationIndex> pageSize,
+    Maybe<protocol::Runtime::KeyIterationIndex> pageIndex,
     std::unique_ptr<protocol::Array<protocol::Runtime::PropertyDescriptor>>*
         result,
     Maybe<protocol::Array<protocol::Runtime::InternalPropertyDescriptor>>*
@@ -555,10 +566,12 @@ Response V8RuntimeAgentImpl::getProperties(
                      false /* generateWebDriverValue */, &wrapOptions);
   if (!response.IsSuccess()) return response;
 
+  v8::KeyIterationParams params(pageSize.fromMaybe(0), pageIndex.fromMaybe(0));
+
   response = scope.injectedScript()->getProperties(
       object, scope.objectGroupName(), ownProperties.fromMaybe(false),
       accessorPropertiesOnly.fromMaybe(false),
-      nonIndexedPropertiesOnly.fromMaybe(false), *wrapOptions.get(), result,
+      nonIndexedPropertiesOnly.fromMaybe(false), *wrapOptions.get(), &params, result,
       exceptionDetails);
   if (!response.IsSuccess()) return response;
   if (exceptionDetails->isJust()) return Response::Success();
@@ -567,7 +580,7 @@ Response V8RuntimeAgentImpl::getProperties(
   std::unique_ptr<protocol::Array<PrivatePropertyDescriptor>>
       privatePropertiesProtocolArray;
   response = scope.injectedScript()->getInternalAndPrivateProperties(
-      object, scope.objectGroupName(), accessorPropertiesOnly.fromMaybe(false),
+      object, scope.objectGroupName(), accessorPropertiesOnly.fromMaybe(false), &params,
       &internalPropertiesProtocolArray, &privatePropertiesProtocolArray);
   if (!response.IsSuccess()) return response;
   if (!internalPropertiesProtocolArray->empty())
@@ -912,6 +925,11 @@ void V8RuntimeAgentImpl::addBinding(InspectedContext* context,
   }
   v8::HandleScope handles(m_inspector->isolate());
   v8::Local<v8::Context> localContext = context->context();
+  if (localContext.IsEmpty()) {
+    v8::recordreplay::Warning("InspectorAddBindingEmptyContext",
+                              {{"contextId", context->contextId()}});
+    return;
+  }
   v8::Local<v8::Object> global = localContext->Global();
   v8::Local<v8::String> v8Name = toV8String(m_inspector->isolate(), name);
   v8::Local<v8::Value> functionValue;
@@ -976,6 +994,7 @@ Response V8RuntimeAgentImpl::getExceptionDetails(
 void V8RuntimeAgentImpl::bindingCalled(const String16& name,
                                        const String16& payload,
                                        int executionContextId) {
+
   if (!m_activeBindings.count(name)) return;
   m_frontend.bindingCalled(name, payload, executionContextId);
   m_frontend.flush();
@@ -1002,8 +1021,13 @@ void V8RuntimeAgentImpl::addBindings(InspectedContext* context) {
 }
 
 void V8RuntimeAgentImpl::restore() {
-  if (!m_state->booleanProperty(V8RuntimeAgentImplState::runtimeEnabled, false))
-    return;
+  v8::replayio::AutoMaybeMarkReplayCode mark(m_replay_owned);
+  v8::replayio::AutoMaybeDisallowEvents disallow(
+      m_replay_owned, m_inspector->isolate(), "V8RuntimeAgentImpl::restore");
+
+  int runtimeEnabled = m_state->booleanProperty(
+      V8RuntimeAgentImplState::runtimeEnabled, false);
+  if (!runtimeEnabled) return;
   m_frontend.executionContextsCleared();
   enable();
   if (m_state->booleanProperty(
@@ -1031,9 +1055,9 @@ Response V8RuntimeAgentImpl::enable() {
   m_state->setBoolean(V8RuntimeAgentImplState::runtimeEnabled, true);
   m_inspector->debugger()->setMaxCallStackSizeToCapture(
       this, V8StackTraceImpl::kDefaultMaxCallStackSizeToCapture);
-  m_session->reportAllContexts(this);
   V8ConsoleMessageStorage* storage =
       m_inspector->ensureConsoleMessageStorage(m_session->contextGroupId());
+  m_session->reportAllContexts(this);
   for (const auto& message : storage->messages()) {
     if (!reportMessage(message.get(), false)) break;
   }
@@ -1060,6 +1084,7 @@ Response V8RuntimeAgentImpl::disable() {
 }
 
 void V8RuntimeAgentImpl::reset() {
+
   m_compiledScripts.clear();
   if (m_enabled) {
     int sessionId = m_session->sessionId();
@@ -1073,6 +1098,7 @@ void V8RuntimeAgentImpl::reset() {
 
 void V8RuntimeAgentImpl::reportExecutionContextCreated(
     InspectedContext* context) {
+
   if (!m_enabled) return;
   context->setReported(m_session->sessionId(), true);
   std::unique_ptr<protocol::Runtime::ExecutionContextDescription> description =
@@ -1095,6 +1121,7 @@ void V8RuntimeAgentImpl::reportExecutionContextCreated(
 
 void V8RuntimeAgentImpl::reportExecutionContextDestroyed(
     InspectedContext* context) {
+
   if (m_enabled && context->isReported(m_session->sessionId())) {
     context->setReported(m_session->sessionId(), false);
     m_frontend.executionContextDestroyed(context->contextId(),
@@ -1105,19 +1132,22 @@ void V8RuntimeAgentImpl::reportExecutionContextDestroyed(
 void V8RuntimeAgentImpl::inspect(
     std::unique_ptr<protocol::Runtime::RemoteObject> objectToInspect,
     std::unique_ptr<protocol::DictionaryValue> hints, int executionContextId) {
+
   if (m_enabled)
     m_frontend.inspectRequested(std::move(objectToInspect), std::move(hints),
                                 executionContextId);
 }
 
 void V8RuntimeAgentImpl::messageAdded(V8ConsoleMessage* message) {
-  if (m_enabled) reportMessage(message, true);
+  if (m_enabled) reportMessage(message, /*generatePreview=*/!m_replay_owned);
 }
 
 bool V8RuntimeAgentImpl::reportMessage(V8ConsoleMessage* message,
                                        bool generatePreview) {
+
   message->reportToFrontend(&m_frontend, m_session, generatePreview);
   m_frontend.flush();
+
   return m_inspector->hasConsoleMessageStorage(m_session->contextGroupId());
 }
 }  // namespace v8_inspector
