@@ -14,6 +14,8 @@
 #include "include/v8-microtask-queue.h"
 #include "src/base/macros.h"
 
+#include "include/v8.h"  // For replay.
+
 #ifdef V8_CPPGC_MICROTASK_QUEUE
 namespace cppgc {
 class Visitor;
@@ -63,6 +65,11 @@ class V8_EXPORT_PRIVATE MicrotaskQueue final : public v8::MicrotaskQueue {
                         v8::MicrotaskCallbackWithData callback,
                         v8::Local<v8::Data> data) override;
   void PerformCheckpoint(v8::Isolate* isolate) override {
+    v8::recordreplay::AssertMaybeEventsDisallowed(
+      "MicrotaskQueue::PerformCheckpoint %d",
+      ShouldPerfomCheckpoint()
+    );
+
     if (!ShouldPerfomCheckpoint()) return;
     PerformCheckpointInternal(isolate);
   }
