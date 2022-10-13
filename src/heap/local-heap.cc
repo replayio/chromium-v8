@@ -82,6 +82,8 @@ LocalHeap::LocalHeap(Heap* heap, ThreadKind kind,
 }
 
 LocalHeap::~LocalHeap() {
+  recordreplay::Diagnostic("LocalHeap Destroy %p", this);
+
   // Park thread since removing the local heap could block.
   EnsureParkedBeforeDestruction();
 
@@ -268,6 +270,8 @@ void LocalHeap::ParkSlowPath() {
 }
 
 void LocalHeap::UnparkSlowPath() {
+  replayio::AutoDisallowEvents disallow("LocalHeap::UnparkSlowPath");
+
   while (true) {
     ThreadState current_state = ThreadState::Parked();
     if (state_.CompareExchangeStrong(current_state, ThreadState::Running()))
@@ -328,6 +332,8 @@ void LocalHeap::EnsureParkedBeforeDestruction() {
 }
 
 void LocalHeap::SafepointSlowPath() {
+  replayio::AutoDisallowEvents disallow("LocalHeap::SafepointSlowPath");
+
   ThreadState current_state = state_.load_relaxed();
   DCHECK(current_state.IsRunning());
 
@@ -435,6 +441,8 @@ void LocalHeap::UnmarkSharedLinearAllocationArea() {
 AllocationResult LocalHeap::PerformCollectionAndAllocateAgain(
     int object_size, AllocationType type, AllocationOrigin origin,
     AllocationAlignment alignment) {
+  replayio::AutoDisallowEvents disallow("LocalHeap::PerformCollectionAndAllocateAgain");
+
   // All allocation tries in this method should have this flag enabled.
   CHECK(!allocation_failed_);
   allocation_failed_ = true;
