@@ -107,6 +107,8 @@ domain Debugger
       # Deprecated in favor of using the `location.scriptId` to resolve the URL via a previously
       # sent `Debugger.scriptParsed` event.
       deprecated string url
+      # Execution context associated with this frame.
+      Runtime.ExecutionContextId contextId
       # Scope chain for this call frame.
       array of Scope scopeChain
       # `this` object for this call frame.
@@ -560,6 +562,28 @@ domain Debugger
       BreakpointId breakpointId
       # Actual breakpoint location.
       Location location
+
+  command getCallFrames
+    parameters
+      # Maximum number of frames to return.
+      optional integer maxFrames
+      # Don't generate scopes or "this" object for returned frames.
+      optional boolean noContents
+      # Symbolic group name that can be used to release multiple objects.
+      optional string objectGroup
+    returns
+      array of CallFrame callFrames
+
+  command getTopFrameLocation
+    returns
+      optional Location location
+
+  command getPendingException
+    parameters
+      # Symbolic group name that can be used to release multiple objects.
+      optional string objectGroup
+    returns
+      optional Runtime.RemoteObject exception
 
   # Fired when the virtual machine stopped on breakpoint or exception or any other stop criteria.
   event paused
@@ -1100,6 +1124,8 @@ domain Runtime
       experimental optional WebDriverValue webDriverValue
       # Unique object identifier (for non-primitive values).
       optional RemoteObjectId objectId
+      # Any available persistent object identifier when recording/replaying.
+      optional string persistentId
       # Preview containing abbreviated property values. Specified for `object` type values only.
       experimental optional ObjectPreview preview
       experimental optional CustomPreview customPreview
@@ -1522,6 +1548,8 @@ domain Runtime
       # Allocated heap size in bytes.
       number totalSize
 
+  type KeyIterationIndex extends integer
+
   # Returns properties of a given object. Object group of the result is inherited from the target
   # object.
   command getProperties
@@ -1538,6 +1566,10 @@ domain Runtime
       experimental optional boolean generatePreview
       # If true, returns non-indexed properties only.
       experimental optional boolean nonIndexedPropertiesOnly
+      # If > 0, returns up to `pageSize` properties only.
+      optional KeyIterationIndex pageSize
+      # If pageIndex > 0 and pageSize > 0, returns properties starting at pageIndex * pageSize.
+      optional KeyIterationIndex pageIndex
     returns
       # Object properties.
       array of PropertyDescriptor result
