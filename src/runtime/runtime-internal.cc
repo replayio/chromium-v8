@@ -185,6 +185,7 @@ RUNTIME_FUNCTION(Runtime_ThrowInvalidTypedArrayAlignment) {
                              problem_string, type, element_size));
 }
 
+extern uint64_t* gProgressCounter;
 RUNTIME_FUNCTION(Runtime_UnwindAndFindExceptionHandler) {
   SealHandleScope shs(isolate);
   DCHECK_EQ(0, args.length());
