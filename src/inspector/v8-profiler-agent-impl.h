@@ -14,6 +14,7 @@
 
 namespace v8 {
 class CpuProfiler;
+enum class CpuProfilingStatus;
 class Isolate;
 }  // namespace v8
 
@@ -33,6 +34,7 @@ class V8ProfilerAgentImpl : public protocol::Profiler::Backend {
   V8ProfilerAgentImpl& operator=(const V8ProfilerAgentImpl&) = delete;
 
   bool enabled() const { return m_enabled; }
+  bool replayOwned() const { return m_replay_owned; }
   void restore();
 
   Response enable() override;
@@ -61,9 +63,10 @@ class V8ProfilerAgentImpl : public protocol::Profiler::Backend {
  private:
   String16 nextProfileId();
 
-  void startProfiling(const String16& title);
+  v8::CpuProfilingStatus startProfiling(const String16& title);
   std::unique_ptr<protocol::Profiler::Profile> stopProfiling(
       const String16& title, bool serialize);
+  void disposeProfilerIfUnused();
 
   V8InspectorSessionImpl* m_session;
   v8::Isolate* m_isolate;
@@ -71,6 +74,7 @@ class V8ProfilerAgentImpl : public protocol::Profiler::Backend {
   protocol::DictionaryValue* m_state;
   protocol::Profiler::Frontend m_frontend;
   bool m_enabled = false;
+  bool m_replay_owned = false;
   bool m_recordingCPUProfile = false;
   class ProfileDescriptor;
   std::vector<ProfileDescriptor> m_startedProfiles;
