@@ -200,6 +200,16 @@ Tagged<HeapObject> HeapAllocator::AllocateRawSlowPath(
     AllocationRetryMode retry_mode, int size, AllocationType allocation,
     AllocationOrigin origin, AllocationAlignment alignment,
     AllocationHint hint) {
+  // V8 12.7 moved the allocation-failure retry loop out of
+  // LocalHeap::PerformCollectionAndAllocateAgain, which this scope used to
+  // bracket: a thread that fails to allocate requests a GC from the main
+  // thread and waits for it, and events must not run while it does. V8 13.5
+  // moved it into templated overloads, and V8 14.3 collapsed those into this
+  // one non-template slow path -- so the two scopes that used to sit in
+  // AllocateRawWith{LightRetry,RetryOrFail}SlowPath are this single scope,
+  // which brackets both retry modes and exactly the paths they did.
+  replayio::AutoDisallowEvents disallow("HeapAllocator::AllocateRawSlowPath");
+
   AllocationResult result;
   auto allocate = [&result, size, allocation, origin, alignment, hint, this]() {
     // Initially flags on the LocalHeap are always disabled. They are only
@@ -511,6 +521,15 @@ bool HeapAllocator::RetryCustomAllocate(CustomAllocationFunction allocate,
 void HeapAllocator::RetryCustomAllocateOrFail(
     CustomAllocationFunction allocate, AllocationType allocation,
     GarbageCollectionReason gc_reason) {
+  // The third entry point into the retry logic, added in V8 13.5 and reached
+  // off the main thread: FactoryBase<LocalFactory>::NewJSDispatchHandle, from
+  // background code-cache deserialization (src/heap/factory-base.cc). It was
+  // CustomAllocateWithRetryOrFail in heap-allocator-inl.h until V8 14.3
+  // renamed and un-templated it to here; same reason as the slow path above.
+  // See defect DV8-011.
+  replayio::AutoDisallowEvents disallow(
+      "HeapAllocator::RetryCustomAllocateOrFail");
+
   if (RetryCustomAllocate(allocate, allocation, gc_reason)) return;
   V8::FatalProcessOutOfMemory(heap_->isolate(), "CALL_AND_RETRY_LAST",
                               V8::kHeapOOM);
