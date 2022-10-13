@@ -4272,6 +4272,13 @@ class RepresentationSelector {
         return VisitUnop<T>(node, UseInfo::AnyTagged(),
                             MachineRepresentation::kTagged);
       }
+      case IrOpcode::kIncrementAndCheckProgressCounter:
+        // The frame state and the context.
+        ProcessInput<T>(node, 0, UseInfo::AnyTagged());
+        ProcessInput<T>(node, 1, UseInfo::AnyTagged());
+        return;
+      case IrOpcode::kReplayDecrementJsFrameDepth:
+        return;
       case IrOpcode::kFrameState:
         return VisitFrameState<T>(FrameState{node});
       case IrOpcode::kStateValues:
