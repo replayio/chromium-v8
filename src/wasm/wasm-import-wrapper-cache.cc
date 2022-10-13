@@ -223,6 +223,32 @@ void WasmImportWrapperCache::Free(std::vector<WasmCode*>& wrappers) {
   wrappers.clear();
 }
 
+int WasmImportWrapperCache::record_replay_ordered_lock_ = 0;
+
+WasmImportWrapperCache::WasmImportWrapperCache() {
+  // Order the acquisitions that compile or publish a wrapper, rather than the
+  // mutex itself. V8 13.0 made this cache process wide and put it on the stack
+  // walk: WasmCodeManager::LookupCode(pc) falls through to Lookup() for every
+  // pc that is in no NativeModule, so an ordered mutex would be taken by every
+  // stack walk in every program, wasm or not -- including the walks Replay's
+  // own CDP handling does with events disallowed, where there is no order to
+  // record. Recording and replaying would then disagree about whether the lock
+  // was taken at all.
+  //
+  // Only {ModificationScope} takes it, which is what the fork's ordering was
+  // for: that scope holds mutex_ while joining a compile job, which takes the
+  // thread pool's ordered locks, so an unordered acquisition there could let
+  // the replay wait for an ordered lock whose next owner is blocked on it.
+  // Lookup(), FindWrapper() and MaybeGet() only read, under mutex_ alone, and
+  // whatever they find was published under the order below.
+  //
+  // This runs once per process, from WasmEngine::InitializeOncePerProcess by
+  // way of GlobalWasmState, which is the same kind of point as
+  // NativeModuleCache's own ordered lock in wasm-engine.cc.
+  record_replay_ordered_lock_ =
+      static_cast<int>(recordreplay::CreateOrderedLock("WasmImportWrapperCache"));
+}
+
 WasmCode* WasmImportWrapperCache::MaybeGet(ImportCallKind kind,
                                            CanonicalTypeIndex type_index,
                                            int expected_arity,
