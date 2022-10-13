@@ -63,6 +63,20 @@ Address MathRandom::InitializeAndMaybeRefillCache(Isolate* isolate,
     state.s0 = base::RandomNumberGenerator::MurmurHash3(seed);
     state.s1 = base::RandomNumberGenerator::MurmurHash3(~seed);
     CHECK(state.s0 != 0 || state.s1 != 0);
+
+    // Record/replay: this is the ONLY point at which a non-deterministic
+    // value enters Math.random(). Everything downstream is pure arithmetic
+    // on this state -- XorShift128 + ToDouble in the 32-bit cache loop below,
+    // and the Torque XorShift128/RandomToDouble macros in math.tq on 64-bit
+    // (upstream gates the loop on kUseRefillCache == (kSystemPointerSize == 4)
+    // and computes Math.random() in generated code otherwise). So recording
+    // the seeded state fixes the whole sequence for both arms.
+    //
+    // It MUST stay above the `if (!kUseRefillCache)` return below: the fork's
+    // previous hook recorded each cached double inside the loop, which M150
+    // made unreachable on 64-bit, so Math.random() was silently unrecorded.
+    // See defect DV8-070.
+    recordreplay::RecordReplayBytes("MathRandom", &state, sizeof(state));
   }
 
   if (!kUseRefillCache) {
