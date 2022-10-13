@@ -8,6 +8,8 @@
 #include "src/execution/microtask-queue.h"
 #include "src/objects/js-promise-inl.h"
 
+#include "src/base/replayio.h"
+
 namespace v8 {
 namespace internal {
 
@@ -172,6 +174,7 @@ RUNTIME_FUNCTION(Runtime_RejectPromise) {
   DirectHandle<JSPromise> promise = args.at<JSPromise>(0);
   DirectHandle<Object> reason = args.at(1);
   DirectHandle<Boolean> debug_event = args.at<Boolean>(2);
+
   DirectHandle<Object> result;
   ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
       isolate, result,

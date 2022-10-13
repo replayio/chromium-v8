@@ -8,6 +8,7 @@
 #include "src/builtins/builtins-utils-inl.h"
 #include "src/builtins/builtins.h"
 #include "src/common/assert-scope.h"
+#include "src/debug/debug.h"
 #include "src/logging/log.h"
 #include "src/logging/runtime-call-stats-scope.h"
 #include "src/objects/objects-inl.h"
@@ -63,6 +64,8 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> HandleApiCallHelper(
   static_assert(std::is_same_v<ArgT, DirectHandle<Object>> ||
                 std::is_same_v<ArgT, Address>);
 
+  // Cover HandleApiCall / CallApiCallback as well as InvokeApiFunction.
+  RecordReplayScrubDivergentProgressScope scrub_divergent_progress;
   Handle<JSReceiver> js_receiver;
   if (is_construct) {
     DCHECK(IsTdzHole(*receiver));
@@ -157,6 +160,7 @@ MaybeHandle<Object> Builtins::InvokeApiFunction(
     DirectHandle<HeapObject> new_target,
     SideEffectType overrider_side_effect_type) {
   RCS_SCOPE(isolate, RuntimeCallCounterId::kInvokeApiFunction);
+  RecordReplayScrubDivergentProgressScope scrub_divergent_progress;
 
   if (!is_construct ||
       (function->has_callback(isolate) && function->has_side_effects() &&
@@ -206,6 +210,7 @@ HandleApiCallAsFunctionOrConstructorDelegate(Isolate* isolate,
                                              bool is_construct_call,
                                              DirectHandle<JSAny> receiver,
                                              base::Vector<const Address> args) {
+  RecordReplayScrubDivergentProgressScope scrub_divergent_progress;
   // Get the object called.
   Tagged<JSObject> obj = Cast<JSObject>(*receiver);
 
