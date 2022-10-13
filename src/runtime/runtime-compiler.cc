@@ -14,6 +14,8 @@
 #include "src/execution/arguments-inl.h"
 #include "src/execution/frames-inl.h"
 #include "src/execution/isolate-inl.h"
+// Record/replay: for GetIsolateFromWritableObject (DV8-007).
+#include "src/execution/isolate-utils-inl.h"
 #include "src/objects/js-array-buffer-inl.h"
 #include "src/objects/objects-inl.h"
 #include "src/objects/shared-function-info.h"
@@ -61,6 +63,12 @@ RUNTIME_FUNCTION(Runtime_CompileLazy) {
           check.JsHasOverflowed(kStackSpaceRequiredForCompilation * KB))) {
     return isolate->StackOverflow();
   }
+
+  // GetIsolateFromWritableObject is what the internal GetIsolate() expanded to
+  // before V8 13.8 removed NEVER_READ_ONLY_SPACE; keeping it preserves what this
+  // CHECK asserts (the function's own isolate), which Isolate::Current() would
+  // not. See defect DV8-007.
+  CHECK(isolate == GetIsolateFromWritableObject(*function));
 
   DirectHandle<SharedFunctionInfo> sfi(function->shared(), isolate);
 
