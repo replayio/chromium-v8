@@ -33,6 +33,17 @@ class V8_EXPORT_PRIVATE MemoryReducerBase {
 
   Heap* heap_;
   std::shared_ptr<v8::TaskRunner> task_runner_;
+
+ public:
+  // [DV8-103] Heap holds a MemoryReducerBase* from M157, and the fork's
+  // record/replay timer determinism is implemented only by the timer-driven
+  // MemoryReducer below, so these are declared here for Heap to call through
+  // the base. The default body is empty rather than UNREACHABLE(): the
+  // limit-based reducer genuinely has no such mechanism, the flag selecting it
+  // defaults off, and trapping would crash any run that merely turns it on.
+  // The resulting gap is recorded as DV8-104 and is an owner decision.
+  virtual void RecordReplayPostRequestedTimer() {}
+  virtual void RecordReplayOnProgressInterrupt() {}
 };
 
 // The goal of the MemoryReducer class is to detect transition of the
@@ -181,6 +192,11 @@ class V8_EXPORT_PRIVATE MemoryReducer final : public MemoryReducerBase {
   static State Step(const State& state, const Event& event);
   // Posts a timer task that will call NotifyTimer after the given delay.
   void ScheduleTimer(double delay_ms);
+
+  // Posts the timer when recording/replaying if the recording requested one,
+  // see RecordReplayRequestTimer.
+  void RecordReplayPostRequestedTimer() override;
+  void RecordReplayOnProgressInterrupt() override;
   static const int kShortDelayMs;
   static const int kWatchdogDelayMs;
   // The committed memory has to increase by at least this factor since the
@@ -204,10 +220,14 @@ class V8_EXPORT_PRIVATE MemoryReducer final : public MemoryReducerBase {
    private:
     // v8::internal::CancelableTask overrides.
     void RunInternal() override;
+    void RunTimer();
     MemoryReducer* memory_reducer_;
   };
 
   void NotifyTimer(const Event& event);
+
+  void PostTimer(double delay_ms);
+  void RecordReplayRequestTimer(double delay_ms);
 
   static bool WatchdogGC(const State& state, const Event& event);
 
@@ -215,6 +235,10 @@ class V8_EXPORT_PRIVATE MemoryReducer final : public MemoryReducerBase {
   unsigned int js_calls_counter_;
   double js_calls_sample_time_ms_;
   int start_delay_ms_ = false;
+  // When recording/replaying, the delay of a requested timer which hasn't
+  // been posted yet, or zero, and whether a posted timer hasn't run yet.
+  double record_replay_timer_delay_ms_ = 0;
+  bool record_replay_timer_posted_ = false;
 
   // Used in tests.
   friend class HeapInternalsBase;

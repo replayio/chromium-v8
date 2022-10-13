@@ -174,6 +174,11 @@ static constexpr int kFastCCallAlignmentPaddingCount = 1;
     offsetof(ThreadLocalTop, central_stack_limit_))                            \
   V(JSEntrySP, js_entry_sp, thread_local_top,                                  \
     offsetof(ThreadLocalTop, js_entry_sp_))                                    \
+  /* Record/replay: the fork adds replay_js_frame_depth_ to ThreadLocalTop     \
+     and reads it from generated code. V8 14.5 deleted the macro and enum      \
+     this entry lived in (globals.h); see defect DV8-031. */                   \
+  V(ReplayJsFrameDepth, replay_js_frame_depth, thread_local_top,               \
+    offsetof(ThreadLocalTop, replay_js_frame_depth_))                          \
                                                                                \
   /* HandleScopeData fields. */                                                \
   V(HandleScopeLevel, handle_scope_level, handle_scope_data,                   \
