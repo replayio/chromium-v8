@@ -30,6 +30,7 @@
 
 #include "src/inspector/v8-inspector-impl.h"
 
+#include <string>
 #include <vector>
 
 #include "include/cppgc/allocation.h"
@@ -54,6 +55,17 @@
 #include "src/inspector/v8-runtime-agent-impl.h"
 #include "src/inspector/v8-stack-trace-impl.h"
 #include "src/inspector/value-mirror.h"
+
+#include "src/base/replayio.h"
+#include "v8.h"
+
+extern "C" uintptr_t V8RecordReplayGetDefaultContextAddress(v8::Isolate* isolate);
+namespace v8 {
+namespace internal {
+std::string RecordReplayContextAddressToken(v8::Isolate* isolate,
+                                            uintptr_t ctxAddr, bool includeId);
+}
+}
 
 namespace v8_inspector {
 
@@ -261,10 +273,26 @@ std::shared_ptr<InspectedContext> V8InspectorImpl::getContext(
   if (!groupId || !contextId) return nullptr;
 
   auto contextGroupIt = m_contexts.find(groupId);
-  if (contextGroupIt == m_contexts.end()) return nullptr;
+  if (contextGroupIt == m_contexts.end()) {
+    v8::recordreplay::CommandDiagnostic(
+        "[RUN-2486-2537] V8InspectorImpl::getContext A %d %d %zu %s", contextId,
+        groupId, m_contexts.size(),
+        v8::internal::RecordReplayContextAddressToken(
+            m_isolate, V8RecordReplayGetDefaultContextAddress(m_isolate), true)
+            .c_str());
+    return nullptr;
+  }
 
   auto contextIt = contextGroupIt->second->find(contextId);
-  if (contextIt == contextGroupIt->second->end()) return nullptr;
+  if (contextIt == contextGroupIt->second->end()) {
+    v8::recordreplay::CommandDiagnostic(
+        "[RUN-2486-2537] V8InspectorImpl::getContext B %d %d %zu %s", contextId,
+        groupId, contextGroupIt->second->size(),
+        v8::internal::RecordReplayContextAddressToken(
+            m_isolate, V8RecordReplayGetDefaultContextAddress(m_isolate), true)
+            .c_str());
+    return nullptr;
+  }
 
   return contextIt->second;
 }
@@ -292,6 +320,10 @@ uint64_t V8InspectorImpl::isolateId() {
 }
 
 void V8InspectorImpl::contextCreated(const V8ContextInfo& info) {
+  const bool replay_owned = v8::replayio::CheckReplayOwned();
+  v8::replayio::AutoMaybeMarkReplayCode mark(replay_owned);
+  v8::replayio::AutoMaybeDisallowEvents disallow(
+      replay_owned, m_isolate, "V8InspectorImpl::contextCreated");
   int contextId = ++m_lastContextId;
   auto* context = new InspectedContext(this, info, contextId);
   m_contextIdToGroupIdMap[contextId] = info.contextGroupId;
@@ -350,10 +382,18 @@ void V8InspectorImpl::contextCollected(int groupId, int contextId) {
 }
 
 void V8InspectorImpl::resetContextGroup(int contextGroupId) {
+  using v8::recordreplay;
+  const bool replay_owned = v8::replayio::CheckReplayOwned();
+  v8::replayio::AutoMaybeMarkReplayCode mark(replay_owned);
+  v8::replayio::AutoMaybeDisallowEvents disallow(
+      replay_owned, m_isolate, "V8InspectorImpl::resetContextGroup");
+  auto contextsIt = m_contexts.find(contextGroupId);
   m_consoleStorageMap.erase(contextGroupId);
   m_muteExceptionsMap.erase(contextGroupId);
-  auto contextsIt = m_contexts.find(contextGroupId);
   // Context might have been removed already by discardContextScript()
+  int hasContexts = contextsIt != m_contexts.end();
+  REPLAY_ASSERT_MAYBE_EVENTS_DISALLOWED(
+      "V8InspectorImpl::resetContextGroup %d", hasContexts);
   if (contextsIt != m_contexts.end()) {
     for (const auto& map_entry : *contextsIt->second) {
       m_uniqueIdToContextId.erase(map_entry.second->uniqueId().pair());
@@ -468,6 +508,7 @@ void V8InspectorImpl::discardInspectedContext(int contextGroupId,
                                               int contextId) {
   auto context = getContext(contextGroupId, contextId);
   if (!context) return;
+
   m_uniqueIdToContextId.erase(context->uniqueId().pair());
   m_contexts[contextGroupId]->erase(contextId);
   if (m_contexts[contextGroupId]->empty()) m_contexts.erase(contextGroupId);
@@ -518,14 +559,20 @@ void V8InspectorImpl::forEachSession(
 
   // Retrieve by ids each time since |callback| may destroy some contexts.
   for (auto& sessionId : ids) {
-    it = m_sessions.find(contextGroupId);
-    if (it == m_sessions.end()) continue;
-    auto sessionIt = it->second.find(sessionId);
-    if (sessionIt != it->second.end()) {
-      V8InspectorSessionImpl::KeepSessionAliveScope keepAlive(
-          *sessionIt->second);
-      callback(sessionIt->second);
-    }
+    V8InspectorSessionImpl* session = sessionById(contextGroupId, sessionId);
+    if (!session) continue;
+    // Declared FIRST so it is destroyed LAST, as at the fork's other
+    // KeepSessionAliveScope site: the record/replay scopes below touch the
+    // isolate when they unwind, so the session must still be alive then.
+    // M151 added this scope to upstream's own copy of this lookup (3 -> 4
+    // occurrences tree-wide); the fork replaced that lookup with
+    // sessionById(), so the obligation had to be carried over by hand.
+    V8InspectorSessionImpl::KeepSessionAliveScope keepAlive(*session);
+    const bool replay_owned = session->replayOwned();
+    v8::replayio::AutoMaybeMarkReplayCode mark(replay_owned);
+    v8::replayio::AutoMaybeDisallowEvents disallow(
+        replay_owned, m_isolate, "V8InspectorImpl::forEachSession");
+    callback(session);
   }
 }
 
