@@ -2647,6 +2647,8 @@ i::ScriptDetails GetScriptDetails(
 
 }  // namespace
 
+static const char* RecordReplayReplaceSourceContents(const char* contents);
+
 namespace internal {
 
 // If we are compiling a script while replaying that replaces another one,
@@ -2658,9 +2660,72 @@ bool gReplaceSourceContentsInstrumented;
 bool gReplaceSourceContentsAssertValues;
 static std::set<int>* gScriptsWithReplacedContents;
 
+void MarkRecordReplayReplacedScript(int script_id) {
+  if (!gScriptsWithReplacedContents) {
+    gScriptsWithReplacedContents = new std::set<int>();
+  }
+  gScriptsWithReplacedContents->insert(script_id);
+}
+
 bool IsRecordReplayReplacedScript(int script_id) {
   return gScriptsWithReplacedContents &&
          gScriptsWithReplacedContents->count(script_id);
+}
+
+MaybeHandle<String>
+ReplayingReplaceScriptContents(Isolate* isolate, Handle<String> source) {
+  if (!recordreplay::IsReplaying() || !IsMainThread()) {
+    return MaybeHandle<String>();
+  }
+
+  std::unique_ptr<char[]> contents = source->ToCString();
+  const char* new_contents = RecordReplayReplaceSourceContents(contents.get());
+  if (!new_contents) {
+    return MaybeHandle<String>();
+  }
+
+  return isolate->factory()->NewStringFromUtf8(base::CStrVector(new_contents)).ToHandleChecked();
+}
+
+extern void RecordReplayRegisterCompiledScript(
+    Isolate* isolate, MaybeHandle<SharedFunctionInfo> maybe_function_info);
+
+MaybeHandle<SharedFunctionInfo>
+ReplayingMaybeReplaceScript(Isolate* isolate,
+                            MaybeHandle<SharedFunctionInfo> maybe_function_info,
+                            const ScriptDetails& script_details,
+                            Handle<String> source) {
+  MaybeHandle<String> new_source = ReplayingReplaceScriptContents(isolate, source);
+
+  if (new_source.is_null() || maybe_function_info.is_null()) {
+    RecordReplayRegisterCompiledScript(isolate, maybe_function_info);
+    return maybe_function_info;
+  }
+
+  CHECK(!gReplaceSourceContentsScriptId);
+  Script replaced_script = Script::cast(maybe_function_info.ToHandleChecked()->script());
+  gReplaceSourceContentsScriptId = replaced_script.id();
+  gReplaceSourceContentsInstrumented = replaced_script.record_replay_instrumented();
+  gReplaceSourceContentsAssertValues = replaced_script.record_replay_assert_values();
+
+  maybe_function_info = Compiler::GetSharedFunctionInfoForScript(
+      isolate, new_source.ToHandleChecked(), script_details,
+      ScriptCompiler::kNoCompileOptions,
+      ScriptCompiler::kNoCacheNoReason,
+      NOT_NATIVES_CODE);
+
+  // Only ignore source positions for scripts that successfully compiled from
+  // replacement contents. A failed compile should not weaken progress checks
+  // for the original script.
+  if (!maybe_function_info.is_null()) {
+    MarkRecordReplayReplacedScript(gReplaceSourceContentsScriptId);
+  }
+
+  gReplaceSourceContentsScriptId = 0;
+  gReplaceSourceContentsInstrumented = false;
+  gReplaceSourceContentsAssertValues = false;
+  RecordReplayRegisterCompiledScript(isolate, maybe_function_info);
+  return maybe_function_info;
 }
 
 } // namespace internal
@@ -11680,6 +11745,13 @@ char* recordreplay::ReadAssetFileContents(const char* aPath, size_t* aLength) {
 
 extern "C" DLLEXPORT char* V8RecordReplayReadAssetFileContents(const char* aPath, size_t* aLength) {
   return recordreplay::ReadAssetFileContents(aPath, aLength);
+}
+
+static const char* RecordReplayReplaceSourceContents(const char* contents) {
+  if (recordreplay::IsReplaying()) {
+    return gRecordReplayReplaceSourceContents(contents);
+  }
+  return nullptr;
 }
 
 void recordreplay::Print(const char* format, ...) {
