@@ -848,7 +848,6 @@ int GetIdentityHashHelper(Tagged<JSReceiver> object) {
   if (IsSmi(properties)) {
     return Smi::ToInt(properties);
   }
-
   if (IsPropertyArray(properties)) {
     return Cast<PropertyArray>(properties)->Hash();
   }
@@ -5838,6 +5837,8 @@ MaybeDirectHandle<JSDate> JSDate::New(Isolate* isolate,
 int64_t JSDate::CurrentTimeValue(Isolate* isolate) {
   if (v8_flags.log_timer_events) LOG(isolate, CurrentTimeEvent());
   if (v8_flags.correctness_fuzzer_suppressions) return 4;
+
+  recordreplay::Assert("[RUN-1675-1826] JSDate::CurrentTimeValue");
 
   // According to ECMA-262, section 15.9.1, page 117, the precision of
   // the number in a Date object representing a particular instant in
