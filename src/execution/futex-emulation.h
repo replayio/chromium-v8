@@ -33,6 +33,16 @@ class TimeDelta;
 
 namespace internal {
 
+// Record/replay (DV8-063): WaitSyncImpl needs a handle on the ordered lock
+// WaitSync holds, because V8 14.7 extracted the body out of WaitSync. The
+// obvious spelling -- std::optional<recordreplay::AutoOrderedLock>* -- cannot
+// be used in THIS header: `recordreplay` is a CLASS (include/v8.h:92), so
+// AutoOrderedLock is a nested type and cannot be forward-declared from
+// outside it. Naming it would force include/v8.h into isolate.h's transitive
+// closure, which ~39 generated TUs sit in. So the header names only this
+// opaque fork-owned holder, defined in futex-emulation.cc.
+struct ReplayOrderedLockHandle;
+
 class BackingStore;
 class FutexWaitList;
 #if V8_ENABLE_WEBASSEMBLY
@@ -143,6 +153,9 @@ class FutexWaitListNode {
 
   // State used for an async wait; nullptr on sync waits.
   const std::unique_ptr<AsyncState> async_state_;
+  // While recording or replaying, the id of the task that resolves this async
+  // waiter's promise once it is notified.
+  uint64_t record_replay_resolve_id_ = 0;
 };
 
 #if V8_ENABLE_WEBASSEMBLY
@@ -261,6 +274,11 @@ class FutexEmulation : public AllStatic {
   // Called before |isolate| dies. Removes async waiters owned by |isolate|.
   static void IsolateDeinit(Isolate* isolate);
 
+  // Creates the ordered lock that orders notifies against waiters entering and
+  // leaving the wait list and going away with their isolate, while recording
+  // or replaying.
+  static void RecordReplayInitialize();
+
   // Return the number of threads or async waiters waiting on |addr|. Should
   // only be used for testing.
   static int NumWaitersForTesting(Tagged<JSArrayBuffer> array_buffer,
@@ -299,16 +317,30 @@ class FutexEmulation : public AllStatic {
       Isolate* isolate, WaitList* wait_list, FutexWaitListNode* node,
       NoGarbageCollectionMutexGuard& lock_guard, bool use_timeout,
       base::TimeTicks timeout_time, T value, T loaded_value,
-      std::optional<void*> wait_location);
+      std::optional<void*> wait_location,
+      // Record/replay: the ordered lock WaitSync takes before the
+      // wait-list mutex, threaded in because V8 14.7 extracted this body
+      // out of WaitSync. DEFAULTED so the wasm managed-object call site is
+      // upstream's text unchanged and that path stays OUTSIDE the fork's
+      // ordering -- DV8-036 question 4, resolved as "preserve today's
+      // coverage", which only a recording at M147+ can revisit.
+      ReplayOrderedLockHandle* ordered_lock = nullptr);
 
   // Resolve the Promises of the async waiters which belong to |isolate|.
-  static void ResolveAsyncWaiterPromises(Isolate* isolate);
+  // While recording or replaying, only those given record_replay_resolve_id.
+  static void ResolveAsyncWaiterPromises(Isolate* isolate,
+                                         uint64_t record_replay_resolve_id = 0);
 
   static void ResolveAsyncWaiterPromise(FutexWaitListNode* node);
 
   static void HandleAsyncWaiterTimeout(FutexWaitListNode* node);
 
-  static void NotifyAsyncWaiter(FutexWaitListNode* node);
+  // While recording or replaying, the tasks to post once events are allowed
+  // again.
+  class RecordReplayTasksToPost;
+
+  static void NotifyAsyncWaiter(FutexWaitListNode* node,
+                                RecordReplayTasksToPost* record_replay_tasks);
 
   // Remove the node's Promise from the NativeContext's Promise set.
   static void CleanupAsyncWaiterPromise(FutexWaitListNode* node);
