@@ -2655,7 +2655,8 @@ enum class AliasingKind {
   C(PendingHandlerSP, pending_handler_sp)                           \
   C(NumFramesAbovePendingHandler, num_frames_above_pending_handler) \
   C(IsOnCentralStackFlag, is_on_central_stack_flag)                 \
-  C(JSEntrySP, js_entry_sp)
+  C(JSEntrySP, js_entry_sp)                                         \
+  C(ReplayJsFrameDepth, replay_js_frame_depth)
 
 enum IsolateAddressId {
 #define DECLARE_ENUM(CamelName, hacker_name) k##CamelName##Address,

@@ -117,6 +117,16 @@ constexpr AllocationSpace AllocationTypeToGCSpace(AllocationType type) {
 AllocationResult HeapAllocator::AllocateRawWithLightRetrySlowPath(
     int size, AllocationType allocation, AllocationOrigin origin,
     AllocationAlignment alignment, AllocationHint hint) {
+  // V8 12.7 moved the allocation-failure retry loop here from
+  // LocalHeap::PerformCollectionAndAllocateAgain, which this scope used to
+  // bracket: a background thread that fails to allocate requests a GC from the
+  // main thread and waits for it, and events must not run while it does.
+  // V8 13.5 moved the loop one level deeper again, into the templated overload
+  // this function now delegates to; the scope still spans that call, so it
+  // brackets exactly the paths it did before.
+  replayio::AutoDisallowEvents disallow(
+      "HeapAllocator::AllocateRawWithLightRetrySlowPath");
+
   auto Allocate = [&]() {
     return AllocateRaw(size, allocation, origin, alignment, hint);
   };
@@ -144,6 +154,12 @@ void HeapAllocator::CollectGarbage(
 AllocationResult HeapAllocator::AllocateRawWithRetryOrFailSlowPath(
     int size, AllocationType allocation, AllocationOrigin origin,
     AllocationAlignment alignment, AllocationHint hint) {
+  // The last-resort collection, now in the templated overload this function
+  // delegates to, is reached on background threads too and is not covered by
+  // the light-retry scope.
+  replayio::AutoDisallowEvents disallow(
+      "HeapAllocator::AllocateRawWithRetryOrFailSlowPath");
+
   auto Allocate = [&]() {
     return AllocateRaw(size, allocation, origin, alignment, hint);
   };
