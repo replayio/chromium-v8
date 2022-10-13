@@ -27,6 +27,7 @@ void Destructor(void* ptr) {
   // effect (see wasm-in-js-inlining-reducer-inl.h), so an unparenthesized call
   // in a header can be rewritten into recordreplay::AssertImpl.
   (recordreplay::Assert)("Managed::Destructor");
+  if (*shared_ptr_ptr) OnManagedRemoved(shared_ptr_ptr->get());
   delete shared_ptr_ptr;
 }
 }  // namespace detail
@@ -39,6 +40,7 @@ DirectHandle<Managed<CppType>> Managed<CppType>::From(
   static constexpr ExternalPointerTag kTag = TagForManaged<CppType>::value;
   static_assert(IsManagedExternalPointerType(kTag));
   SharedFlag shared = SharedFlag(IsSharedAllocationType(allocation_type));
+  if (shared_ptr) OnManagedAdded(shared_ptr.get());
   auto destructor = new ManagedPtrDestructor(
       estimated_size, new std::shared_ptr<CppType>{std::move(shared_ptr)},
       detail::Destructor<CppType>, shared);
@@ -64,6 +66,12 @@ template <class CppType>
 DirectHandle<TrustedManaged<CppType>> TrustedManaged<CppType>::From(
     Isolate* isolate, size_t estimated_size,
     std::shared_ptr<CppType> shared_ptr) {
+  // Both {Managed} and {TrustedManaged} register detail::Destructor<CppType>,
+  // which removes the holder, so both have to add it: a wasm instance holds its
+  // NativeModule through one of each (WasmModuleObject's {Managed} and
+  // WasmTrustedInstanceData's {TrustedManaged}, new in V8 12.8), and the
+  // cache's holder count has to match.
+  if (shared_ptr) OnManagedAdded(shared_ptr.get());
   auto destructor = new ManagedPtrDestructor(
       estimated_size, new std::shared_ptr<CppType>{std::move(shared_ptr)},
       detail::Destructor<CppType>, SharedFlag{false});
