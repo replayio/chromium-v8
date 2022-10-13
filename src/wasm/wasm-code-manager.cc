@@ -8,6 +8,7 @@
 #include <iomanip>
 #include <numeric>
 
+#include "include/replayio.h"
 #include "src/base/atomicops.h"
 #include "src/base/build_config.h"
 #include "src/base/iterator.h"
@@ -970,6 +971,20 @@ BoundsCheckStrategy GetBoundsChecks(const WasmModule* module) {
   if (trap_handler::IsTrapHandlerEnabled()) return kTrapHandler;
   return kExplicitBoundsChecks;
 }
+
+// A NativeModule shared between isolates (posted to workers, or compiled from
+// the same bytes through the NativeModuleCache) is deleted by whichever holder
+// drops the last reference, on its own thread, which nothing orders with the
+// other holders. When recording or replaying, that can be a different thread
+// in each, so deleting it must not record anything on that thread.
+void DeleteNativeModule(NativeModule* native_module) {
+  base::Optional<replayio::AutoDisallowEvents> disallow;
+  if (recordreplay::IsRecordingOrReplaying("wasm-native-module-sharing",
+                                         "DeleteNativeModule")) {
+    disallow.emplace("wasm::DeleteNativeModule");
+  }
+  delete native_module;
+}
 }  // namespace
 
 NativeModule::NativeModule(const WasmFeatures& enabled,
@@ -991,7 +1006,7 @@ NativeModule::NativeModule(const WasmFeatures& enabled,
   // there.
   DCHECK_NOT_NULL(shared_this);
   DCHECK_NULL(*shared_this);
-  shared_this->reset(this);
+  shared_this->reset(this, DeleteNativeModule);
   compilation_state_ = CompilationState::New(
       *shared_this, std::move(async_counters), dynamic_tiering);
   compilation_state_->InitCompileJob();
