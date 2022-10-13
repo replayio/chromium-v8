@@ -249,6 +249,10 @@ void MemoryOptimizer::VisitNode(Node* node, AllocationState const* state,
     case IrOpcode::kStorePair:
       // Store pairing should happen after this pass.
       UNREACHABLE();
+    case IrOpcode::kIncrementAndCheckProgressCounter:
+    case IrOpcode::kReplayDecrementJsFrameDepth:
+      // Note: this is the default behavior in VisitCall when allocations are possible.
+      return EnqueueUses(node, empty_state(), effect_chain);
     default:
       if (!CanAllocate(node)) {
         // These operations cannot trigger GC.
