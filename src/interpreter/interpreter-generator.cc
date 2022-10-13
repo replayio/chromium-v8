@@ -23,6 +23,7 @@
 #include "src/objects/oddball.h"
 #include "src/objects/shared-function-info.h"
 #include "src/objects/source-text-module.h"
+#include "src/execution/thread-local-top.h"
 #include "src/utils/ostreams.h"
 #include "torque-generated/exported-macros-assembler.h"
 
@@ -2844,6 +2845,101 @@ IGNITION_HANDLER(IncBlockCounter, InterpreterAssembler) {
 
   CallBuiltin(Builtin::kIncBlockCounter, context, closure, coverage_array_slot);
 
+  Dispatch();
+}
+
+IGNITION_HANDLER(RecordReplayIncExecutionProgressCounter, InterpreterAssembler) {
+  TNode<Context> context = GetContext();
+  TNode<Object> closure = LoadRegister(Register::function_closure());
+  CallRuntime(Runtime::kRecordReplayAssertExecutionProgress, context, closure);
+  Dispatch();
+}
+
+IGNITION_HANDLER(ReplayIncJsFrameDepth, InterpreterAssembler) {
+  TNode<ExternalReference> depth_addr = ExternalConstant(
+      ExternalReference::Create(IsolateAddressId::kReplayJsFrameDepthAddress,
+                                isolate()));
+  TNode<Int32T> depth =
+      UncheckedCast<Int32T>(Load(MachineType::Int32(), depth_addr));
+  TNode<Int32T> new_depth = Int32Add(depth, Int32Constant(1));
+  StoreNoWriteBarrier(MachineRepresentation::kWord32, depth_addr, new_depth);
+
+  Label ok(this), overflow(this, Label::kDeferred);
+  GotoIf(Int32GreaterThanOrEqual(
+             new_depth, Int32Constant(ThreadLocalTop::kReplayMaxJsFrameDepth)),
+         &overflow);
+  Goto(&ok);
+
+  BIND(&overflow);
+  CallRuntime(Runtime::kThrowStackOverflow, GetContext());
+  Abort(AbortReason::kUnexpectedReturnFromThrow);
+  Unreachable();
+
+  BIND(&ok);
+  Dispatch();
+}
+
+IGNITION_HANDLER(ReplayDecJsFrameDepth, InterpreterAssembler) {
+  TNode<ExternalReference> depth_addr = ExternalConstant(
+      ExternalReference::Create(IsolateAddressId::kReplayJsFrameDepthAddress,
+                                isolate()));
+  TNode<Int32T> depth =
+      UncheckedCast<Int32T>(Load(MachineType::Int32(), depth_addr));
+  TNode<Int32T> new_depth = Int32Sub(depth, Int32Constant(1));
+  StoreNoWriteBarrier(MachineRepresentation::kWord32, depth_addr, new_depth);
+  Dispatch();
+}
+
+IGNITION_HANDLER(RecordReplayNotifyActivity, InterpreterAssembler) {
+  TNode<Context> context = GetContext();
+  CallRuntime(Runtime::kRecordReplayNotifyActivity, context);
+  Dispatch();
+}
+
+IGNITION_HANDLER(RecordReplayInstrumentation, InterpreterAssembler) {
+  TNode<Context> context = GetContext();
+  TNode<Object> closure = LoadRegister(Register::function_closure());
+  TNode<Smi> index = BytecodeOperandIdxSmi(0);
+  CallRuntime(Runtime::kRecordReplayInstrumentation, context, closure, index);
+  Dispatch();
+}
+
+IGNITION_HANDLER(RecordReplayInstrumentationGenerator, InterpreterAssembler) {
+  TNode<Context> context = GetContext();
+  TNode<Object> closure = LoadRegister(Register::function_closure());
+  TNode<Smi> index = BytecodeOperandIdxSmi(0);
+  TNode<Object> generator = LoadRegisterAtOperandIndex(1);
+  CallRuntime(Runtime::kRecordReplayInstrumentationGenerator,
+              context, closure, index, generator);
+  Dispatch();
+}
+
+IGNITION_HANDLER(RecordReplayInstrumentationReturn, InterpreterAssembler) {
+  TNode<Context> context = GetContext();
+  TNode<Object> closure = LoadRegister(Register::function_closure());
+  TNode<Smi> index = BytecodeOperandIdxSmi(0);
+  TNode<Object> return_value = LoadRegisterAtOperandIndex(1);
+  CallRuntime(Runtime::kRecordReplayInstrumentationReturn,
+              context, closure, index, return_value);
+  Dispatch();
+}
+
+IGNITION_HANDLER(RecordReplayAssertValue, InterpreterAssembler) {
+  TNode<Context> context = GetContext();
+  TNode<Object> closure = LoadRegister(Register::function_closure());
+  TNode<Smi> index = BytecodeOperandIdxSmi(0);
+  TNode<Object> value = GetAccumulator();
+  TNode<Object> result = CallRuntime(Runtime::kRecordReplayAssertValue,
+                                     context, closure, index, value);
+  SetAccumulator(result);
+  Dispatch();
+}
+
+IGNITION_HANDLER(RecordReplayTrackObjectId, InterpreterAssembler) {
+  TNode<Context> context = GetContext();
+  TNode<Object> object = LoadRegisterAtOperandIndex(0);
+  CallRuntime(Runtime::kRecordReplayTrackObjectId,
+              context, object);
   Dispatch();
 }
 
