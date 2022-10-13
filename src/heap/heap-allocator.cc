@@ -110,6 +110,13 @@ constexpr AllocationSpace AllocationTypeToGCSpace(AllocationType type) {
 AllocationResult HeapAllocator::AllocateRawWithLightRetrySlowPath(
     int size, AllocationType allocation, AllocationOrigin origin,
     AllocationAlignment alignment) {
+  // V8 12.7 moved the allocation-failure retry loop here from
+  // LocalHeap::PerformCollectionAndAllocateAgain, which this scope used to
+  // bracket: a background thread that fails to allocate requests a GC from the
+  // main thread and waits for it, and events must not run while it does.
+  replayio::AutoDisallowEvents disallow(
+      "HeapAllocator::AllocateRawWithLightRetrySlowPath");
+
   AllocationResult result = AllocateRaw(size, allocation, origin, alignment);
   if (!result.IsFailure()) {
     return result;
@@ -144,6 +151,11 @@ void HeapAllocator::CollectGarbage(AllocationType allocation) {
 AllocationResult HeapAllocator::AllocateRawWithRetryOrFailSlowPath(
     int size, AllocationType allocation, AllocationOrigin origin,
     AllocationAlignment alignment) {
+  // The last-resort collection below is reached on background threads too, and
+  // is not covered by the light-retry scope.
+  replayio::AutoDisallowEvents disallow(
+      "HeapAllocator::AllocateRawWithRetryOrFailSlowPath");
+
   AllocationResult result =
       AllocateRawWithLightRetrySlowPath(size, allocation, origin, alignment);
   if (!result.IsFailure()) return result;
