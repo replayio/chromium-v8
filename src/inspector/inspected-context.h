@@ -60,7 +60,8 @@ class InspectedContext {
   V8InspectorImpl* inspector() const { return m_inspector; }
 
   std::shared_ptr<InjectedScript> getInjectedScript(int sessionId);
-  std::shared_ptr<InjectedScript> createInjectedScript(int sessionId);
+  std::shared_ptr<InjectedScript> createInjectedScript(int sessionId,
+                                                       bool replayOwned);
   void discardInjectedScript(int sessionId);
 
   bool addInternalObject(v8::Local<v8::Object> object,
