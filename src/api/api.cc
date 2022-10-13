@@ -10141,6 +10141,64 @@ bool RecordReplayHasDefaultContext() {
 
 } // namespace internal
 
+
+static std::vector<std::string>* gRecordReplayDisabledFeatures;
+
+extern "C" V8_EXPORT bool V8RecordReplayFeatureEnabled(const char* feature) {
+  if (gRecordReplayDisabledFeatures) {
+    for (std::string disabled : *gRecordReplayDisabledFeatures) {
+      if (disabled == feature) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+// Disabled features are specified with "," as a separator.
+//
+// This is used to disable functionality, typically to test the performance impact of
+// recording-specific changes or narrow down the reason for incorrect behavior while
+// recording.
+static const char* GetDisabledFeatureSpecifier() {
+  const char* env = getenv("RECORD_REPLAY_DISABLE_FEATURES");
+  if (env) {
+    return env;
+  }
+
+  // Diagnostic for problems replaying in certain environments.
+  if (getenv("EBAY_TEST_ENVIRONMENT")) {
+    return "no-interrupts,disallow-events";
+  }
+
+  return nullptr;
+}
+
+static void RecordReplayInitializeDisabledFeatures() {
+  const char* env = GetDisabledFeatureSpecifier();
+  if (!env) {
+    return;
+  }
+
+  gRecordReplayDisabledFeatures = new std::vector<std::string>();
+  while (true) {
+    const char* sep = strchr(env, ',');
+    if (sep) {
+      gRecordReplayDisabledFeatures->emplace_back(env, sep - env);
+      env = sep + 1;
+    } else {
+      if (strlen(env)) {
+        gRecordReplayDisabledFeatures->emplace_back(env);
+      }
+      break;
+    }
+  }
+
+  for (const std::string& feature : *gRecordReplayDisabledFeatures) {
+    fprintf(stderr, "RecordReplayDisabledFeature %s\n", feature.c_str());
+  }
+}
+
 bool recordreplay::IsRecordingOrReplaying() {
   return gRecordingOrReplaying;
 }
@@ -10244,7 +10302,7 @@ extern "C" void V8RecordReplayBytes(const char* why, void* buf, size_t size) {
 }
 
 bool recordreplay::AreEventsDisallowed() {
-  if (IsRecordingOrReplaying()) {
+  if (IsRecordingOrReplaying() && V8RecordReplayFeatureEnabled("disallow-events")) {
     return gRecordReplayAreEventsDisallowed();
   }
   return false;
@@ -10638,61 +10696,6 @@ extern "C" V8_EXPORT void V8RecordReplayFinishRecording() {
       }
     } else {
       recordreplay::InvalidateRecording("No interesting content");
-    }
-  }
-}
-
-static std::vector<std::string>* gRecordReplayDisabledFeatures;
-
-extern "C" V8_EXPORT bool V8RecordReplayFeatureEnabled(const char* feature) {
-  if (gRecordReplayDisabledFeatures) {
-    for (std::string disabled : *gRecordReplayDisabledFeatures) {
-      if (disabled == feature) {
-        return false;
-      }
-    }
-  }
-  return true;
-}
-
-// Disabled features are specified with "," as a separator.
-//
-// This is used to disable functionality, typically to test the performance impact of
-// recording-specific changes or narrow down the reason for incorrect behavior while
-// recording.
-static const char* GetDisabledFeatureSpecifier() {
-  const char* env = getenv("RECORD_REPLAY_DISABLE_FEATURES");
-  if (env) {
-    return env;
-  }
-
-  // Diagnostic for problems replaying in certain environments.
-  if (getenv("EBAY_TEST_ENVIRONMENT")) {
-    return "no-interrupts";
-  }
-
-  return nullptr;
-}
-
-static void RecordReplayInitializeDisabledFeatures() {
-  const char* env = GetDisabledFeatureSpecifier();
-  if (!env) {
-    return;
-  }
-
-  fprintf(stderr, "RecordReplayDisabledFeatures %s\n", env);
-
-  gRecordReplayDisabledFeatures = new std::vector<std::string>();
-  while (true) {
-    const char* sep = strchr(env, ',');
-    if (sep) {
-      gRecordReplayDisabledFeatures->emplace_back(env, sep - env);
-      env = sep + 1;
-    } else {
-      if (strlen(env)) {
-        gRecordReplayDisabledFeatures->emplace_back(env);
-      }
-      break;
     }
   }
 }
