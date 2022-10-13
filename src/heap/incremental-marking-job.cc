@@ -35,6 +35,8 @@ class IncrementalMarkingJob::Task final : public CancelableTask {
   // CancelableTask overrides.
   void RunInternal() override;
 
+  bool IsRecordReplayNonDeterministic() const override { return true; }
+
   Isolate* isolate() const { return isolate_; }
 
  private:
@@ -49,6 +51,8 @@ IncrementalMarkingJob::IncrementalMarkingJob(Heap* heap)
 }
 
 void IncrementalMarkingJob::ScheduleTask(TaskType task_type) {
+  replayio::AutoDisallowEvents disallow("IncrementalMarkingJob::ScheduleTask");
+
   base::MutexGuard guard(&mutex_);
 
   if (pending_task_.has_value() || heap_->IsTearingDown()) {
@@ -90,6 +94,10 @@ void IncrementalMarkingJob::ScheduleTask(TaskType task_type) {
 }
 
 void IncrementalMarkingJob::Task::RunInternal() {
+  // RUN-2140: This shouldn't be necessary, this task should run at non-deterministic
+  // points in general and be unordered.
+  replayio::AutoDisallowEvents disallow("IncrementalMarkingJob::Task::RunInternal");
+
   VMState<GC> state(isolate());
   TRACE_EVENT_CALL_STATS_SCOPED(isolate(), "v8",
                                 "V8.IncrementalMarkingJob.Task");
