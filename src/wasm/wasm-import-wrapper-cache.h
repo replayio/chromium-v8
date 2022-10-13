@@ -11,6 +11,7 @@
 
 #include <unordered_map>
 
+#include "include/v8.h"  // For replay.
 #include "src/base/platform/mutex.h"
 #include "src/wasm/module-instantiate.h"
 #include "src/wasm/wasm-code-manager.h"
@@ -56,7 +57,9 @@ class WasmImportWrapperCache {
   class V8_NODISCARD ModificationScope {
    public:
     explicit ModificationScope(WasmImportWrapperCache* cache)
-        : cache_(cache), guard_(&cache->mutex_) {}
+        : cache_(cache),
+          ordered_(record_replay_ordered_lock_),
+          guard_(&cache->mutex_) {}
 
     V8_EXPORT_PRIVATE WasmCode* operator[](const CacheKey& key);
 
@@ -65,10 +68,13 @@ class WasmImportWrapperCache {
 
    private:
     WasmImportWrapperCache* const cache_;
+    // Declared before guard_ so the recorded order is taken first; see the
+    // constructor in wasm-import-wrapper-cache.cc.
+    v8::recordreplay::AutoOrderedLock ordered_;
     base::MutexGuard guard_;
   };
 
-  WasmImportWrapperCache() = default;
+  WasmImportWrapperCache();
   ~WasmImportWrapperCache() = default;
 
   void LazyInitialize(Isolate* triggering_isolate);
@@ -106,6 +112,12 @@ class WasmImportWrapperCache {
  private:
   std::unique_ptr<WasmCodeAllocator> code_allocator_;
   mutable base::Mutex mutex_;
+  // Orders the acquisitions that compile or publish a wrapper, rather than the
+  // mutex itself; see the constructor in wasm-import-wrapper-cache.cc. One lock
+  // for the whole process: V8 13.0 made this cache a process-wide singleton.
+  // Not taken by Lookup(), FindWrapper() or MaybeGet(), which every stack walk
+  // reaches. Static, so the class keeps upstream's size.
+  static int record_replay_ordered_lock_;
   std::unordered_map<CacheKey, WasmCode*, CacheKeyHash> entry_map_;
   // Lookup support. The map key is the instruction start address.
   std::map<Address, WasmCode*> codes_;
