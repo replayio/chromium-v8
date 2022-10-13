@@ -132,8 +132,7 @@ class V8ConsoleMessageStorage {
  private:
   V8InspectorImpl* m_inspector;
   int m_contextGroupId;
-  int m_estimatedSize = 0;
-  std::deque<std::unique_ptr<V8ConsoleMessage>> m_messages;
+  int m_estimatedSize = 0;  std::deque<std::unique_ptr<V8ConsoleMessage>> m_messages;
 
   struct PerContextData {
     std::set<String16> m_reportedDeprecationMessages;
