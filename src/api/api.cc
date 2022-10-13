@@ -12940,6 +12940,7 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
   gRecordReplaySetCrashReasonCallback(V8RecordReplayCrashReasonCallback);
 
   gFinishRecordingOrderedLockId = (int)CreateOrderedLock("FinishRecording");
+  i::FutexEmulation::RecordReplayInitialize();
   gAssertBufferAllocationStateLSKey = base::Thread::CreateThreadLocalKey();
 
   i::gProgressCounter = gRecordReplayProgressCounter();
