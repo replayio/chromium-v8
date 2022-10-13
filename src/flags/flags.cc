@@ -19,6 +19,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "include/v8.h"
 #include "src/base/fpu.h"
 #include "src/base/hashing.h"
 #include "src/base/lazy-instance.h"
@@ -1527,6 +1528,19 @@ void FlagList::EnforceFlagImplications() {
 uint32_t FlagList::Hash() {
   if (uint32_t hash = flag_hash.load(std::memory_order_relaxed)) return hash;
   uint32_t hash = ComputeFlagListHash();
+
+  // Some flags are set differently when recording and when replaying, e.g. by
+  // recordreplay::SetRecordingOrReplaying and the driver's heap limits, and
+  // the hash covers every non-default flag. Use the hash from the recording
+  // when replaying, so that everything derived from it (code cache checks,
+  // ScriptCompiler::CachedDataVersionTag) behaves the same.
+  if (recordreplay::IsRecordingOrReplaying() && IsMainThread() &&
+      !recordreplay::AreEventsDisallowed("FlagList::Hash") &&
+      !recordreplay::AreEventsPassedThrough("FlagList::Hash")) {
+    hash = static_cast<uint32_t>(
+        recordreplay::RecordReplayValue("FlagList::Hash", hash));
+  }
+
   flag_hash.store(hash, std::memory_order_relaxed);
   return hash;
 }
