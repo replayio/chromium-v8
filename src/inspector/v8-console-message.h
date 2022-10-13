@@ -136,8 +136,7 @@ class V8ConsoleMessageStorage {
  private:
   V8InspectorImpl* m_inspector;
   int m_contextGroupId;
-  int m_estimatedSize = 0;
-  std::deque<std::unique_ptr<V8ConsoleMessage>> m_messages;
+  int m_estimatedSize = 0;  std::deque<std::unique_ptr<V8ConsoleMessage>> m_messages;
 
   // Timers and counters are keyed by their `console.context()` ID
   // and their label.
