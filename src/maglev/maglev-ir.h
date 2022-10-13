@@ -492,6 +492,8 @@ class ExceptionHandlerInfo;
   V(HandleNoHeapWritesInterrupt)              \
   V(ReduceInterruptBudgetForLoop)             \
   V(ReduceInterruptBudgetForReturn)           \
+  V(ReplayIncrementAndCheckJsFrameDepth)      \
+  V(ReplayDecrementJsFrameDepth)              \
   V(ThrowReferenceErrorIfTdzHole)             \
   V(ThrowSuperNotCalledIfTdzHole)             \
   V(ThrowSuperAlreadyCalledIfNotTdzHole)      \
@@ -11210,6 +11212,36 @@ class ReduceInterruptBudgetForReturn
 
  private:
   const int amount_;
+};
+
+class ReplayIncrementAndCheckJsFrameDepth
+    : public FixedInputNodeT<0, ReplayIncrementAndCheckJsFrameDepth> {
+  using Base = FixedInputNodeT<0, ReplayIncrementAndCheckJsFrameDepth>;
+
+ public:
+  explicit ReplayIncrementAndCheckJsFrameDepth(uint64_t bitfield) : Base(bitfield) {}
+
+  static constexpr OpProperties kProperties = OpProperties::CanWrite() |
+                                              OpProperties::CanThrow() |
+                                              OpProperties::DeferredCall();
+
+  int MaxCallStackArgs() const;
+  void SetValueLocationConstraints();
+  void GenerateCode(MaglevAssembler*, const ProcessingState&);
+  void PrintParams(std::ostream&) const {}
+};
+
+class ReplayDecrementJsFrameDepth : public FixedInputNodeT<0, ReplayDecrementJsFrameDepth> {
+  using Base = FixedInputNodeT<0, ReplayDecrementJsFrameDepth>;
+
+ public:
+  explicit ReplayDecrementJsFrameDepth(uint64_t bitfield) : Base(bitfield) {}
+
+  static constexpr OpProperties kProperties = OpProperties::CanWrite();
+
+  void SetValueLocationConstraints();
+  void GenerateCode(MaglevAssembler*, const ProcessingState&);
+  void PrintParams(std::ostream&) const {}
 };
 
 class ThrowReferenceErrorIfTdzHole
