@@ -10168,7 +10168,7 @@ static const char* GetDisabledFeatureSpecifier() {
 
   // Diagnostic for problems replaying in certain environments.
   if (getenv("EBAY_TEST_ENVIRONMENT")) {
-    return "no-interrupts,disallow-events";
+    return "no-interrupts,disallow-events,leak-references,no-language-detection,no-webgl,no-media";
   }
 
   return nullptr;
