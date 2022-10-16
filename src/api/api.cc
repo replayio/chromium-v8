@@ -9938,6 +9938,7 @@ static void (*gRecordReplayAssertBytes)(const char* why, const void* ptr, size_t
 static void (*gRecordReplayBytes)(const char* why, void* buf, size_t size);
 static uintptr_t (*gRecordReplayValue)(const char* why, uintptr_t v);
 static bool (*gRecordReplayAreEventsDisallowed)();
+static void (*gRecordReplayProgressReached)();
 static void (*gRecordReplayBeginPassThroughEvents)();
 static void (*gRecordReplayEndPassThroughEvents)();
 static void (*gRecordReplayBeginDisallowEvents)();
@@ -10039,6 +10040,22 @@ bool gRecordReplayInstrumentationEnabled;
 void RecordReplayChangeInstrument(bool enabled) {
   CHECK(!enabled || recordreplay::IsReplaying());
   gRecordReplayInstrumentationEnabled = enabled;
+
+  // All optimized code needs to be recompiled when instrumentation changes,
+  // as instrumentation calls will be optimized out when instrumentation is
+  // disabled.
+  Isolate* isolate = Isolate::Current();
+  Deoptimizer::DeoptimizeAll(isolate);
+}
+
+uint64_t gTargetProgress;
+
+void RecordReplaySetTargetProgress(uint64_t progress) {
+  gTargetProgress = progress;
+}
+
+void RecordReplayOnTargetProgressReached() {
+  gRecordReplayProgressReached();
 }
 
 void RecordReplayInstrument(const char* kind, const char* function, int offset) {
@@ -10721,6 +10738,7 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   RecordReplayLoadSymbol(handle, "RecordReplayValue", gRecordReplayValue);
   RecordReplayLoadSymbol(handle, "RecordReplayOnInstrument", gRecordReplayOnInstrument);
   RecordReplayLoadSymbol(handle, "RecordReplayAreEventsDisallowed", gRecordReplayAreEventsDisallowed);
+  RecordReplayLoadSymbol(handle, "RecordReplayProgressReached", gRecordReplayProgressReached);
   RecordReplayLoadSymbol(handle, "RecordReplayBeginPassThroughEvents", gRecordReplayBeginPassThroughEvents);
   RecordReplayLoadSymbol(handle, "RecordReplayEndPassThroughEvents", gRecordReplayEndPassThroughEvents);
   RecordReplayLoadSymbol(handle, "RecordReplayBeginDisallowEvents", gRecordReplayBeginDisallowEvents);
@@ -10778,6 +10796,10 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   void (*setChangeInstrumentCallback)(void (*callback)(bool wantInstrumentation));
   RecordReplayLoadSymbol(handle, "RecordReplaySetChangeInstrumentCallback", setChangeInstrumentCallback);
   setChangeInstrumentCallback(internal::RecordReplayChangeInstrument);
+
+  void (*setProgressCallback)(void (*aCallback)(uint64_t));
+  RecordReplayLoadSymbol(handle, "RecordReplaySetProgressCallback", setProgressCallback);
+  setProgressCallback(internal::RecordReplaySetTargetProgress);
 
   internal::gRecordReplayAssertValues = !!getenv("RECORD_REPLAY_JS_ASSERTS");
 
