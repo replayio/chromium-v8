@@ -530,6 +530,8 @@ void TraceV8ConsoleMessageEvent(V8MessageOrigin origin, ConsoleAPIType type) {
 
 }  // anonymous namespace
 
+extern "C" void V8RecordReplayOnConsoleMessage(size_t bookmark);
+
 void V8ConsoleMessageStorage::addMessage(
     std::unique_ptr<V8ConsoleMessage> message) {
   int contextGroupId = m_contextGroupId;
@@ -544,6 +546,13 @@ void V8ConsoleMessageStorage::addMessage(
           session->consoleAgent()->messageAdded(message.get());
         session->runtimeAgent()->messageAdded(message.get());
       });
+
+  // After notifying the inspector about the message, listeners will know about
+  // the message contents if any commands are sent within RecordReplayOnConsoleMessage.
+  if (message->origin() == V8MessageOrigin::kConsole) {
+    V8RecordReplayOnConsoleMessage(0);
+  }
+
   if (!inspector->hasConsoleMessageStorage(contextGroupId)) return;
 
   DCHECK(m_messages.size() <= maxConsoleMessageCount);

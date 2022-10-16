@@ -10338,10 +10338,18 @@ void recordreplay::BeginDisallowEvents() {
   }
 }
 
+extern "C" void V8RecordReplayBeginDisallowEvents() {
+  recordreplay::BeginDisallowEvents();
+}
+
 void recordreplay::EndDisallowEvents() {
   if (IsRecordingOrReplaying()) {
     gRecordReplayEndDisallowEvents();
   }
+}
+
+extern "C" void V8RecordReplayEndDisallowEvents() {
+  recordreplay::EndDisallowEvents();
 }
 
 void recordreplay::InvalidateRecording(const char* why) {
