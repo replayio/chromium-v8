@@ -2313,9 +2313,24 @@ void BaselineCompiler::VisitIncBlockCounter() {
               IndexAsSmi(0));  // coverage array slot
 }
 
+extern bool gRecordReplayAssertValues;
+
 void BaselineCompiler::VisitRecordReplayIncExecutionProgressCounter() {
-  CallRuntime(Runtime::kRecordReplayAssertExecutionProgress,
-              __ FunctionOperand());
+  if (gRecordReplayAssertValues) {
+    CallRuntime(Runtime::kRecordReplayAssertExecutionProgress,
+                __ FunctionOperand());
+  } else {
+    BaselineAssembler::ScratchRegisterScope scratch_scope(&basm_);
+    Register reg = scratch_scope.AcquireScratch();
+    __ Move(reg, ExternalReference::record_replay_progress_counter());
+    __ Add64(1, reg);
+    __ Store(reg, ExternalReference::record_replay_progress_counter());
+    __ ComparePointer(reg, ExternalReferenceAsOperand(ExternalReference::record_replay_target_progress()));
+    Label done;
+    __ JumpIf(Condition::kNotEqual, &done, Label::kNear);
+    CallRuntime(Runtime::kRecordReplayTargetProgressReached);
+    __ Bind(&done);
+  }
 }
 
 void BaselineCompiler::VisitRecordReplayNotifyActivity() {

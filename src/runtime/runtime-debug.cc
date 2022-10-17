@@ -1041,6 +1041,11 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
   return ReadOnlyRoots(isolate).undefined_value();
 }
 
+RUNTIME_FUNCTION(Runtime_RecordReplayTargetProgressReached) {
+  CHECK(*gProgressCounter == gTargetProgress);
+  RecordReplayOnTargetProgressReached();
+}
+
 extern "C" void V8RecordReplayNotifyActivity();
 
 RUNTIME_FUNCTION(Runtime_RecordReplayNotifyActivity) {
