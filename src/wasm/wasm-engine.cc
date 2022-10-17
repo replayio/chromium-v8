@@ -1248,7 +1248,7 @@ class SampleTopTierCodeSizeTask : public CancelableTask {
 
 void WasmEngine::SampleTopTierCodeSizeInAllIsolates(
     const std::shared_ptr<NativeModule>& native_module) {
-  if (recordreplay::IsRecordingOrReplaying()) {
+  if (recordreplay::IsRecordingOrReplaying("deterministic-tasks")) {
     // Posting tasks while holding the unordered lock below can lead to a
     // deadlock. Normally we would order this mutex itself, but it is acquired
     // during GCs which causes its own problems.

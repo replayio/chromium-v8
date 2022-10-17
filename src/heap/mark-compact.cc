@@ -3138,7 +3138,7 @@ class PageEvacuationJob : public v8::JobTask {
 
   void Run(JobDelegate* delegate) override {
     Evacuator* evacuator;
-    if (recordreplay::IsRecordingOrReplaying()) {
+    if (recordreplay::IsRecordingOrReplaying("deterministic-tasks")) {
       CHECK(evacuators_->size() == 1);
       evacuator = (*evacuators_)[0].get();
     } else {
@@ -3217,7 +3217,7 @@ void MarkCompactCollectorBase::CreateAndExecuteEvacuationTasks(
   std::unique_ptr<JobTask> task =
     std::make_unique<PageEvacuationJob>(isolate(), &evacuators,
                                         std::move(evacuation_items));
-  if (recordreplay::IsRecordingOrReplaying()) {
+  if (recordreplay::IsRecordingOrReplaying("deterministic-tasks")) {
     task->Run(nullptr);
   } else {
     V8::GetCurrentPlatform()
@@ -3961,7 +3961,7 @@ void MarkCompactCollector::UpdatePointersAfterEvacuation() {
                                             GCTracer::Scope::MC_EVACUATE_UPDATE_POINTERS_PARALLEL,
                                             GCTracer::Scope::MC_BACKGROUND_EVACUATE_UPDATE_POINTERS);
 
-    if (recordreplay::IsRecordingOrReplaying()) {
+    if (recordreplay::IsRecordingOrReplaying("deterministic-tasks")) {
       task->Run(nullptr);
     } else {
       V8::GetCurrentPlatform()

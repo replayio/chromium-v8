@@ -177,7 +177,7 @@ ScavengerCollector::JobTask::JobTask(
 
 void ScavengerCollector::JobTask::Run(JobDelegate* delegate) {
   Scavenger* scavenger;
-  if (recordreplay::IsRecordingOrReplaying()) {
+  if (recordreplay::IsRecordingOrReplaying("deterministic-tasks")) {
     CHECK(scavengers_->size() == 1);
     scavenger = (*scavengers_)[0].get();
   } else {
@@ -340,7 +340,7 @@ void ScavengerCollector::CollectGarbage() {
         std::make_unique<JobTask>(this, &scavengers,
                                   std::move(memory_chunks),
                                   &copied_list, &promotion_list);
-      if (recordreplay::IsRecordingOrReplaying()) {
+      if (recordreplay::IsRecordingOrReplaying("deterministic-tasks")) {
         task->Run(nullptr);
       } else {
         V8::GetCurrentPlatform()
