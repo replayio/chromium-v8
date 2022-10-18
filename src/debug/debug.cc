@@ -3284,8 +3284,6 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
   RecordReplayAddRegisteredScript(*script);
 }
 
-extern void RecordReplayOnConsoleMessage(size_t bookmark);
-
 // Command callbacks which we handle directly.
 struct InternalCommandCallback {
   const char* mCommand;
