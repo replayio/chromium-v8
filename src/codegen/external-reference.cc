@@ -497,6 +497,9 @@ ExternalReference ExternalReference::address_of_pending_message_obj(
 
 FUNCTION_REFERENCE(abort_with_reason, i::abort_with_reason)
 
+extern uint64_t* gProgressCounter;
+extern uint64_t gTargetProgress;
+
 ExternalReference ExternalReference::record_replay_progress_counter() {
   return ExternalReference(gProgressCounter);
 }

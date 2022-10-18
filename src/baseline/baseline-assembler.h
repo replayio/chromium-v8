@@ -155,6 +155,8 @@ class BaselineAssembler {
   inline void SmiUntag(Register value);
   inline void SmiUntag(Register output, Register value);
 
+  inline void AddPointer(Register output, Immediate value);
+
   inline void Switch(Register reg, int case_value_base, Label** labels,
                      int num_labels);
 
