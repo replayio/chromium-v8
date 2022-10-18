@@ -995,7 +995,6 @@ extern bool gRecordReplayHasCheckpoint;
 extern void RecordReplayOnTargetProgressReached();
 
 RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
-  ++*gProgressCounter;
   if (++*gProgressCounter == gTargetProgress) {
     RecordReplayOnTargetProgressReached();
   }
