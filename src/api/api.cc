@@ -9981,14 +9981,12 @@ bool gRecordReplayHasCheckpoint;
 
 void RecordReplayOnNewSource(Isolate* isolate, const char* id,
                              const char* kind, const char* url) {
-  DCHECK(gRecordingOrReplaying);
   if (gRecordReplayHasCheckpoint) {
     gRecordReplayOnNewSource(id, kind, url);
   }
 }
 
 void RecordReplayOnConsoleMessage(size_t bookmark) {
-  DCHECK(gRecordingOrReplaying);
   if (gRecordReplayHasCheckpoint) {
     gRecordReplayOnConsoleMessage(bookmark);
   }
@@ -10161,15 +10159,113 @@ bool RecordReplayHasDefaultContext() {
 
 static std::vector<std::string>* gRecordReplayDisabledFeatures;
 
-extern "C" V8_EXPORT bool V8RecordReplayFeatureEnabled(const char* feature) {
-  if (gRecordReplayDisabledFeatures) {
-    for (std::string disabled : *gRecordReplayDisabledFeatures) {
-      if (disabled == feature) {
-        return false;
-      }
+// Known features which can be disabled via RECORD_REPLAY_DISABLE_FEATURES.
+// Used to catch misspellings when testing if a feature is enabled or specifying
+// disabled features.
+static const char* gRecordReplayKnownFeatures[] = {
+  // Disable all tests for whether we are recording/replaying.
+  "record-replay",
+
+  // Tasks must be posted at deterministic points.
+  "deterministic-tasks",
+
+  // Assorted changes related to the GC and inspecting the heap.
+  "gc-changes",
+
+  // References are held on assorted objects to avoid problems when they are
+  // destroyed at non-deterministic points.
+  "leak-references",
+
+  // Register scripts with the recorder.
+  "register-scripts",
+
+  // Emit special record/replay opcodes in registered scripts.
+  "emit-opcodes",
+
+  // Behavior changes in places when events are disallowed.
+  "disallow-events",
+
+  // Don't compile "use asm" scripts as wasm.
+  "no-asm-wasm",
+
+  // Don't use cached results of script compilations.
+  "no-compile-cache",
+
+  // Compute IDs for pointers where necessary.
+  "pointer-ids",
+
+  // Explicitly record/replay values where necessary.
+  "values",
+
+  // Create checkpoints and setup functionality for inspecting state afterwards.
+  "checkpoints",
+
+  // Creating WebGL canvas contexts is disabled.
+  "no-webgl",
+
+  // Interrupting JS is disabled.
+  "no-interrupts",
+
+  // Detecting the language in text is disabled.
+  "no-language-detection",
+
+  // Media playback is disabled.
+  "no-media",
+
+  // Field trials of new features are disabled.
+  "no-field-trials",
+
+  // Using the GPU is disabled.
+  "no-gpu",
+
+  // Computing stats for calls is disabled.
+  "no-call-stats",
+
+  // Parking strings is disabled.
+  "no-park-strings",
+
+  // Creating multiple worker threads for rendering is disabled.
+  "no-render-workers",
+
+  // Notify the recorder about paints.
+  "notify-paints",
+
+  // Notify the recorder about network events.
+  "notify-network",
+
+  // Notify the recorder about HTML parses.
+  "notify-html-parse",
+};
+
+static inline bool RecordReplayKnownFeature(const char* feature) {
+  for (const char* known : gRecordReplayKnownFeatures) {
+    if (!strcmp(known, feature)) {
+      return true;
     }
   }
+  return false;
+}
+
+bool recordreplay::FeatureEnabled(const char* feature) {
+  if (!gRecordReplayDisabledFeatures) {
+    return true;
+  }
+
+  for (const std::string& disabled : *gRecordReplayDisabledFeatures) {
+    if (disabled == feature) {
+      return false;
+    }
+  }
+
+  if (!RecordReplayKnownFeature(feature)) {
+    fprintf(stderr, "UnknownFeature %s\n", feature);
+  }
+
   return true;
+}
+
+extern "C" V8_EXPORT bool V8RecordReplayFeatureEnabled(const char* feature) {
+  return recordreplay::FeatureEnabled(feature);
 }
 
 // Disabled features are specified with "," as a separator.
@@ -10185,7 +10281,7 @@ static const char* GetDisabledFeatureSpecifier() {
 
   // Diagnostic for problems replaying in certain environments.
   if (getenv("EBAY_TEST_ENVIRONMENT")) {
-    return "no-interrupts,disallow-events,leak-references,no-language-detection,no-webgl,no-media";
+    return "deterministic-tasks,gc-changes,leak-references,register-scripts,emit-opcodes,disallow-events,no-asm-wasm,no-compile-cache,pointer-ids,values,checkpoints,no-webgl,no-interrupts,no-language-detection,no-media,no-field-trials,no-gpu,no-call-stats,no-park-strings,no-render-workers,notify-paints,notify-network,notify-html-parse";
   }
 
   return nullptr;
@@ -10213,15 +10309,19 @@ static void RecordReplayInitializeDisabledFeatures() {
 
   for (const std::string& feature : *gRecordReplayDisabledFeatures) {
     fprintf(stderr, "RecordReplayDisabledFeature %s\n", feature.c_str());
+
+    if (!RecordReplayKnownFeature(feature.c_str())) {
+      fprintf(stderr, "UnknownFeature %s\n", feature.c_str());
+    }
   }
 }
 
-bool recordreplay::IsRecordingOrReplaying() {
-  return gRecordingOrReplaying;
+bool recordreplay::IsRecordingOrReplaying(const char* feature) {
+  return gRecordingOrReplaying && (!feature || FeatureEnabled(feature));
 }
 
-extern "C" bool V8IsRecordingOrReplaying() {
-  return recordreplay::IsRecordingOrReplaying();
+extern "C" bool V8IsRecordingOrReplaying(const char* feature) {
+  return recordreplay::IsRecordingOrReplaying(feature);
 }
 
 void recordreplay::Print(const char* format, ...) {
@@ -10298,7 +10398,7 @@ extern "C" void V8RecordReplayAssertBytes(const char* why, const void* buf, size
 }
 
 uintptr_t recordreplay::RecordReplayValue(const char* why, uintptr_t v) {
-  if (IsRecordingOrReplaying()) {
+  if (IsRecordingOrReplaying("values")) {
     return gRecordReplayValue(why, v);
   }
   return v;
@@ -10309,7 +10409,7 @@ extern "C" uintptr_t V8RecordReplayValue(const char* why, uintptr_t value) {
 }
 
 void recordreplay::RecordReplayBytes(const char* why, void* buf, size_t size) {
-  if (IsRecordingOrReplaying()) {
+  if (IsRecordingOrReplaying("values")) {
     gRecordReplayBytes(why, buf, size);
   }
 }
@@ -10319,7 +10419,7 @@ extern "C" void V8RecordReplayBytes(const char* why, void* buf, size_t size) {
 }
 
 bool recordreplay::AreEventsDisallowed() {
-  if (IsRecordingOrReplaying() && V8RecordReplayFeatureEnabled("disallow-events")) {
+  if (IsRecordingOrReplaying("disallow-events")) {
     return gRecordReplayAreEventsDisallowed();
   }
   return false;
@@ -10400,7 +10500,7 @@ typedef void (*RecordReplayBrowserEventCallback)(const char* name, const char* p
 static RecordReplayBrowserEventCallback gBrowserEventCallback = nullptr;
 
 extern "C" void V8RecordReplayBrowserEvent(const char* name, const char* payload) {
-  assert(recordreplay::IsRecordingOrReplaying());
+  CHECK(recordreplay::IsRecordingOrReplaying());
   if (gBrowserEventCallback) {
     gBrowserEventCallback(name, payload);
   }
@@ -10408,8 +10508,8 @@ extern "C" void V8RecordReplayBrowserEvent(const char* name, const char* payload
 
 extern "C" void V8RecordReplayRegisterBrowserEventCallback(
     RecordReplayBrowserEventCallback callback) {
-  assert(recordreplay::IsRecordingOrReplaying());
-  assert(!gBrowserEventCallback);
+  CHECK(recordreplay::IsRecordingOrReplaying());
+  CHECK(!gBrowserEventCallback);
   gBrowserEventCallback = callback;
 }
 
@@ -10478,7 +10578,7 @@ extern "C" bool V8RecordReplayHasDivergedFromRecording() {
 }
 
 void recordreplay::RegisterPointer(const void* ptr) {
-  if (IsRecordingOrReplaying()) {
+  if (IsRecordingOrReplaying("pointer-ids")) {
     gRecordReplayRegisterPointer(ptr);
   }
 }
@@ -10488,7 +10588,7 @@ extern "C" void V8RecordReplayRegisterPointer(const void* ptr) {
 }
 
 void recordreplay::UnregisterPointer(const void* ptr) {
-  if (IsRecordingOrReplaying()) {
+  if (IsRecordingOrReplaying("pointer-ids")) {
     gRecordReplayUnregisterPointer(ptr);
   }
 }
@@ -10498,7 +10598,7 @@ extern "C" void V8RecordReplayUnregisterPointer(const void* ptr) {
 }
 
 int recordreplay::PointerId(const void* ptr) {
-  if (IsRecordingOrReplaying()) {
+  if (IsRecordingOrReplaying("pointer-ids")) {
     return gRecordReplayPointerId(ptr);
   }
   return 0;
@@ -10509,7 +10609,7 @@ extern "C" int V8RecordReplayPointerId(const void* ptr) {
 }
 
 void* recordreplay::IdPointer(int id) {
-  DCHECK(IsRecordingOrReplaying());
+  CHECK(IsRecordingOrReplaying("pointer-ids"));
   return gRecordReplayIdPointer(id);
 }
 

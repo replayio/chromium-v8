@@ -152,7 +152,7 @@ RUNTIME_FUNCTION(Runtime_CompileOptimized_Concurrent) {
   return CompileOptimized(isolate, function,
                           // Only non-concurrent compilation is currently supported
                           // when recording/replaying.
-                          recordreplay::IsRecordingOrReplaying()
+                          recordreplay::IsRecordingOrReplaying("deterministic-tasks")
                           ? ConcurrencyMode::kNotConcurrent
                           : ConcurrencyMode::kConcurrent);
 }

@@ -518,7 +518,7 @@ bool UseAsmWasm(FunctionLiteral* literal, bool asm_wasm_broken) {
 
   // Instrumentation added when recording/replaying requires that scripts be
   // compiled in the regular way.
-  if (recordreplay::IsRecordingOrReplaying()) return false;
+  if (recordreplay::IsRecordingOrReplaying("no-asm-wasm")) return false;
 
   // In stress mode we want to run the validator on everything.
   if (FLAG_stress_validate_asm) return true;
@@ -2887,7 +2887,7 @@ MaybeHandle<SharedFunctionInfo> Compiler::GetSharedFunctionInfoForScript(
   // nor put the compilation result back into the cache.
   const bool use_compilation_cache =
       extension == nullptr && script_details.repl_mode == REPLMode::kNo &&
-      !recordreplay::IsRecordingOrReplaying();
+      !recordreplay::IsRecordingOrReplaying("no-compile-cache");
   MaybeHandle<SharedFunctionInfo> maybe_result;
   IsCompiledScope is_compiled_scope;
   if (use_compilation_cache) {

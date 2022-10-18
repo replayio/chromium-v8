@@ -305,7 +305,7 @@ class V8_EXPORT_PRIVATE WasmCode final {
 
     // Keep WasmCode objects around forever to avoid problems with them being
     // destroyed at non-deterministic points.
-    if (recordreplay::IsRecordingOrReplaying()) {
+    if (recordreplay::IsRecordingOrReplaying("leak-references")) {
       IncRef();
     }
   }

@@ -1503,7 +1503,7 @@ void GlobalHandles::InvokeOrScheduleSecondPassPhantomCallbacks(
   if (!second_pass_callbacks_.empty()) {
     if (FLAG_optimize_for_size || FLAG_predictable || synchronous_second_pass ||
         // Avoid posting runnables at non-deterministic points.
-        recordreplay::IsRecordingOrReplaying()) {
+        recordreplay::IsRecordingOrReplaying("deterministic-tasks")) {
       Heap::DevToolsTraceEventScope devtools_trace_event_scope(
           isolate()->heap(), "MajorGC", "invoke weak phantom callbacks");
       isolate()->heap()->CallGCPrologueCallbacks(

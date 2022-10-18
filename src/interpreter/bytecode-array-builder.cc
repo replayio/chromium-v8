@@ -72,7 +72,7 @@ BytecodeArrayBuilder::BytecodeArrayBuilder(
         zone->New<RegisterTransferWriter>(this));
   }
 
-  if (recordreplay::IsRecordingOrReplaying() &&
+  if (recordreplay::IsRecordingOrReplaying("emit-opcodes") &&
       IsMainThread() &&
       RecordReplayHasDefaultContext() &&
       !record_replay_ignore) {
