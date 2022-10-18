@@ -549,7 +549,7 @@ void V8ConsoleMessageStorage::addMessage(
 
   // After notifying the inspector about the message, listeners will know about
   // the message contents if any commands are sent within RecordReplayOnConsoleMessage.
-  if (message->origin() == V8MessageOrigin::kConsole) {
+  if (message->origin() == V8MessageOrigin::kConsole && v8::IsMainThread()) {
     V8RecordReplayOnConsoleMessage(0);
   }
 
