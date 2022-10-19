@@ -10909,6 +10909,10 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   RecordReplayLoadSymbol(handle, "RecordReplaySetProgressCallback", setProgressCallback);
   setProgressCallback(internal::RecordReplaySetTargetProgress);
 
+  void (*enableProgressCheckpoints)();
+  RecordReplayLoadSymbol(handle, "RecordReplayEnableProgressCheckpoints", enableProgressCheckpoints);
+  enableProgressCheckpoints();
+
   internal::gRecordReplayAssertValues = !!getenv("RECORD_REPLAY_JS_ASSERTS");
 
   // Set flags to disable non-deterministic posting of tasks to other threads.
