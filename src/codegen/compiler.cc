@@ -1615,6 +1615,8 @@ BackgroundCompileTask::BackgroundCompileTask(ScriptStreamingData* streamed_data,
   info_->set_character_stream(std::move(stream));
 }
 
+extern bool RecordReplayHasDefaultContext();
+
 BackgroundCompileTask::BackgroundCompileTask(
     const ParseInfo* outer_parse_info, const AstRawString* function_name,
     const FunctionLiteral* function_literal,
@@ -1633,6 +1635,11 @@ BackgroundCompileTask::BackgroundCompileTask(
       worker_thread_runtime_call_stats_(worker_thread_runtime_stats),
       timer_(timer),
       language_mode_(info_->language_mode()) {
+  if (recordreplay::IsRecordingOrReplaying() &&
+      (!IsMainThread() || !RecordReplayHasDefaultContext())) {
+    flags_.set_record_replay_ignore(true);
+  }
+
   DCHECK_EQ(outer_parse_info->parameters_end_pos(), kNoSourcePosition);
   DCHECK_NULL(outer_parse_info->extension());
 
@@ -1691,7 +1698,17 @@ class V8_NODISCARD OffThreadParseInfoScope {
 
 }  // namespace
 
+// For use when checking that record/replay opcodes are only emitted
+// for the main thread.
+static std::atomic<size_t> gNumRunningBackgroundCompileTasks;
+
+size_t NumRunningBackgroundCompileTasks() {
+  return gNumRunningBackgroundCompileTasks;
+}
+
 void BackgroundCompileTask::Run() {
+  gNumRunningBackgroundCompileTasks++;
+
   TimedHistogramScope timer(timer_);
   base::Optional<OffThreadParseInfoScope> off_thread_scope(
       base::in_place, info_.get(), worker_thread_runtime_call_stats_,
@@ -1767,6 +1784,8 @@ void BackgroundCompileTask::Run() {
       info_.reset();
     }
   }
+
+  gNumRunningBackgroundCompileTasks--;
 }
 
 MaybeHandle<SharedFunctionInfo> BackgroundCompileTask::GetOuterFunctionSfi(
@@ -2056,10 +2075,14 @@ MaybeHandle<SharedFunctionInfo> Compiler::CompileToplevel(
                                        isolate, is_compiled_scope);
 }
 
+extern void RecordReplayCopyMainThreadInstrumentationSitesAfterBackgroundCompileTask();
+
 // static
 bool Compiler::FinalizeBackgroundCompileTask(
     BackgroundCompileTask* task, Handle<SharedFunctionInfo> shared_info,
     Isolate* isolate, ClearExceptionFlag flag) {
+  RecordReplayCopyMainThreadInstrumentationSitesAfterBackgroundCompileTask();
+
   DCHECK(!FLAG_finalize_streaming_on_background);
 
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("v8.compile"),
@@ -2683,13 +2706,20 @@ Handle<Script> NewScript(
 
 static void SetRecordReplayIgnoreByURL(UnoptimizedCompileFlags& flags,
                                        const Compiler::ScriptDetails& script_details) {
-  if (recordreplay::IsRecordingOrReplaying()) {
-    Handle<Object> script_name;
-    if (script_details.name_obj.ToHandle(&script_name)) {
-      std::unique_ptr<char[]> name_cstr = String::cast(*script_name).ToCString();
-      if (RecordReplayIgnoreScriptByURL(name_cstr.get())) {
-        flags.set_record_replay_ignore(true);
-      }
+  if (!recordreplay::IsRecordingOrReplaying()) {
+    return;
+  }
+
+  if (!IsMainThread()) {
+    flags.set_record_replay_ignore(true);
+    return;
+  }
+
+  Handle<Object> script_name;
+  if (script_details.name_obj.ToHandle(&script_name)) {
+    std::unique_ptr<char[]> name_cstr = String::cast(*script_name).ToCString();
+    if (RecordReplayIgnoreScriptByURL(name_cstr.get())) {
+      flags.set_record_replay_ignore(true);
     }
   }
 }

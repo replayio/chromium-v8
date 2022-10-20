@@ -25,6 +25,8 @@ extern int RegisterInstrumentationSite(const char* kind, int source_position,
 extern bool RecordReplayHasDefaultContext();
 extern bool gRecordReplayAssertValues;
 
+extern size_t NumRunningBackgroundCompileTasks();
+
 namespace interpreter {
 
 class RegisterTransferWriter final
@@ -73,10 +75,16 @@ BytecodeArrayBuilder::BytecodeArrayBuilder(
   }
 
   if (recordreplay::IsRecordingOrReplaying("emit-opcodes") &&
-      IsMainThread() &&
       RecordReplayHasDefaultContext() &&
       !record_replay_ignore) {
     emit_record_replay_opcodes_ = true;
+
+    // Record/replay opcodes can only be emitted for scripts that run on the
+    // main thread. If we aren't on the main thread, this must have been
+    // triggered by a background compile task.
+    if (!IsMainThread()) {
+      CHECK(NumRunningBackgroundCompileTasks() != 0);
+    }
   }
 }
 

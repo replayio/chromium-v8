@@ -10150,12 +10150,12 @@ extern "C" void V8RecordReplayGetDefaultContext(v8::Isolate* isolate, v8::Local<
 }
 
 bool RecordReplayHasDefaultContext() {
-  CHECK(IsMainThread());
   return !!gDefaultContext;
 }
 
-} // namespace internal
+extern void RecordReplayInitInstrumentationState();
 
+} // namespace internal
 
 static std::vector<std::string>* gRecordReplayDisabledFeatures;
 
@@ -10237,13 +10237,14 @@ static const char* gRecordReplayKnownFeatures[] = {
   "notify-html-parse",
 };
 
-static inline bool RecordReplayKnownFeature(const char* feature) {
+static inline void RecordReplayCheckKnownFeature(const char* feature) {
   for (const char* known : gRecordReplayKnownFeatures) {
     if (!strcmp(known, feature)) {
-      return true;
+      return;
     }
   }
-  return false;
+  fprintf(stderr, "UnknownFeature %s\n", feature);
+  recordreplay::Print("UnknownFeature %s", feature);
 }
 
 bool recordreplay::FeatureEnabled(const char* feature) {
@@ -10257,10 +10258,7 @@ bool recordreplay::FeatureEnabled(const char* feature) {
     }
   }
 
-  if (!RecordReplayKnownFeature(feature)) {
-    fprintf(stderr, "UnknownFeature %s\n", feature);
-  }
-
+  RecordReplayCheckKnownFeature(feature);
   return true;
 }
 
@@ -10304,14 +10302,6 @@ static void RecordReplayInitializeDisabledFeatures() {
         gRecordReplayDisabledFeatures->emplace_back(env);
       }
       break;
-    }
-  }
-
-  for (const std::string& feature : *gRecordReplayDisabledFeatures) {
-    fprintf(stderr, "RecordReplayDisabledFeature %s\n", feature.c_str());
-
-    if (!RecordReplayKnownFeature(feature.c_str())) {
-      fprintf(stderr, "UnknownFeature %s\n", feature.c_str());
     }
   }
 }
@@ -10948,6 +10938,16 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
       fclose(file);
     }
   }
+
+  // Log disabled features.
+  if (gRecordReplayDisabledFeatures) {
+    for (const std::string& feature : *gRecordReplayDisabledFeatures) {
+      fprintf(stderr, "RecordReplayDisabledFeature %s\n", feature.c_str());
+      RecordReplayCheckKnownFeature(feature.c_str());
+    }
+  }
+
+  internal::RecordReplayInitInstrumentationState();
 }
 
 extern "C" void V8SetRecordingOrReplaying(void* handle) {
