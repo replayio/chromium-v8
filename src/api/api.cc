@@ -9951,7 +9951,7 @@ static void (*gRecordReplayInvalidateRecording)(const char* format, ...);
 static void (*gRecordReplayNewCheckpoint)();
 static bool (*gRecordReplayIsReplaying)();
 static bool (*gRecordReplayHasDivergedFromRecording)();
-static void (*gRecordReplayRegisterPointer)(const void* ptr);
+static void (*gRecordReplayRegisterPointerWithName)(const char* name, const void* ptr);
 static void (*gRecordReplayUnregisterPointer)(const void* ptr);
 static int (*gRecordReplayPointerId)(const void* ptr);
 static void* (*gRecordReplayIdPointer)(int id);
@@ -10567,14 +10567,14 @@ extern "C" bool V8RecordReplayHasDivergedFromRecording() {
   return false;
 }
 
-void recordreplay::RegisterPointer(const void* ptr) {
+void recordreplay::RegisterPointer(const char* name, const void* ptr) {
   if (IsRecordingOrReplaying("pointer-ids")) {
-    gRecordReplayRegisterPointer(ptr);
+    gRecordReplayRegisterPointerWithName(name, ptr);
   }
 }
 
-extern "C" void V8RecordReplayRegisterPointer(const void* ptr) {
-  recordreplay::RegisterPointer(ptr);
+extern "C" void V8RecordReplayRegisterPointer(const char* name, const void* ptr) {
+  recordreplay::RegisterPointer(name, ptr);
 }
 
 void recordreplay::UnregisterPointer(const void* ptr) {
@@ -10849,7 +10849,7 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   RecordReplayLoadSymbol(handle, "RecordReplayAddOrderedPthreadMutex", gRecordReplayAddOrderedPthreadMutex);
   RecordReplayLoadSymbol(handle, "RecordReplayIsReplaying", gRecordReplayIsReplaying);
   RecordReplayLoadSymbol(handle, "RecordReplayHasDivergedFromRecording", gRecordReplayHasDivergedFromRecording);
-  RecordReplayLoadSymbol(handle, "RecordReplayRegisterPointer", gRecordReplayRegisterPointer);
+  RecordReplayLoadSymbol(handle, "RecordReplayRegisterPointerWithName", gRecordReplayRegisterPointerWithName);
   RecordReplayLoadSymbol(handle, "RecordReplayUnregisterPointer", gRecordReplayUnregisterPointer);
   RecordReplayLoadSymbol(handle, "RecordReplayPointerId", gRecordReplayPointerId);
   RecordReplayLoadSymbol(handle, "RecordReplayIdPointer", gRecordReplayIdPointer);

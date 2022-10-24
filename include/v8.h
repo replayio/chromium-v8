@@ -12303,7 +12303,7 @@ struct AutoDisallowEvents {
   ~AutoDisallowEvents() { EndDisallowEvents(); }
 };
 
-static void RegisterPointer(const void* ptr);
+static void RegisterPointer(const char* name, const void* ptr);
 static void UnregisterPointer(const void* ptr);
 static int PointerId(const void* ptr);
 static void* IdPointer(int id);
