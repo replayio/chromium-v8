@@ -4560,7 +4560,20 @@ void Isolate::CountUsage(v8::Isolate::UseCounterFeature feature) {
   }
 }
 
-int Isolate::GetNextScriptId() { return heap()->NextScriptId(); }
+// Start disallowed script IDs at a value that won't conflict with regular IDs,
+// which start at one and increment from there.
+static int gNextDisallowedScriptId = 1 << 30;
+
+int Isolate::GetNextScriptId() {
+  // Use a separate pool of IDs when events are disallowed, as these scripts
+  // won't be created at consistently when recording vs. replaying.
+  if (recordreplay::AreEventsDisallowed()) {
+    CHECK(IsMainThread());
+    return gNextDisallowedScriptId++;
+  }
+
+  return heap()->NextScriptId();
+}
 
 // static
 std::string Isolate::GetTurboCfgFileName(Isolate* isolate) {
