@@ -1178,13 +1178,13 @@ typedef std::vector<InstrumentationSite> InstrumentationSiteVector;
 static InstrumentationSiteVector* gInstrumentationSites;
 static base::Mutex* gInstrumentationSitesMutex;
 
-// Prefix of gInstrumentationSites which are usable by running scripts.
-// Main thread only.
+// Prefix of gInstrumentationSites, main thread only. Used to avoid locking.
 static InstrumentationSiteVector* gMainThreadInstrumentationSites;
 
 // On the main thread, copy over any instrumentation sites that haven't
 // been added to gMainThreadInstrumentationSites.
-static void CopyMainThreadInstrumentationSites(const base::MutexGuard&) {
+static void CopyMainThreadInstrumentationSites() {
+  base::MutexGuard lock(gInstrumentationSitesMutex);
   for (size_t i = gMainThreadInstrumentationSites->size();
        i < gInstrumentationSites->size();
        i++) {
@@ -1204,27 +1204,20 @@ int RegisterInstrumentationSite(const char* kind, int source_position,
   int index = (int)gInstrumentationSites->size();
   gInstrumentationSites->push_back(site);
 
-  if (IsMainThread()) {
-    CopyMainThreadInstrumentationSites(lock);
-  }
-
   return index + BytecodeSiteOffset;
-}
-
-void RecordReplayCopyMainThreadInstrumentationSitesAfterBackgroundCompileTask() {
-  CHECK(IsMainThread());
-  base::MutexGuard lock(gInstrumentationSitesMutex);
-  CopyMainThreadInstrumentationSites(lock);
 }
 
 static InstrumentationSite& GetInstrumentationSite(const char* why, int index) {
   CHECK(IsMainThread());
   index -= BytecodeSiteOffset;
   if ((size_t)index >= gMainThreadInstrumentationSites->size()) {
-    recordreplay::Diagnostic("BadInstrumentationSite %s %d %d",
-                             why, index, gMainThreadInstrumentationSites->size());
+    CopyMainThreadInstrumentationSites();
+    if ((size_t)index >= gMainThreadInstrumentationSites->size()) {
+      recordreplay::Diagnostic("BadInstrumentationSite %s %d %d",
+                               why, index, gMainThreadInstrumentationSites->size());
+      CHECK((size_t)index < gMainThreadInstrumentationSites->size());
+    }
   }
-  CHECK((size_t)index < gMainThreadInstrumentationSites->size());
   return (*gMainThreadInstrumentationSites)[index];
 }
 
