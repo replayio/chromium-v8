@@ -2075,14 +2075,10 @@ MaybeHandle<SharedFunctionInfo> Compiler::CompileToplevel(
                                        isolate, is_compiled_scope);
 }
 
-extern void RecordReplayCopyMainThreadInstrumentationSitesAfterBackgroundCompileTask();
-
 // static
 bool Compiler::FinalizeBackgroundCompileTask(
     BackgroundCompileTask* task, Handle<SharedFunctionInfo> shared_info,
     Isolate* isolate, ClearExceptionFlag flag) {
-  RecordReplayCopyMainThreadInstrumentationSitesAfterBackgroundCompileTask();
-
   DCHECK(!FLAG_finalize_streaming_on_background);
 
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("v8.compile"),
