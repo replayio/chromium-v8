@@ -10279,7 +10279,7 @@ static const char* GetDisabledFeatureSpecifier() {
 
   // Diagnostic for problems replaying in certain environments.
   if (getenv("EBAY_TEST_ENVIRONMENT")) {
-    return "register-scripts,emit-opcodes,no-asm-wasm,no-compile-cache,checkpoints,no-webgl,no-interrupts,no-language-detection,no-media,no-field-trials";
+    return "register-scripts,emit-opcodes,no-asm-wasm,no-compile-cache,no-webgl,no-interrupts,no-language-detection,no-media,no-field-trials";
   }
 
   return nullptr;
