@@ -2213,6 +2213,10 @@ MaybeHandle<JSFunction> Compiler::GetFunctionFromEval(
     DCHECK(!flags.is_module());
     flags.set_parse_restriction(restriction);
 
+    if (!IsMainThread()) {
+      flags.set_record_replay_ignore(true);
+    }
+
     UnoptimizedCompileState compile_state(isolate);
     ParseInfo parse_info(isolate, flags, &compile_state);
     parse_info.set_parameters_end_pos(parameters_end_pos);
