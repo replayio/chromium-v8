@@ -194,6 +194,7 @@ void LocalHeap::UnparkSlowPath() {
     CHECK(state_.compare_exchange_strong(expected, kCollectionRequested));
     heap_->CollectGarbageForBackground(this);
   } else {
+    recordreplay::AutoDisallowEvents disallow;
     while (true) {
       ThreadState expected = kParked;
       if (!state_.compare_exchange_strong(expected, kRunning)) {
