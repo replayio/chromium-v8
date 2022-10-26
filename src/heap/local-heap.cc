@@ -194,6 +194,7 @@ void LocalHeap::UnparkSlowPath() {
     CHECK(state_.compare_exchange_strong(expected, kCollectionRequested));
     heap_->CollectGarbageForBackground(this);
   } else {
+    recordreplay::AutoDisallowEvents disallow;
     while (true) {
       ThreadState expected = kParked;
       if (!state_.compare_exchange_strong(expected, kRunning)) {
@@ -217,6 +218,7 @@ void LocalHeap::SafepointSlowPath() {
     CHECK_EQ(kCollectionRequested, state_relaxed());
     heap_->CollectGarbageForBackground(this);
   } else {
+    recordreplay::AutoDisallowEvents disallow;
     TRACE_GC1(heap_->tracer(), GCTracer::Scope::BACKGROUND_SAFEPOINT,
               ThreadKind::kBackground);
     ThreadState expected = kSafepointRequested;
