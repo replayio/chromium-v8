@@ -10958,6 +10958,10 @@ bool IsMainThread() {
   return gMainThread == pthread_self();
 }
 
+extern "C" bool V8IsMainThread() {
+  return IsMainThread();
+}
+
 namespace internal {
 
 const size_t HandleScopeImplementer::kEnteredContextsOffset =
