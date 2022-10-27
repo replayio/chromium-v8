@@ -10200,6 +10200,9 @@ static const char* gRecordReplayKnownFeatures[] = {
   // Create checkpoints and setup functionality for inspecting state afterwards.
   "checkpoints",
 
+  // Run the special recording script at the first checkpoint.
+  "recording-script",
+
   // Creating WebGL canvas contexts is disabled.
   "no-webgl",
 
@@ -10282,7 +10285,7 @@ static const char* GetDisabledFeatureSpecifier() {
 
   // Diagnostic for problems replaying in certain environments.
   if (getenv("EBAY_TEST_ENVIRONMENT")) {
-    return "register-scripts,emit-opcodes,no-asm-wasm,no-compile-cache,no-webgl,no-interrupts,no-language-detection,no-media,no-field-trials";
+    return "register-scripts,emit-opcodes,no-asm-wasm,no-compile-cache,no-webgl,no-interrupts,no-language-detection,no-media,no-field-trials,recording-script";
   }
 
   return nullptr;
