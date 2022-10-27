@@ -10215,6 +10215,9 @@ static const char* gRecordReplayKnownFeatures[] = {
   // Field trials of new features are disabled.
   "no-field-trials",
 
+  // Don't report V8 feature usage to the browser process.
+  "no-count-usage",
+
   // Using the GPU is disabled.
   "no-gpu",
 
