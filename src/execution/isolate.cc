@@ -4538,7 +4538,7 @@ void Isolate::CountUsage(v8::Isolate::UseCounterFeature feature) {
   // Don't count usage when recording/replaying, as this can involve posting
   // tasks to other threads in places that run non-deterministically
   // (e.g. compilation).
-  if (recordreplay::IsRecordingOrReplaying("deterministic-tasks")) {
+  if (recordreplay::IsRecordingOrReplaying("no-count-usage")) {
     return;
   }
 
