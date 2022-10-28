@@ -3137,13 +3137,7 @@ class PageEvacuationJob : public v8::JobTask {
         tracer_(isolate->heap()->tracer()) {}
 
   void Run(JobDelegate* delegate) override {
-    Evacuator* evacuator;
-    if (recordreplay::IsRecordingOrReplaying("deterministic-tasks")) {
-      CHECK(evacuators_->size() == 1);
-      evacuator = (*evacuators_)[0].get();
-    } else {
-      evacuator = (*evacuators_)[delegate->GetTaskId()].get();
-    }
+    Evacuator* evacuator = (*evacuators_)[delegate->GetTaskId()].get();
     if (!delegate || delegate->IsJoiningThread()) {
       TRACE_GC(tracer_, evacuator->GetTracingScope());
       ProcessItems(delegate, evacuator);
@@ -3217,13 +3211,9 @@ void MarkCompactCollectorBase::CreateAndExecuteEvacuationTasks(
   std::unique_ptr<JobTask> task =
     std::make_unique<PageEvacuationJob>(isolate(), &evacuators,
                                         std::move(evacuation_items));
-  if (recordreplay::IsRecordingOrReplaying("deterministic-tasks")) {
-    task->Run(nullptr);
-  } else {
-    V8::GetCurrentPlatform()
-        ->PostJob(v8::TaskPriority::kUserBlocking, std::move(task))
-        ->Join();
-  }
+  V8::GetCurrentPlatform()
+      ->PostJob(v8::TaskPriority::kUserBlocking, std::move(task))
+      ->Join();
 
   for (auto& evacuator : evacuators) evacuator->Finalize();
   evacuators.clear();
@@ -3961,13 +3951,9 @@ void MarkCompactCollector::UpdatePointersAfterEvacuation() {
                                             GCTracer::Scope::MC_EVACUATE_UPDATE_POINTERS_PARALLEL,
                                             GCTracer::Scope::MC_BACKGROUND_EVACUATE_UPDATE_POINTERS);
 
-    if (recordreplay::IsRecordingOrReplaying("deterministic-tasks")) {
-      task->Run(nullptr);
-    } else {
-      V8::GetCurrentPlatform()
-          ->PostJob(v8::TaskPriority::kUserBlocking, std::move(task))
-          ->Join();
-    }
+    V8::GetCurrentPlatform()
+        ->PostJob(v8::TaskPriority::kUserBlocking, std::move(task))
+        ->Join();
   }
 
   {
