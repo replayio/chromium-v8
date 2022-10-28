@@ -10197,9 +10197,6 @@ static const char* gRecordReplayKnownFeatures[] = {
   // Create checkpoints and setup functionality for inspecting state afterwards.
   "checkpoints",
 
-  // Run the special recording script at the first checkpoint.
-  "recording-script",
-
   // Creating WebGL canvas contexts is disabled.
   "no-webgl",
 
@@ -10238,6 +10235,11 @@ static const char* gRecordReplayKnownFeatures[] = {
 
   // Notify the recorder about HTML parses.
   "notify-html-parse",
+
+  // Collect source maps referenced by scripts in the recording. This can be
+  // separately disabled with the RECORD_REPLAY_DISABLE_SOURCEMAP_COLLECTION
+  // environment variable.
+  "collect-source-maps",
 };
 
 static inline void RecordReplayCheckKnownFeature(const char* feature) {
