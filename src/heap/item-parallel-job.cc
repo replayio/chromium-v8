@@ -90,21 +90,11 @@ void ItemParallelJob::Run() {
 
     task->SetupInternal(pending_tasks_, &items_, start_index);
     task_ids[i] = task->id();
-    if (recordreplay::IsRecordingOrReplaying("deterministic-tasks")) {
-      // All tasks run on the main thread when recording/replaying for now.
-      // We don't have a way to post tasks that run non-deterministically.
-      task->WillRunOnForeground();
-      task->Run();
-    } else if (i > 0) {
+    if (i > 0) {
       V8::GetCurrentPlatform()->CallBlockingTaskOnWorkerThread(std::move(task));
     } else {
       main_task = std::move(task);
     }
-  }
-
-  if (recordreplay::IsRecordingOrReplaying("deterministic-tasks")) {
-    // We're already done.
-    return;
   }
 
   // Contribute on main thread.

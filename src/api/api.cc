@@ -10166,9 +10166,6 @@ static const char* gRecordReplayKnownFeatures[] = {
   // Disable all tests for whether we are recording/replaying.
   "record-replay",
 
-  // Tasks must be posted at deterministic points.
-  "deterministic-tasks",
-
   // Assorted changes related to the GC and inspecting the heap.
   "gc-changes",
 

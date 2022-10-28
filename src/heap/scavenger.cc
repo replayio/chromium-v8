@@ -177,13 +177,8 @@ ScavengerCollector::JobTask::JobTask(
 
 void ScavengerCollector::JobTask::Run(JobDelegate* delegate) {
   Scavenger* scavenger;
-  if (recordreplay::IsRecordingOrReplaying("deterministic-tasks")) {
-    CHECK(scavengers_->size() == 1);
-    scavenger = (*scavengers_)[0].get();
-  } else {
-    DCHECK_LT(delegate->GetTaskId(), scavengers_->size());
-    scavenger = (*scavengers_)[delegate->GetTaskId()].get();
-  }
+  DCHECK_LT(delegate->GetTaskId(), scavengers_->size());
+  scavenger = (*scavengers_)[delegate->GetTaskId()].get();
   if (!delegate || delegate->IsJoiningThread()) {
     TRACE_GC(outer_->heap_->tracer(),
              GCTracer::Scope::SCAVENGER_SCAVENGE_PARALLEL);
@@ -340,13 +335,9 @@ void ScavengerCollector::CollectGarbage() {
         std::make_unique<JobTask>(this, &scavengers,
                                   std::move(memory_chunks),
                                   &copied_list, &promotion_list);
-      if (recordreplay::IsRecordingOrReplaying("deterministic-tasks")) {
-        task->Run(nullptr);
-      } else {
-        V8::GetCurrentPlatform()
-            ->PostJob(v8::TaskPriority::kUserBlocking, std::move(task))
-            ->Join();
-      }
+      V8::GetCurrentPlatform()
+          ->PostJob(v8::TaskPriority::kUserBlocking, std::move(task))
+          ->Join();
       DCHECK(copied_list.IsEmpty());
       DCHECK(promotion_list.IsEmpty());
     }
