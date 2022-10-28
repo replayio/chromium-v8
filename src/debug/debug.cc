@@ -3301,8 +3301,8 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
 
       Handle<Object> callArgs[3];
       callArgs[0] = idStr;
-      callArgs[1] = Handle(script->GetNameOrSourceURL(), isolate);
-      callArgs[2] = Handle(script->source_mapping_url(), isolate);
+      callArgs[1] = Handle<Object>(script->GetNameOrSourceURL(), isolate);
+      callArgs[2] = Handle<Object>(script->source_mapping_url(), isolate);
 
       Handle<Object> undefined = isolate->factory()->undefined_value();
       MaybeHandle<Object> rv = Execution::Call(isolate, handler, undefined, 3, callArgs);
@@ -3595,22 +3595,27 @@ void FunctionCallbackRecordReplayAddNewScriptHandler(const FunctionCallbackInfo<
   if (!i::gNewScriptHandlers) {
     i::gNewScriptHandlers = new i::NewScriptHandlerVector();
   }
-  gNewScriptHandlers->push_back(handler);
+  i::gNewScriptHandlers->push_back(handler);
 }
 
 void FunctionCallbackRecordReplayGetScriptSource(const FunctionCallbackInfo<Value>& callArgs) {
   CHECK(recordreplay::IsRecordingOrReplaying());
   CHECK(IsMainThread());
   CHECK(callArgs.Length() == 1);
-  CHECK(callArgs[0]->IsString()) {
+  CHECK(callArgs[0]->IsString());
 
-  std::unique_ptr<char[]> script_id_text = String::cast(*callArgs[0]).ToCString();
+  i::Handle<i::Object> id_obj = Utils::OpenHandle(*callArgs[0]);
+
+  std::unique_ptr<char[]> script_id_text = i::String::cast(*id_obj).ToCString();
   int script_id = atoi(script_id_text.get());
 
-  Handle<Script> script = GetScript(callArgs.GetIsolate(), script_id);
-  Handle<String> source(String::cast(script->source()), isolate);
+  i::Isolate* isolate = (i::Isolate*)callArgs.GetIsolate();
 
-  callArgs.GetReturnValue().Set(source);
+  i::Handle<i::Script> script = i::GetScript(isolate, script_id);
+  i::Handle<i::String> source(i::String::cast(script->source()), isolate);
+
+  Local<Value> source_val = v8::Utils::ToLocal(source);
+  callArgs.GetReturnValue().Set(source_val);
 }
 
 }  // namespace v8
