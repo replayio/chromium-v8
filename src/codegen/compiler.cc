@@ -518,7 +518,7 @@ bool UseAsmWasm(FunctionLiteral* literal, bool asm_wasm_broken) {
 
   // Instrumentation added when recording/replaying requires that scripts be
   // compiled in the regular way.
-  if (recordreplay::IsRecordingOrReplaying()) return false;
+  if (recordreplay::IsRecordingOrReplaying("no-asm-wasm")) return false;
 
   // In stress mode we want to run the validator on everything.
   if (FLAG_stress_validate_asm) return true;
@@ -1098,10 +1098,6 @@ bool GetOptimizedCodeLater(std::unique_ptr<OptimizedCompilationJob> job,
                            Isolate* isolate,
                            OptimizedCompilationInfo* compilation_info,
                            CodeKind code_kind, Handle<JSFunction> function) {
-  // Optimization jobs are generated non-deterministically and we don't
-  // support posting non-deterministic tasks to other threads yet.
-  CHECK(!recordreplay::IsRecordingOrReplaying());
-
   if (!isolate->optimizing_compile_dispatcher()->IsQueueAvailable()) {
     if (FLAG_trace_concurrent_recompilation) {
       PrintF("  ** Compilation queue full, will retry optimizing ");
@@ -1619,6 +1615,8 @@ BackgroundCompileTask::BackgroundCompileTask(ScriptStreamingData* streamed_data,
   info_->set_character_stream(std::move(stream));
 }
 
+extern bool RecordReplayHasDefaultContext();
+
 BackgroundCompileTask::BackgroundCompileTask(
     const ParseInfo* outer_parse_info, const AstRawString* function_name,
     const FunctionLiteral* function_literal,
@@ -1637,6 +1635,11 @@ BackgroundCompileTask::BackgroundCompileTask(
       worker_thread_runtime_call_stats_(worker_thread_runtime_stats),
       timer_(timer),
       language_mode_(info_->language_mode()) {
+  if (recordreplay::IsRecordingOrReplaying() &&
+      (!IsMainThread() || !RecordReplayHasDefaultContext())) {
+    flags_.set_record_replay_ignore(true);
+  }
+
   DCHECK_EQ(outer_parse_info->parameters_end_pos(), kNoSourcePosition);
   DCHECK_NULL(outer_parse_info->extension());
 
@@ -1695,7 +1698,17 @@ class V8_NODISCARD OffThreadParseInfoScope {
 
 }  // namespace
 
+// For use when checking that record/replay opcodes are only emitted
+// for the main thread.
+static std::atomic<size_t> gNumRunningBackgroundCompileTasks;
+
+size_t NumRunningBackgroundCompileTasks() {
+  return gNumRunningBackgroundCompileTasks;
+}
+
 void BackgroundCompileTask::Run() {
+  gNumRunningBackgroundCompileTasks++;
+
   TimedHistogramScope timer(timer_);
   base::Optional<OffThreadParseInfoScope> off_thread_scope(
       base::in_place, info_.get(), worker_thread_runtime_call_stats_,
@@ -1771,6 +1784,8 @@ void BackgroundCompileTask::Run() {
       info_.reset();
     }
   }
+
+  gNumRunningBackgroundCompileTasks--;
 }
 
 MaybeHandle<SharedFunctionInfo> BackgroundCompileTask::GetOuterFunctionSfi(
@@ -2197,6 +2212,10 @@ MaybeHandle<JSFunction> Compiler::GetFunctionFromEval(
     flags.set_is_eval(true);
     DCHECK(!flags.is_module());
     flags.set_parse_restriction(restriction);
+
+    if (!IsMainThread()) {
+      flags.set_record_replay_ignore(true);
+    }
 
     UnoptimizedCompileState compile_state(isolate);
     ParseInfo parse_info(isolate, flags, &compile_state);
@@ -2687,13 +2706,20 @@ Handle<Script> NewScript(
 
 static void SetRecordReplayIgnoreByURL(UnoptimizedCompileFlags& flags,
                                        const Compiler::ScriptDetails& script_details) {
-  if (recordreplay::IsRecordingOrReplaying()) {
-    Handle<Object> script_name;
-    if (script_details.name_obj.ToHandle(&script_name)) {
-      std::unique_ptr<char[]> name_cstr = String::cast(*script_name).ToCString();
-      if (RecordReplayIgnoreScriptByURL(name_cstr.get())) {
-        flags.set_record_replay_ignore(true);
-      }
+  if (!recordreplay::IsRecordingOrReplaying()) {
+    return;
+  }
+
+  if (!IsMainThread()) {
+    flags.set_record_replay_ignore(true);
+    return;
+  }
+
+  Handle<Object> script_name;
+  if (script_details.name_obj.ToHandle(&script_name)) {
+    std::unique_ptr<char[]> name_cstr = String::cast(*script_name).ToCString();
+    if (RecordReplayIgnoreScriptByURL(name_cstr.get())) {
+      flags.set_record_replay_ignore(true);
     }
   }
 }
@@ -2887,7 +2913,7 @@ MaybeHandle<SharedFunctionInfo> Compiler::GetSharedFunctionInfoForScript(
   // nor put the compilation result back into the cache.
   const bool use_compilation_cache =
       extension == nullptr && script_details.repl_mode == REPLMode::kNo &&
-      !recordreplay::IsRecordingOrReplaying();
+      !recordreplay::IsRecordingOrReplaying("no-compile-cache");
   MaybeHandle<SharedFunctionInfo> maybe_result;
   IsCompiledScope is_compiled_scope;
   if (use_compilation_cache) {

@@ -995,7 +995,6 @@ extern bool gRecordReplayHasCheckpoint;
 extern void RecordReplayOnTargetProgressReached();
 
 RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
-  ++*gProgressCounter;
   if (++*gProgressCounter == gTargetProgress) {
     RecordReplayOnTargetProgressReached();
   }
@@ -1114,12 +1113,11 @@ struct AssertionSite {
 };
 typedef std::vector<AssertionSite> AssertionSiteVector;
 static AssertionSiteVector* gAssertionSites;
+static base::Mutex* gAssertionSitesMutex;
 
 int RegisterAssertValueSite(const std::string& desc, int source_position) {
-  CHECK(IsMainThread());
-  if (!gAssertionSites) {
-    gAssertionSites = new AssertionSiteVector();
-  }
+  base::MutexGuard lock(gAssertionSitesMutex);
+
   int index = (int)gAssertionSites->size();
   gAssertionSites->push_back({ desc, source_position, "" });
   return index + BytecodeSiteOffset;
@@ -1141,6 +1139,9 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertValue) {
   CHECK(RecordReplayHasRegisteredScript(*script));
 
   index -= BytecodeSiteOffset;
+
+  base::MutexGuard lock(gAssertionSitesMutex);
+
   CHECK(gAssertionSites && (size_t)index < gAssertionSites->size());
   AssertionSite& site = (*gAssertionSites)[index];
 
@@ -1176,35 +1177,54 @@ struct InstrumentationSite {
   std::string function_id_;
 };
 
-// Main thread only.
 typedef std::vector<InstrumentationSite> InstrumentationSiteVector;
+
+// All instrumentation sites that have been registered, possibly on a non-main
+// thread during background compilation tasks. Protected by gInstrumentationSitesMutex.
 static InstrumentationSiteVector* gInstrumentationSites;
+static base::Mutex* gInstrumentationSitesMutex;
+
+// Prefix of gInstrumentationSites, main thread only. Used to avoid locking.
+static InstrumentationSiteVector* gMainThreadInstrumentationSites;
+
+// On the main thread, copy over any instrumentation sites that haven't
+// been added to gMainThreadInstrumentationSites.
+static void CopyMainThreadInstrumentationSites() {
+  base::MutexGuard lock(gInstrumentationSitesMutex);
+  for (size_t i = gMainThreadInstrumentationSites->size();
+       i < gInstrumentationSites->size();
+       i++) {
+    gMainThreadInstrumentationSites->push_back((*gInstrumentationSites)[i]);
+  }
+}
 
 int RegisterInstrumentationSite(const char* kind, int source_position,
                                 int bytecode_offset) {
-  CHECK(IsMainThread());
   InstrumentationSite site;
   site.kind_ = kind;
   site.source_position_ = source_position;
   site.bytecode_offset_ = bytecode_offset;
-  if (!gInstrumentationSites) {
-    gInstrumentationSites = new InstrumentationSiteVector();
-  }
+
+  base::MutexGuard lock(gInstrumentationSitesMutex);
+
   int index = (int)gInstrumentationSites->size();
   gInstrumentationSites->push_back(site);
+
   return index + BytecodeSiteOffset;
 }
 
 static InstrumentationSite& GetInstrumentationSite(const char* why, int index) {
   CHECK(IsMainThread());
-  CHECK(gInstrumentationSites);
   index -= BytecodeSiteOffset;
-  if ((size_t)index >= gInstrumentationSites->size()) {
-    recordreplay::Diagnostic("BadInstrumentationSite %s %d %d",
-                             why, index, gInstrumentationSites->size());
+  if ((size_t)index >= gMainThreadInstrumentationSites->size()) {
+    CopyMainThreadInstrumentationSites();
+    if ((size_t)index >= gMainThreadInstrumentationSites->size()) {
+      recordreplay::Diagnostic("BadInstrumentationSite %s %d %d",
+                               why, index, gMainThreadInstrumentationSites->size());
+      CHECK((size_t)index < gMainThreadInstrumentationSites->size());
+    }
   }
-  CHECK((size_t)index < gInstrumentationSites->size());
-  return (*gInstrumentationSites)[index];
+  return (*gMainThreadInstrumentationSites)[index];
 }
 
 const char* InstrumentationSiteKind(int index) {
@@ -1217,6 +1237,15 @@ int InstrumentationSiteSourcePosition(int index) {
 
 int InstrumentationSiteBytecodeOffset(int index) {
   return GetInstrumentationSite("BytecodeOffset", index).bytecode_offset_;
+}
+
+void RecordReplayInitInstrumentationState() {
+  // These can't have static ctors/dtors...
+  gAssertionSites = new AssertionSiteVector();
+  gAssertionSitesMutex = new base::Mutex();
+  gInstrumentationSites = new InstrumentationSiteVector();
+  gInstrumentationSitesMutex = new base::Mutex();
+  gMainThreadInstrumentationSites = new InstrumentationSiteVector();
 }
 
 extern void RecordReplayInstrument(const char* kind, const char* function, int offset);

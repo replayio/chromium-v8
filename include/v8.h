@@ -12265,10 +12265,12 @@ class V8_EXPORT recordreplay {
   public:
 
 static void SetRecordingOrReplaying(void* handle);
-static bool IsRecordingOrReplaying();
+static bool IsRecordingOrReplaying(const char* feature = nullptr);
 static bool IsRecording();
 static bool IsReplaying();
 static const char* GetRecordingId();
+
+static bool FeatureEnabled(const char* feature);
 
 static void Print(const char* format, ...);
 static void Diagnostic(const char* format, ...);
@@ -12301,7 +12303,7 @@ struct AutoDisallowEvents {
   ~AutoDisallowEvents() { EndDisallowEvents(); }
 };
 
-static void RegisterPointer(const void* ptr);
+static void RegisterPointer(const char* name, const void* ptr);
 static void UnregisterPointer(const void* ptr);
 static int PointerId(const void* ptr);
 static void* IdPointer(int id);

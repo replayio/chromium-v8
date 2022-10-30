@@ -2187,7 +2187,7 @@ void Debug::DoProcessCompileEvent(bool has_compile_error, Handle<Script> script)
 
 void Debug::ProcessCompileEvent(bool has_compile_error, Handle<Script> script) {
   Debug::DoProcessCompileEvent(has_compile_error, script);
-  if (!has_compile_error && recordreplay::IsRecordingOrReplaying() && IsMainThread()) {
+  if (!has_compile_error && recordreplay::IsRecordingOrReplaying("register-scripts") && IsMainThread()) {
     RecordReplayRegisterScript(script);
   }
 }
@@ -3229,16 +3229,10 @@ extern bool RecordReplayHasDefaultContext();
 
 static void RecordReplayAddRegisteredScript(Script script);
 
-extern "C" bool V8RecordReplayFeatureEnabled(const char* feature);
-
 static void RecordReplayRegisterScript(Handle<Script> script) {
   CHECK(IsMainThread());
 
   if (!RecordReplayHasDefaultContext()) {
-    return;
-  }
-
-  if (!V8RecordReplayFeatureEnabled("register-scripts")) {
     return;
   }
 
@@ -3289,8 +3283,6 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
 
   RecordReplayAddRegisteredScript(*script);
 }
-
-extern void RecordReplayOnConsoleMessage(size_t bookmark);
 
 // Command callbacks which we handle directly.
 struct InternalCommandCallback {
@@ -3563,18 +3555,6 @@ std::string RecordReplayBasicValueContents(Handle<Object> value) {
 
 namespace i = internal;
 
-void FunctionCallbackIsRecordingOrReplaying(const FunctionCallbackInfo<Value>& callArgs) {
-  Local<Boolean> rv = Boolean::New(callArgs.GetIsolate(), recordreplay::IsRecordingOrReplaying());
-  callArgs.GetReturnValue().Set(rv);
-}
-
-void FunctionCallbackRecordReplayOnConsoleAPI(const FunctionCallbackInfo<Value>& callArgs) {
-  CHECK(recordreplay::IsRecordingOrReplaying());
-  if (IsMainThread()) {
-    i::RecordReplayOnConsoleMessage(0);
-  }
-}
-
 void FunctionCallbackRecordReplaySetCommandCallback(const FunctionCallbackInfo<Value>& callArgs) {
   CHECK(recordreplay::IsRecordingOrReplaying());
   CHECK(IsMainThread());
@@ -3591,29 +3571,6 @@ void FunctionCallbackRecordReplaySetClearPauseDataCallback(const FunctionCallbac
 
   Isolate* v8isolate = callArgs.GetIsolate();
   i::gClearPauseDataCallback = new Eternal<Value>(v8isolate, callArgs[0]);
-}
-
-void FunctionCallbackRecordReplayAssert(const FunctionCallbackInfo<Value>& callArgs) {
-  if (!recordreplay::IsRecordingOrReplaying()) {
-    return;
-  }
-
-  i::Handle<i::Object> value = Utils::OpenHandle(*callArgs[0]);
-
-  // This is used when a script explicitly asserts the contents of a value, so we can do
-  // more thorough checking.
-  if (value->IsString()) {
-    std::unique_ptr<char[]> contents = i::String::cast(*value).ToCString();
-    size_t len = strlen(contents.get());
-    if (len < 2000) {
-      recordreplay::Assert("AssertValue StringContents %s", contents.get());
-    } else {
-      recordreplay::AssertBytes("AssertValue StringBytes", contents.get(), len);
-    }
-  } else {
-    std::string contents = i::RecordReplayBasicValueContents(value);
-    recordreplay::Assert("AssertValue %s", contents.c_str());
-  }
 }
 
 }  // namespace v8

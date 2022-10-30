@@ -211,7 +211,9 @@ MemoryReducer::State MemoryReducer::Step(const State& state,
 }
 
 void MemoryReducer::ScheduleTimer(double delay_ms) {
-  if (recordreplay::IsRecordingOrReplaying()) {
+  // Posting tasks non-deterministically with a delay is not currently supported
+  // when recording/replaying.
+  if (recordreplay::IsRecordingOrReplaying("gc-changes")) {
     return;
   }
   DCHECK_LT(0, delay_ms);

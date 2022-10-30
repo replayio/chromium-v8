@@ -30,6 +30,9 @@
 
 namespace v8 {
 namespace internal {
+
+extern bool gRecordReplayAssertValues;
+
 namespace interpreter {
 
 // Scoped class tracking context objects created by the visitor. Represents
@@ -1427,13 +1430,15 @@ void BytecodeGenerator::GenerateBytecodeBody() {
     }
   }
 
-  if (recordreplay::IsRecordingOrReplaying()) {
+  if (recordreplay::IsRecordingOrReplaying("emit-opcodes")) {
     builder()->RecordReplayOnProgress();
 
-    int num_parameters = closure_scope()->num_parameters();
-    for (int i = 0; i < num_parameters; i++) {
-      Register parameter(builder()->Parameter(i));
-      builder()->LoadAccumulatorWithRegister(parameter).RecordReplayAssertValue("Parameter");
+    if (gRecordReplayAssertValues) {
+      int num_parameters = closure_scope()->num_parameters();
+      for (int i = 0; i < num_parameters; i++) {
+        Register parameter(builder()->Parameter(i));
+        builder()->LoadAccumulatorWithRegister(parameter).RecordReplayAssertValue("Parameter");
+      }
     }
 
     if (IsResumableFunction(literal->kind())) {
