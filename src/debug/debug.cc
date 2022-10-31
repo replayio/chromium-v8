@@ -2158,8 +2158,6 @@ void Debug::OnAfterCompile(Handle<Script> script) {
 static void RecordReplayRegisterScript(Handle<Script> script);
 
 void Debug::DoProcessCompileEvent(bool has_compile_error, Handle<Script> script) {
-  // https://linear.app/replay/issue/RUN-735
-  recordreplay::Assert("Debug::DoProcessCompileEvent Start");
 
   // Ignore temporary scripts.
   if (script->id() == Script::kTemporaryScriptId) return;
@@ -2177,25 +2175,14 @@ void Debug::DoProcessCompileEvent(bool has_compile_error, Handle<Script> script)
 #else
   if (!script->IsUserJavaScript()) return;
 #endif  // V8_ENABLE_WEBASSEMBLY
-
-  // https://linear.app/replay/issue/RUN-735
-  recordreplay::Assert("Debug::DoProcessCompileEvent #1 %d", !!debug_delegate_);
-
   if (!debug_delegate_) return;
   SuppressDebug while_processing(this);
   DebugScope debug_scope(this);
   HandleScope scope(isolate_);
   DisableBreak no_recursive_break(this);
   AllowJavascriptExecution allow_script(isolate_);
-
-  // https://linear.app/replay/issue/RUN-735
-  recordreplay::Assert("Debug::DoProcessCompileEvent #2");
-
   debug_delegate_->ScriptCompiled(ToApiHandle<debug::Script>(script),
                                   running_live_edit_, has_compile_error);
-
-  // https://linear.app/replay/issue/RUN-735
-  recordreplay::Assert("Debug::DoProcessCompileEvent Done");
 }
 
 void Debug::ProcessCompileEvent(bool has_compile_error, Handle<Script> script) {
@@ -3249,7 +3236,7 @@ bool RecordReplayHasRegisteredScript(Script script) {
     gRegisteredScripts->find(script.id()) != gRegisteredScripts->end();
 }
 
-typedef std::vector<Eternal<Value>*> NewScriptHandlerVector;
+typedef std::vector<std::pair<Eternal<Value>*, bool>> NewScriptHandlerVector;
 static NewScriptHandlerVector* gNewScriptHandlers;
 
 static void RecordReplayRegisterScript(Handle<Script> script) {
@@ -3308,7 +3295,15 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
   gRegisteredScripts->insert(script->id());
 
   if (gNewScriptHandlers) {
-    for (const auto& handlerEternalValue : *gNewScriptHandlers) {
+    for (auto entry : *gNewScriptHandlers) {
+      auto handlerEternalValue = entry.first;
+      auto disallowEvents = entry.second;
+
+      base::Optional<recordreplay::AutoDisallowEvents> disallow;
+      if (disallowEvents) {
+        disallow.emplace();
+      }
+
       Local<v8::Value> handlerValue = handlerEternalValue->Get((v8::Isolate*)isolate);
       Handle<Object> handler = Utils::OpenHandle(*handlerValue);
 
@@ -3604,11 +3599,12 @@ void FunctionCallbackRecordReplayAddNewScriptHandler(const FunctionCallbackInfo<
 
   Isolate* v8isolate = callArgs.GetIsolate();
   auto handler = new Eternal<Value>(v8isolate, callArgs[0]);
+  bool disallowEvents = callArgs.Length() >= 2 && callArgs[1]->IsTrue();
 
   if (!i::gNewScriptHandlers) {
     i::gNewScriptHandlers = new i::NewScriptHandlerVector();
   }
-  i::gNewScriptHandlers->push_back(handler);
+  i::gNewScriptHandlers->emplace_back(handler, disallowEvents);
 }
 
 void FunctionCallbackRecordReplayGetScriptSource(const FunctionCallbackInfo<Value>& callArgs) {

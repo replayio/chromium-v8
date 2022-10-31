@@ -490,9 +490,6 @@ size_t V8Debugger::nearHeapLimitCallback(void* data, size_t current_heap_limit,
 
 void V8Debugger::ScriptCompiled(v8::Local<v8::debug::Script> script,
                                 bool is_live_edited, bool has_compile_error) {
-  // https://linear.app/replay/issue/RUN-735
-  v8::recordreplay::Assert("V8Debugger::ScriptCompiled Start");
-
   if (m_ignoreScriptParsedEventsCounter != 0) return;
 
   int contextId;
@@ -500,9 +497,6 @@ void V8Debugger::ScriptCompiled(v8::Local<v8::debug::Script> script,
 
   v8::Isolate* isolate = m_isolate;
   V8InspectorClient* client = m_inspector->client();
-
-  // https://linear.app/replay/issue/RUN-735
-  v8::recordreplay::Assert("V8Debugger::ScriptCompiled #1");
 
   m_inspector->forEachSession(
       m_inspector->contextGroupId(contextId),
@@ -515,9 +509,6 @@ void V8Debugger::ScriptCompiled(v8::Local<v8::debug::Script> script,
                                      client),
             !has_compile_error);
       });
-
-  // https://linear.app/replay/issue/RUN-735
-  v8::recordreplay::Assert("V8Debugger::ScriptCompiled Done");
 }
 
 void V8Debugger::BreakProgramRequested(
