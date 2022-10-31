@@ -3227,7 +3227,17 @@ bool RecordReplayIgnoreScriptByURL(const char* url) {
 
 extern bool RecordReplayHasDefaultContext();
 
-static void RecordReplayAddRegisteredScript(Script script);
+typedef std::unordered_set<int> ScriptIdSet;
+static ScriptIdSet* gRegisteredScripts;
+
+bool RecordReplayHasRegisteredScript(Script script) {
+  return IsMainThread() &&
+    gRegisteredScripts &&
+    gRegisteredScripts->find(script.id()) != gRegisteredScripts->end();
+}
+
+typedef std::vector<Eternal<Value>*> NewScriptHandlerVector;
+static NewScriptHandlerVector* gNewScriptHandlers;
 
 static void RecordReplayRegisterScript(Handle<Script> script) {
   CHECK(IsMainThread());
@@ -3279,9 +3289,28 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
 
   recordreplay::Diagnostic("OnNewSource %s %s", id.get(), kind);
 
-  RecordReplayOnNewSource(isolate, id.get(), kind, url.length() ? url.c_str() : nullptr);
+  if (!gRegisteredScripts) {
+    gRegisteredScripts = new ScriptIdSet;
+  }
+  gRegisteredScripts->insert(script->id());
 
-  RecordReplayAddRegisteredScript(*script);
+  if (gNewScriptHandlers) {
+    for (const auto& handlerEternalValue : *gNewScriptHandlers) {
+      Local<v8::Value> handlerValue = handlerEternalValue->Get((v8::Isolate*)isolate);
+      Handle<Object> handler = Utils::OpenHandle(*handlerValue);
+
+      Handle<Object> callArgs[3];
+      callArgs[0] = idStr;
+      callArgs[1] = Handle<Object>(script->GetNameOrSourceURL(), isolate);
+      callArgs[2] = Handle<Object>(script->source_mapping_url(), isolate);
+
+      Handle<Object> undefined = isolate->factory()->undefined_value();
+      MaybeHandle<Object> rv = Execution::Call(isolate, handler, undefined, 3, callArgs);
+      CHECK(!rv.is_null());
+    }
+  }
+
+  RecordReplayOnNewSource(isolate, id.get(), kind, url.length() ? url.c_str() : nullptr);
 }
 
 // Command callbacks which we handle directly.
@@ -3383,23 +3412,6 @@ void ClearPauseDataCallback() {
   Handle<Object> undefined = isolate->factory()->undefined_value();
   MaybeHandle<Object> rv = Execution::Call(isolate, callback, undefined, 0, nullptr);
   CHECK(!rv.is_null());
-}
-
-typedef std::unordered_set<int> ScriptIdSet;
-static ScriptIdSet* gRegisteredScripts;
-
-static void RecordReplayAddRegisteredScript(Script script) {
-  CHECK(IsMainThread());
-  if (!gRegisteredScripts) {
-    gRegisteredScripts = new ScriptIdSet;
-  }
-  gRegisteredScripts->insert(script.id());
-}
-
-bool RecordReplayHasRegisteredScript(Script script) {
-  return IsMainThread() &&
-    gRegisteredScripts &&
-    gRegisteredScripts->find(script.id()) != gRegisteredScripts->end();
 }
 
 static std::string StringPrintf(const char* format, ...) {
@@ -3571,6 +3583,39 @@ void FunctionCallbackRecordReplaySetClearPauseDataCallback(const FunctionCallbac
 
   Isolate* v8isolate = callArgs.GetIsolate();
   i::gClearPauseDataCallback = new Eternal<Value>(v8isolate, callArgs[0]);
+}
+
+void FunctionCallbackRecordReplayAddNewScriptHandler(const FunctionCallbackInfo<Value>& callArgs) {
+  CHECK(recordreplay::IsRecordingOrReplaying());
+  CHECK(IsMainThread());
+
+  Isolate* v8isolate = callArgs.GetIsolate();
+  auto handler = new Eternal<Value>(v8isolate, callArgs[0]);
+
+  if (!i::gNewScriptHandlers) {
+    i::gNewScriptHandlers = new i::NewScriptHandlerVector();
+  }
+  i::gNewScriptHandlers->push_back(handler);
+}
+
+void FunctionCallbackRecordReplayGetScriptSource(const FunctionCallbackInfo<Value>& callArgs) {
+  CHECK(recordreplay::IsRecordingOrReplaying());
+  CHECK(IsMainThread());
+  CHECK(callArgs.Length() == 1);
+  CHECK(callArgs[0]->IsString());
+
+  i::Handle<i::Object> id_obj = Utils::OpenHandle(*callArgs[0]);
+
+  std::unique_ptr<char[]> script_id_text = i::String::cast(*id_obj).ToCString();
+  int script_id = atoi(script_id_text.get());
+
+  i::Isolate* isolate = (i::Isolate*)callArgs.GetIsolate();
+
+  i::Handle<i::Script> script = i::GetScript(isolate, script_id);
+  i::Handle<i::String> source(i::String::cast(script->source()), isolate);
+
+  Local<Value> source_val = v8::Utils::ToLocal(source);
+  callArgs.GetReturnValue().Set(source_val);
 }
 
 }  // namespace v8
