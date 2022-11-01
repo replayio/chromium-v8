@@ -9974,7 +9974,7 @@ static void* (*gJSONCreateString)(const char*);
 static void* (*gJSONCreateObject)(size_t, const char**, void**);
 static char* (*gJSONToString)(void*);
 static void (*gJSONFree)(void*);
-static void (*gRecordRepayOnAnnotation)(const char* kind, const char* contents);
+static void (*gRecordReplayOnAnnotation)(const char* kind, const char* contents);
 
 namespace internal {
 
@@ -10686,7 +10686,9 @@ extern "C" void V8RecordReplayNotifyActivity() {
 
 extern "C" void V8RecordReplayOnAnnotation(const char* kind, const char* contents) {
   DCHECK(recordreplay::IsRecordingOrReplaying());
-  return internal::gRecordReplayHasCheckpoint ? gRecordRepayOnAnnotation(kind, contents) : 0;
+  if (internal::gRecordReplayHasCheckpoint) {
+    gRecordReplayOnAnnotation(kind, contents);
+  }
 }
 
 template <typename Src, typename Dst>
