@@ -366,6 +366,10 @@ void BaselineAssembler::AddSmi(Register lhs, Smi rhs) {
   }
 }
 
+void BaselineAssembler::AddPointer(Register output, Immediate value) {
+  __ addq(output, value);
+}
+
 void BaselineAssembler::Switch(Register reg, int case_value_base,
                                Label** labels, int num_labels) {
   ScratchRegisterScope scope(this);

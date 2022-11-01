@@ -46,6 +46,9 @@
 
 namespace v8 {
 namespace internal {
+
+extern bool gRecordReplayAssertValues;
+
 namespace baseline {
 
 template <typename LocalIsolate>
@@ -2314,8 +2317,24 @@ void BaselineCompiler::VisitIncBlockCounter() {
 }
 
 void BaselineCompiler::VisitRecordReplayIncExecutionProgressCounter() {
-  CallRuntime(Runtime::kRecordReplayAssertExecutionProgress,
-              __ FunctionOperand());
+  if (gRecordReplayAssertValues) {
+    CallRuntime(Runtime::kRecordReplayAssertExecutionProgress,
+                __ FunctionOperand());
+  } else {
+    BaselineAssembler::ScratchRegisterScope scratch_scope(&basm_);
+    Register reg1 = scratch_scope.AcquireScratch();
+    Register reg2 = scratch_scope.AcquireScratch();
+    __ Move(reg1, ExternalReference::record_replay_progress_counter());
+    __ Move(reg2, MemOperand(reg1, 0));
+    __ AddPointer(reg2, Immediate(1));
+    __ Move(MemOperand(reg1, 0), reg2);
+    __ Move(reg1, ExternalReference::record_replay_target_progress());
+    __ ComparePointer(reg2, MemOperand(reg1, 0));
+    Label done;
+    __ JumpIf(Condition::kNotEqual, &done, Label::kNear);
+    CallRuntime(Runtime::kRecordReplayTargetProgressReached);
+    __ Bind(&done);
+  }
 }
 
 void BaselineCompiler::VisitRecordReplayNotifyActivity() {
