@@ -10046,14 +10046,54 @@ void RecordReplayChangeInstrument(bool enabled) {
   Deoptimizer::DeoptimizeAll(isolate);
 }
 
+// Progress counter we were requested to stop at by the recorder, or zero.
+uint64_t gRequestProgress;
+
+// Progress counter we need to stop at and invoke API interrupts, or zero.
+uint64_t gInterruptProgress;
+
+// Next progress value we will stop at. The minimum of gRequestProgress and gInterruptProgress
+// (except for zero counters).
 uint64_t gTargetProgress;
 
+static void UpdateTargetProgress() {
+  gTargetProgress = 0;
+
+  if (gRequestProgress > *gProgressCounter) {
+    gTargetProgress = gRequestProgress;
+  }
+
+  if (gInterruptProgress > *gProgressCounter &&
+      (!gTargetProgress || gTargetProgress > gInterruptProgress)) {
+    gTargetProgress = gInterruptProgress;
+  }
+}
+
 void RecordReplaySetTargetProgress(uint64_t progress) {
-  gTargetProgress = progress;
+  CHECK(IsMainThread());
+  gRequestProgress = progress;
+  UpdateTargetProgress();
+}
+
+void RecordReplayInterruptAtNextProgressCounter() {
+  CHECK(recordreplay::IsRecording() && IsMainThread());
+  gInterruptProgress = *gProgressCounter + 1;
+  UpdateTargetProgress();
 }
 
 void RecordReplayOnTargetProgressReached() {
-  gRecordReplayProgressReached();
+  CHECK(IsMainThread());
+
+  if (*gProgressCounter == gInterruptProgress) {
+    Isolate* isolate = Isolate::Current();
+    isolate->RecordReplayInvokeApiInterruptCallbacksAtProgress();
+  }
+
+  if (*gProgressCounter == gTargetProgress) {
+    gRecordReplayProgressReached();
+  }
+
+  UpdateTargetProgress();
 }
 
 void RecordReplayInstrument(const char* kind, const char* function, int offset) {
@@ -10197,6 +10237,9 @@ static const char* gRecordReplayKnownFeatures[] = {
   // Create checkpoints and setup functionality for inspecting state afterwards.
   "checkpoints",
 
+  // Ensure that API interrupts will be performed at deterministic points.
+  "interrupts",
+
   // Creating WebGL canvas contexts is disabled.
   "no-webgl",
 
@@ -10284,7 +10327,7 @@ static const char* GetDisabledFeatureSpecifier() {
 
   // Diagnostic for problems replaying in certain environments.
   if (getenv("EBAY_TEST_ENVIRONMENT")) {
-    return "no-interrupts,recording-script";
+    return "no-interrupts";
   }
 
   return nullptr;
