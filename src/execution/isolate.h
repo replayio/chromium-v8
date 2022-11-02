@@ -941,6 +941,8 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   void RequestInterrupt(InterruptCallback callback, void* data);
   void InvokeApiInterruptCallbacks();
 
+  void RecordReplayInvokeApiInterruptCallbacksAtProgress();
+
   // Administration
   void Iterate(RootVisitor* v);
   void Iterate(RootVisitor* v, ThreadLocalTop* t);

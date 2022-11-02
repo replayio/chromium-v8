@@ -1474,7 +1474,24 @@ void Isolate::RequestInterrupt(InterruptCallback callback, void* data) {
   stack_guard()->RequestApiInterrupt();
 }
 
+extern void RecordReplayInterruptAtNextProgressCounter();
+
 void Isolate::InvokeApiInterruptCallbacks() {
+  if (recordreplay::IsRecordingOrReplaying("interrupts")) {
+    // When recording, we can't invoke API interrupt callbacks at arbitrary points
+    // where we check for interrupts, as we won't be able to invoke those callbacks
+    // at the same point when replaying. Instead, after detecting that interrupts
+    // have been added to the queue we ensure that we'll stop the next time the
+    // progress counter is updated, and invoke the callbacks then.
+    if (recordreplay::IsRecording() && IsMainThread()) {
+      ExecutionAccess access(this);
+      if (!api_interrupts_queue_.empty()) {
+        RecordReplayInterruptAtNextProgressCounter();
+      }
+    }
+    return;
+  }
+
   RuntimeCallTimerScope runtimeTimer(
       this, RuntimeCallCounterId::kInvokeApiInterruptCallbacks);
   // Note: callback below should be called outside of execution access lock.
@@ -1489,6 +1506,28 @@ void Isolate::InvokeApiInterruptCallbacks() {
     VMState<EXTERNAL> state(this);
     HandleScope handle_scope(this);
     entry.first(reinterpret_cast<v8::Isolate*>(this), entry.second);
+  }
+}
+
+void Isolate::RecordReplayInvokeApiInterruptCallbacksAtProgress() {
+  if (!recordreplay::IsRecordingOrReplaying("interrupts")) {
+    return;
+  }
+
+  if (recordreplay::IsRecording() && IsMainThread()) {
+    while (true) {
+      InterruptEntry entry;
+      {
+        ExecutionAccess access(this);
+        if (api_interrupts_queue_.empty())
+          return;
+        entry = api_interrupts_queue_.front();
+        api_interrupts_queue_.pop();
+      }
+      VMState<EXTERNAL> state(this);
+      HandleScope handle_scope(this);
+      entry.first(reinterpret_cast<v8::Isolate*>(this), entry.second);
+    }
   }
 }
 
