@@ -1519,7 +1519,8 @@ void Isolate::RecordReplayInvokeApiInterruptCallbacksAtProgress() {
       InterruptEntry entry;
       {
         ExecutionAccess access(this);
-        if (api_interrupts_queue_.empty()) return;
+        if (api_interrupts_queue_.empty())
+          return;
         entry = api_interrupts_queue_.front();
         api_interrupts_queue_.pop();
       }
