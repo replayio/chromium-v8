@@ -9974,6 +9974,7 @@ static void* (*gJSONCreateString)(const char*);
 static void* (*gJSONCreateObject)(size_t, const char**, void**);
 static char* (*gJSONToString)(void*);
 static void (*gJSONFree)(void*);
+static void (*gRecordReplayOnAnnotation)(const char* kind, const char* contents);
 
 namespace internal {
 
@@ -10726,6 +10727,13 @@ extern "C" void V8RecordReplayNotifyActivity() {
   gRecordReplayNotifyActivity();
 }
 
+extern "C" void V8RecordReplayOnAnnotation(const char* kind, const char* contents) {
+  DCHECK(recordreplay::IsRecordingOrReplaying());
+  if (internal::gRecordReplayHasCheckpoint) {
+    gRecordReplayOnAnnotation(kind, contents);
+  }
+}
+
 template <typename Src, typename Dst>
 static inline void CastPointer(const Src src, Dst* dst) {
   static_assert(sizeof(Src) == sizeof(uintptr_t), "bad size");
@@ -10920,6 +10928,7 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   RecordReplayLoadSymbol(handle, "RecordReplayJSONCreateObject", gJSONCreateObject);
   RecordReplayLoadSymbol(handle, "RecordReplayJSONToString", gJSONToString);
   RecordReplayLoadSymbol(handle, "RecordReplayJSONFree", gJSONFree);
+  RecordReplayLoadSymbol(handle, "RecordReplayOnAnnotation", gRecordReplayOnAnnotation);
 
   void (*setDefaultCommandCallback)(char* (*callback)(const char* command, const char* params));
   RecordReplayLoadSymbol(handle, "RecordReplaySetDefaultCommandCallback", setDefaultCommandCallback);
