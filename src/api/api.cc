@@ -9177,7 +9177,9 @@ String::Value::~Value() { i::DeleteArray(str_); }
       i::HandleScope scope(isolate);                                     \
       i::Handle<i::String> message = Utils::OpenHandle(*raw_message);    \
       std::unique_ptr<char[]> message_str = message->ToCString();        \
-      recordreplay::Assert("CreateException %s %s", #NAME, message_str.get()); \
+      if (!recordreplay::AreEventsDisallowed()) {                        \
+        recordreplay::Assert("CreateException %s %s", #NAME, message_str.get()); \
+      }                                                                  \
       i::Handle<i::JSFunction> constructor = isolate->name##_function(); \
       error = *isolate->factory()->NewError(constructor, message);       \
     }                                                                    \
