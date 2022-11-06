@@ -1034,8 +1034,8 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
     CHECK(gRecordReplayHasCheckpoint);
   }
 
-  recordreplay::Assert("ExecutionProgress %s:%d:%d",
-                       name.c_str(), info.line + 1, info.column);
+  recordreplay::Assert("ExecutionProgress %zu %s:%d:%d",
+                       *gProgressCounter, name.c_str(), info.line + 1, info.column);
 
   return ReadOnlyRoots(isolate).undefined_value();
 }
