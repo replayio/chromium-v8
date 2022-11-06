@@ -32,7 +32,7 @@
 namespace v8 {
 namespace internal {
 
-extern bool gRecordReplayAssertValues;
+extern bool gRecordReplayAssertProgress;
 extern bool gRecordReplayInstrumentationEnabled;
 
 namespace compiler {
@@ -3706,7 +3706,7 @@ void BytecodeGraphBuilder::VisitRecordReplayIncExecutionProgressCounter() {
   //
   // The optimized path is currently disabled while recording as well.
   // See https://linear.app/replay/issue/RUN-744
-  if ((true)/*gRecordReplayAssertValues || recordreplay::IsReplaying()*/) {
+  if ((true)/*gRecordReplayAssertProgress || recordreplay::IsReplaying()*/) {
     Node* closure = GetFunctionClosure();
     const Operator* op = javascript()->CallRuntime(Runtime::kRecordReplayAssertExecutionProgress);
 

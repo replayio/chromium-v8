@@ -962,7 +962,7 @@ RUNTIME_FUNCTION(Runtime_ProfileCreateSnapshotDataBlob) {
 
 extern uint64_t* gProgressCounter;
 extern uint64_t gTargetProgress;
-extern bool gRecordReplayAssertValues;
+extern bool gRecordReplayAssertProgress;
 
 // Define this to check preconditions for using record/replay opcodes.
 //#define RECORD_REPLAY_CHECK_OPCODES
@@ -999,7 +999,7 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
     RecordReplayOnTargetProgressReached();
   }
 
-  if (!gRecordReplayAssertValues) {
+  if (!gRecordReplayAssertProgress) {
     return ReadOnlyRoots(isolate).undefined_value();
   }
 
@@ -1126,7 +1126,6 @@ int RegisterAssertValueSite(const std::string& desc, int source_position) {
 extern std::string RecordReplayBasicValueContents(Handle<Object> value);
 
 RUNTIME_FUNCTION(Runtime_RecordReplayAssertValue) {
-  CHECK(gRecordReplayAssertValues);
   CHECK(RecordReplayBytecodeAllowed());
 
   HandleScope scope(isolate);

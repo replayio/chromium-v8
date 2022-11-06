@@ -47,7 +47,7 @@
 namespace v8 {
 namespace internal {
 
-extern bool gRecordReplayAssertValues;
+extern bool gRecordReplayAssertProgress;
 
 namespace baseline {
 
@@ -2317,7 +2317,9 @@ void BaselineCompiler::VisitIncBlockCounter() {
 }
 
 void BaselineCompiler::VisitRecordReplayIncExecutionProgressCounter() {
-  if (gRecordReplayAssertValues) {
+  // The optimized path is currently disabled.
+  // See https://linear.app/replay/issue/RUN-744
+  if ((true)/*gRecordReplayAssertProgress*/) {
     CallRuntime(Runtime::kRecordReplayAssertExecutionProgress,
                 __ FunctionOperand());
   } else {
