@@ -10287,6 +10287,10 @@ static const char* gRecordReplayKnownFeatures[] = {
   // separately disabled with the RECORD_REPLAY_DISABLE_SOURCEMAP_COLLECTION
   // environment variable.
   "collect-source-maps",
+
+  // Force window proxies to be initialized for consistency with inspector
+  // state when replaying.
+  "initialize-window-proxy",
 };
 
 static inline void RecordReplayCheckKnownFeature(const char* feature) {
