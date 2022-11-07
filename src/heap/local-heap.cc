@@ -252,6 +252,8 @@ bool LocalHeap::TryPerformCollection() {
     heap_->CollectGarbageForBackground(this);
     return true;
   } else {
+    recordreplay::AutoDisallowEvents disallow;
+
     LocalHeap* main_thread = heap_->isolate()->main_thread_local_heap();
     ThreadState current = main_thread->state_relaxed();
 
