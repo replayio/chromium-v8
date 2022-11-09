@@ -3703,7 +3703,10 @@ void BytecodeGraphBuilder::VisitRecordReplayIncExecutionProgressCounter() {
   // Use a VM call instead of an optimized path when we need to add assertions
   // to the recording, or when replaying so that the calling code can be deoptimized
   // when the target progress value has been reached.
-  if (gRecordReplayAssertProgress || recordreplay::IsReplaying()) {
+  //
+  // The optimized path is currently disabled while recording as well.
+  // See https://linear.app/replay/issue/RUN-744
+  if ((true)/*gRecordReplayAssertProgress || recordreplay::IsReplaying()*/) {
     Node* closure = GetFunctionClosure();
     const Operator* op = javascript()->CallRuntime(Runtime::kRecordReplayAssertExecutionProgress);
 
