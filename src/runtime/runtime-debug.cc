@@ -1320,7 +1320,7 @@ RUNTIME_FUNCTION(Runtime_RecordReplayInstrumentation) {
   return ReadOnlyRoots(isolate).undefined_value();
 }
 
-extern int RecordReplayObjectId(Handle<Object> internal_object);
+extern int RecordReplayObjectId(Isolate* isolate, Handle<Object> internal_object);
 
 static int gCurrentGeneratorId;
 
@@ -1336,16 +1336,25 @@ RUNTIME_FUNCTION(Runtime_RecordReplayInstrumentationGenerator) {
   CONVERT_ARG_HANDLE_CHECKED(JSGeneratorObject, generator_object, 2);
 
   // Note: RecordReplayObjectId calls have to occur in the same places when
-  // replaying as when recording (regardless of whether instrumentation is
-  // enabled) so that objects will be assigned consistent IDs.
+  // replaying (regardless of whether instrumentation is enabled) so that objects
+  // will be assigned consistent IDs.
   CHECK(!gCurrentGeneratorId);
-  gCurrentGeneratorId = RecordReplayObjectId(generator_object);
+  gCurrentGeneratorId = RecordReplayObjectId(isolate, generator_object);
 
   if (gRecordReplayInstrumentationEnabled) {
     OnInstrumentation(isolate, function, index);
   }
 
   gCurrentGeneratorId = 0;
+
+  return ReadOnlyRoots(isolate).undefined_value();
+}
+
+RUNTIME_FUNCTION(Runtime_RecordReplayTrackObjectId) {
+  DCHECK_EQ(1, args.length());
+  CONVERT_ARG_HANDLE_CHECKED(Object, value, 0);
+
+  RecordReplayObjectId(isolate, value);
 
   return ReadOnlyRoots(isolate).undefined_value();
 }

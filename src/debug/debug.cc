@@ -3462,9 +3462,9 @@ static Local<v8::debug::WeakMap> GetObjectIdMapForContext(v8::Isolate* isolate, 
 
 static int gNextObjectId = 1;
 
-int RecordReplayObjectId(Handle<Object> internal_object) {
+int RecordReplayObjectId(Isolate* isolate_arg, Handle<Object> internal_object) {
   CHECK(IsMainThread());
-  v8::Isolate* isolate = v8::Isolate::GetCurrent();
+  v8::Isolate* isolate = (v8::Isolate*) isolate_arg;
 
   v8::Local<v8::Value> object = v8::Utils::ToLocal(internal_object);
 
@@ -3473,13 +3473,27 @@ int RecordReplayObjectId(Handle<Object> internal_object) {
 
   v8::Local<v8::Value> idValue;
   if (object_ids->Get(cx, object).ToLocal(&idValue) && idValue->IsInt32()) {
-    return idValue.As<v8::Int32>()->Value();
+    int id = idValue.As<v8::Int32>()->Value();
+    if (gRecordReplayAssertValues) {
+      recordreplay::Assert("ReuseObjectId %d", id);
+    }
+    return id;
   }
 
   int id = gNextObjectId++;
+
+  if (gRecordReplayAssertValues) {
+    recordreplay::Assert("NewObjectId %d", id);
+  }
+
   Local<Value> id_value = v8::Integer::New(isolate, id);
   object_ids->Set(cx, object, id_value).ToLocalChecked();
   return id;
+}
+
+// Whether to generate object IDs for objects created as part of constructor calls.
+bool RecordReplayTrackConstructorObjectIds() {
+  return recordreplay::IsReplaying() || gRecordReplayAssertValues;
 }
 
 inline int HashBytes(const void* aPtr, size_t aSize) {
@@ -3530,7 +3544,7 @@ std::string RecordReplayBasicValueContents(Handle<Object> value) {
   }
 
   if (value->IsJSObject()) {
-    int object_id = RecordReplayObjectId(value);
+    int object_id = RecordReplayObjectId(Isolate::Current(), value);
 
     InstanceType type = JSObject::cast(*value).map().instance_type();
     const char* typeStr;

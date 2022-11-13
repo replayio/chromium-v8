@@ -38,6 +38,8 @@
 namespace v8 {
 namespace internal {
 
+extern bool RecordReplayTrackConstructorObjectIds();
+
 #define __ ACCESS_MASM(masm)
 
 void Builtins::Generate_Adaptor(MacroAssembler* masm, Address address) {
@@ -203,6 +205,12 @@ void Builtins::Generate_JSConstructStubGeneric(MacroAssembler* masm) {
   masm->isolate()->heap()->SetConstructStubCreateDeoptPCOffset(
       masm->pc_offset());
   __ bind(&post_instantiation_deopt_entry);
+
+  if (RecordReplayTrackConstructorObjectIds()) {
+    __ Push(rax);
+    __ CallRuntime(Runtime::kRecordReplayTrackObjectId, 1);
+    __ Pop(rax);
+  }
 
   // Restore new target.
   __ Pop(rdx);
