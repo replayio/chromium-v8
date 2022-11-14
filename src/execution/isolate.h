@@ -1980,6 +1980,10 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   using InterruptEntry = std::pair<InterruptCallback, void*>;
   std::queue<InterruptEntry> api_interrupts_queue_;
 
+  // Lock to ensure consistent ordering of other threads adding API interrupts
+  // vs. the isolate's thread removing and running them.
+  int record_replay_api_interrupts_ordered_lock_id_ = 0;
+
 #define GLOBAL_BACKING_STORE(type, name, initialvalue) type name##_;
   ISOLATE_INIT_LIST(GLOBAL_BACKING_STORE)
 #undef GLOBAL_BACKING_STORE

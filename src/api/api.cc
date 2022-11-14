@@ -9941,6 +9941,7 @@ static void (*gRecordReplayBytes)(const char* why, void* buf, size_t size);
 static uintptr_t (*gRecordReplayValue)(const char* why, uintptr_t v);
 static bool (*gRecordReplayAreEventsDisallowed)();
 static void (*gRecordReplayProgressReached)();
+static void (*gRecordReplayTriggerProgressInterrupt)();
 static void (*gRecordReplayBeginPassThroughEvents)();
 static void (*gRecordReplayEndPassThroughEvents)();
 static void (*gRecordReplayBeginDisallowEvents)();
@@ -10049,54 +10050,27 @@ void RecordReplayChangeInstrument(bool enabled) {
   Deoptimizer::DeoptimizeAll(isolate);
 }
 
-// Progress counter we were requested to stop at by the recorder, or zero.
-uint64_t gRequestProgress;
-
-// Progress counter we need to stop at and invoke API interrupts, or zero.
-uint64_t gInterruptProgress;
-
-// Next progress value we will stop at. The minimum of gRequestProgress and gInterruptProgress
-// (except for zero counters).
 uint64_t gTargetProgress;
-
-static void UpdateTargetProgress() {
-  gTargetProgress = 0;
-
-  if (gRequestProgress > *gProgressCounter) {
-    gTargetProgress = gRequestProgress;
-  }
-
-  if (gInterruptProgress > *gProgressCounter &&
-      (!gTargetProgress || gTargetProgress > gInterruptProgress)) {
-    gTargetProgress = gInterruptProgress;
-  }
-}
 
 void RecordReplaySetTargetProgress(uint64_t progress) {
   CHECK(IsMainThread());
-  gRequestProgress = progress;
-  UpdateTargetProgress();
+  gTargetProgress = progress;
 }
 
-void RecordReplayInterruptAtNextProgressCounter() {
+void RecordReplayTriggerProgressInterrupt() {
   CHECK(recordreplay::IsRecording() && IsMainThread());
-  gInterruptProgress = *gProgressCounter + 1;
-  UpdateTargetProgress();
+  gRecordReplayTriggerProgressInterrupt();
 }
 
 void RecordReplayOnTargetProgressReached() {
   CHECK(IsMainThread());
+  gRecordReplayProgressReached();
+}
 
-  if (*gProgressCounter == gInterruptProgress) {
-    Isolate* isolate = Isolate::Current();
-    isolate->RecordReplayInvokeApiInterruptCallbacksAtProgress();
-  }
-
-  if (*gProgressCounter == gTargetProgress) {
-    gRecordReplayProgressReached();
-  }
-
-  UpdateTargetProgress();
+static void RecordReplayProgressInterruptCallback() {
+  CHECK(IsMainThread());
+  Isolate* isolate = Isolate::Current();
+  isolate->RecordReplayInvokeApiInterruptCallbacksAtProgress();
 }
 
 void RecordReplayInstrument(const char* kind, const char* function, int offset) {
@@ -10247,9 +10221,6 @@ static const char* gRecordReplayKnownFeatures[] = {
   // Creating WebGL canvas contexts is disabled.
   "no-webgl",
 
-  // Interrupting JS is disabled.
-  "no-interrupts",
-
   // Detecting the language in text is disabled.
   "no-language-detection",
 
@@ -10328,17 +10299,7 @@ extern "C" V8_EXPORT bool V8RecordReplayFeatureEnabled(const char* feature) {
 // recording-specific changes or narrow down the reason for incorrect behavior while
 // recording.
 static const char* GetDisabledFeatureSpecifier() {
-  const char* env = getenv("RECORD_REPLAY_DISABLE_FEATURES");
-  if (env) {
-    return env;
-  }
-
-  // Diagnostic for problems replaying in certain environments.
-  if (getenv("EBAY_TEST_ENVIRONMENT")) {
-    return "no-interrupts";
-  }
-
-  return nullptr;
+  return getenv("RECORD_REPLAY_DISABLE_FEATURES");
 }
 
 static void RecordReplayInitializeDisabledFeatures() {
@@ -10900,6 +10861,7 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   RecordReplayLoadSymbol(handle, "RecordReplayOnInstrument", gRecordReplayOnInstrument);
   RecordReplayLoadSymbol(handle, "RecordReplayAreEventsDisallowed", gRecordReplayAreEventsDisallowed);
   RecordReplayLoadSymbol(handle, "RecordReplayProgressReached", gRecordReplayProgressReached);
+  RecordReplayLoadSymbol(handle, "RecordReplayTriggerProgressInterrupt", gRecordReplayTriggerProgressInterrupt);
   RecordReplayLoadSymbol(handle, "RecordReplayBeginPassThroughEvents", gRecordReplayBeginPassThroughEvents);
   RecordReplayLoadSymbol(handle, "RecordReplayEndPassThroughEvents", gRecordReplayEndPassThroughEvents);
   RecordReplayLoadSymbol(handle, "RecordReplayBeginDisallowEvents", gRecordReplayBeginDisallowEvents);
@@ -10962,6 +10924,10 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   void (*setProgressCallback)(void (*aCallback)(uint64_t));
   RecordReplayLoadSymbol(handle, "RecordReplaySetProgressCallback", setProgressCallback);
   setProgressCallback(internal::RecordReplaySetTargetProgress);
+
+  void (*setProgressInterruptCallback)(void (*aCallback)());
+  RecordReplayLoadSymbol(handle, "RecordReplaySetProgressInterruptCallback", setProgressInterruptCallback);
+  setProgressInterruptCallback(internal::RecordReplayProgressInterruptCallback);
 
   void (*enableProgressCheckpoints)();
   RecordReplayLoadSymbol(handle, "RecordReplayEnableProgressCheckpoints", enableProgressCheckpoints);

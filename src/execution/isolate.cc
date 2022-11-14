@@ -1469,24 +1469,26 @@ void Isolate::CancelTerminateExecution() {
 }
 
 void Isolate::RequestInterrupt(InterruptCallback callback, void* data) {
+  recordreplay::OrderedLock(record_replay_api_interrupts_ordered_lock_id_);
   ExecutionAccess access(this);
   api_interrupts_queue_.push(InterruptEntry(callback, data));
   stack_guard()->RequestApiInterrupt();
+  recordreplay::OrderedUnlock(record_replay_api_interrupts_ordered_lock_id_);
 }
 
-extern void RecordReplayInterruptAtNextProgressCounter();
+extern void RecordReplayTriggerProgressInterrupt();
 
 void Isolate::InvokeApiInterruptCallbacks() {
   if (recordreplay::IsRecordingOrReplaying("interrupts")) {
     // When recording, we can't invoke API interrupt callbacks at arbitrary points
     // where we check for interrupts, as we won't be able to invoke those callbacks
     // at the same point when replaying. Instead, after detecting that interrupts
-    // have been added to the queue we ensure that we'll stop the next time the
-    // progress counter is updated, and invoke the callbacks then.
+    // have been added to the queue we trigger an interrupt the next time the progress
+    // counter advances, and will invoke the callbacks then.
     if (recordreplay::IsRecording() && IsMainThread()) {
       ExecutionAccess access(this);
       if (!api_interrupts_queue_.empty()) {
-        RecordReplayInterruptAtNextProgressCounter();
+        RecordReplayTriggerProgressInterrupt();
       }
     }
     return;
@@ -1510,24 +1512,25 @@ void Isolate::InvokeApiInterruptCallbacks() {
 }
 
 void Isolate::RecordReplayInvokeApiInterruptCallbacksAtProgress() {
-  if (!recordreplay::IsRecordingOrReplaying("interrupts")) {
-    return;
-  }
+  CHECK(recordreplay::IsRecordingOrReplaying("interrupts"));
+  CHECK(IsMainThread());
 
-  if (recordreplay::IsRecording() && IsMainThread()) {
-    while (true) {
-      InterruptEntry entry;
-      {
-        ExecutionAccess access(this);
-        if (api_interrupts_queue_.empty())
-          return;
-        entry = api_interrupts_queue_.front();
-        api_interrupts_queue_.pop();
+  while (true) {
+    InterruptEntry entry;
+    recordreplay::OrderedLock(record_replay_api_interrupts_ordered_lock_id_);
+    {
+      ExecutionAccess access(this);
+      if (api_interrupts_queue_.empty()) {
+        recordreplay::OrderedUnlock(record_replay_api_interrupts_ordered_lock_id_);
+        return;
       }
-      VMState<EXTERNAL> state(this);
-      HandleScope handle_scope(this);
-      entry.first(reinterpret_cast<v8::Isolate*>(this), entry.second);
+      entry = api_interrupts_queue_.front();
+      api_interrupts_queue_.pop();
     }
+    recordreplay::OrderedUnlock(record_replay_api_interrupts_ordered_lock_id_);
+    VMState<EXTERNAL> state(this);
+    HandleScope handle_scope(this);
+    entry.first(reinterpret_cast<v8::Isolate*>(this), entry.second);
   }
 }
 
@@ -3011,6 +3014,8 @@ Isolate::Isolate(std::unique_ptr<i::IsolateAllocator> isolate_allocator)
   InitializeDefaultEmbeddedBlob();
 
   MicrotaskQueue::SetUpDefaultMicrotaskQueue(this);
+
+  record_replay_api_interrupts_ordered_lock_id_ = (int)recordreplay::CreateOrderedLock("APIInterrupts");
 
   if (recordreplay::IsRecordingOrReplaying() && IsMainThread()) {
     RecordReplayOnMainThreadIsolateCreated(this);
