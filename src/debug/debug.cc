@@ -3460,15 +3460,18 @@ static Local<v8::debug::WeakMap> GetObjectIdMapForContext(v8::Isolate* isolate, 
   return gRecordReplayObjectIds->back().object_ids_.Get(isolate);
 }
 
+extern bool gRecordReplayAssertValues;
+
 static int gNextObjectId = 1;
 
-int RecordReplayObjectId(Isolate* isolate_arg, Handle<Object> internal_object) {
+int RecordReplayObjectId(v8::Isolate* isolate, v8::Local<v8::Context> cx,
+                         v8::Local<v8::Value> object, bool allow_create) {
   CHECK(IsMainThread());
-  v8::Isolate* isolate = (v8::Isolate*) isolate_arg;
 
-  v8::Local<v8::Value> object = v8::Utils::ToLocal(internal_object);
+  if (!object->IsObject()) {
+    return 0;
+  }
 
-  Local<v8::Context> cx = isolate->GetCurrentContext();
   Local<v8::debug::WeakMap> object_ids = GetObjectIdMapForContext(isolate, cx);
 
   v8::Local<v8::Value> idValue;
@@ -3480,6 +3483,10 @@ int RecordReplayObjectId(Isolate* isolate_arg, Handle<Object> internal_object) {
     return id;
   }
 
+  if (!allow_create) {
+    return 0;
+  }
+
   int id = gNextObjectId++;
 
   if (gRecordReplayAssertValues) {
@@ -3487,13 +3494,27 @@ int RecordReplayObjectId(Isolate* isolate_arg, Handle<Object> internal_object) {
   }
 
   Local<Value> id_value = v8::Integer::New(isolate, id);
-  object_ids->Set(cx, object, id_value).ToLocalChecked();
+  auto rv = object_ids->Set(cx, object, id_value);
+
+  // Note: Sometimes this Set() call fails, for unknown reasons. Include an assertion
+  // as hopefully failures will happen consistently.
+  if (rv.IsEmpty() && gRecordReplayAssertValues) {
+    recordreplay::Assert("SetObjectIdFailed %d", id);
+  }
+
   return id;
+}
+
+static bool gTrackObjects = false;
+
+// Called by the recorder when we need to track persistent IDs for objects.
+void TrackObjectsCallback(bool track_objects) {
+  gTrackObjects = track_objects;
 }
 
 // Whether to generate object IDs for objects created as part of constructor calls.
 bool RecordReplayTrackConstructorObjectIds() {
-  return recordreplay::IsReplaying() || gRecordReplayAssertValues;
+  return gRecordReplayAssertValues || gTrackObjects;
 }
 
 inline int HashBytes(const void* aPtr, size_t aSize) {
@@ -3544,7 +3565,10 @@ std::string RecordReplayBasicValueContents(Handle<Object> value) {
   }
 
   if (value->IsJSObject()) {
-    int object_id = RecordReplayObjectId(Isolate::Current(), value);
+    v8::Isolate* isolate = v8::Isolate::GetCurrent();
+    v8::Local<v8::Context> cx = isolate->GetCurrentContext();
+    int object_id = RecordReplayObjectId(isolate, cx, v8::Utils::ToLocal(value),
+                                         /* allow_create */ true);
 
     InstanceType type = JSObject::cast(*value).map().instance_type();
     const char* typeStr;

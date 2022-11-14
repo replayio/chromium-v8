@@ -207,9 +207,12 @@ void Builtins::Generate_JSConstructStubGeneric(MacroAssembler* masm) {
   __ bind(&post_instantiation_deopt_entry);
 
   if (RecordReplayTrackConstructorObjectIds()) {
+    __ pushq(rax);
     __ Push(rax);
-    __ CallRuntime(Runtime::kRecordReplayTrackObjectId, 1);
-    __ Pop(rax);
+    __ movq(rax, Operand(rbp, ConstructFrameConstants::kContextOffset));
+    __ Push(rax);
+    __ CallRuntime(Runtime::kRecordReplayTrackObjectId, 2);
+    __ popq(rax);
   }
 
   // Restore new target.

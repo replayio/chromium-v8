@@ -10103,6 +10103,8 @@ void RecordReplayInstrument(const char* kind, const char* function, int offset) 
   gRecordReplayOnInstrument(kind, function, offset);
 }
 
+extern void TrackObjectsCallback(bool track_objects);
+
 extern char* CommandCallback(const char* command, const char* params);
 extern void ClearPauseDataCallback();
 
@@ -10966,6 +10968,10 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   void (*enableProgressCheckpoints)();
   RecordReplayLoadSymbol(handle, "RecordReplayEnableProgressCheckpoints", enableProgressCheckpoints);
   enableProgressCheckpoints();
+
+  void (*setTrackObjectsCallback)(void (*aCallback)(bool aTrackObjects));
+  RecordReplayLoadSymbol(handle, "RecordReplaySetTrackObjectsCallback", setTrackObjectsCallback);
+  setTrackObjectsCallback(internal::TrackObjectsCallback);
 
   internal::gRecordReplayAssertValues = !!getenv("RECORD_REPLAY_JS_ASSERTS");
   internal::gRecordReplayAssertProgress =
