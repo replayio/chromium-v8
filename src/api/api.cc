@@ -10264,6 +10264,9 @@ static const char* gRecordReplayKnownFeatures[] = {
   // Force window proxies to be initialized for consistency with inspector
   // state when replaying.
   "initialize-window-proxy",
+
+  // Install hook used by react devtools backend.
+  "react-devtools-backend",
 };
 
 static inline void RecordReplayCheckKnownFeature(const char* feature) {
