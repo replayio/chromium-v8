@@ -4,6 +4,7 @@
 
 #include <vector>
 
+#include "src/api/api-inl.h"
 #include "src/codegen/compiler.h"
 #include "src/common/globals.h"
 #include "src/debug/debug-coverage.h"
@@ -1320,7 +1321,8 @@ RUNTIME_FUNCTION(Runtime_RecordReplayInstrumentation) {
   return ReadOnlyRoots(isolate).undefined_value();
 }
 
-extern int RecordReplayObjectId(Handle<Object> internal_object);
+extern int RecordReplayObjectId(v8::Isolate* isolate, Local<v8::Context> cx,
+                                v8::Local<v8::Value> object, bool allow_create);
 
 static int gCurrentGeneratorId;
 
@@ -1333,19 +1335,35 @@ RUNTIME_FUNCTION(Runtime_RecordReplayInstrumentationGenerator) {
   DCHECK_EQ(3, args.length());
   CONVERT_ARG_HANDLE_CHECKED(JSFunction, function, 0);
   CONVERT_NUMBER_CHECKED(int32_t, index, Int32, args[1]);
-  CONVERT_ARG_HANDLE_CHECKED(JSGeneratorObject, generator_object, 2);
+  CONVERT_ARG_HANDLE_CHECKED(Object, generator_object, 2);
 
   // Note: RecordReplayObjectId calls have to occur in the same places when
-  // replaying as when recording (regardless of whether instrumentation is
-  // enabled) so that objects will be assigned consistent IDs.
+  // replaying (regardless of whether instrumentation is enabled) so that objects
+  // will be assigned consistent IDs.
   CHECK(!gCurrentGeneratorId);
-  gCurrentGeneratorId = RecordReplayObjectId(generator_object);
+  v8::Isolate* v8_isolate = (v8::Isolate*) isolate;
+  gCurrentGeneratorId = RecordReplayObjectId(v8_isolate, v8_isolate->GetCurrentContext(),
+                                             v8::Utils::ToLocal(generator_object),
+                                             /* allow_create */ true);
 
   if (gRecordReplayInstrumentationEnabled) {
     OnInstrumentation(isolate, function, index);
   }
 
   gCurrentGeneratorId = 0;
+
+  return ReadOnlyRoots(isolate).undefined_value();
+}
+
+RUNTIME_FUNCTION(Runtime_RecordReplayTrackObjectId) {
+  DCHECK_EQ(2, args.length());
+  CONVERT_ARG_HANDLE_CHECKED(Object, value, 0);
+  CONVERT_ARG_HANDLE_CHECKED(Context, context, 1);
+
+  v8::Isolate* v8_isolate = (v8::Isolate*) isolate;
+  RecordReplayObjectId(v8_isolate, v8::Utils::ToLocal(context),
+                       v8::Utils::ToLocal(value),
+                       /* allow_create */ true);
 
   return ReadOnlyRoots(isolate).undefined_value();
 }

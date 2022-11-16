@@ -1404,10 +1404,9 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayInstrumentation(const ch
 
 BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayInstrumentationGenerator(
     const char* kind, Register generator_object) {
-  // Even though instrumentation opcodes aren't needed when recording, we still
-  // need to emit InstrumentationGenerator opcodes so that generator objects
-  // will be associated with IDs at consistent points.
-  if (emit_record_replay_opcodes_) {
+  // Instrumentation opcodes aren't needed when recording, except when we are asserting
+  // encountered values and need consistent IDs for these objects when recording.
+  if (emit_record_replay_opcodes_ && (recordreplay::IsReplaying() || gRecordReplayAssertValues)) {
     int bytecode_offset = bytecode_array_writer_.size();
     int index = RegisterInstrumentationSite(kind, kNoSourcePosition, bytecode_offset);
     OutputRecordReplayInstrumentationGenerator(index, generator_object);

@@ -1054,6 +1054,8 @@ domain Runtime
       optional string description
       # Unique object identifier (for non-primitive values).
       optional RemoteObjectId objectId
+      # Any available persistent object identifier when recording/replaying.
+      optional string persistentId
       # Preview containing abbreviated property values. Specified for `object` type values only.
       experimental optional ObjectPreview preview
       experimental optional CustomPreview customPreview
