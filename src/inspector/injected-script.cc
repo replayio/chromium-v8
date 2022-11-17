@@ -1047,11 +1047,13 @@ Response InjectedScript::bindRemoteObjectIfNeeded(
       return Response::ServerError("Cannot find context with specified id");
     }
     remoteObject->setObjectId(injectedScript->bindObject(value, groupName));
-    int persistentId = v8::internal::RecordReplayObjectId(isolate, context, value,
-                                                          /* allow_create */ false);
-    if (persistentId) {
-      auto persistentIdString = String16::fromInteger64(static_cast<int64_t>(persistentId));
-      remoteObject->setPersistentId(persistentIdString);
+    if (v8::IsMainThread()) {
+      int persistentId = v8::internal::RecordReplayObjectId(isolate, context, value,
+                                                            /* allow_create */ false);
+      if (persistentId) {
+        auto persistentIdString = String16::fromInteger64(static_cast<int64_t>(persistentId));
+        remoteObject->setPersistentId(persistentIdString);
+      }
     }
   }
   return Response::Success();
