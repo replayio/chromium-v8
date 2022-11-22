@@ -55,6 +55,8 @@ namespace v8 {
   }
 }
 
+extern "C" bool V8RecordReplayHasDivergedFromRecording();
+
 namespace v8_inspector {
 
 namespace {
@@ -1051,7 +1053,7 @@ Response InjectedScript::bindRemoteObjectIfNeeded(
     // Persistent IDs are not tracked when recording by default, so they are only
     // provided when the CDP is being used to inspect state while replaying and
     // diverged from the recording.
-    if (recordreplay::HasDivergedFromRecording()) {
+    if (V8RecordReplayHasDivergedFromRecording()) {
       int persistentId = v8::internal::RecordReplayObjectId(isolate, context, value,
                                                             /* allow_create */ false);
       if (persistentId) {
