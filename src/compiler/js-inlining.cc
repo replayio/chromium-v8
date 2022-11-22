@@ -30,9 +30,6 @@
 
 namespace v8 {
 namespace internal {
-
-extern bool RecordReplayTrackConstructorObjectIds();
-
 namespace compiler {
 
 namespace {
@@ -485,14 +482,6 @@ Reduction JSInliner::ReduceJSCall(Node* node) {
       !IsConstructable(shared_info->kind())) {
     TRACE("Not inlining " << *shared_info << " into " << outer_shared_info
                           << " because constructor is not constructable.");
-    return NoChange();
-  }
-
-  // Constructors are not inlined when keeping track of constructor object IDs,
-  // for simplicity.
-  if (node->opcode() == IrOpcode::kJSConstruct && RecordReplayTrackConstructorObjectIds()) {
-    TRACE("Not inlining " << *shared_info << " into " << outer_shared_info
-                          << " because constructor object IDs are being tracked.");
     return NoChange();
   }
 

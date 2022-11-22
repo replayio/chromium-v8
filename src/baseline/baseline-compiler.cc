@@ -2361,6 +2361,10 @@ void BaselineCompiler::VisitRecordReplayAssertValue() {
               kInterpreterAccumulatorRegister);
 }
 
+void BaselineCompiler::VisitRecordReplayTrackObjectId() {
+  CallRuntime(Runtime::kRecordReplayTrackObjectId, RegisterOperand(0));
+}
+
 void BaselineCompiler::VisitAbort() {
   CallRuntime(Runtime::kAbort, Smi::FromInt(Index(0)));
   __ Trap();
