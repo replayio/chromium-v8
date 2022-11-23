@@ -32,6 +32,7 @@ namespace v8 {
 namespace internal {
 
 extern bool gRecordReplayAssertValues;
+extern bool RecordReplayTrackThisObjectAssignment(const std::string& property);
 
 namespace interpreter {
 
@@ -1446,6 +1447,9 @@ void BytecodeGenerator::GenerateBytecodeBody() {
     } else {
       builder()->RecordReplayInstrumentation("main");
     }
+
+    // Reset for each function.
+    record_replay_has_track_this_ = false;
   }
 
   // Increment the function-scope block coverage counter.
@@ -3556,6 +3560,14 @@ void BytecodeGenerator::BuildLoadNamedProperty(const Expression* object_expr,
 void BytecodeGenerator::BuildStoreNamedProperty(const Expression* object_expr,
                                                 Register object,
                                                 const AstRawString* name) {
+  if (recordreplay::IsRecordingOrReplaying("emit-opcodes") &&
+      !record_replay_has_track_this_ &&
+      object_expr->IsThisExpression() &&
+      RecordReplayTrackThisObjectAssignment(name->to_string())) {
+    builder()->RecordReplayTrackObjectId(object);
+    record_replay_has_track_this_ = true;
+  }
+
   Register value;
   if (!execution_result()->IsEffect()) {
     value = register_allocator()->NewRegister();

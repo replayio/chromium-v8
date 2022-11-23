@@ -23,7 +23,6 @@ extern int RegisterAssertValueSite(const std::string& desc, int source_position)
 extern int RegisterInstrumentationSite(const char* kind, int source_position,
                                        int bytecode_offset);
 extern bool RecordReplayHasDefaultContext();
-extern bool RecordReplayShouldTrackObjectIds();
 extern bool gRecordReplayAssertValues;
 
 extern size_t NumRunningBackgroundCompileTasks();
@@ -927,12 +926,6 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::StoreNamedProperty(
     LanguageMode language_mode) {
   RecordReplayAssertValue(std::string("StoreNamedProperty " + name->to_string()));
 
-  // For now we only track objects which might be React fibers. These will
-  // have an "alternate" property assigned to in the constructor.
-  if (name->to_string() == "alternate") {
-    RecordReplayTrackObjectId(object);
-  }
-
   size_t name_index = GetConstantPoolEntry(name);
   return StoreNamedProperty(object, name_index, feedback_slot, language_mode);
 }
@@ -1423,7 +1416,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayInstrumentationGenerator
 }
 
 BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayTrackObjectId(Register object) {
-  if (emit_record_replay_opcodes_ && RecordReplayShouldTrackObjectIds()) {
+  if (emit_record_replay_opcodes_) {
     OutputRecordReplayTrackObjectId(object);
   }
   return *this;

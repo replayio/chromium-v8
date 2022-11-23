@@ -535,6 +535,11 @@ class BytecodeGenerator final : public AstVisitor<BytecodeGenerator> {
   // TODO(solanes): assess if we can move loop_depth_ into LoopScope.
   int loop_depth_;
 
+  // Whether we've emitted an opcode to track the 'this' object after
+  // seeing an assignment to one of its properties. This is emitted at
+  // most once per function.
+  bool record_replay_has_track_this_ = false;
+
   LoopScope* current_loop_scope_;
 
   HandlerTable::CatchPrediction catch_prediction_;
