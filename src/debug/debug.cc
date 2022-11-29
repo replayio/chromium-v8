@@ -3533,12 +3533,12 @@ bool RecordReplayTrackThisObjectAssignment(const std::string& property) {
   return false;
 }
 
-// Crash if an object does not have a persistent ID. For use in testing.
-void RecordReplayCheckObjectId(v8::Isolate* isolate, v8::Local<v8::Context> cx,
-                               v8::Local<v8::Value> object) {
+// Print a message if an object does not have a persistent ID. For use in testing.
+void RecordReplayConfirmObjectHasId(v8::Isolate* isolate, v8::Local<v8::Context> cx,
+                                    v8::Local<v8::Value> object) {
   int id = RecordReplayObjectId(isolate, cx, object, /* allow_create */ false);
   if (!id) {
-    recordreplay::Print("RecordReplayCheckObjectId unexpected missing persistent ID");
+    recordreplay::Print("RecordReplayConfirmObjectHasId unexpected missing persistent ID");
   }
 }
 
