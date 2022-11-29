@@ -3770,6 +3770,16 @@ void BytecodeGraphBuilder::VisitRecordReplayAssertValue() {
   environment()->BindAccumulator(node, Environment::kAttachFrameState);
 }
 
+void BytecodeGraphBuilder::VisitRecordReplayTrackObjectId() {
+  PrepareEagerCheckpoint();
+  Node* object = environment()->LookupRegister(
+      bytecode_iterator().GetRegisterOperand(0));
+  const Operator* op = javascript()->CallRuntime(Runtime::kRecordReplayTrackObjectId);
+
+  Node* node = NewNode(op, object);
+  environment()->RecordAfterState(node, Environment::kAttachFrameState);
+}
+
 void BytecodeGraphBuilder::VisitForInEnumerate() {
   Node* receiver =
       environment()->LookupRegister(bytecode_iterator().GetRegisterOperand(0));

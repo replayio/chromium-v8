@@ -3460,7 +3460,7 @@ static Local<v8::debug::WeakMap> GetObjectIdMapForContext(v8::Isolate* isolate, 
   return gRecordReplayObjectIds->back().object_ids_.Get(isolate);
 }
 
-extern bool gRecordReplayAssertValues;
+extern bool gRecordReplayAssertTrackedObjects;
 
 static int gNextObjectId = 1;
 
@@ -3477,7 +3477,7 @@ int RecordReplayObjectId(v8::Isolate* isolate, v8::Local<v8::Context> cx,
   v8::Local<v8::Value> idValue;
   if (object_ids->Get(cx, object).ToLocal(&idValue) && idValue->IsInt32()) {
     int id = idValue.As<v8::Int32>()->Value();
-    if (gRecordReplayAssertValues) {
+    if (gRecordReplayAssertTrackedObjects) {
       recordreplay::Assert("ReuseObjectId %d", id);
     }
     return id;
@@ -3489,7 +3489,7 @@ int RecordReplayObjectId(v8::Isolate* isolate, v8::Local<v8::Context> cx,
 
   int id = gNextObjectId++;
 
-  if (gRecordReplayAssertValues) {
+  if (gRecordReplayAssertTrackedObjects) {
     recordreplay::Assert("NewObjectId %d", id);
   }
 
@@ -3498,7 +3498,7 @@ int RecordReplayObjectId(v8::Isolate* isolate, v8::Local<v8::Context> cx,
 
   // Note: Sometimes this Set() call fails, for unknown reasons. Include an assertion
   // as hopefully failures will happen consistently.
-  if (rv.IsEmpty() && gRecordReplayAssertValues) {
+  if (rv.IsEmpty() && gRecordReplayAssertTrackedObjects) {
     recordreplay::Assert("SetObjectIdFailed %d", id);
   }
 
@@ -3507,14 +3507,39 @@ int RecordReplayObjectId(v8::Isolate* isolate, v8::Local<v8::Context> cx,
 
 static bool gTrackObjects = false;
 
-// Called by the recorder when we need to track persistent IDs for objects.
+// Called by the recorder when we need to track persistent IDs for as many objects
+// as we are able to. Currently this is enabled while replaying via the
+// enablePersistentIDs experimental setting.
 void TrackObjectsCallback(bool track_objects) {
+  CHECK(recordreplay::IsReplaying());
   gTrackObjects = track_objects;
 }
 
-// Whether to generate object IDs for objects created as part of constructor calls.
-bool RecordReplayTrackConstructorObjectIds() {
-  return gRecordReplayAssertValues || gTrackObjects;
+// Whether to keep track of 'this' objects being assigned a property.
+bool RecordReplayTrackThisObjectAssignment(const std::string& property) {
+  // If we've been told to track objects then all 'this' objects which are
+  // assigned a property will be tracked.
+  if (gRecordReplayAssertTrackedObjects || gTrackObjects) {
+    return true;
+  }
+
+  // By default we only track objects which might be React fibers. These will
+  // have an "alternate" property assigned to in the constructor. Tracking objects
+  // is only needed when replaying.
+  if (recordreplay::IsReplaying() && property == "alternate") {
+    return true;
+  }
+
+  return false;
+}
+
+// Print a message if an object does not have a persistent ID. For use in testing.
+void RecordReplayConfirmObjectHasId(v8::Isolate* isolate, v8::Local<v8::Context> cx,
+                                    v8::Local<v8::Value> object) {
+  int id = RecordReplayObjectId(isolate, cx, object, /* allow_create */ false);
+  if (!id) {
+    recordreplay::Print("RecordReplayConfirmObjectHasId unexpected missing persistent ID");
+  }
 }
 
 inline int HashBytes(const void* aPtr, size_t aSize) {

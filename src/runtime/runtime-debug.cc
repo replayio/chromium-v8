@@ -1356,12 +1356,11 @@ RUNTIME_FUNCTION(Runtime_RecordReplayInstrumentationGenerator) {
 }
 
 RUNTIME_FUNCTION(Runtime_RecordReplayTrackObjectId) {
-  DCHECK_EQ(2, args.length());
+  DCHECK_EQ(1, args.length());
   CONVERT_ARG_HANDLE_CHECKED(Object, value, 0);
-  CONVERT_ARG_HANDLE_CHECKED(Context, context, 1);
 
   v8::Isolate* v8_isolate = (v8::Isolate*) isolate;
-  RecordReplayObjectId(v8_isolate, v8::Utils::ToLocal(context),
+  RecordReplayObjectId(v8_isolate, v8_isolate->GetCurrentContext(),
                        v8::Utils::ToLocal(value),
                        /* allow_create */ true);
 
