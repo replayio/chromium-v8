@@ -301,6 +301,17 @@ V8InspectorSessionImpl::wrapObject(v8::Local<v8::Context> context,
   return wrapObject(context, value, toString16(groupName), generatePreview);
 }
 
+// Replay edit: Return objectId
+StringView V8InspectorSessionImpl::wrapObjectGetObjectId(
+    v8::Local<v8::Context>, v8::Local<v8::Value>, StringView groupName,
+    bool generatePreview) {
+  std::unique_ptr<protocol::Runtime::RemoteObject> remoteObject =
+      wrapObject(context, value, toString16(groupName), generatePreview);
+
+  String16 defaultValue("");
+  return remoteObject->getObjectId(defaultValue);
+}
+
 std::unique_ptr<protocol::Runtime::RemoteObject>
 V8InspectorSessionImpl::wrapObject(v8::Local<v8::Context> context,
                                    v8::Local<v8::Value> value,

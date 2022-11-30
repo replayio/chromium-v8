@@ -157,6 +157,10 @@ class V8_EXPORT V8InspectorSession {
       v8::Local<v8::Context>, v8::Local<v8::Value>, StringView groupName,
       bool generatePreview) = 0;
 
+  // Replay edit: Return objectId
+  virtual StringView wrapObjectGetObjectId(v8::Local<v8::Context>, v8::Local<v8::Value>,
+                                StringView groupName, bool generatePreview) = 0;
+
   virtual bool unwrapObject(std::unique_ptr<StringBuffer>* error,
                             StringView objectId, v8::Local<v8::Value>*,
                             v8::Local<v8::Context>*,
