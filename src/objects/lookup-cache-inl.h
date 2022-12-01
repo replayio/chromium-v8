@@ -6,8 +6,8 @@
 #define V8_OBJECTS_LOOKUP_CACHE_INL_H_
 
 #include "src/objects/lookup-cache.h"
-
-#include "src/objects/objects-inl.h"
+#include "src/objects/map.h"
+#include "src/objects/name-inl.h"
 
 namespace v8 {
 namespace internal {
@@ -24,7 +24,10 @@ int DescriptorLookupCache::Hash(Map source, Name name) {
 int DescriptorLookupCache::Lookup(Map source, Name name) {
   int index = Hash(source, name);
   Key& key = keys_[index];
-  if ((key.source == source) && (key.name == name)) return results_[index];
+  // Pointers in the table might be stale, so use SafeEquals.
+  if (key.source.SafeEquals(source) && key.name.SafeEquals(name)) {
+    return results_[index];
+  }
   return kAbsent;
 }
 

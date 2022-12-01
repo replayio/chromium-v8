@@ -35,6 +35,11 @@ struct RawPtrT : WordT {
   static constexpr MachineType kMachineType = MachineType::Pointer();
 };
 
+// A RawPtrT that is guaranteed to point into the sandbox.
+struct SandboxedPtrT : WordT {
+  static constexpr MachineType kMachineType = MachineType::SandboxedPointer();
+};
+
 template <class To>
 struct RawPtr : RawPtrT {};
 
@@ -79,11 +84,19 @@ struct UintPtrT : WordT {
   static constexpr MachineType kMachineType = MachineType::UintPtr();
 };
 
+struct ExternalPointerHandleT : Uint32T {
+  static constexpr MachineType kMachineType = MachineType::Uint32();
+};
+
+#ifdef V8_ENABLE_SANDBOX
+struct ExternalPointerT : Uint32T {
+  static constexpr MachineType kMachineType = MachineType::Uint32();
+};
+#else
 struct ExternalPointerT : UntaggedT {
-  static const MachineRepresentation kMachineRepresentation =
-      MachineType::PointerRepresentation();
   static constexpr MachineType kMachineType = MachineType::Pointer();
 };
+#endif
 
 struct Float32T : UntaggedT {
   static const MachineRepresentation kMachineRepresentation =
@@ -109,6 +122,16 @@ struct BoolT : Word32T {};
 // Value type of a Turbofan node with two results.
 template <class T1, class T2>
 struct PairT {};
+
+struct Simd128T : UntaggedT {
+  static const MachineRepresentation kMachineRepresentation =
+      MachineRepresentation::kSimd128;
+  static constexpr MachineType kMachineType = MachineType::Simd128();
+};
+
+struct I8x16T : Simd128T {};
+struct I16x8T : Simd128T {};
+struct I32x2T : Simd128T {};
 
 inline constexpr MachineType CommonMachineType(MachineType type1,
                                                MachineType type2) {
@@ -165,7 +188,7 @@ struct MachineRepresentationOf {
 // If T defines kMachineType, then we take the machine representation from
 // there.
 template <class T>
-struct MachineRepresentationOf<T, base::void_t<decltype(T::kMachineType)>> {
+struct MachineRepresentationOf<T, std::void_t<decltype(T::kMachineType)>> {
   static const MachineRepresentation value = T::kMachineType.representation();
 };
 template <class T>
@@ -339,6 +362,7 @@ class TNode {
   TNode(const TNode<U>& other) : node_(other) {
     LazyTemplateChecks();
   }
+  TNode(const TNode& other) : node_(other) { LazyTemplateChecks(); }
   TNode() : TNode(nullptr) {}
 
   TNode operator=(TNode other) {

@@ -7,6 +7,7 @@
 #include <unordered_map>
 #include <utility>
 
+#include "include/v8-locker.h"
 #include "src/base/lazy-instance.h"
 #include "src/base/template-utils.h"
 #include "src/debug/debug.h"
@@ -39,13 +40,17 @@ class CpuSampler : public sampler::Sampler {
 
   void SampleStack(const v8::RegisterState& regs) override {
     Isolate* isolate = reinterpret_cast<Isolate*>(this->isolate());
-    if (v8::Locker::IsActive() && (!isolate->thread_manager()->IsLockedByThread(
-                                       perThreadData_->thread_id()) ||
-                                   perThreadData_->thread_state() != nullptr)) {
+    if (isolate->was_locker_ever_used() &&
+        (!isolate->thread_manager()->IsLockedByThread(
+             perThreadData_->thread_id()) ||
+         perThreadData_->thread_state() != nullptr)) {
       ProfilerStats::Instance()->AddReason(
           ProfilerStats::Reason::kIsolateNotLocked);
       return;
     }
+#if V8_HEAP_USE_PKU_JIT_WRITE_PROTECT
+    i::RwxMemoryWriteScope::SetDefaultPermissionsForSignalHandler();
+#endif
     TickSample* sample = processor_->StartTickSample();
     if (sample == nullptr) {
       ProfilerStats::Instance()->AddReason(
@@ -74,18 +79,18 @@ ProfilingScope::ProfilingScope(Isolate* isolate, ProfilerListener* listener)
   size_t profiler_count = isolate_->num_cpu_profilers();
   profiler_count++;
   isolate_->set_num_cpu_profilers(profiler_count);
-  isolate_->set_is_profiling(true);
+  isolate_->SetIsProfiling(true);
 #if V8_ENABLE_WEBASSEMBLY
-  isolate_->wasm_engine()->EnableCodeLogging(isolate_);
+  wasm::GetWasmEngine()->EnableCodeLogging(isolate_);
 #endif  // V8_ENABLE_WEBASSEMBLY
 
-  Logger* logger = isolate_->logger();
-  logger->AddCodeEventListener(listener_);
+  V8FileLogger* logger = isolate_->v8_file_logger();
+  logger->AddLogEventListener(listener_);
   // Populate the ProfilerCodeObserver with the initial functions and
   // callbacks on the heap.
   DCHECK(isolate_->heap()->HasBeenSetUp());
 
-  if (!FLAG_prof_browser_mode) {
+  if (!v8_flags.prof_browser_mode) {
     logger->LogCodeObjects();
   }
   logger->LogCompiledFunctions();
@@ -93,21 +98,22 @@ ProfilingScope::ProfilingScope(Isolate* isolate, ProfilerListener* listener)
 }
 
 ProfilingScope::~ProfilingScope() {
-  isolate_->logger()->RemoveCodeEventListener(listener_);
+  isolate_->v8_file_logger()->RemoveLogEventListener(listener_);
 
   size_t profiler_count = isolate_->num_cpu_profilers();
   DCHECK_GT(profiler_count, 0);
   profiler_count--;
   isolate_->set_num_cpu_profilers(profiler_count);
-  if (profiler_count == 0) isolate_->set_is_profiling(false);
+  if (profiler_count == 0) isolate_->SetIsProfiling(false);
 }
 
 ProfilerEventsProcessor::ProfilerEventsProcessor(
     Isolate* isolate, Symbolizer* symbolizer,
-    ProfilerCodeObserver* code_observer)
+    ProfilerCodeObserver* code_observer, CpuProfilesCollection* profiles)
     : Thread(Thread::Options("v8:ProfEvntProc", kProfilerStackSize)),
       symbolizer_(symbolizer),
       code_observer_(code_observer),
+      profiles_(profiles),
       last_code_event_id_(0),
       last_processed_code_event_id_(0),
       isolate_(isolate) {
@@ -119,9 +125,8 @@ SamplingEventsProcessor::SamplingEventsProcessor(
     Isolate* isolate, Symbolizer* symbolizer,
     ProfilerCodeObserver* code_observer, CpuProfilesCollection* profiles,
     base::TimeDelta period, bool use_precise_sampling)
-    : ProfilerEventsProcessor(isolate, symbolizer, code_observer),
+    : ProfilerEventsProcessor(isolate, symbolizer, code_observer, profiles),
       sampler_(new CpuSampler(isolate, this)),
-      profiles_(profiles),
       period_(period),
       use_precise_sampling_(use_precise_sampling) {
   sampler_->Start();
@@ -188,7 +193,14 @@ void ProfilerEventsProcessor::StopSynchronously() {
 bool ProfilerEventsProcessor::ProcessCodeEvent() {
   CodeEventsContainer record;
   if (events_buffer_.Dequeue(&record)) {
-    code_observer_->CodeEventHandlerInternal(record);
+    if (record.generic.type == CodeEventRecord::Type::kNativeContextMove) {
+      NativeContextMoveEventRecord& nc_record =
+          record.NativeContextMoveEventRecord_;
+      profiles_->UpdateNativeContextAddressForCurrentProfiles(
+          nc_record.from_address, nc_record.to_address);
+    } else {
+      code_observer_->CodeEventHandlerInternal(record);
+    }
     last_processed_code_event_id_ = record.generic.order;
     return true;
   }
@@ -198,13 +210,14 @@ bool ProfilerEventsProcessor::ProcessCodeEvent() {
 void ProfilerEventsProcessor::CodeEventHandler(
     const CodeEventsContainer& evt_rec) {
   switch (evt_rec.generic.type) {
-    case CodeEventRecord::CODE_CREATION:
-    case CodeEventRecord::CODE_MOVE:
-    case CodeEventRecord::CODE_DISABLE_OPT:
-    case CodeEventRecord::CODE_DELETE:
+    case CodeEventRecord::Type::kCodeCreation:
+    case CodeEventRecord::Type::kCodeMove:
+    case CodeEventRecord::Type::kCodeDisableOpt:
+    case CodeEventRecord::Type::kCodeDelete:
+    case CodeEventRecord::Type::kNativeContextMove:
       Enqueue(evt_rec);
       break;
-    case CodeEventRecord::CODE_DEOPT: {
+    case CodeEventRecord::Type::kCodeDeopt: {
       const CodeDeoptEventRecord* rec = &evt_rec.CodeDeoptEventRecord_;
       Address pc = rec->pc;
       int fp_to_sp_delta = rec->fp_to_sp_delta;
@@ -212,19 +225,23 @@ void ProfilerEventsProcessor::CodeEventHandler(
       AddDeoptStack(pc, fp_to_sp_delta);
       break;
     }
-    case CodeEventRecord::NONE:
-    case CodeEventRecord::REPORT_BUILTIN:
+    case CodeEventRecord::Type::kNoEvent:
+    case CodeEventRecord::Type::kReportBuiltin:
       UNREACHABLE();
   }
 }
 
 void SamplingEventsProcessor::SymbolizeAndAddToProfiles(
     const TickSampleEventRecord* record) {
+  const TickSample& tick_sample = record->sample;
   Symbolizer::SymbolizedSample symbolized =
-      symbolizer_->SymbolizeTickSample(record->sample);
+      symbolizer_->SymbolizeTickSample(tick_sample);
   profiles_->AddPathToCurrentProfiles(
-      record->sample.timestamp, symbolized.stack_trace, symbolized.src_line,
-      record->sample.update_stats, record->sample.sampling_interval);
+      tick_sample.timestamp, symbolized.stack_trace, symbolized.src_line,
+      tick_sample.update_stats_, tick_sample.sampling_interval_,
+      tick_sample.state, tick_sample.embedder_state,
+      reinterpret_cast<Address>(tick_sample.context),
+      reinterpret_cast<Address>(tick_sample.embedder_context));
 }
 
 ProfilerEventsProcessor::SampleProcessingResult
@@ -254,8 +271,7 @@ SamplingEventsProcessor::ProcessOneSample() {
 void SamplingEventsProcessor::Run() {
   base::MutexGuard guard(&running_mutex_);
   while (running_.load(std::memory_order_relaxed)) {
-    base::TimeTicks nextSampleTime =
-        base::TimeTicks::HighResolutionNow() + period_;
+    base::TimeTicks nextSampleTime = base::TimeTicks::Now() + period_;
     base::TimeTicks now;
     SampleProcessingResult result;
     // Keep processing existing events until we need to do next sample
@@ -267,7 +283,7 @@ void SamplingEventsProcessor::Run() {
         // processed, proceed to the next code event.
         ProcessCodeEvent();
       }
-      now = base::TimeTicks::HighResolutionNow();
+      now = base::TimeTicks::Now();
     } while (result != NoSamplesInQueue && now < nextSampleTime);
 
     if (nextSampleTime > now) {
@@ -276,7 +292,7 @@ void SamplingEventsProcessor::Run() {
           nextSampleTime - now < base::TimeDelta::FromMilliseconds(100)) {
         // Do not use Sleep on Windows as it is very imprecise, with up to 16ms
         // jitter, which is unacceptable for short profile intervals.
-        while (base::TimeTicks::HighResolutionNow() < nextSampleTime) {
+        while (base::TimeTicks::Now() < nextSampleTime) {
         }
       } else  // NOLINT
 #else
@@ -293,7 +309,7 @@ void SamplingEventsProcessor::Run() {
           if (!running_.load(std::memory_order_relaxed)) {
             break;
           }
-          now = base::TimeTicks::HighResolutionNow();
+          now = base::TimeTicks::Now();
         }
       }
     }
@@ -322,14 +338,16 @@ void SamplingEventsProcessor::SetSamplingInterval(base::TimeDelta period) {
 }
 
 void* SamplingEventsProcessor::operator new(size_t size) {
-  return AlignedAlloc(size, alignof(SamplingEventsProcessor));
+  return AlignedAllocWithRetry(size, alignof(SamplingEventsProcessor));
 }
 
 void SamplingEventsProcessor::operator delete(void* ptr) { AlignedFree(ptr); }
 
-ProfilerCodeObserver::ProfilerCodeObserver(Isolate* isolate)
+ProfilerCodeObserver::ProfilerCodeObserver(Isolate* isolate,
+                                           CodeEntryStorage& storage)
     : isolate_(isolate),
-      code_map_(strings_),
+      code_entries_(storage),
+      code_map_(storage),
       weak_code_registry_(isolate),
       processor_(nullptr) {
   CreateEntriesForRuntimeCallStats();
@@ -339,9 +357,6 @@ ProfilerCodeObserver::ProfilerCodeObserver(Isolate* isolate)
 void ProfilerCodeObserver::ClearCodeMap() {
   weak_code_registry_.Clear();
   code_map_.Clear();
-  // We don't currently expect any references to refcounted strings to be
-  // maintained with zero profiles after the code map is cleared.
-  DCHECK(strings_.empty());
 }
 
 void ProfilerCodeObserver::CodeEventHandler(
@@ -353,12 +368,22 @@ void ProfilerCodeObserver::CodeEventHandler(
   CodeEventHandlerInternal(evt_rec);
 }
 
+size_t ProfilerCodeObserver::GetEstimatedMemoryUsage() const {
+  // To avoid race condition in codemap,
+  // for now limit computation in kEagerLogging mode
+  if (!processor_) {
+    return sizeof(*this) + code_map_.GetEstimatedMemoryUsage() +
+           code_entries_.strings().GetStringSize();
+  }
+  return 0;
+}
+
 void ProfilerCodeObserver::CodeEventHandlerInternal(
     const CodeEventsContainer& evt_rec) {
   CodeEventsContainer record = evt_rec;
   switch (evt_rec.generic.type) {
 #define PROFILER_TYPE_CASE(type, clss)        \
-  case CodeEventRecord::type:                 \
+  case CodeEventRecord::Type::type:           \
     record.clss##_.UpdateCodeMap(&code_map_); \
     break;
 
@@ -371,27 +396,29 @@ void ProfilerCodeObserver::CodeEventHandlerInternal(
 }
 
 void ProfilerCodeObserver::CreateEntriesForRuntimeCallStats() {
+#ifdef V8_RUNTIME_CALL_STATS
   RuntimeCallStats* rcs = isolate_->counters()->runtime_call_stats();
   for (int i = 0; i < RuntimeCallStats::kNumberOfCounters; ++i) {
     RuntimeCallCounter* counter = rcs->GetCounter(i);
     DCHECK(counter->name());
-    auto entry = new CodeEntry(CodeEventListener::FUNCTION_TAG, counter->name(),
-                               "native V8Runtime");
+    auto entry = code_entries_.Create(LogEventListener::CodeTag::kFunction,
+                                      counter->name(), "native V8Runtime");
     code_map_.AddCode(reinterpret_cast<Address>(counter), entry, 1);
   }
+#endif  // V8_RUNTIME_CALL_STATS
 }
 
 void ProfilerCodeObserver::LogBuiltins() {
   Builtins* builtins = isolate_->builtins();
   DCHECK(builtins->is_initialized());
-  for (int i = 0; i < Builtins::builtin_count; i++) {
-    CodeEventsContainer evt_rec(CodeEventRecord::REPORT_BUILTIN);
+  for (Builtin builtin = Builtins::kFirst; builtin <= Builtins::kLast;
+       ++builtin) {
+    CodeEventsContainer evt_rec(CodeEventRecord::Type::kReportBuiltin);
     ReportBuiltinEventRecord* rec = &evt_rec.ReportBuiltinEventRecord_;
-    Builtins::Name id = static_cast<Builtins::Name>(i);
-    Code code = builtins->builtin(id);
+    CodeT code = builtins->code(builtin);
     rec->instruction_start = code.InstructionStart();
     rec->instruction_size = code.InstructionSize();
-    rec->builtin_id = id;
+    rec->builtin = builtin;
     CodeEventHandlerInternal(evt_rec);
   }
 }
@@ -449,6 +476,16 @@ class CpuProfilersManager {
     }
   }
 
+  size_t GetAllProfilersMemorySize(Isolate* isolate) {
+    base::MutexGuard lock(&mutex_);
+    size_t estimated_memory = 0;
+    auto range = profilers_.equal_range(isolate);
+    for (auto it = range.first; it != range.second; ++it) {
+      estimated_memory += it->second->GetEstimatedMemoryUsage();
+    }
+    return estimated_memory;
+  }
+
  private:
   std::unordered_multimap<Isolate*, CpuProfiler*> profilers_;
   base::Mutex mutex_;
@@ -462,7 +499,7 @@ CpuProfiler::CpuProfiler(Isolate* isolate, CpuProfilingNamingMode naming_mode,
                          CpuProfilingLoggingMode logging_mode)
     : CpuProfiler(isolate, naming_mode, logging_mode,
                   new CpuProfilesCollection(isolate), nullptr, nullptr,
-                  new ProfilerCodeObserver(isolate)) {}
+                  new ProfilerCodeObserver(isolate, code_entries_)) {}
 
 CpuProfiler::CpuProfiler(Isolate* isolate, CpuProfilingNamingMode naming_mode,
                          CpuProfilingLoggingMode logging_mode,
@@ -474,7 +511,7 @@ CpuProfiler::CpuProfiler(Isolate* isolate, CpuProfilingNamingMode naming_mode,
       naming_mode_(naming_mode),
       logging_mode_(logging_mode),
       base_sampling_interval_(base::TimeDelta::FromMicroseconds(
-          FLAG_cpu_profiler_sampling_interval)),
+          v8_flags.cpu_profiler_sampling_interval)),
       code_observer_(test_code_observer),
       profiles_(test_profiles),
       symbolizer_(test_symbolizer),
@@ -491,6 +528,11 @@ CpuProfiler::~CpuProfiler() {
   GetProfilersManager()->RemoveProfiler(isolate_, this);
 
   DisableLogging();
+  profiles_.reset();
+
+  // We don't currently expect any references to refcounted strings to be
+  // maintained with zero profiles after the code map is cleared.
+  DCHECK(code_entries_.strings().empty());
 }
 
 void CpuProfiler::set_sampling_interval(base::TimeDelta value) {
@@ -506,11 +548,6 @@ void CpuProfiler::set_use_precise_sampling(bool value) {
 void CpuProfiler::ResetProfiles() {
   profiles_.reset(new CpuProfilesCollection(isolate_));
   profiles_->set_cpu_profiler(this);
-  symbolizer_.reset();
-  if (!profiling_scope_) {
-    profiler_listener_.reset();
-    code_observer_->ClearCodeMap();
-  }
 }
 
 void CpuProfiler::EnableLogging() {
@@ -518,7 +555,7 @@ void CpuProfiler::EnableLogging() {
 
   if (!profiler_listener_) {
     profiler_listener_.reset(new ProfilerListener(
-        isolate_, code_observer_.get(), *code_observer_->strings(),
+        isolate_, code_observer_.get(), *code_observer_->code_entries(),
         *code_observer_->weak_code_registry(), naming_mode_));
   }
   profiling_scope_.reset(
@@ -530,9 +567,11 @@ void CpuProfiler::DisableLogging() {
 
   DCHECK(profiler_listener_);
   profiling_scope_.reset();
+  profiler_listener_.reset();
+  code_observer_->ClearCodeMap();
 }
 
-base::TimeDelta CpuProfiler::ComputeSamplingInterval() const {
+base::TimeDelta CpuProfiler::ComputeSamplingInterval() {
   return profiles_->GetCommonSamplingInterval();
 }
 
@@ -554,28 +593,43 @@ void CpuProfiler::CollectSample() {
   }
 }
 
-CpuProfilingStatus CpuProfiler::StartProfiling(
+// static
+size_t CpuProfiler::GetAllProfilersMemorySize(Isolate* isolate) {
+  return GetProfilersManager()->GetAllProfilersMemorySize(isolate);
+}
+
+size_t CpuProfiler::GetEstimatedMemoryUsage() const {
+  return code_observer_->GetEstimatedMemoryUsage();
+}
+
+CpuProfilingResult CpuProfiler::StartProfiling(
+    CpuProfilingOptions options,
+    std::unique_ptr<DiscardedSamplesDelegate> delegate) {
+  return StartProfiling(nullptr, std::move(options), std::move(delegate));
+}
+
+CpuProfilingResult CpuProfiler::StartProfiling(
     const char* title, CpuProfilingOptions options,
     std::unique_ptr<DiscardedSamplesDelegate> delegate) {
-  StartProfilingStatus status =
-      profiles_->StartProfiling(title, options, std::move(delegate));
+  CpuProfilingResult result =
+      profiles_->StartProfiling(title, std::move(options), std::move(delegate));
 
   // TODO(nicodubus): Revisit logic for if we want to do anything different for
   // kAlreadyStarted
-  if (status == CpuProfilingStatus::kStarted ||
-      status == CpuProfilingStatus::kAlreadyStarted) {
+  if (result.status == CpuProfilingStatus::kStarted ||
+      result.status == CpuProfilingStatus::kAlreadyStarted) {
     TRACE_EVENT0("v8", "CpuProfiler::StartProfiling");
     AdjustSamplingInterval();
     StartProcessorIfNotStarted();
   }
 
-  return status;
+  return result;
 }
 
-CpuProfilingStatus CpuProfiler::StartProfiling(
+CpuProfilingResult CpuProfiler::StartProfiling(
     String title, CpuProfilingOptions options,
     std::unique_ptr<DiscardedSamplesDelegate> delegate) {
-  return StartProfiling(profiles_->GetName(title), options,
+  return StartProfiling(profiles_->GetName(title), std::move(options),
                         std::move(delegate));
 }
 
@@ -606,31 +660,38 @@ void CpuProfiler::StartProcessorIfNotStarted() {
 }
 
 CpuProfile* CpuProfiler::StopProfiling(const char* title) {
+  CpuProfile* profile = profiles_->Lookup(title);
+  if (profile) {
+    return StopProfiling(profile->id());
+  }
+  return nullptr;
+}
+
+CpuProfile* CpuProfiler::StopProfiling(ProfilerId id) {
   if (!is_profiling_) return nullptr;
-  StopProcessorIfLastProfile(title);
-  CpuProfile* result = profiles_->StopProfiling(title);
+  const bool last_profile = profiles_->IsLastProfileLeft(id);
+  if (last_profile) StopProcessor();
+
+  CpuProfile* profile = profiles_->StopProfiling(id);
+
   AdjustSamplingInterval();
-  return result;
+
+  DCHECK(profiling_scope_);
+  if (last_profile && logging_mode_ == kLazyLogging) {
+    DisableLogging();
+  }
+
+  return profile;
 }
 
 CpuProfile* CpuProfiler::StopProfiling(String title) {
   return StopProfiling(profiles_->GetName(title));
 }
 
-void CpuProfiler::StopProcessorIfLastProfile(const char* title) {
-  if (!profiles_->IsLastProfile(title)) return;
-  StopProcessor();
-}
-
 void CpuProfiler::StopProcessor() {
   is_profiling_ = false;
   processor_->StopSynchronously();
   processor_.reset();
-
-  DCHECK(profiling_scope_);
-  if (logging_mode_ == kLazyLogging) {
-    DisableLogging();
-  }
 }
 }  // namespace internal
 }  // namespace v8

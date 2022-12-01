@@ -2,9 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "test/cctest/test-api.h"
-
+#include "include/v8-function.h"
 #include "src/api/api-inl.h"
+#include "src/base/strings.h"
+#include "test/cctest/test-api.h"
 
 using ::v8::Array;
 using ::v8::Context;
@@ -345,9 +346,7 @@ static void AnalyzeStackInNativeCode(
   }
 }
 
-// TODO(3074796): Reenable this as a THREADED_TEST once it passes.
-// THREADED_TEST(CaptureStackTrace) {
-TEST(CaptureStackTrace) {
+THREADED_TEST(CaptureStackTrace) {
   v8::Isolate* isolate = CcTest::isolate();
   v8::HandleScope scope(isolate);
   v8::Local<v8::String> origin = v8_str("capture-stack-trace-test");
@@ -714,10 +713,10 @@ TEST(SourceURLInStackTrace) {
       "}\n"
       "eval('(' + outer +')()%s');";
 
-  i::ScopedVector<char> code(1024);
-  i::SNPrintF(code, source, "//# sourceURL=eval_url");
+  v8::base::ScopedVector<char> code(1024);
+  v8::base::SNPrintF(code, source, "//# sourceURL=eval_url");
   CHECK(CompileRun(code.begin())->IsUndefined());
-  i::SNPrintF(code, source, "//@ sourceURL=eval_url");
+  v8::base::SNPrintF(code, source, "//@ sourceURL=eval_url");
   CHECK(CompileRun(code.begin())->IsUndefined());
 }
 
@@ -792,10 +791,10 @@ TEST(InlineScriptWithSourceURLInStackTrace) {
       "}\n"
       "outer()\n%s";
 
-  i::ScopedVector<char> code(1024);
-  i::SNPrintF(code, source, "//# sourceURL=source_url");
+  v8::base::ScopedVector<char> code(1024);
+  v8::base::SNPrintF(code, source, "//# sourceURL=source_url");
   CHECK(CompileRunWithOrigin(code.begin(), "url", 0, 1)->IsUndefined());
-  i::SNPrintF(code, source, "//@ sourceURL=source_url");
+  v8::base::SNPrintF(code, source, "//@ sourceURL=source_url");
   CHECK(CompileRunWithOrigin(code.begin(), "url", 0, 1)->IsUndefined());
 }
 
@@ -836,10 +835,10 @@ TEST(DynamicWithSourceURLInStackTrace) {
       "}\n"
       "outer()\n%s";
 
-  i::ScopedVector<char> code(1024);
-  i::SNPrintF(code, source, "//# sourceURL=source_url");
+  v8::base::ScopedVector<char> code(1024);
+  v8::base::SNPrintF(code, source, "//# sourceURL=source_url");
   CHECK(CompileRunWithOrigin(code.begin(), "url", 0, 0)->IsUndefined());
-  i::SNPrintF(code, source, "//@ sourceURL=source_url");
+  v8::base::SNPrintF(code, source, "//@ sourceURL=source_url");
   CHECK(CompileRunWithOrigin(code.begin(), "url", 0, 0)->IsUndefined());
 }
 
@@ -856,8 +855,8 @@ TEST(DynamicWithSourceURLInStackTraceString) {
       "}\n"
       "outer()\n%s";
 
-  i::ScopedVector<char> code(1024);
-  i::SNPrintF(code, source, "//# sourceURL=source_url");
+  v8::base::ScopedVector<char> code(1024);
+  v8::base::SNPrintF(code, source, "//# sourceURL=source_url");
   v8::TryCatch try_catch(context->GetIsolate());
   CompileRunWithOrigin(code.begin(), "", 0, 0);
   CHECK(try_catch.HasCaught());
@@ -867,14 +866,77 @@ TEST(DynamicWithSourceURLInStackTraceString) {
   CHECK_NOT_NULL(strstr(*stack, "at foo (source_url:3:5)"));
 }
 
-TEST(CaptureStackTraceForStackOverflow) {
-  v8::internal::FLAG_stack_size = 150;
-  LocalContext current;
-  v8::Isolate* isolate = current->GetIsolate();
+UNINITIALIZED_TEST(CaptureStackTraceForStackOverflow) {
+  // We must set v8_flags.stack_size before initializing the isolate.
+  v8::internal::v8_flags.stack_size = 150;
+  v8::Isolate::CreateParams create_params;
+  create_params.array_buffer_allocator = CcTest::array_buffer_allocator();
+  v8::Isolate* isolate = v8::Isolate::New(create_params);
+  isolate->Enter();
+  {
+    LocalContext current(isolate);
+    v8::HandleScope scope(isolate);
+    isolate->SetCaptureStackTraceForUncaughtExceptions(
+        true, 10, v8::StackTrace::kDetailed);
+    v8::TryCatch try_catch(isolate);
+    CompileRun("(function f(x) { f(x+1); })(0)");
+    CHECK(try_catch.HasCaught());
+  }
+  isolate->Exit();
+  isolate->Dispose();
+}
+
+void AnalyzeScriptNameInStack(const v8::FunctionCallbackInfo<v8::Value>& args) {
+  v8::HandleScope scope(args.GetIsolate());
+  v8::Local<v8::String> name =
+      v8::StackTrace::CurrentScriptNameOrSourceURL(args.GetIsolate());
+  CHECK(!name.IsEmpty());
+  CHECK(name->StringEquals(v8_str("test.js")));
+}
+
+TEST(CurrentScriptNameOrSourceURL_Name) {
+  v8::Isolate* isolate = CcTest::isolate();
   v8::HandleScope scope(isolate);
-  isolate->SetCaptureStackTraceForUncaughtExceptions(true, 10,
-                                                     v8::StackTrace::kDetailed);
-  v8::TryCatch try_catch(isolate);
-  CompileRun("(function f(x) { f(x+1); })(0)");
-  CHECK(try_catch.HasCaught());
+  Local<ObjectTemplate> templ = ObjectTemplate::New(isolate);
+  templ->Set(
+      isolate, "AnalyzeScriptNameInStack",
+      v8::FunctionTemplate::New(CcTest::isolate(), AnalyzeScriptNameInStack));
+  LocalContext context(nullptr, templ);
+
+  const char* source = R"(
+    function foo() {
+      AnalyzeScriptNameInStack();
+    }
+    foo();
+  )";
+
+  CHECK(CompileRunWithOrigin(source, "test.js")->IsUndefined());
+}
+
+void AnalyzeScriptURLInStack(const v8::FunctionCallbackInfo<v8::Value>& args) {
+  v8::HandleScope scope(args.GetIsolate());
+  v8::Local<v8::String> name =
+      v8::StackTrace::CurrentScriptNameOrSourceURL(args.GetIsolate());
+  CHECK(!name.IsEmpty());
+  CHECK(name->StringEquals(v8_str("foo.js")));
+}
+
+TEST(CurrentScriptNameOrSourceURL_SourceURL) {
+  v8::Isolate* isolate = CcTest::isolate();
+  v8::HandleScope scope(isolate);
+  Local<ObjectTemplate> templ = ObjectTemplate::New(isolate);
+  templ->Set(
+      isolate, "AnalyzeScriptURLInStack",
+      v8::FunctionTemplate::New(CcTest::isolate(), AnalyzeScriptURLInStack));
+  LocalContext context(nullptr, templ);
+
+  const char* source = R"(
+    function foo() {
+      AnalyzeScriptURLInStack();
+    }
+    foo();
+    //# sourceURL=foo.js
+  )";
+
+  CHECK(CompileRunWithOrigin(source, "")->IsUndefined());
 }

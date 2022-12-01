@@ -34,8 +34,11 @@
 
 #include "src/codegen/assembler.h"
 
+#ifdef V8_CODE_COMMENTS
+#include <iomanip>
+#endif
+#include "src/base/vector.h"
 #include "src/codegen/assembler-inl.h"
-#include "src/codegen/string-constants.h"
 #include "src/deoptimizer/deoptimizer.h"
 #include "src/diagnostics/disassembler.h"
 #include "src/execution/isolate.h"
@@ -43,7 +46,6 @@
 #include "src/snapshot/embedded/embedded-data.h"
 #include "src/snapshot/snapshot.h"
 #include "src/utils/ostreams.h"
-#include "src/utils/vector.h"
 
 namespace v8 {
 namespace internal {
@@ -54,7 +56,7 @@ AssemblerOptions AssemblerOptions::Default(Isolate* isolate) {
   const bool generating_embedded_builtin =
       isolate->IsGeneratingEmbeddedBuiltins();
   options.record_reloc_info_for_serialization = serializer;
-  options.enable_root_array_delta_access =
+  options.enable_root_relative_access =
       !serializer && !generating_embedded_builtin;
 #ifdef USE_SIMULATOR
   // Even though the simulator is enabled, we may still need to generate code
@@ -65,20 +67,21 @@ AssemblerOptions AssemblerOptions::Default(Isolate* isolate) {
 
   // So here we enable simulator specific code if not generating the snapshot or
   // if we are but we are targetting the simulator *only*.
-  options.enable_simulator_code = !serializer || FLAG_target_is_simulator;
+  options.enable_simulator_code = !serializer || v8_flags.target_is_simulator;
 #endif
-  options.inline_offheap_trampolines &= !generating_embedded_builtin;
+
 #if V8_TARGET_ARCH_X64 || V8_TARGET_ARCH_ARM64
-  const base::AddressRegion& code_range = isolate->heap()->code_range();
-  DCHECK_IMPLIES(code_range.begin() != kNullAddress, !code_range.is_empty());
-  options.code_range_start = code_range.begin();
+  options.code_range_base = isolate->heap()->code_range_base();
 #endif
-  options.short_builtin_calls =
+  bool short_builtin_calls =
       isolate->is_short_builtin_calls_enabled() &&
       !generating_embedded_builtin &&
-      (options.code_range_start != kNullAddress) &&
-      // Serialization of RUNTIME_ENTRY reloc infos is not supported yet.
+      (options.code_range_base != kNullAddress) &&
+      // Serialization of NEAR_BUILTIN_ENTRY reloc infos is not supported yet.
       !serializer;
+  if (short_builtin_calls) {
+    options.builtin_call_jump_mode = BuiltinCallJumpMode::kPCRelative;
+  }
   return options;
 }
 
@@ -96,9 +99,10 @@ namespace {
 class DefaultAssemblerBuffer : public AssemblerBuffer {
  public:
   explicit DefaultAssemblerBuffer(int size)
-      : buffer_(OwnedVector<uint8_t>::NewForOverwrite(size)) {
+      : buffer_(base::OwnedVector<uint8_t>::NewForOverwrite(
+            std::max(AssemblerBase::kMinimalBufferSize, size))) {
 #ifdef DEBUG
-    ZapCode(reinterpret_cast<Address>(buffer_.start()), size);
+    ZapCode(reinterpret_cast<Address>(buffer_.start()), buffer_.size());
 #endif
   }
 
@@ -112,7 +116,7 @@ class DefaultAssemblerBuffer : public AssemblerBuffer {
   }
 
  private:
-  OwnedVector<uint8_t> buffer_;
+  base::OwnedVector<uint8_t> buffer_;
 };
 
 class ExternalAssemblerBufferImpl : public AssemblerBuffer {
@@ -175,12 +179,17 @@ std::unique_ptr<AssemblerBuffer> NewAssemblerBuffer(int size) {
 // -----------------------------------------------------------------------------
 // Implementation of AssemblerBase
 
+// static
+constexpr int AssemblerBase::kMinimalBufferSize;
+
+// static
+constexpr int AssemblerBase::kDefaultBufferSize;
+
 AssemblerBase::AssemblerBase(const AssemblerOptions& options,
                              std::unique_ptr<AssemblerBuffer> buffer)
     : buffer_(std::move(buffer)),
       options_(options),
       enabled_cpu_features_(0),
-      emit_debug_code_(FLAG_debug_code),
       predictable_code_size_(false),
       constant_pool_available_(false),
       jump_optimization_info_(nullptr) {
@@ -193,7 +202,7 @@ AssemblerBase::~AssemblerBase() = default;
 
 void AssemblerBase::Print(Isolate* isolate) {
   StdoutStream os;
-  v8::internal::Disassembler::Decode(isolate, &os, buffer_start_, pc_);
+  v8::internal::Disassembler::Decode(isolate, os, buffer_start_, pc_);
 }
 
 // -----------------------------------------------------------------------------
@@ -215,32 +224,29 @@ CpuFeatureScope::~CpuFeatureScope() {
 
 bool CpuFeatures::initialized_ = false;
 bool CpuFeatures::supports_wasm_simd_128_ = false;
+bool CpuFeatures::supports_cetss_ = false;
 unsigned CpuFeatures::supported_ = 0;
 unsigned CpuFeatures::icache_line_size_ = 0;
 unsigned CpuFeatures::dcache_line_size_ = 0;
 
-HeapObjectRequest::HeapObjectRequest(double heap_number, int offset)
-    : kind_(kHeapNumber), offset_(offset) {
-  value_.heap_number = heap_number;
-  DCHECK(!IsSmiDouble(value_.heap_number));
-}
-
-HeapObjectRequest::HeapObjectRequest(const StringConstantBase* string,
-                                     int offset)
-    : kind_(kStringConstant), offset_(offset) {
-  value_.string = string;
-  DCHECK_NOT_NULL(value_.string);
+HeapNumberRequest::HeapNumberRequest(double heap_number, int offset)
+    : offset_(offset) {
+  value_ = heap_number;
+  DCHECK(!IsSmiDouble(value_));
 }
 
 // Platform specific but identical code for all the platforms.
 
-void Assembler::RecordDeoptReason(DeoptimizeReason reason,
+void Assembler::RecordDeoptReason(DeoptimizeReason reason, uint32_t node_id,
                                   SourcePosition position, int id) {
   EnsureSpace ensure_space(this);
   RecordRelocInfo(RelocInfo::DEOPT_SCRIPT_OFFSET, position.ScriptOffset());
   RecordRelocInfo(RelocInfo::DEOPT_INLINING_ID, position.InliningId());
   RecordRelocInfo(RelocInfo::DEOPT_REASON, static_cast<int>(reason));
   RecordRelocInfo(RelocInfo::DEOPT_ID, id);
+#ifdef DEBUG
+  RecordRelocInfo(RelocInfo::DEOPT_NODE_ID, node_id);
+#endif  // DEBUG
 }
 
 void Assembler::DataAlign(int m) {
@@ -253,12 +259,12 @@ void Assembler::DataAlign(int m) {
   }
 }
 
-void AssemblerBase::RequestHeapObject(HeapObjectRequest request) {
+void AssemblerBase::RequestHeapNumber(HeapNumberRequest request) {
   request.set_offset(pc_offset());
-  heap_object_requests_.push_front(request);
+  heap_number_requests_.push_front(request);
 }
 
-int AssemblerBase::AddCodeTarget(Handle<Code> target) {
+int AssemblerBase::AddCodeTarget(Handle<CodeT> target) {
   int current = static_cast<int>(code_targets_.size());
   if (current > 0 && !target.is_null() &&
       code_targets_.back().address() == target.address()) {
@@ -270,7 +276,7 @@ int AssemblerBase::AddCodeTarget(Handle<Code> target) {
   }
 }
 
-Handle<Code> AssemblerBase::GetCodeTarget(intptr_t code_target_index) const {
+Handle<CodeT> AssemblerBase::GetCodeTarget(intptr_t code_target_index) const {
   DCHECK_LT(static_cast<size_t>(code_target_index), code_targets_.size());
   return code_targets_[code_target_index];
 }
@@ -298,6 +304,7 @@ Handle<HeapObject> AssemblerBase::GetEmbeddedObject(
 
 
 int Assembler::WriteCodeComments() {
+  if (!v8_flags.code_comments) return 0;
   CHECK_IMPLIES(code_comments_writer_.entry_count() > 0,
                 options().emit_code_comments);
   if (code_comments_writer_.entry_count() == 0) return 0;
@@ -307,6 +314,25 @@ int Assembler::WriteCodeComments() {
   DCHECK_EQ(size, code_comments_writer_.section_size());
   return size;
 }
+
+#ifdef V8_CODE_COMMENTS
+int Assembler::CodeComment::depth() const { return assembler_->comment_depth_; }
+void Assembler::CodeComment::Open(const std::string& comment) {
+  std::stringstream sstream;
+  sstream << std::setfill(' ') << std::setw(depth() * kIndentWidth + 2);
+  sstream << "[ " << comment;
+  assembler_->comment_depth_++;
+  assembler_->RecordComment(sstream.str());
+}
+
+void Assembler::CodeComment::Close() {
+  assembler_->comment_depth_--;
+  std::string comment = "]";
+  comment.insert(0, depth() * kIndentWidth, ' ');
+  DCHECK_LE(0, depth());
+  assembler_->RecordComment(comment);
+}
+#endif
 
 }  // namespace internal
 }  // namespace v8

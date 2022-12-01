@@ -19,6 +19,7 @@ group("gn_all") {
   ]
 
   deps = [
+    "bigint:bigint_shell",
     "inspector:inspector-test",
     "mkgrokdump:mkgrokdump",
   ]
@@ -40,7 +41,7 @@ group("gn_all") {
     deps += [
       "benchmarks/cpp:gn_all",
       "cctest:cctest",
-      "cctest:generate-bytecode-expectations",
+      "unittests:generate-bytecode-expectations",
       "unittests:unittests",
     ]
   }

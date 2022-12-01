@@ -5,13 +5,13 @@
 #include "src/debug/debug-coverage.h"
 
 #include "src/ast/ast-source-ranges.h"
-#include "src/ast/ast.h"
 #include "src/base/hashmap.h"
+#include "src/common/assert-scope.h"
+#include "src/common/globals.h"
 #include "src/debug/debug.h"
 #include "src/deoptimizer/deoptimizer.h"
 #include "src/execution/frames-inl.h"
 #include "src/execution/isolate.h"
-#include "src/objects/debug-objects-inl.h"
 #include "src/objects/objects.h"
 
 namespace v8 {
@@ -61,8 +61,7 @@ bool CompareCoverageBlock(const CoverageBlock& a, const CoverageBlock& b) {
   return a.start < b.start;
 }
 
-void SortBlockData(
-    std::vector<CoverageBlock>& v) {  // NOLINT(runtime/references)
+void SortBlockData(std::vector<CoverageBlock>& v) {
   // Sort according to the block nesting structure.
   std::sort(v.begin(), v.end(), CompareCoverageBlock);
 }
@@ -479,7 +478,7 @@ void CollectBlockCoverage(CoverageFunction* function, SharedFunctionInfo info,
 void PrintBlockCoverage(const CoverageFunction* function,
                         SharedFunctionInfo info, bool has_nonempty_source_range,
                         bool function_is_relevant) {
-  DCHECK(FLAG_trace_block_coverage);
+  DCHECK(v8_flags.trace_block_coverage);
   std::unique_ptr<char[]> function_name =
       function->name->ToCString(DISALLOW_NULLS, ROBUST_STRING_TRAVERSAL);
   i::PrintF(
@@ -517,7 +516,7 @@ void CollectAndMaybeResetCounts(Isolate* isolate,
         SharedFunctionInfo shared = vector.shared_function_info();
         DCHECK(shared.IsSubjectToDebugging());
         uint32_t count = static_cast<uint32_t>(vector.invocation_count());
-        if (reset_count) vector.clear_invocation_count();
+        if (reset_count) vector.clear_invocation_count(kRelaxedStore);
         counter_map->Add(shared, count);
       }
       break;
@@ -527,6 +526,7 @@ void CollectAndMaybeResetCounts(Isolate* isolate,
                   ->feedback_vectors_for_profiling_tools()
                   ->IsArrayList());
       DCHECK_EQ(v8::debug::CoverageMode::kBestEffort, coverage_mode);
+      AllowGarbageCollection allow_gc;
       HeapObjectIterator heap_iterator(isolate->heap());
       for (HeapObject current_obj = heap_iterator.Next();
            !current_obj.is_null(); current_obj = heap_iterator.Next()) {
@@ -543,7 +543,12 @@ void CollectAndMaybeResetCounts(Isolate* isolate,
           count =
               static_cast<uint32_t>(func.feedback_vector().invocation_count());
         } else if (func.raw_feedback_cell().interrupt_budget() <
-                   FLAG_budget_for_feedback_vector_allocation) {
+                   v8_flags.interrupt_budget_for_feedback_allocation) {
+          // TODO(jgruber): The condition above is no longer precise since we
+          // may use either the fixed interrupt_budget or
+          // v8_flags.interrupt_budget_factor_for_feedback_allocation. If the
+          // latter, we may incorrectly set a count of 1.
+          //
           // We haven't allocated feedback vector, but executed the function
           // atleast once. We don't have precise invocation count here.
           count = 1;
@@ -600,12 +605,12 @@ std::unique_ptr<Coverage> Coverage::CollectPrecise(Isolate* isolate) {
   DCHECK(!isolate->is_best_effort_code_coverage());
   std::unique_ptr<Coverage> result =
       Collect(isolate, isolate->code_coverage_mode());
-  if (!isolate->is_collecting_type_profile() &&
-      (isolate->is_precise_binary_code_coverage() ||
-       isolate->is_block_binary_code_coverage())) {
+  if (isolate->is_precise_binary_code_coverage() ||
+      isolate->is_block_binary_code_coverage()) {
     // We do not have to hold onto feedback vectors for invocations we already
     // reported. So we can reset the list.
-    isolate->SetFeedbackVectorsForProfilingTools(*ArrayList::New(isolate, 0));
+    isolate->SetFeedbackVectorsForProfilingTools(
+        ReadOnlyRoots(isolate).empty_array_list());
   }
   return result;
 }
@@ -729,7 +734,7 @@ std::unique_ptr<Coverage> Coverage::Collect(
         functions->emplace_back(function);
       }
 
-      if (FLAG_trace_block_coverage) {
+      if (v8_flags.trace_block_coverage) {
         PrintBlockCoverage(&function, *info, has_nonempty_source_range,
                            function_is_relevant);
       }
@@ -760,10 +765,8 @@ void Coverage::SelectMode(Isolate* isolate, debug::CoverageMode mode) {
       // following coverage recording (without reloads) will be at function
       // granularity.
       isolate->debug()->RemoveAllCoverageInfos();
-      if (!isolate->is_collecting_type_profile()) {
-        isolate->SetFeedbackVectorsForProfilingTools(
-            ReadOnlyRoots(isolate).undefined_value());
-      }
+      isolate->SetFeedbackVectorsForProfilingTools(
+          ReadOnlyRoots(isolate).undefined_value());
       break;
     case debug::CoverageMode::kBlockBinary:
     case debug::CoverageMode::kBlockCount:
@@ -794,7 +797,7 @@ void Coverage::SelectMode(Isolate* isolate, debug::CoverageMode mode) {
             shared.set_has_reported_binary_coverage(false);
           } else if (o.IsFeedbackVector()) {
             // In any case, clear any collected invocation counts.
-            FeedbackVector::cast(o).clear_invocation_count();
+            FeedbackVector::cast(o).clear_invocation_count(kRelaxedStore);
           }
         }
       }
@@ -803,7 +806,7 @@ void Coverage::SelectMode(Isolate* isolate, debug::CoverageMode mode) {
         IsCompiledScope is_compiled_scope(
             func->shared().is_compiled_scope(isolate));
         CHECK(is_compiled_scope.is_compiled());
-        JSFunction::EnsureFeedbackVector(func, &is_compiled_scope);
+        JSFunction::EnsureFeedbackVector(isolate, func, &is_compiled_scope);
       }
 
       // Root all feedback vectors to avoid early collection.

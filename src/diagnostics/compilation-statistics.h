@@ -8,6 +8,7 @@
 #include <map>
 #include <string>
 
+#include "src/base/platform/mutex.h"
 #include "src/base/platform/time.h"
 #include "src/utils/allocation.h"
 
@@ -36,6 +37,8 @@ class CompilationStatistics final : public Malloced {
           absolute_max_allocated_bytes_(0) {}
 
     void Accumulate(const BasicStats& stats);
+
+    std::string AsJSON();
 
     base::TimeDelta delta_;
     size_t total_allocated_bytes_;

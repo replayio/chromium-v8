@@ -5,8 +5,6 @@
 #ifndef V8_TEST_CCTEST_TEST_API_H_
 #define V8_TEST_CCTEST_TEST_API_H_
 
-#include "src/init/v8.h"
-
 #include "src/api/api.h"
 #include "src/execution/isolate.h"
 #include "src/execution/vm-state.h"
@@ -95,7 +93,7 @@ struct ConvertJSValue<int64_t> {
     constexpr uint64_t kMaxULL = std::numeric_limits<uint64_t>::max();
 
     // -2^{64} < fmod_value < 2^{64}.
-    double fmod_value = fmod(result, kMaxULL + 1.0);
+    double fmod_value = fmod(result, static_cast<double>(kMaxULL));
     if (fmod_value >= 0) {
       if (fmod_value < pow(2, 63)) {
         // 0 <= fmod_value < 2^{63}.
@@ -133,7 +131,7 @@ struct ConvertJSValue<uint64_t> {
     constexpr uint64_t kMaxULL = std::numeric_limits<uint64_t>::max();
 
     // -2^{64} < fmod_value < 2^{64}.
-    double fmod_value = fmod(result, kMaxULL + 1.0);
+    double fmod_value = fmod(result, static_cast<double>(kMaxULL));
     if (fmod_value >= 0) {
       return v8::Just(static_cast<uint64_t>(fmod_value));
     }

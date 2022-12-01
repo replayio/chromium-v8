@@ -28,6 +28,7 @@ namespace trap_handler {
 // We declare this as int rather than bool as a workaround for a glibc bug, in
 // which the dynamic loader cannot handle executables whose TLS area is only
 // 1 byte in size; see https://sourceware.org/bugzilla/show_bug.cgi?id=14898.
+<<<<<<< HEAD
 
 THREAD_LOCAL int g_thread_in_wasm_code2;
 
@@ -50,6 +51,11 @@ int& IsThreadInWasmCode() {
   }
   return *v;
 }
+||||||| 7cbb7db789
+THREAD_LOCAL int g_thread_in_wasm_code;
+=======
+thread_local int g_thread_in_wasm_code;
+>>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
 
 static_assert(sizeof(g_thread_in_wasm_code) > 1,
               "sizeof(thread_local_var) must be > 1, see "
@@ -59,14 +65,19 @@ size_t gNumCodeObjects = 0;
 CodeProtectionInfoListEntry* gCodeObjects = nullptr;
 std::atomic_size_t gRecoveredTrapCount = {0};
 
+#if !defined(__cpp_lib_atomic_value_initialization) || \
+    __cpp_lib_atomic_value_initialization < 201911L
 std::atomic_flag MetadataLock::spinlock_ = ATOMIC_FLAG_INIT;
+#else
+std::atomic_flag MetadataLock::spinlock_;
+#endif
 
 MetadataLock::MetadataLock() {
   if (g_thread_in_wasm_code) {
     abort();
   }
 
-  while (spinlock_.test_and_set(std::memory_order::memory_order_acquire)) {
+  while (spinlock_.test_and_set(std::memory_order_acquire)) {
   }
 }
 
@@ -75,7 +86,7 @@ MetadataLock::~MetadataLock() {
     abort();
   }
 
-  spinlock_.clear(std::memory_order::memory_order_release);
+  spinlock_.clear(std::memory_order_release);
 }
 
 }  // namespace trap_handler

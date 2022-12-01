@@ -9,12 +9,13 @@
 #include "src/base/flags.h"
 #include "src/codegen/interface-descriptors.h"
 #include "src/codegen/machine-type.h"
-#include "src/codegen/register-arch.h"
+#include "src/codegen/register.h"
 #include "src/codegen/reglist.h"
 #include "src/codegen/signature.h"
 #include "src/common/globals.h"
 #include "src/compiler/frame.h"
 #include "src/compiler/operator.h"
+#include "src/execution/encoded-c-signature.h"
 #include "src/runtime/runtime.h"
 #include "src/zone/zone.h"
 
@@ -35,7 +36,8 @@ class OptimizedCompilationInfo;
 
 namespace compiler {
 
-const RegList kNoCalleeSaved = 0;
+constexpr RegList kNoCalleeSaved;
+constexpr DoubleRegList kNoCalleeSavedFp;
 
 class OsrHelper;
 
@@ -62,6 +64,11 @@ class LinkageLocation {
                       b.machine_type_.representation()) ||
             IsSubtype(b.machine_type_.representation(),
                       a.machine_type_.representation()));
+  }
+
+  static LinkageLocation ForNullRegister(
+      int32_t reg, MachineType type = MachineType::None()) {
+    return LinkageLocation(REGISTER, reg, type);
   }
 
   static LinkageLocation ForAnyRegister(
@@ -101,7 +108,7 @@ class LinkageLocation {
   }
 
   static LinkageLocation ForSavedCallerConstantPool() {
-    DCHECK(V8_EMBEDDED_CONSTANT_POOL);
+    DCHECK(V8_EMBEDDED_CONSTANT_POOL_BOOL);
     return ForCalleeFrameSlot((StandardFrameConstants::kCallerPCOffset -
                                StandardFrameConstants::kConstantPoolOffset) /
                                   kSystemPointerSize,
@@ -127,13 +134,8 @@ class LinkageLocation {
 
   MachineType GetType() const { return machine_type_; }
 
-  int GetSize() const {
-    return 1 << ElementSizeLog2Of(GetType().representation());
-  }
-
   int GetSizeInPointers() const {
-    // Round up
-    return (GetSize() + kSystemPointerSize - 1) / kSystemPointerSize;
+    return ElementSizeInPointers(GetType().representation());
   }
 
   int32_t GetLocation() const {
@@ -143,6 +145,9 @@ class LinkageLocation {
            LocationField::kShift;
   }
 
+  bool IsNullRegister() const {
+    return IsRegister() && GetLocation() < ANY_REGISTER;
+  }
   NO_INLINE_FOR_ARM64_MSVC bool IsRegister() const {
     return TypeField::decode(bit_field_) == REGISTER;
   }
@@ -219,15 +224,13 @@ class V8_EXPORT_PRIVATE CallDescriptor final
     kInitializeRootRegister = 1u << 3,
     // Does not ever try to allocate space on our heap.
     kNoAllocate = 1u << 4,
-    // Use retpoline for this call if indirect.
-    kRetpoline = 1u << 5,
     // Use the kJavaScriptCallCodeStartRegister (fixed) register for the
     // indirect target address when calling.
-    kFixedTargetRegister = 1u << 6,
-    kCallerSavedRegisters = 1u << 7,
+    kFixedTargetRegister = 1u << 5,
+    kCallerSavedRegisters = 1u << 6,
     // The kCallerSavedFPRegisters only matters (and set) when the more general
     // flag for kCallerSavedRegisters above is also set.
-    kCallerSavedFPRegisters = 1u << 8,
+    kCallerSavedFPRegisters = 1u << 7,
     // Tail calls for tier up are special (in fact they are different enough
     // from normal tail calls to warrant a dedicated opcode; but they also have
     // enough similar aspects that reusing the TailCall opcode is pragmatic).
@@ -243,15 +246,15 @@ class V8_EXPORT_PRIVATE CallDescriptor final
     //
     // In other words, behavior is identical to a jmp instruction prior caller
     // frame construction.
-    kIsTailCallForTierUp = 1u << 9,
+    kIsTailCallForTierUp = 1u << 8,
+
+    // AIX has a function descriptor by default but it can be disabled for a
+    // certain CFunction call (only used for Kind::kCallAddress).
+    kNoFunctionDescriptor = 1u << 9,
 
     // Flags past here are *not* encoded in InstructionCode and are thus not
     // accessible from the code generator. See also
     // kFlagsBitsEncodedInInstructionCode.
-
-    // AIX has a function descriptor by default but it can be disabled for a
-    // certain CFunction call (only used for Kind::kCallAddress).
-    kNoFunctionDescriptor = 1u << 10,
   };
   using Flags = base::Flags<Flag>;
 
@@ -259,10 +262,10 @@ class V8_EXPORT_PRIVATE CallDescriptor final
                  LocationSignature* location_sig, size_t param_slot_count,
                  Operator::Properties properties,
                  RegList callee_saved_registers,
-                 RegList callee_saved_fp_registers, Flags flags,
+                 DoubleRegList callee_saved_fp_registers, Flags flags,
                  const char* debug_name = "",
                  StackArgumentOrder stack_order = StackArgumentOrder::kDefault,
-                 const RegList allocatable_registers = 0,
+                 const RegList allocatable_registers = {},
                  size_t return_slot_count = 0)
       : kind_(kind),
         target_type_(target_type),
@@ -306,14 +309,33 @@ class V8_EXPORT_PRIVATE CallDescriptor final
 #if V8_ENABLE_WEBASSEMBLY
     if (IsWasmFunctionCall()) return true;
 #endif  // V8_ENABLE_WEBASSEMBLY
+    if (CalleeSavedRegisters() != kNoCalleeSaved) return true;
     return false;
   }
 
   // The number of return values from this call.
   size_t ReturnCount() const { return location_sig_->return_count(); }
 
-  // The number of C parameters to this call.
+  // The number of C parameters to this call. The following invariant
+  // should hold true:
+  // ParameterCount() == GPParameterCount() + FPParameterCount()
   size_t ParameterCount() const { return location_sig_->parameter_count(); }
+
+  // The number of general purpose C parameters to this call.
+  size_t GPParameterCount() const {
+    if (!gp_param_count_) {
+      ComputeParamCounts();
+    }
+    return gp_param_count_.value();
+  }
+
+  // The number of floating point C parameters to this call.
+  size_t FPParameterCount() const {
+    if (!fp_param_count_) {
+      ComputeParamCounts();
+    }
+    return fp_param_count_.value();
+  }
 
   // The number of stack parameter slots to the call.
   size_t ParameterSlotCount() const { return param_slot_count_; }
@@ -391,12 +413,14 @@ class V8_EXPORT_PRIVATE CallDescriptor final
   RegList CalleeSavedRegisters() const { return callee_saved_registers_; }
 
   // Get the callee-saved FP registers, if any, across this call.
-  RegList CalleeSavedFPRegisters() const { return callee_saved_fp_registers_; }
+  DoubleRegList CalleeSavedFPRegisters() const {
+    return callee_saved_fp_registers_;
+  }
 
   const char* debug_name() const { return debug_name_; }
 
-  bool UsesOnlyRegisters() const;
-
+  // Difference between the number of parameter slots of *this* and
+  // *tail_caller* (callee minus caller).
   int GetStackParameterDelta(const CallDescriptor* tail_caller) const;
 
   // Returns the offset to the area below the parameter slots on the stack,
@@ -410,7 +434,8 @@ class V8_EXPORT_PRIVATE CallDescriptor final
   // If there are no parameter slots, returns 0.
   int GetOffsetToReturns() const;
 
-  int GetTaggedParameterSlots() const;
+  // Returns two 16-bit numbers packed together: (first slot << 16) | num_slots.
+  uint32_t GetTaggedParameterSlots() const;
 
   bool CanTailCall(const CallDescriptor* callee) const;
 
@@ -419,17 +444,14 @@ class V8_EXPORT_PRIVATE CallDescriptor final
   RegList AllocatableRegisters() const { return allocatable_registers_; }
 
   bool HasRestrictedAllocatableRegisters() const {
-    return allocatable_registers_ != 0;
+    return !allocatable_registers_.is_empty();
   }
 
-  // Stores the signature information for a fast API call - C++ functions
-  // that can be called directly from TurboFan.
-  void SetCFunctionInfo(const CFunctionInfo* c_function_info) {
-    c_function_info_ = c_function_info;
-  }
-  const CFunctionInfo* GetCFunctionInfo() const { return c_function_info_; }
+  EncodedCSignature ToEncodedCSignature() const;
 
  private:
+  void ComputeParamCounts() const;
+
   friend class Linkage;
 
   const Kind kind_;
@@ -440,14 +462,16 @@ class V8_EXPORT_PRIVATE CallDescriptor final
   const size_t return_slot_count_;
   const Operator::Properties properties_;
   const RegList callee_saved_registers_;
-  const RegList callee_saved_fp_registers_;
+  const DoubleRegList callee_saved_fp_registers_;
   // Non-zero value means restricting the set of allocatable registers for
   // register allocator to use.
   const RegList allocatable_registers_;
   const Flags flags_;
   const StackArgumentOrder stack_order_;
   const char* const debug_name_;
-  const CFunctionInfo* c_function_info_ = nullptr;
+
+  mutable base::Optional<size_t> gp_param_count_;
+  mutable base::Optional<size_t> fp_param_count_;
 };
 
 DEFINE_OPERATORS_FOR_FLAGS(CallDescriptor::Flags)

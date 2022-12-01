@@ -30,7 +30,7 @@ class TranslatedState;
 void TranslationArrayPrintSingleFrame(std::ostream& os,
                                       TranslationArray translation_array,
                                       int translation_index,
-                                      FixedArray literal_array);
+                                      DeoptimizationLiteralArray literal_array);
 
 // The Translated{Value,Frame,State} class hierarchy are a set of utility
 // functions to work with the combination of translations (built from a
@@ -73,6 +73,7 @@ class TranslatedValue {
     kInt32,
     kInt64,
     kInt64ToBigInt,
+    kUint64ToBigInt,
     kUInt32,
     kBoolBit,
     kFloat,
@@ -111,6 +112,8 @@ class TranslatedValue {
   static TranslatedValue NewInt64(TranslatedState* container, int64_t value);
   static TranslatedValue NewInt64ToBigInt(TranslatedState* container,
                                           int64_t value);
+  static TranslatedValue NewUint64ToBigInt(TranslatedState* container,
+                                           uint64_t value);
   static TranslatedValue NewUInt32(TranslatedState* container, uint32_t value);
   static TranslatedValue NewBool(TranslatedState* container, uint32_t value);
   static TranslatedValue NewTagged(TranslatedState* container, Object literal);
@@ -152,7 +155,9 @@ class TranslatedValue {
     uint32_t uint32_value_;
     // kind is kInt32.
     int32_t int32_value_;
-    // kind is kInt64.
+    // kind is kUint64ToBigInt.
+    uint64_t uint64_value_;
+    // kind is kInt64 or kInt64ToBigInt.
     int64_t int64_value_;
     // kind is kFloat
     Float32 float_value_;
@@ -167,6 +172,7 @@ class TranslatedValue {
   int32_t int32_value() const;
   int64_t int64_value() const;
   uint32_t uint32_value() const;
+  uint64_t uint64_value() const;
   Float32 float_value() const;
   Float64 double_value() const;
   int object_length() const;
@@ -177,7 +183,7 @@ class TranslatedFrame {
  public:
   enum Kind {
     kUnoptimizedFunction,
-    kArgumentsAdaptor,
+    kInlinedExtraArguments,
     kConstructStub,
     kBuiltinContinuation,
 #if V8_ENABLE_WEBASSEMBLY
@@ -276,7 +282,7 @@ class TranslatedFrame {
                                           int return_value_count);
   static TranslatedFrame AccessorFrame(Kind kind,
                                        SharedFunctionInfo shared_info);
-  static TranslatedFrame ArgumentsAdaptorFrame(SharedFunctionInfo shared_info,
+  static TranslatedFrame InlinedExtraArguments(SharedFunctionInfo shared_info,
                                                int height);
   static TranslatedFrame ConstructStubFrame(BytecodeOffset bailout_id,
                                             SharedFunctionInfo shared_info,
@@ -382,7 +388,7 @@ class TranslatedState {
 
   void Init(Isolate* isolate, Address input_frame_pointer,
             Address stack_frame_pointer, TranslationArrayIterator* iterator,
-            FixedArray literal_array, RegisterValues* registers,
+            DeoptimizationLiteralArray literal_array, RegisterValues* registers,
             FILE* trace_file, int parameter_count, int actual_argument_count);
 
   void VerifyMaterializedObjects();
@@ -397,13 +403,14 @@ class TranslatedState {
   // details, see the code around ReplaceElementsArrayWithCopy.
   enum Purpose { kDeoptimization, kFrameInspection };
 
-  TranslatedFrame CreateNextTranslatedFrame(TranslationArrayIterator* iterator,
-                                            FixedArray literal_array,
-                                            Address fp, FILE* trace_file);
+  TranslatedFrame CreateNextTranslatedFrame(
+      TranslationArrayIterator* iterator,
+      DeoptimizationLiteralArray literal_array, Address fp, FILE* trace_file);
   int CreateNextTranslatedValue(int frame_index,
                                 TranslationArrayIterator* iterator,
-                                FixedArray literal_array, Address fp,
-                                RegisterValues* registers, FILE* trace_file);
+                                DeoptimizationLiteralArray literal_array,
+                                Address fp, RegisterValues* registers,
+                                FILE* trace_file);
   Address DecompressIfNeeded(intptr_t value);
   void CreateArgumentsElementsTranslatedValues(int frame_index,
                                                Address input_frame_pointer,
@@ -439,7 +446,8 @@ class TranslatedState {
       Handle<Map> map, const DisallowGarbageCollection& no_gc);
 
   void ReadUpdateFeedback(TranslationArrayIterator* iterator,
-                          FixedArray literal_array, FILE* trace_file);
+                          DeoptimizationLiteralArray literal_array,
+                          FILE* trace_file);
 
   TranslatedValue* ResolveCapturedObject(TranslatedValue* slot);
   TranslatedValue* GetValueByObjectIndex(int object_index);

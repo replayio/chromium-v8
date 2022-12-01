@@ -7,11 +7,17 @@
 #include <string.h>
 
 #include "include/libplatform/v8-tracing.h"
+<<<<<<< HEAD
 #include "include/v8.h"
 
+||||||| 7cbb7db789
+
+=======
+>>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
 #include "src/base/atomicops.h"
 #include "src/base/platform/mutex.h"
 #include "src/base/platform/time.h"
+#include "src/base/platform/wrappers.h"
 
 #ifdef V8_USE_PERFETTO
 #include "perfetto/ext/trace_processor/export_json.h"
@@ -107,7 +113,7 @@ void TracingController::Initialize(TraceBuffer* trace_buffer) {
 }
 
 int64_t TracingController::CurrentTimestampMicroseconds() {
-  return base::TimeTicks::HighResolutionNow().ToInternalValue();
+  return base::TimeTicks::Now().ToInternalValue();
 }
 
 int64_t TracingController::CurrentCpuTimestampMicroseconds() {
@@ -330,7 +336,7 @@ const uint8_t* TracingController::GetCategoryGroupEnabled(
     // Don't hold on to the category_group pointer, so that we can create
     // category groups with strings not known at compile time (this is
     // required by SetWatchEvent).
-    const char* new_group = strdup(category_group);
+    const char* new_group = base::Strdup(category_group);
     g_category_groups[category_index] = new_group;
     DCHECK(!g_category_group_enabled[category_index]);
     // Note that if both included and excluded patterns in the

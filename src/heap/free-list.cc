@@ -48,7 +48,7 @@ FreeSpace FreeListCategory::SearchForNodeInList(size_t minimum_size,
   for (FreeSpace cur_node = top(); !cur_node.is_null();
        cur_node = cur_node.next()) {
     DCHECK(Page::FromHeapObject(cur_node)->CanAllocate());
-    size_t size = cur_node.size();
+    size_t size = cur_node.size(kRelaxedLoad);
     if (size >= minimum_size) {
       DCHECK_GE(available_, size);
       UpdateCountersAfterAllocation(size);
@@ -58,7 +58,8 @@ FreeSpace FreeListCategory::SearchForNodeInList(size_t minimum_size,
       if (!prev_non_evac_node.is_null()) {
         MemoryChunk* chunk = MemoryChunk::FromHeapObject(prev_non_evac_node);
         if (chunk->owner_identity() == CODE_SPACE) {
-          chunk->heap()->UnprotectAndRegisterMemoryChunk(chunk);
+          chunk->heap()->UnprotectAndRegisterMemoryChunk(
+              chunk, UnprotectMemoryOrigin::kMaybeOffMainThread);
         }
         prev_non_evac_node.set_next(cur_node.next());
       }
@@ -91,10 +92,10 @@ void FreeListCategory::RepairFreeList(Heap* heap) {
   FreeSpace n = top();
   while (!n.is_null()) {
     ObjectSlot map_slot = n.map_slot();
-    if (map_slot.contains_value(kNullAddress)) {
-      map_slot.store(free_space_map);
+    if (map_slot.contains_map_value(kNullAddress)) {
+      map_slot.store_map(free_space_map);
     } else {
-      DCHECK(map_slot.contains_value(free_space_map.ptr()));
+      DCHECK(map_slot.contains_map_value(free_space_map.ptr()));
     }
     n = n.next();
   }
@@ -109,6 +110,10 @@ void FreeListCategory::Relink(FreeList* owner) {
 // Generic FreeList methods (alloc/free related)
 
 FreeList* FreeList::CreateFreeList() { return new FreeListManyCachedOrigin(); }
+
+FreeList* FreeList::CreateFreeListForNewSpace() {
+  return new FreeListManyCachedOriginForNewSpace();
+}
 
 FreeSpace FreeList::TryFindNodeIn(FreeListCategoryType type,
                                   size_t minimum_size, size_t* node_size) {
@@ -360,12 +365,14 @@ FreeSpace FreeListManyCachedFastPath::Allocate(size_t size_in_bytes,
   // Fast path part 2: searching the medium categories for tiny objects
   if (node.is_null()) {
     if (size_in_bytes <= kTinyObjectMaxSize) {
+      DCHECK_EQ(kFastPathFirstCategory, first_category);
       for (type = next_nonempty_category[kFastPathFallBackTiny];
            type < kFastPathFirstCategory;
            type = next_nonempty_category[type + 1]) {
         node = TryFindNodeIn(type, size_in_bytes, node_size);
         if (!node.is_null()) break;
       }
+      first_category = kFastPathFallBackTiny;
     }
   }
 
@@ -386,18 +393,40 @@ FreeSpace FreeListManyCachedFastPath::Allocate(size_t size_in_bytes,
     }
   }
 
-  // Updating cache
-  if (!node.is_null() && categories_[type] == nullptr) {
-    UpdateCacheAfterRemoval(type);
+  if (!node.is_null()) {
+    if (categories_[type] == nullptr) UpdateCacheAfterRemoval(type);
+    Page::FromHeapObject(node)->IncreaseAllocatedBytes(*node_size);
   }
 
 #ifdef DEBUG
   CheckCacheIntegrity();
 #endif
 
+  DCHECK(IsVeryLong() || Available() == SumFreeLists());
+  return node;
+}
+
+// ------------------------------------------------
+// FreeListManyCachedFastPathForNewSpace implementation
+
+FreeSpace FreeListManyCachedFastPathForNewSpace::Allocate(
+    size_t size_in_bytes, size_t* node_size, AllocationOrigin origin) {
+  FreeSpace node =
+      FreeListManyCachedFastPath::Allocate(size_in_bytes, node_size, origin);
+  if (!node.is_null()) return node;
+
+  // Search through the precise category for a fit
+  FreeListCategoryType type = SelectFreeListCategoryType(size_in_bytes);
+  node = SearchForNodeInList(type, size_in_bytes, node_size);
+
   if (!node.is_null()) {
+    if (categories_[type] == nullptr) UpdateCacheAfterRemoval(type);
     Page::FromHeapObject(node)->IncreaseAllocatedBytes(*node_size);
   }
+
+#ifdef DEBUG
+  CheckCacheIntegrity();
+#endif
 
   DCHECK(IsVeryLong() || Available() == SumFreeLists());
   return node;
@@ -414,6 +443,19 @@ FreeSpace FreeListManyCachedOrigin::Allocate(size_t size_in_bytes,
   } else {
     return FreeListManyCachedFastPath::Allocate(size_in_bytes, node_size,
                                                 origin);
+  }
+}
+
+// ------------------------------------------------
+// FreeListManyCachedOriginForNewSpace implementation
+
+FreeSpace FreeListManyCachedOriginForNewSpace::Allocate(
+    size_t size_in_bytes, size_t* node_size, AllocationOrigin origin) {
+  if (origin == AllocationOrigin::kGC) {
+    return FreeListManyCached::Allocate(size_in_bytes, node_size, origin);
+  } else {
+    return FreeListManyCachedFastPathForNewSpace::Allocate(size_in_bytes,
+                                                           node_size, origin);
   }
 }
 
@@ -504,12 +546,13 @@ size_t FreeListCategory::SumFreeList() {
   while (!cur.is_null()) {
     // We can't use "cur->map()" here because both cur's map and the
     // root can be null during bootstrapping.
-    DCHECK(cur.map_slot().contains_value(Page::FromHeapObject(cur)
-                                             ->heap()
-                                             ->isolate()
-                                             ->root(RootIndex::kFreeSpaceMap)
-                                             .ptr()));
-    sum += cur.relaxed_read_size();
+    DCHECK(
+        cur.map_slot().contains_map_value(Page::FromHeapObject(cur)
+                                              ->heap()
+                                              ->isolate()
+                                              ->root(RootIndex::kFreeSpaceMap)
+                                              .ptr()));
+    sum += cur.size(kRelaxedLoad);
     cur = cur.next();
   }
   return sum;

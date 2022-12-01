@@ -21,7 +21,6 @@
 #include "src/base/hashmap.h"
 #include "src/base/lazy-instance.h"
 #include "src/base/platform/mutex.h"
-#include "src/base/platform/wrappers.h"
 #include "src/codegen/assembler.h"
 #include "src/codegen/ppc/constants-ppc.h"
 #include "src/execution/simulator-base.h"
@@ -177,11 +176,11 @@ class Simulator : public SimulatorBase {
   double get_double_from_register_pair(int reg);
   void set_d_register_from_double(int dreg, const double dbl) {
     DCHECK(dreg >= 0 && dreg < kNumFPRs);
-    *bit_cast<double*>(&fp_registers_[dreg]) = dbl;
+    *base::bit_cast<double*>(&fp_registers_[dreg]) = dbl;
   }
   double get_double_from_d_register(int dreg) {
     DCHECK(dreg >= 0 && dreg < kNumFPRs);
-    return *bit_cast<double*>(&fp_registers_[dreg]);
+    return *base::bit_cast<double*>(&fp_registers_[dreg]);
   }
   void set_d_register(int dreg, int64_t value) {
     DCHECK(dreg >= 0 && dreg < kNumFPRs);
@@ -287,7 +286,7 @@ class Simulator : public SimulatorBase {
   template <typename T>
   inline void Read(uintptr_t address, T* value) {
     base::MutexGuard lock_guard(&GlobalMonitor::Get()->mutex);
-    base::Memcpy(value, reinterpret_cast<const char*>(address), sizeof(T));
+    memcpy(value, reinterpret_cast<const char*>(address), sizeof(T));
   }
 
   template <typename T>
@@ -296,7 +295,7 @@ class Simulator : public SimulatorBase {
     GlobalMonitor::Get()->NotifyLoadExcl(
         address, static_cast<TransactionSize>(sizeof(T)),
         isolate_->thread_id());
-    base::Memcpy(value, reinterpret_cast<const char*>(address), sizeof(T));
+    memcpy(value, reinterpret_cast<const char*>(address), sizeof(T));
   }
 
   template <typename T>
@@ -305,7 +304,7 @@ class Simulator : public SimulatorBase {
     GlobalMonitor::Get()->NotifyStore(address,
                                       static_cast<TransactionSize>(sizeof(T)),
                                       isolate_->thread_id());
-    base::Memcpy(reinterpret_cast<char*>(address), &value, sizeof(T));
+    memcpy(reinterpret_cast<char*>(address), &value, sizeof(T));
   }
 
   template <typename T>
@@ -314,11 +313,23 @@ class Simulator : public SimulatorBase {
     if (GlobalMonitor::Get()->NotifyStoreExcl(
             address, static_cast<TransactionSize>(sizeof(T)),
             isolate_->thread_id())) {
-      base::Memcpy(reinterpret_cast<char*>(address), &value, sizeof(T));
+      memcpy(reinterpret_cast<char*>(address), &value, sizeof(T));
       return 0;
     } else {
       return 1;
     }
+  }
+
+  // Byte Reverse.
+  static inline __uint128_t __builtin_bswap128(__uint128_t v) {
+    union {
+      uint64_t u64[2];
+      __uint128_t u128;
+    } res, val;
+    val.u128 = v;
+    res.u64[0] = ByteReverse<int64_t>(val.u64[1]);
+    res.u64[1] = ByteReverse<int64_t>(val.u64[0]);
+    return res.u128;
   }
 
 #define RW_VAR_LIST(V)      \
@@ -419,6 +430,16 @@ class Simulator : public SimulatorBase {
   }
 
   template <class T>
+  T get_simd_register_bytes(int reg, int byte_from) {
+    // Byte location is reversed in memory.
+    int from = kSimd128Size - 1 - (byte_from + sizeof(T) - 1);
+    void* src = base::bit_cast<uint8_t*>(&simd_registers_[reg]) + from;
+    T dst;
+    memcpy(&dst, src, sizeof(T));
+    return dst;
+  }
+
+  template <class T>
   void set_simd_register_by_lane(int reg, int lane, const T& value,
                                  bool force_ibm_lane_numbering = true) {
     if (force_ibm_lane_numbering) {
@@ -431,7 +452,15 @@ class Simulator : public SimulatorBase {
     (reinterpret_cast<T*>(&simd_registers_[reg]))[lane] = value;
   }
 
-  simdr_t get_simd_register(int reg) { return simd_registers_[reg]; }
+  template <class T>
+  void set_simd_register_bytes(int reg, int byte_from, T value) {
+    // Byte location is reversed in memory.
+    int from = kSimd128Size - 1 - (byte_from + sizeof(T) - 1);
+    void* dst = base::bit_cast<uint8_t*>(&simd_registers_[reg]) + from;
+    memcpy(dst, &value, sizeof(T));
+  }
+
+  simdr_t& get_simd_register(int reg) { return simd_registers_[reg]; }
 
   void set_simd_register(int reg, const simdr_t& value) {
     simd_registers_[reg] = value;

@@ -4,31 +4,62 @@
 
 #include "src/compiler/js-inlining-heuristic.h"
 
-#include "src/codegen/optimized-compilation-info.h"
 #include "src/compiler/common-operator.h"
 #include "src/compiler/compiler-source-position-table.h"
 #include "src/compiler/js-heap-broker.h"
 #include "src/compiler/node-matchers.h"
 #include "src/compiler/simplified-operator.h"
-#include "src/objects/objects-inl.h"
 
 namespace v8 {
 namespace internal {
 namespace compiler {
 
-#define TRACE(...)                                                             \
-  do {                                                                         \
-    if (FLAG_trace_turbo_inlining) StdoutStream{} << __VA_ARGS__ << std::endl; \
+#define TRACE(...)                                \
+  do {                                            \
+    if (v8_flags.trace_turbo_inlining)            \
+      StdoutStream{} << __VA_ARGS__ << std::endl; \
   } while (false)
 
 namespace {
 bool IsSmall(int const size) {
-  return size <= FLAG_max_inlined_bytecode_size_small;
+  return size <= v8_flags.max_inlined_bytecode_size_small;
 }
 
 bool CanConsiderForInlining(JSHeapBroker* broker,
-                            SharedFunctionInfoRef const& shared,
-                            FeedbackVectorRef const& feedback_vector) {
+                            FeedbackCellRef const& feedback_cell) {
+  base::Optional<FeedbackVectorRef> feedback_vector =
+      feedback_cell.feedback_vector();
+  if (!feedback_vector.has_value()) {
+    TRACE("Cannot consider " << feedback_cell
+                             << " for inlining (no feedback vector)");
+    return false;
+  }
+  SharedFunctionInfoRef shared = feedback_vector->shared_function_info();
+
+  if (!shared.HasBytecodeArray()) {
+    TRACE("Cannot consider " << shared << " for inlining (no bytecode)");
+    return false;
+  }
+  // Ensure we have a persistent handle to the bytecode in order to avoid
+  // flushing it during the remaining compilation.
+  shared.GetBytecodeArray();
+
+  // Read feedback vector again in case it got flushed before we were able to
+  // prevent flushing above.
+  base::Optional<FeedbackVectorRef> feedback_vector_again =
+      feedback_cell.feedback_vector();
+  if (!feedback_vector_again.has_value()) {
+    TRACE("Cannot consider " << shared << " for inlining (no feedback vector)");
+    return false;
+  }
+  if (!feedback_vector_again->equals(*feedback_vector)) {
+    // The new feedback vector likely contains lots of uninitialized slots, so
+    // it doesn't make much sense to inline this function now.
+    TRACE("Not considering " << shared
+                             << " for inlining (feedback vector changed)");
+    return false;
+  }
+
   SharedFunctionInfo::Inlineability inlineability = shared.GetInlineability();
   if (inlineability != SharedFunctionInfo::kIsInlineable) {
     TRACE("Cannot consider "
@@ -36,35 +67,20 @@ bool CanConsiderForInlining(JSHeapBroker* broker,
     return false;
   }
 
-  DCHECK(shared.HasBytecodeArray());
-  if (!broker->IsSerializedForCompilation(shared, feedback_vector)) {
-    TRACE_BROKER_MISSING(
-        broker, "data for " << shared << " (not serialized for compilation)");
-    TRACE("Cannot consider " << shared << " for inlining with "
-                             << feedback_vector << " (missing data)");
-    return false;
-  }
-  TRACE("Considering " << shared << " for inlining with " << feedback_vector);
+  TRACE("Considering " << shared << " for inlining with " << *feedback_vector);
   return true;
 }
 
 bool CanConsiderForInlining(JSHeapBroker* broker,
                             JSFunctionRef const& function) {
-  if (!function.has_feedback_vector()) {
-    TRACE("Cannot consider " << function
-                             << " for inlining (no feedback vector)");
-    return false;
+  FeedbackCellRef feedback_cell =
+      function.raw_feedback_cell(broker->dependencies());
+  bool const result = CanConsiderForInlining(broker, feedback_cell);
+  if (result) {
+    CHECK(
+        function.shared().equals(feedback_cell.shared_function_info().value()));
   }
-
-  if (!function.serialized() || !function.serialized_code_and_feedback()) {
-    TRACE_BROKER_MISSING(
-        broker, "data for " << function << " (cannot consider for inlining)");
-    TRACE("Cannot consider " << function << " for inlining (missing data)");
-    return false;
-  }
-
-  return CanConsiderForInlining(broker, function.shared(),
-                                function.feedback_vector());
+  return result;
 }
 
 }  // namespace
@@ -78,8 +94,8 @@ JSInliningHeuristic::Candidate JSInliningHeuristic::CollectFunctions(
 
   HeapObjectMatcher m(callee);
   if (m.HasResolvedValue() && m.Ref(broker()).IsJSFunction()) {
-    out.functions[0] = m.Ref(broker()).AsJSFunction();
-    JSFunctionRef function = out.functions[0].value();
+    JSFunctionRef function = m.Ref(broker()).AsJSFunction();
+    out.functions[0] = function;
     if (CanConsiderForInlining(broker(), function)) {
       out.bytecode[0] = function.shared().GetBytecodeArray();
       out.num_functions = 1;
@@ -93,13 +109,13 @@ JSInliningHeuristic::Candidate JSInliningHeuristic::CollectFunctions(
       return out;
     }
     for (int n = 0; n < value_input_count; ++n) {
-      HeapObjectMatcher m(callee->InputAt(n));
-      if (!m.HasResolvedValue() || !m.Ref(broker()).IsJSFunction()) {
+      HeapObjectMatcher m2(callee->InputAt(n));
+      if (!m2.HasResolvedValue() || !m2.Ref(broker()).IsJSFunction()) {
         out.num_functions = 0;
         return out;
       }
 
-      out.functions[n] = m.Ref(broker()).AsJSFunction();
+      out.functions[n] = m2.Ref(broker()).AsJSFunction();
       JSFunctionRef function = out.functions[n].value();
       if (CanConsiderForInlining(broker(), function)) {
         out.bytecode[n] = function.shared().GetBytecodeArray();
@@ -110,11 +126,10 @@ JSInliningHeuristic::Candidate JSInliningHeuristic::CollectFunctions(
   }
   if (m.IsCheckClosure()) {
     DCHECK(!out.functions[0].has_value());
-    FeedbackCellRef feedback_cell(broker(), FeedbackCellOf(m.op()));
-    SharedFunctionInfoRef shared_info = *feedback_cell.shared_function_info();
-    out.shared_info = shared_info;
-    if (CanConsiderForInlining(broker(), shared_info, *feedback_cell.value())) {
-      out.bytecode[0] = shared_info.GetBytecodeArray();
+    FeedbackCellRef feedback_cell = MakeRef(broker(), FeedbackCellOf(m.op()));
+    if (CanConsiderForInlining(broker(), feedback_cell)) {
+      out.shared_info = feedback_cell.shared_function_info().value();
+      out.bytecode[0] = out.shared_info->GetBytecodeArray();
     }
     out.num_functions = 1;
     return out;
@@ -122,13 +137,11 @@ JSInliningHeuristic::Candidate JSInliningHeuristic::CollectFunctions(
   if (m.IsJSCreateClosure()) {
     DCHECK(!out.functions[0].has_value());
     JSCreateClosureNode n(callee);
-    CreateClosureParameters const& p = n.Parameters();
     FeedbackCellRef feedback_cell = n.GetFeedbackCellRefChecked(broker());
-    SharedFunctionInfoRef shared_info(broker(), p.shared_info());
-    out.shared_info = shared_info;
-    if (feedback_cell.value().has_value() &&
-        CanConsiderForInlining(broker(), shared_info, *feedback_cell.value())) {
-      out.bytecode[0] = shared_info.GetBytecodeArray();
+    if (CanConsiderForInlining(broker(), feedback_cell)) {
+      out.shared_info = feedback_cell.shared_function_info().value();
+      out.bytecode[0] = out.shared_info->GetBytecodeArray();
+      CHECK(out.shared_info->equals(n.Parameters().shared_info(broker())));
     }
     out.num_functions = 1;
     return out;
@@ -150,7 +163,7 @@ Reduction JSInliningHeuristic::Reduce(Node* node) {
   DCHECK_EQ(mode(), kJSOnly);
   if (!IrOpcode::IsInlineeOpcode(node->opcode())) return NoChange();
 
-  if (total_inlined_bytecode_size_ >= FLAG_max_inlined_bytecode_size_absolute) {
+  if (total_inlined_bytecode_size_ >= max_inlined_bytecode_size_absolute_) {
     return NoChange();
   }
 
@@ -161,7 +174,7 @@ Reduction JSInliningHeuristic::Reduce(Node* node) {
   Candidate candidate = CollectFunctions(node, kMaxCallPolymorphism);
   if (candidate.num_functions == 0) {
     return NoChange();
-  } else if (candidate.num_functions > 1 && !FLAG_polymorphic_inlining) {
+  } else if (candidate.num_functions > 1 && !v8_flags.polymorphic_inlining) {
     TRACE("Not considering call site #"
           << node->id() << ":" << node->op()->mnemonic()
           << ", because polymorphic inlining is disabled");
@@ -183,16 +196,23 @@ Reduction JSInliningHeuristic::Reduce(Node* node) {
                                        ? candidate.functions[i].value().shared()
                                        : candidate.shared_info.value();
     candidate.can_inline_function[i] = candidate.bytecode[i].has_value();
-    CHECK_IMPLIES(candidate.can_inline_function[i], shared.IsInlineable());
+    // Because of concurrent optimization, optimization of the inlining
+    // candidate could have been disabled meanwhile.
+    // JSInliner will check this again and not actually inline the function in
+    // this case.
+    CHECK_IMPLIES(candidate.can_inline_function[i],
+                  shared.IsInlineable() ||
+                      shared.GetInlineability() ==
+                          SharedFunctionInfo::kHasOptimizationDisabled);
     // Do not allow direct recursion i.e. f() -> f(). We still allow indirect
-    // recurion like f() -> g() -> f(). The indirect recursion is helpful in
+    // recursion like f() -> g() -> f(). The indirect recursion is helpful in
     // cases where f() is a small dispatch function that calls the appropriate
     // function. In the case of direct recursion, we only have some static
     // information for the first level of inlining and it may not be that useful
     // to just inline one level in recursive calls. In some cases like tail
     // recursion we may benefit from recursive inlining, if we have additional
     // analysis that converts them to iterative implementations. Though it is
-    // not obvious if such an anlysis is needed.
+    // not obvious if such an analysis is needed.
     if (frame_info.shared_info().ToHandle(&frame_shared_info) &&
         frame_shared_info.equals(shared.object())) {
       TRACE("Not considering call site #" << node->id() << ":"
@@ -229,7 +249,7 @@ Reduction JSInliningHeuristic::Reduce(Node* node) {
   // threshold, i.e. a call site that is only hit once every N
   // invocations of the caller.
   if (candidate.frequency.IsKnown() &&
-      candidate.frequency.value() < FLAG_min_inlining_frequency) {
+      candidate.frequency.value() < v8_flags.min_inlining_frequency) {
     return NoChange();
   }
 
@@ -256,7 +276,7 @@ Reduction JSInliningHeuristic::Reduce(Node* node) {
 
 void JSInliningHeuristic::Finalize() {
   if (candidates_.empty()) return;  // Nothing to do without candidates.
-  if (FLAG_trace_turbo_inlining) PrintCandidates();
+  if (v8_flags.trace_turbo_inlining) PrintCandidates();
 
   // We inline at most one candidate in every iteration of the fixpoint.
   // This is to ensure that we don't consume the full inlining budget
@@ -274,10 +294,10 @@ void JSInliningHeuristic::Finalize() {
     // Make sure we have some extra budget left, so that any small functions
     // exposed by this function would be given a chance to inline.
     double size_of_candidate =
-        candidate.total_size * FLAG_reserve_inline_budget_scale_factor;
+        candidate.total_size * v8_flags.reserve_inline_budget_scale_factor;
     int total_size =
         total_inlined_bytecode_size_ + static_cast<int>(size_of_candidate);
-    if (total_size > FLAG_max_inlined_bytecode_size_cumulative) {
+    if (total_size > max_inlined_bytecode_size_cumulative_) {
       // Try if any smaller functions are available to inline.
       continue;
     }
@@ -588,7 +608,7 @@ bool JSInliningHeuristic::TryReuseDispatch(Node* node, Node* callee,
     // frame state, and change all the uses of the callee to the constant
     // callee.
     Node* target = callee->InputAt(i);
-    Node* effect = effect_phi->InputAt(i);
+    Node* effect_phi_effect = effect_phi->InputAt(i);
     Node* control = merge->InputAt(i);
 
     if (checkpoint) {
@@ -596,8 +616,8 @@ bool JSInliningHeuristic::TryReuseDispatch(Node* node, Node* callee,
       FrameState new_checkpoint_state = DuplicateFrameStateAndRename(
           FrameState{checkpoint_state}, callee, target,
           (i == num_calls - 1) ? kChangeInPlace : kCloneState);
-      effect = graph()->NewNode(checkpoint->op(), new_checkpoint_state, effect,
-                                control);
+      effect_phi_effect = graph()->NewNode(
+          checkpoint->op(), new_checkpoint_state, effect_phi_effect, control);
     }
 
     // Duplicate the call.
@@ -606,7 +626,7 @@ bool JSInliningHeuristic::TryReuseDispatch(Node* node, Node* callee,
         (i == num_calls - 1) ? kChangeInPlace : kCloneState);
     inputs[0] = target;
     inputs[input_count - 3] = new_lazy_frame_state;
-    inputs[input_count - 2] = effect;
+    inputs[input_count - 2] = effect_phi_effect;
     inputs[input_count - 1] = control;
     calls[i] = if_successes[i] =
         graph()->NewNode(node->op(), input_count, inputs);
@@ -636,7 +656,7 @@ void JSInliningHeuristic::CreateOrReuseDispatch(Node* node, Node* callee,
     return;
   }
 
-  STATIC_ASSERT(JSCallOrConstructNode::kHaveIdenticalLayouts);
+  static_assert(JSCallOrConstructNode::kHaveIdenticalLayouts);
 
   Node* fallthrough_control = NodeProperties::GetControlInput(node);
   int const num_calls = candidate.num_functions;
@@ -746,18 +766,18 @@ Reduction JSInliningHeuristic::InlineCandidate(Candidate const& candidate,
 
   // Inline the individual, cloned call sites.
   for (int i = 0; i < num_calls && total_inlined_bytecode_size_ <
-                                       FLAG_max_inlined_bytecode_size_absolute;
+                                       max_inlined_bytecode_size_absolute_;
        ++i) {
     if (candidate.can_inline_function[i] &&
         (small_function || total_inlined_bytecode_size_ <
-                               FLAG_max_inlined_bytecode_size_cumulative)) {
-      Node* node = calls[i];
-      Reduction const reduction = inliner_.ReduceJSCall(node);
+                               max_inlined_bytecode_size_cumulative_)) {
+      Node* call = calls[i];
+      Reduction const reduction = inliner_.ReduceJSCall(call);
       if (reduction.Changed()) {
         total_inlined_bytecode_size_ += candidate.bytecode[i]->length();
         // Killing the call node is not strictly necessary, but it is safer to
         // make sure we do not resurrect the node.
-        node->Kill();
+        call->Kill();
       }
     }
   }
@@ -818,6 +838,10 @@ void JSInliningHeuristic::PrintCandidates() {
 }
 
 Graph* JSInliningHeuristic::graph() const { return jsgraph()->graph(); }
+
+CompilationDependencies* JSInliningHeuristic::dependencies() const {
+  return broker()->dependencies();
+}
 
 CommonOperatorBuilder* JSInliningHeuristic::common() const {
   return jsgraph()->common();

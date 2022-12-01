@@ -5,6 +5,7 @@
 // Only including the -inl.h file directly makes the linter complain.
 #include "src/objects/swiss-name-dictionary.h"
 
+#include "src/heap/heap-inl.h"
 #include "src/objects/swiss-name-dictionary-inl.h"
 
 namespace v8 {
@@ -37,10 +38,9 @@ Handle<SwissNameDictionary> SwissNameDictionary::DeleteEntry(
 }
 
 // static
-template <typename LocalIsolate>
+template <typename IsolateT>
 Handle<SwissNameDictionary> SwissNameDictionary::Rehash(
-    LocalIsolate* isolate, Handle<SwissNameDictionary> table,
-    int new_capacity) {
+    IsolateT* isolate, Handle<SwissNameDictionary> table, int new_capacity) {
   DCHECK(IsValidCapacity(new_capacity));
   DCHECK_LE(table->NumberOfElements(), MaxUsableCapacity(new_capacity));
   ReadOnlyRoots roots(isolate);
@@ -207,7 +207,8 @@ Handle<SwissNameDictionary> SwissNameDictionary::Shrink(
 // storing it somewhere in the main table or the meta table, for those
 // SwissNameDictionaries that we know will be in-place rehashed, most notably
 // those stored in the snapshot.
-void SwissNameDictionary::Rehash(Isolate* isolate) {
+template <typename IsolateT>
+void SwissNameDictionary::Rehash(IsolateT* isolate) {
   DisallowHeapAllocation no_gc;
 
   struct Entry {
@@ -259,7 +260,7 @@ int SwissNameDictionary::NumberOfEnumerableProperties() {
     if (k.FilterKey(ENUMERABLE_STRINGS)) continue;
     PropertyDetails details = this->DetailsAt(i);
     PropertyAttributes attr = details.attributes();
-    if ((attr & ONLY_ENUMERABLE) == 0) result++;
+    if ((int{attr} & ONLY_ENUMERABLE) == 0) result++;
   }
   return result;
 }
@@ -283,14 +284,14 @@ Object SwissNameDictionary::SlowReverseLookup(Isolate* isolate, Object value) {
 // deleted element count is MaxUsableCapacity(Capacity()). All data in the
 // meta table is unsigned. Using this, we verify the values of the constants
 // |kMax1ByteMetaTableCapacity| and |kMax2ByteMetaTableCapacity|.
-STATIC_ASSERT(SwissNameDictionary::kMax1ByteMetaTableCapacity - 1 <=
+static_assert(SwissNameDictionary::kMax1ByteMetaTableCapacity - 1 <=
               std::numeric_limits<uint8_t>::max());
-STATIC_ASSERT(SwissNameDictionary::MaxUsableCapacity(
+static_assert(SwissNameDictionary::MaxUsableCapacity(
                   SwissNameDictionary::kMax1ByteMetaTableCapacity) <=
               std::numeric_limits<uint8_t>::max());
-STATIC_ASSERT(SwissNameDictionary::kMax2ByteMetaTableCapacity - 1 <=
+static_assert(SwissNameDictionary::kMax2ByteMetaTableCapacity - 1 <=
               std::numeric_limits<uint16_t>::max());
-STATIC_ASSERT(SwissNameDictionary::MaxUsableCapacity(
+static_assert(SwissNameDictionary::MaxUsableCapacity(
                   SwissNameDictionary::kMax2ByteMetaTableCapacity) <=
               std::numeric_limits<uint16_t>::max());
 
@@ -306,6 +307,10 @@ SwissNameDictionary::Rehash(LocalIsolate* isolate,
 template V8_EXPORT_PRIVATE Handle<SwissNameDictionary>
 SwissNameDictionary::Rehash(Isolate* isolate, Handle<SwissNameDictionary> table,
                             int new_capacity);
+
+template V8_EXPORT_PRIVATE void SwissNameDictionary::Rehash(
+    LocalIsolate* isolate);
+template V8_EXPORT_PRIVATE void SwissNameDictionary::Rehash(Isolate* isolate);
 
 constexpr int SwissNameDictionary::kInitialCapacity;
 constexpr int SwissNameDictionary::kGroupWidth;

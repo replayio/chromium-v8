@@ -2,15 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "test/cctest/cctest.h"
-
 #include "src/base/utils/random-number-generator.h"
 #include "src/ic/accessor-assembler.h"
 #include "src/ic/stub-cache.h"
 #include "src/objects/objects-inl.h"
 #include "src/objects/smi.h"
-#include "test/cctest/compiler/code-assembler-tester.h"
+#include "test/cctest/cctest.h"
 #include "test/cctest/compiler/function-tester.h"
+#include "test/common/code-assembler-tester.h"
 
 namespace v8 {
 namespace internal {
@@ -37,7 +36,7 @@ void TestStubCacheOffsetCalculation(StubCache::Table table) {
       result = primary_offset;
     } else {
       CHECK_EQ(StubCache::kSecondary, table);
-      result = m.StubCacheSecondaryOffsetForTesting(name, primary_offset);
+      result = m.StubCacheSecondaryOffsetForTesting(name, map);
     }
     m.Return(m.SmiTag(result));
   }
@@ -83,8 +82,7 @@ void TestStubCacheOffsetCalculation(StubCache::Table table) {
         if (table == StubCache::kPrimary) {
           expected_result = primary_offset;
         } else {
-          expected_result =
-              StubCache::SecondaryOffsetForTesting(*name, primary_offset);
+          expected_result = StubCache::SecondaryOffsetForTesting(*name, *map);
         }
       }
       Handle<Object> result = ft.Call(name, map).ToHandleChecked();
@@ -161,7 +159,7 @@ TEST(TryProbeStubCache) {
   std::vector<Handle<JSObject>> receivers;
   std::vector<Handle<Code>> handlers;
 
-  base::RandomNumberGenerator rand_gen(FLAG_random_seed);
+  base::RandomNumberGenerator rand_gen(v8_flags.random_seed);
 
   Factory* factory = isolate->factory();
 
@@ -217,7 +215,8 @@ TEST(TryProbeStubCache) {
     Handle<Name> name = names[index % names.size()];
     Handle<JSObject> receiver = receivers[index % receivers.size()];
     Handle<Code> handler = handlers[index % handlers.size()];
-    stub_cache.Set(*name, receiver->map(), MaybeObject::FromObject(*handler));
+    stub_cache.Set(*name, receiver->map(),
+                   MaybeObject::FromObject(ToCodeT(*handler)));
   }
 
   // Perform some queries.

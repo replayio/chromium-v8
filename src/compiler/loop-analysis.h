@@ -26,6 +26,7 @@ namespace compiler {
 static const int kAssumedLoopEntryIndex = 0;  // assume loops are entered here.
 
 class LoopFinderImpl;
+class AllNodes;
 
 using NodeRange = base::iterator_range<Node**>;
 
@@ -179,23 +180,27 @@ class V8_EXPORT_PRIVATE LoopFinder {
 
   static bool HasMarkedExits(LoopTree* loop_tree_, const LoopTree::Loop* loop);
 
-  // Find all nodes of a loop given its header node. Will exit early once the
-  // current loop size exceed {max_size}. This is a very restricted version of
-  // BuildLoopTree.
-  // Assumptions:
-  // 1) All loop exits of the loop are marked with LoopExit, LoopExitEffect,
-  //    and LoopExitValue nodes.
-  // 2) There are no nested loops within this loop.
-  static ZoneUnorderedSet<Node*>* FindUnnestedLoopFromHeader(Node* loop_header,
-                                                             Zone* zone,
-                                                             size_t max_size);
+#if V8_ENABLE_WEBASSEMBLY
+  // Find all nodes in the loop headed by {loop_header} if it contains no nested
+  // loops.
+  // Assumption: *if* this loop has no nested loops, all exits from the loop are
+  // marked with LoopExit, LoopExitEffect, LoopExitValue, or End nodes.
+  // Returns {nullptr} if
+  // 1) the loop size (in graph nodes) exceeds {max_size},
+  // 2) {calls_are_large} and a function call is found in the loop, excluding
+  //    calls to a set of wasm builtins,
+  // 3) a nested loop is found in the loop.
+  static ZoneUnorderedSet<Node*>* FindSmallInnermostLoopFromHeader(
+      Node* loop_header, AllNodes& all_nodes, Zone* zone, size_t max_size,
+      bool calls_are_large);
+#endif
 };
 
 // Copies a range of nodes any number of times.
 class NodeCopier {
  public:
   // {max}: The maximum number of nodes that this copier will track, including
-  //        The original nodes and all copies.
+  //        the original nodes and all copies.
   // {p}: A vector that holds the original nodes and all copies.
   // {copy_count}: How many times the nodes should be copied.
   NodeCopier(Graph* graph, uint32_t max, NodeVector* p, uint32_t copy_count)

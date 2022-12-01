@@ -5,9 +5,8 @@
 #ifndef V8_DEBUG_DEBUG_SCOPES_H_
 #define V8_DEBUG_DEBUG_SCOPES_H_
 
-#include <vector>
-
 #include "src/debug/debug-frames.h"
+#include "src/parsing/parse-info.h"
 
 namespace v8 {
 namespace internal {
@@ -44,6 +43,11 @@ class ScopeIterator {
   enum class ReparseStrategy {
     kScript,
     kFunctionLiteral,
+    // Checks whether the paused function (and its scope chain) already has
+    // its blocklist calculated and re-parses the whole script if not.
+    // Otherwise only the function literal is re-parsed.
+    // Only vaild with enabled "experimental_reuse_locals_blocklists" flag.
+    kScriptIfNeeded,
   };
 
   ScopeIterator(Isolate* isolate, FrameInspector* frame_inspector,
@@ -102,7 +106,7 @@ class ScopeIterator {
 
   bool InInnerScope() const { return !function_.is_null(); }
   bool HasContext() const;
-  bool NeedsAndHasContext() const;
+  bool NeedsContext() const;
   Handle<Context> CurrentContext() const {
     DCHECK(HasContext());
     return context_;
@@ -110,8 +114,15 @@ class ScopeIterator {
 
  private:
   Isolate* isolate_;
+<<<<<<< HEAD
   ParseInfo* info_ = nullptr;
   bool info_owned_ = false;
+||||||| 7cbb7db789
+  std::unique_ptr<ParseInfo> info_;
+=======
+  std::unique_ptr<ReusableUnoptimizedCompileState> reusable_compile_state_;
+  std::unique_ptr<ParseInfo> info_;
+>>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
   FrameInspector* const frame_inspector_ = nullptr;
   Handle<JSGeneratorObject> generator_;
 
@@ -126,17 +137,27 @@ class ScopeIterator {
   Scope* start_scope_ = nullptr;
   Scope* current_scope_ = nullptr;
   bool seen_script_scope_ = false;
+  bool calculate_blocklists_ = false;
 
   inline JavaScriptFrame* GetFrame() const {
     return frame_inspector_->javascript_frame();
   }
 
-  void AdvanceOneScope();
-  void AdvanceToNonHiddenScope();
+  bool AdvanceOneScope();
+  void AdvanceOneContext();
+  void AdvanceScope();
   void AdvanceContext();
   void CollectLocalsFromCurrentScope();
 
-  int GetSourcePosition();
+  // Calculates all the block list starting at the current scope and stores
+  // them in the global "LocalsBlocklistCache".
+  //
+  // Is a no-op unless `calculate_blocklists_` is true and
+  // current_scope_ == closure_scope_. Otherwise `context_` does not match
+  // with current_scope_/closure_scope_.
+  void MaybeCollectAndStoreLocalBlocklists() const;
+
+  int GetSourcePosition() const;
 
   void TryParseAndRetrieveScopes(ReparseStrategy strategy);
 

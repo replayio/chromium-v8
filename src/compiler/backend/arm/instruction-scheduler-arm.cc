@@ -106,6 +106,7 @@ int InstructionScheduler::GetTargetInstructionFlags(
     case kArmVmovF64U32U32:
     case kArmVmovU32U32F64:
     case kArmVcnt:
+    case kArmVpadal:
     case kArmVpaddl:
     case kArmFloat32Max:
     case kArmFloat64Max:
@@ -145,8 +146,6 @@ int InstructionScheduler::GetTargetInstructionFlags(
     case kArmF32x4Abs:
     case kArmF32x4Neg:
     case kArmF32x4Sqrt:
-    case kArmF32x4RecipApprox:
-    case kArmF32x4RecipSqrtApprox:
     case kArmF32x4Add:
     case kArmF32x4Sub:
     case kArmF32x4Mul:

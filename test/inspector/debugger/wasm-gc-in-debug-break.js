@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Flags: --experimental-wasm-reftypes --expose-gc
+// Flags: --expose-gc
 utils.load('test/inspector/wasm-inspector-test.js');
 
 let {session, contextGroup, Protocol} =
@@ -36,11 +36,11 @@ contextGroup.addScript(`
 function test() {
   debug(instance.exports.main);
   instance.exports.main({val: "Hello World"});
-}
-//# sourceURL=test.js`);
+}`, 0, 0, 'test.js');
 
 InspectorTest.runAsyncTestSuite([async function test() {
   utils.setLogConsoleApiMessageCalls(true);
+  await Protocol.Runtime.enable();
   await Protocol.Debugger.enable();
   await WasmInspectorTest.instantiate(
       module_bytes, 'instance', '{foo: {bar: (x) => console.log(x.val)}}');

@@ -66,7 +66,8 @@ class V8_EXPORT_PRIVATE BytecodeOffsetIterator {
     return current_bytecode_offset_;
   }
 
-  static void UpdatePointersCallback(void* iterator) {
+  static void UpdatePointersCallback(LocalIsolate*, GCType, GCCallbackFlags,
+                                     void* iterator) {
     reinterpret_cast<BytecodeOffsetIterator*>(iterator)->UpdatePointers();
   }
 
@@ -88,7 +89,7 @@ class V8_EXPORT_PRIVATE BytecodeOffsetIterator {
   BytecodeArray bytecode_handle_storage_;
   interpreter::BytecodeArrayIterator bytecode_iterator_;
   LocalHeap* local_heap_;
-  base::Optional<DisallowGarbageCollection> no_gc;
+  base::Optional<DisallowGarbageCollection> no_gc_;
 };
 
 }  // namespace baseline

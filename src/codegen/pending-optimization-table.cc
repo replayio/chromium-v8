@@ -24,12 +24,17 @@ using FunctionStatusFlags = base::Flags<FunctionStatus>;
 void PendingOptimizationTable::PreparedForOptimization(
     Isolate* isolate, Handle<JSFunction> function,
     bool allow_heuristic_optimization) {
-  DCHECK(FLAG_testing_d8_test_runner);
+  DCHECK(v8_flags.testing_d8_test_runner);
 
   FunctionStatusFlags status = FunctionStatus::kPrepareForOptimize;
   if (allow_heuristic_optimization) {
     status |= FunctionStatus::kAllowHeuristicOptimization;
   }
+  Handle<SharedFunctionInfo> shared_info(function->shared(), isolate);
+
+  IsCompiledScope is_compiled_scope;
+  SharedFunctionInfo::EnsureBytecodeArrayAvailable(isolate, shared_info,
+                                                   &is_compiled_scope);
 
   Handle<ObjectHashTable> table =
       isolate->heap()->pending_optimize_for_test_bytecode().IsUndefined()
@@ -38,7 +43,7 @@ void PendingOptimizationTable::PreparedForOptimization(
                        isolate->heap()->pending_optimize_for_test_bytecode()),
                    isolate);
   Handle<Tuple2> tuple = isolate->factory()->NewTuple2(
-      handle(function->shared().GetBytecodeArray(isolate), isolate),
+      handle(shared_info->GetBytecodeArray(isolate), isolate),
       handle(Smi::FromInt(status), isolate), AllocationType::kYoung);
   table =
       ObjectHashTable::Put(table, handle(function->shared(), isolate), tuple);
@@ -47,7 +52,7 @@ void PendingOptimizationTable::PreparedForOptimization(
 
 bool PendingOptimizationTable::IsHeuristicOptimizationAllowed(
     Isolate* isolate, JSFunction function) {
-  DCHECK(FLAG_testing_d8_test_runner);
+  DCHECK(v8_flags.testing_d8_test_runner);
 
   Handle<Object> table =
       handle(isolate->heap()->pending_optimize_for_test_bytecode(), isolate);
@@ -68,7 +73,7 @@ bool PendingOptimizationTable::IsHeuristicOptimizationAllowed(
 
 void PendingOptimizationTable::MarkedForOptimization(
     Isolate* isolate, Handle<JSFunction> function) {
-  DCHECK(FLAG_testing_d8_test_runner);
+  DCHECK(v8_flags.testing_d8_test_runner);
 
   Handle<Object> table =
       handle(isolate->heap()->pending_optimize_for_test_bytecode(), isolate);
@@ -101,7 +106,7 @@ void PendingOptimizationTable::MarkedForOptimization(
 
 void PendingOptimizationTable::FunctionWasOptimized(
     Isolate* isolate, Handle<JSFunction> function) {
-  DCHECK(FLAG_testing_d8_test_runner);
+  DCHECK(v8_flags.testing_d8_test_runner);
 
   if (isolate->heap()->pending_optimize_for_test_bytecode().IsUndefined()) {
     return;

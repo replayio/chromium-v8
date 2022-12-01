@@ -24,11 +24,6 @@ proposal_flags = [{
                               '--wasm-staging']
                   },
                   {
-                    'name': 'simd',
-                    'flags': ['--experimental-wasm-simd',
-                              '--wasm-staging']
-                  },
-                  {
                     'name': 'memory64',
                     'flags': ['--experimental-wasm-memory64',
                               '--wasm-staging']
@@ -43,8 +38,9 @@ class TestLoader(testsuite.JSTestLoader):
 
 
 class TestSuite(testsuite.TestSuite):
-  def __init__(self, *args, **kwargs):
-    super(TestSuite, self).__init__(*args, **kwargs)
+
+  def __init__(self, ctx, *args, **kwargs):
+    super(TestSuite, self).__init__(ctx, *args, **kwargs)
     self.mjsunit_js = os.path.join(os.path.dirname(self.root), "mjsunit",
                                    "mjsunit.js")
     self.test_root = os.path.join(self.root, "tests")
@@ -92,6 +88,10 @@ class TestCase(testcase.D8TestCase):
             script = os.path.join(self.suite.test_root,
                                   os.sep.join(['proposals', proposal['name']]),
                                   script[len(WPT_ROOT):])
+        if 'wpt' in current_dir:
+          found = True
+          script = os.path.join(self.suite.test_root, 'wpt',
+                                script[len(WPT_ROOT):])
         if not found:
           script = os.path.join(self.suite.test_root, script[len(WPT_ROOT):])
       elif not script.startswith("/"):
@@ -115,7 +115,3 @@ class TestCase(testcase.D8TestCase):
   def _get_source_path(self):
     # All tests are named `path/name.any.js`
     return os.path.join(self.suite.test_root, self.path + ANY_JS)
-
-
-def GetSuite(*args, **kwargs):
-  return TestSuite(*args, **kwargs)

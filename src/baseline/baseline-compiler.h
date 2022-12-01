@@ -7,13 +7,15 @@
 
 // TODO(v8:11421): Remove #if once baseline compiler is ported to other
 // architectures.
-#if V8_TARGET_ARCH_IA32 || V8_TARGET_ARCH_X64 || V8_TARGET_ARCH_ARM64 || \
-    V8_TARGET_ARCH_ARM
+#include "src/flags/flags.h"
+#if ENABLE_SPARKPLUG
 
 #include "src/base/logging.h"
+#include "src/base/pointer-with-payload.h"
 #include "src/base/threaded-list.h"
 #include "src/base/vlq.h"
 #include "src/baseline/baseline-assembler.h"
+#include "src/execution/local-isolate.h"
 #include "src/handles/handles.h"
 #include "src/interpreter/bytecode-array-iterator.h"
 #include "src/interpreter/bytecode-register.h"
@@ -39,8 +41,10 @@ class BytecodeOffsetTableBuilder {
     previous_pc_ = pc_offset;
   }
 
-  template <typename LocalIsolate>
-  Handle<ByteArray> ToBytecodeOffsetTable(LocalIsolate* isolate);
+  template <typename IsolateT>
+  Handle<ByteArray> ToBytecodeOffsetTable(IsolateT* isolate);
+
+  void Reserve(size_t size) { bytes_.reserve(size); }
 
  private:
   size_t previous_pc_ = 0;
@@ -49,12 +53,13 @@ class BytecodeOffsetTableBuilder {
 
 class BaselineCompiler {
  public:
-  explicit BaselineCompiler(Isolate* isolate,
+  explicit BaselineCompiler(LocalIsolate* local_isolate,
                             Handle<SharedFunctionInfo> shared_function_info,
                             Handle<BytecodeArray> bytecode);
 
   void GenerateCode();
-  MaybeHandle<Code> Build(Isolate* isolate);
+  MaybeHandle<Code> Build(LocalIsolate* local_isolate);
+  static int EstimateInstructionSize(BytecodeArray bytecode);
 
  private:
   void Prologue();
@@ -84,13 +89,15 @@ class BaselineCompiler {
   uint32_t Uint(int operand_index);
   int32_t Int(int operand_index);
   uint32_t Index(int operand_index);
-  uint32_t Flag(int operand_index);
+  uint32_t Flag8(int operand_index);
+  uint32_t Flag16(int operand_index);
   uint32_t RegisterCount(int operand_index);
   TaggedIndex IndexAsTagged(int operand_index);
   TaggedIndex UintAsTagged(int operand_index);
   Smi IndexAsSmi(int operand_index);
   Smi IntAsSmi(int operand_index);
-  Smi FlagAsSmi(int operand_index);
+  Smi Flag8AsSmi(int operand_index);
+  Smi Flag16AsSmi(int operand_index);
 
   // Jump helpers.
   Label* NewLabel();
@@ -121,31 +128,21 @@ class BaselineCompiler {
   void SelectBooleanConstant(
       Register output, std::function<void(Label*, Label::Distance)> jump_func);
 
-  // Returns ToBoolean result into kInterpreterAccumulatorRegister.
-  void JumpIfToBoolean(bool do_jump_if_true, Register reg, Label* label,
+  // Jumps based on calling ToBoolean on kInterpreterAccumulatorRegister.
+  void JumpIfToBoolean(bool do_jump_if_true, Label* label,
                        Label::Distance distance = Label::kFar);
 
   // Call helpers.
-  template <typename... Args>
-  void CallBuiltin(Builtins::Name builtin, Args... args);
+  template <Builtin kBuiltin, typename... Args>
+  void CallBuiltin(Args... args);
   template <typename... Args>
   void CallRuntime(Runtime::FunctionId function, Args... args);
 
-  template <typename... Args>
-  void TailCallBuiltin(Builtins::Name builtin, Args... args);
+  template <Builtin kBuiltin, typename... Args>
+  void TailCallBuiltin(Args... args);
 
-  void BuildBinop(
-      Builtins::Name builtin_name, bool fast_path = false,
-      bool check_overflow = false,
-      std::function<void(Register, Register)> instruction = [](Register,
-                                                               Register) {});
-  void BuildUnop(Builtins::Name builtin_name);
-  void BuildCompare(Builtins::Name builtin_name);
-  void BuildBinopWithConstant(Builtins::Name builtin_name);
-
-  template <typename... Args>
-  void BuildCall(ConvertReceiverMode mode, uint32_t slot, uint32_t arg_count,
-                 Args... args);
+  template <ConvertReceiverMode kMode, typename... Args>
+  void BuildCall(uint32_t slot, uint32_t arg_count, Args... args);
 
 #ifdef V8_TRACE_UNOPTIMIZED
   void TraceBytecode(Runtime::FunctionId function_id);
@@ -164,9 +161,10 @@ class BaselineCompiler {
 
   const interpreter::BytecodeArrayIterator& iterator() { return iterator_; }
 
-  Isolate* isolate_;
+  LocalIsolate* local_isolate_;
   RuntimeCallStats* stats_;
   Handle<SharedFunctionInfo> shared_function_info_;
+  Handle<HeapObject> interpreter_data_;
   Handle<BytecodeArray> bytecode_;
   MacroAssembler masm_;
   BaselineAssembler basm_;
@@ -176,31 +174,33 @@ class BaselineCompiler {
 
   int max_call_args_ = 0;
 
-  struct ThreadedLabel {
-    Label label;
-    ThreadedLabel* ptr;
-    ThreadedLabel** next() { return &ptr; }
+  // Mark location as a jump target reachable via indirect branches, required
+  // for CFI.
+  enum class MarkAsIndirectJumpTarget { kNo, kYes };
+
+  struct BaselineLabelPointer : base::PointerWithPayload<Label, bool, 1> {
+    void MarkAsIndirectJumpTarget() { SetPayload(true); }
+    bool IsIndirectJumpTarget() const { return GetPayload(); }
   };
 
-  struct BaselineLabels {
-    base::ThreadedList<ThreadedLabel> linked;
-    Label unlinked;
-  };
-
-  BaselineLabels* EnsureLabels(int i) {
-    if (labels_[i] == nullptr) {
-      labels_[i] = zone_.New<BaselineLabels>();
+  Label* EnsureLabel(
+      int i, MarkAsIndirectJumpTarget mark = MarkAsIndirectJumpTarget::kNo) {
+    if (labels_[i].GetPointer() == nullptr) {
+      labels_[i].SetPointer(zone_.New<Label>());
     }
-    return labels_[i];
+    if (mark == MarkAsIndirectJumpTarget::kYes) {
+      labels_[i].MarkAsIndirectJumpTarget();
+    }
+    return labels_[i].GetPointer();
   }
 
-  BaselineLabels** labels_;
+  BaselineLabelPointer* labels_;
 };
 
 }  // namespace baseline
 }  // namespace internal
 }  // namespace v8
 
-#endif
+#endif  // ENABLE_SPARKPLUG
 
 #endif  // V8_BASELINE_BASELINE_COMPILER_H_

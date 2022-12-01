@@ -27,14 +27,16 @@ FOR_EACH_REG_EXP_TREE_TYPE(MAKE_TYPE_CASE)
 FOR_EACH_REG_EXP_TREE_TYPE(MAKE_TYPE_CASE)
 #undef MAKE_TYPE_CASE
 
+namespace {
 
-static Interval ListCaptureRegisters(ZoneList<RegExpTree*>* children) {
+Interval ListCaptureRegisters(ZoneList<RegExpTree*>* children) {
   Interval result = Interval::Empty();
   for (int i = 0; i < children->length(); i++)
     result = result.Union(children->at(i)->CaptureRegisters());
   return result;
 }
 
+}  // namespace
 
 Interval RegExpAlternative::CaptureRegisters() {
   return ListCaptureRegisters(nodes());
@@ -63,12 +65,12 @@ Interval RegExpQuantifier::CaptureRegisters() {
 
 
 bool RegExpAssertion::IsAnchoredAtStart() {
-  return assertion_type() == RegExpAssertion::START_OF_INPUT;
+  return assertion_type() == RegExpAssertion::Type::START_OF_INPUT;
 }
 
 
 bool RegExpAssertion::IsAnchoredAtEnd() {
-  return assertion_type() == RegExpAssertion::END_OF_INPUT;
+  return assertion_type() == RegExpAssertion::Type::END_OF_INPUT;
 }
 
 
@@ -130,6 +132,7 @@ bool RegExpCapture::IsAnchoredAtStart() { return body()->IsAnchoredAtStart(); }
 
 bool RegExpCapture::IsAnchoredAtEnd() { return body()->IsAnchoredAtEnd(); }
 
+namespace {
 
 // Convert regular expression trees to a simple sexp representation.
 // This representation should be different from the input grammar
@@ -148,6 +151,7 @@ class RegExpUnparser final : public RegExpVisitor {
   Zone* zone_;
 };
 
+}  // namespace
 
 void* RegExpUnparser::VisitDisjunction(RegExpDisjunction* that, void* data) {
   os_ << "(|";
@@ -178,9 +182,7 @@ void RegExpUnparser::VisitCharacterRange(CharacterRange that) {
   }
 }
 
-
-void* RegExpUnparser::VisitCharacterClass(RegExpCharacterClass* that,
-                                          void* data) {
+void* RegExpUnparser::VisitClassRanges(RegExpClassRanges* that, void* data) {
   if (that->is_negated()) os_ << "^";
   os_ << "[";
   for (int i = 0; i < that->ranges(zone_)->length(); i++) {
@@ -191,25 +193,47 @@ void* RegExpUnparser::VisitCharacterClass(RegExpCharacterClass* that,
   return nullptr;
 }
 
+void* RegExpUnparser::VisitClassSetExpression(RegExpClassSetExpression* that,
+                                              void* data) {
+  switch (that->operation()) {
+    case RegExpClassSetExpression::OperationType::kUnion:
+      os_ << "++";
+      break;
+    case RegExpClassSetExpression::OperationType::kIntersection:
+      os_ << "&&";
+      break;
+    case RegExpClassSetExpression::OperationType::kSubtraction:
+      os_ << "--";
+      break;
+  }
+  if (that->is_negated()) os_ << "^";
+  os_ << "[";
+  for (int i = 0; i < that->operands()->length(); i++) {
+    if (i > 0) os_ << " ";
+    that->operands()->at(i)->Accept(this, data);
+  }
+  os_ << "]";
+  return nullptr;
+}
 
 void* RegExpUnparser::VisitAssertion(RegExpAssertion* that, void* data) {
   switch (that->assertion_type()) {
-    case RegExpAssertion::START_OF_INPUT:
+    case RegExpAssertion::Type::START_OF_INPUT:
       os_ << "@^i";
       break;
-    case RegExpAssertion::END_OF_INPUT:
+    case RegExpAssertion::Type::END_OF_INPUT:
       os_ << "@$i";
       break;
-    case RegExpAssertion::START_OF_LINE:
+    case RegExpAssertion::Type::START_OF_LINE:
       os_ << "@^l";
       break;
-    case RegExpAssertion::END_OF_LINE:
+    case RegExpAssertion::Type::END_OF_LINE:
       os_ << "@$l";
       break;
-    case RegExpAssertion::BOUNDARY:
+    case RegExpAssertion::Type::BOUNDARY:
       os_ << "@b";
       break;
-    case RegExpAssertion::NON_BOUNDARY:
+    case RegExpAssertion::Type::NON_BOUNDARY:
       os_ << "@B";
       break;
   }
@@ -219,7 +243,7 @@ void* RegExpUnparser::VisitAssertion(RegExpAssertion* that, void* data) {
 
 void* RegExpUnparser::VisitAtom(RegExpAtom* that, void* data) {
   os_ << "'";
-  Vector<const uc16> chardata = that->data();
+  base::Vector<const base::uc16> chardata = that->data();
   for (int i = 0; i < chardata.length(); i++) {
     os_ << AsUC16(chardata[i]);
   }
@@ -293,13 +317,11 @@ void* RegExpUnparser::VisitEmpty(RegExpEmpty* that, void* data) {
   return nullptr;
 }
 
-
-std::ostream& RegExpTree::Print(std::ostream& os, Zone* zone) {  // NOLINT
+std::ostream& RegExpTree::Print(std::ostream& os, Zone* zone) {
   RegExpUnparser unparser(os, zone);
   Accept(&unparser, nullptr);
   return os;
 }
-
 
 RegExpDisjunction::RegExpDisjunction(ZoneList<RegExpTree*>* alternatives)
     : alternatives_(alternatives) {
@@ -314,8 +336,9 @@ RegExpDisjunction::RegExpDisjunction(ZoneList<RegExpTree*>* alternatives)
   }
 }
 
+namespace {
 
-static int IncreaseBy(int previous, int increase) {
+int IncreaseBy(int previous, int increase) {
   if (RegExpTree::kInfinity - previous < increase) {
     return RegExpTree::kInfinity;
   } else {
@@ -323,6 +346,7 @@ static int IncreaseBy(int previous, int increase) {
   }
 }
 
+}  // namespace
 
 RegExpAlternative::RegExpAlternative(ZoneList<RegExpTree*>* nodes)
     : nodes_(nodes) {

@@ -6,11 +6,12 @@
 
 let codeKinds = [
     "UNKNOWN",
-    "CPPPARSE",
-    "CPPCOMPBC",
-    "CPPCOMP",
-    "CPPGC",
-    "CPPEXT",
+    "CPP_PARSE",
+    "CPP_COMP_BC",
+    "CPP_COMP_BASELINE",
+    "CPP_COMP",
+    "CPP_GC",
+    "CPP_EXT",
     "CPP",
     "LIB",
     "IC",
@@ -18,71 +19,73 @@ let codeKinds = [
     "STUB",
     "BUILTIN",
     "REGEXP",
-    "JSOPT",
-    "JSUNOPT",
-    "JSNCI",
-    "JSTURBOPROP",
-    "JSBASELINE",
+    "JS_IGNITION",
+    "JS_SPARKPLUG",
+    "JS_MAGLEV",
+    "JS_TURBOFAN",
 ];
 
 function resolveCodeKind(code) {
   if (!code || !code.type) {
     return "UNKNOWN";
-  } else if (code.type === "CPP") {
+  }
+  const type = code.type;
+  if (type === "CPP") {
     return "CPP";
-  } else if (code.type === "SHARED_LIB") {
+  } else if (type === "SHARED_LIB") {
     return "LIB";
-  } else if (code.type === "CODE") {
-    if (code.kind === "LoadIC" ||
-        code.kind === "StoreIC" ||
-        code.kind === "KeyedStoreIC" ||
-        code.kind === "KeyedLoadIC" ||
-        code.kind === "LoadGlobalIC" ||
-        code.kind === "Handler") {
+  }
+  const kind = code.kind;
+  if (type === "CODE") {
+    if (kind === "LoadIC" ||
+        kind === "StoreIC" ||
+        kind === "KeyedStoreIC" ||
+        kind === "KeyedLoadIC" ||
+        kind === "LoadGlobalIC" ||
+        kind === "Handler") {
       return "IC";
-    } else if (code.kind === "BytecodeHandler") {
+    } else if (kind === "BytecodeHandler") {
       return "BC";
-    } else if (code.kind === "Stub") {
+    } else if (kind === "Stub") {
       return "STUB";
-    } else if (code.kind === "Builtin") {
+    } else if (kind === "Builtin") {
       return "BUILTIN";
-    } else if (code.kind === "RegExp") {
+    } else if (kind === "RegExp") {
       return "REGEXP";
     }
-    console.log("Unknown CODE: '" + code.kind + "'.");
+    console.warn("Unknown CODE: '" + kind + "'.");
     return "CODE";
-  } else if (code.type === "JS") {
-    if (code.kind === "Builtin") {
-      return "JSUNOPT";
-    } else if (code.kind === "Opt") {
-      return "JSOPT";
-    } else if (code.kind === "Unopt") {
-      return "JSUNOPT";
-    } else if (code.kind === "NCI") {
-      return "JSNCI";
-    } else if (code.kind === "Baseline") {
-      return "JSBASELINE";
-    } else if (code.kind === "Turboprop") {
-      return "JSTURBOPROP";
+  } else if (type === "JS") {
+    if (kind === "Builtin" || kind == "Ignition" || kind === "Unopt") {
+      return "JS_IGNITION";
+    } else if (kind === "Baseline" || kind === "Sparkplug") {
+      return "JS_SPARKPLUG";
+    } else if (kind === "Maglev") {
+      return "JS_MAGLEV";
+    } else if (kind === "Turboprop") {
+      return "JS_TURBOPROP";
+    } else if (kind === "Opt" || kind === "Turbofan") {
+      return "JS_TURBOFAN";
     }
   }
-  console.log("Unknown code type '" + type + "'.");
+  console.warn("Unknown code type '" + kind + "'.");
 }
 
 function resolveCodeKindAndVmState(code, vmState) {
   let kind = resolveCodeKind(code);
   if (kind === "CPP") {
     if (vmState === 1) {
-      kind = "CPPGC";
+      kind = "CPP_GC";
     } else if (vmState === 2) {
-      kind = "CPPPARSE";
+      kind = "CPP_PARSE";
     } else if (vmState === 3) {
-      kind = "CPPCOMPBC";
+      kind = "CPP_COMP_BC";
     } else if (vmState === 4) {
-      kind = "CPPCOMP";
+      kind = "CPP_COMP";
     } else if (vmState === 6) {
-      kind = "CPPEXT";
+      kind = "CPP_EXT";
     }
+    // TODO(cbruni): add CPP_COMP_BASELINE
   }
   return kind;
 }
@@ -272,20 +275,20 @@ function buildCategoryTreeAndLookup() {
     }
     root.children.push(n);
   }
-  addCategory("JS Optimized", [ "JSOPT" ]);
-  addCategory("JS NCI", [ "JSNCI" ]);
-  addCategory("JS Turboprop", [ "JSTURBOPROP" ]);
-  addCategory("JS Baseline", [ "JSBASELINE" ]);
-  addCategory("JS Unoptimized", [ "JSUNOPT", "BC" ]);
+  addCategory("JS Ignition", [ "JS_IGNITION", "BC" ]);
+  addCategory("JS Sparkplug", [ "JS_SPARKPLUG" ]);
+  addCategory("JS Maglev", [ "JS_MAGLEV" ]);
+  addCategory("JS Turbofan", [ "JS_TURBOFAN" ]);
   addCategory("IC", [ "IC" ]);
   addCategory("RegExp", [ "REGEXP" ]);
   addCategory("Other generated", [ "STUB", "BUILTIN" ]);
   addCategory("C++", [ "CPP", "LIB" ]);
-  addCategory("C++/GC", [ "CPPGC" ]);
-  addCategory("C++/Parser", [ "CPPPARSE" ]);
-  addCategory("C++/Bytecode compiler", [ "CPPCOMPBC" ]);
-  addCategory("C++/Compiler", [ "CPPCOMP" ]);
-  addCategory("C++/External", [ "CPPEXT" ]);
+  addCategory("C++/GC", [ "CPP_GC" ]);
+  addCategory("C++/Parser", [ "CPP_PARSE" ]);
+  addCategory("C++/Bytecode Compiler", [ "CPP_COMP_BC" ]);
+  addCategory("C++/Baseline Compiler", [ "CPP_COMP_BASELINE" ]);
+  addCategory("C++/Compiler", [ "CPP_COMP" ]);
+  addCategory("C++/External", [ "CPP_EXT" ]);
   addCategory("Unknown", [ "UNKNOWN" ]);
 
   return { categories, root };
@@ -576,7 +579,7 @@ function computeOptimizationStats(file,
         }
       }
       if (code.deopt) {
-        if (code.deopt.bailoutType === "deopt-lazy" || code.deopt.bailoutType === "deopt-eager" || code.deopt.bailoutType === "deopt-lazy") {
+        if (code.deopt.bailoutType === "deopt-lazy" || code.deopt.bailoutType === "deopt-eager" || code.deopt.bailoutType === "deopt-soft") {
           deoptimized = true;
         }
         if (code.deopt.tm >= timeStart && code.deopt.tm <= timeEnd) {

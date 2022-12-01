@@ -5,6 +5,7 @@
 #ifndef V8_OBJECTS_SOURCE_TEXT_MODULE_H_
 #define V8_OBJECTS_SOURCE_TEXT_MODULE_H_
 
+#include "src/objects/contexts.h"
 #include "src/objects/module.h"
 #include "src/objects/promise.h"
 #include "src/zone/zone-containers.h"
@@ -17,6 +18,7 @@ namespace v8 {
 namespace internal {
 
 class UnorderedModuleSet;
+class StructBodyDescriptor;
 
 #include "torque-generated/src/objects/source-text-module-tq.inc"
 
@@ -53,9 +55,10 @@ class SourceTextModule
   static int ExportIndex(int cell_index);
 
   // Used by builtins to fulfill or reject the promise associated
-  // with async SourceTextModules.
-  static void AsyncModuleExecutionFulfilled(Isolate* isolate,
-                                            Handle<SourceTextModule> module);
+  // with async SourceTextModules. Return Nothing if the execution is
+  // terminated.
+  static Maybe<bool> AsyncModuleExecutionFulfilled(
+      Isolate* isolate, Handle<SourceTextModule> module);
   static void AsyncModuleExecutionRejected(Isolate* isolate,
                                            Handle<SourceTextModule> module,
                                            Handle<Object> exception);
@@ -75,6 +78,15 @@ class SourceTextModule
                              FixedBodyDescriptor<kCodeOffset, kSize, kSize>>;
 
   static constexpr unsigned kFirstAsyncEvaluatingOrdinal = 2;
+
+  enum ExecuteAsyncModuleContextSlots {
+    kModule = Context::MIN_CONTEXT_SLOTS,
+    kContextLength,
+  };
+
+  V8_EXPORT_PRIVATE
+  std::vector<std::tuple<Handle<SourceTextModule>, Handle<JSMessageObject>>>
+  GetStalledTopLevelAwaitMessage(Isolate* isolate);
 
  private:
   friend class Factory;
@@ -125,9 +137,9 @@ class SourceTextModule
   // If 0, this module is not async or has not been async evaluated.
   static constexpr unsigned kNotAsyncEvaluated = 0;
   static constexpr unsigned kAsyncEvaluateDidFinish = 1;
-  STATIC_ASSERT(kNotAsyncEvaluated < kAsyncEvaluateDidFinish);
-  STATIC_ASSERT(kAsyncEvaluateDidFinish < kFirstAsyncEvaluatingOrdinal);
-  STATIC_ASSERT(kMaxModuleAsyncEvaluatingOrdinal ==
+  static_assert(kNotAsyncEvaluated < kAsyncEvaluateDidFinish);
+  static_assert(kAsyncEvaluateDidFinish < kFirstAsyncEvaluatingOrdinal);
+  static_assert(kMaxModuleAsyncEvaluatingOrdinal ==
                 AsyncEvaluatingOrdinalBits::kMax);
   DECL_PRIMITIVE_ACCESSORS(async_evaluating_ordinal, unsigned)
 
@@ -178,10 +190,6 @@ class SourceTextModule
                                            AsyncParentCompletionSet* exec_list);
 
   // Implementation of spec concrete method Evaluate.
-  static V8_WARN_UNUSED_RESULT MaybeHandle<Object> EvaluateMaybeAsync(
-      Isolate* isolate, Handle<SourceTextModule> module);
-
-  // Continued implementation of spec concrete method Evaluate.
   static V8_WARN_UNUSED_RESULT MaybeHandle<Object> Evaluate(
       Isolate* isolate, Handle<SourceTextModule> module);
 
@@ -189,6 +197,11 @@ class SourceTextModule
   static V8_WARN_UNUSED_RESULT MaybeHandle<Object> InnerModuleEvaluation(
       Isolate* isolate, Handle<SourceTextModule> module,
       ZoneForwardList<Handle<SourceTextModule>>* stack, unsigned* dfs_index);
+
+  // Returns true if the evaluation exception was catchable by js, and false
+  // for termination exceptions.
+  bool MaybeHandleEvaluationException(
+      Isolate* isolate, ZoneForwardList<Handle<SourceTextModule>>* stack);
 
   static V8_WARN_UNUSED_RESULT bool MaybeTransitionComponent(
       Isolate* isolate, Handle<SourceTextModule> module,
@@ -204,11 +217,16 @@ class SourceTextModule
   static V8_WARN_UNUSED_RESULT MaybeHandle<Object> ExecuteModule(
       Isolate* isolate, Handle<SourceTextModule> module);
 
-  // Implementation of spec ExecuteAsyncModule.
-  static void ExecuteAsyncModule(Isolate* isolate,
-                                 Handle<SourceTextModule> module);
+  // Implementation of spec ExecuteAsyncModule. Return Nothing if the execution
+  // is been terminated.
+  static V8_WARN_UNUSED_RESULT Maybe<bool> ExecuteAsyncModule(
+      Isolate* isolate, Handle<SourceTextModule> module);
 
   static void Reset(Isolate* isolate, Handle<SourceTextModule> module);
+
+  V8_EXPORT_PRIVATE void InnerGetStalledTopLevelAwaitModule(
+      Isolate* isolate, UnorderedModuleSet* visited,
+      std::vector<Handle<SourceTextModule>>* result);
 
   TQ_OBJECT_CONSTRUCTORS(SourceTextModule)
 };
@@ -219,8 +237,8 @@ class SourceTextModuleInfo : public FixedArray {
  public:
   DECL_CAST(SourceTextModuleInfo)
 
-  template <typename LocalIsolate>
-  static Handle<SourceTextModuleInfo> New(LocalIsolate* isolate, Zone* zone,
+  template <typename IsolateT>
+  static Handle<SourceTextModuleInfo> New(IsolateT* isolate, Zone* zone,
                                           SourceTextModuleDescriptor* descr);
 
   inline FixedArray module_requests() const;
@@ -267,15 +285,16 @@ class ModuleRequest
   NEVER_READ_ONLY_SPACE
   DECL_VERIFIER(ModuleRequest)
 
-  template <typename LocalIsolate>
-  static Handle<ModuleRequest> New(LocalIsolate* isolate,
-                                   Handle<String> specifier,
+  template <typename IsolateT>
+  static Handle<ModuleRequest> New(IsolateT* isolate, Handle<String> specifier,
                                    Handle<FixedArray> import_assertions,
                                    int position);
 
   // The number of entries in the import_assertions FixedArray that are used for
   // a single assertion.
   static const size_t kAssertionEntrySize = 3;
+
+  using BodyDescriptor = StructBodyDescriptor;
 
   TQ_OBJECT_CONSTRUCTORS(ModuleRequest)
 };
@@ -284,15 +303,16 @@ class SourceTextModuleInfoEntry
     : public TorqueGeneratedSourceTextModuleInfoEntry<SourceTextModuleInfoEntry,
                                                       Struct> {
  public:
-  DECL_PRINTER(SourceTextModuleInfoEntry)
   DECL_VERIFIER(SourceTextModuleInfoEntry)
 
-  template <typename LocalIsolate>
+  template <typename IsolateT>
   static Handle<SourceTextModuleInfoEntry> New(
-      LocalIsolate* isolate, Handle<PrimitiveHeapObject> export_name,
+      IsolateT* isolate, Handle<PrimitiveHeapObject> export_name,
       Handle<PrimitiveHeapObject> local_name,
       Handle<PrimitiveHeapObject> import_name, int module_request,
       int cell_index, int beg_pos, int end_pos);
+
+  using BodyDescriptor = StructBodyDescriptor;
 
   TQ_OBJECT_CONSTRUCTORS(SourceTextModuleInfoEntry)
 };
