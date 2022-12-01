@@ -388,42 +388,9 @@ String16 descriptionForEntry(v8::Local<v8::Context> context,
   return key.length() ? ("{" + key + " => " + value + "}") : value;
 }
 
-<<<<<<< HEAD
-extern "C" bool V8RecordReplayHasDivergedFromRecording();
-
-String16 descriptionForFunction(v8::Local<v8::Context> context,
-                                v8::Local<v8::Function> value) {
-  v8::Isolate* isolate = context->GetIsolate();
-
-  // When recording/replaying we might be in a situation where events are
-  // disallowed, e.g. we are constructing the call frames when replaying in
-  // a place where this didn't occur when recording. In this case we don't
-  // want to do anything that calls back into script, so use the default
-  // object description. Call ToString() in other cases to avoid perturbing
-  // the inspector's behavior for other users.
-  if (v8::recordreplay::AreEventsDisallowed() && !V8RecordReplayHasDivergedFromRecording()) {
-    return descriptionForObject(isolate, value);
-  }
-
-  v8::TryCatch tryCatch(isolate);
-  v8::Local<v8::String> description;
-  if (!value->ToString(context).ToLocal(&description)) {
-    return descriptionForObject(isolate, value);
-  }
-||||||| 7cbb7db789
-String16 descriptionForFunction(v8::Local<v8::Context> context,
-                                v8::Local<v8::Function> value) {
-  v8::Isolate* isolate = context->GetIsolate();
-  v8::TryCatch tryCatch(isolate);
-  v8::Local<v8::String> description;
-  if (!value->ToString(context).ToLocal(&description)) {
-    return descriptionForObject(isolate, value);
-  }
-=======
 String16 descriptionForFunction(v8::Local<v8::Function> value) {
   v8::Isolate* isolate = value->GetIsolate();
   v8::Local<v8::String> description = v8::debug::GetFunctionDescription(value);
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
   return toProtocolString(isolate, description);
 }
 

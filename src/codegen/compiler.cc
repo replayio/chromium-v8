@@ -1615,26 +1615,16 @@ BackgroundCompileTask::BackgroundCompileTask(
       stack_size_(max_stack_size),
       worker_thread_runtime_call_stats_(worker_thread_runtime_stats),
       timer_(timer),
-<<<<<<< HEAD
-      language_mode_(info_->language_mode()) {
-  if (recordreplay::IsRecordingOrReplaying() &&
-      (!IsMainThread() || !RecordReplayHasDefaultContext())) {
-    flags_.set_record_replay_ignore(true);
-  }
-
-  DCHECK_EQ(outer_parse_info->parameters_end_pos(), kNoSourcePosition);
-  DCHECK_NULL(outer_parse_info->extension());
-||||||| 7cbb7db789
-      language_mode_(info_->language_mode()) {
-  DCHECK_EQ(outer_parse_info->parameters_end_pos(), kNoSourcePosition);
-  DCHECK_NULL(outer_parse_info->extension());
-=======
       input_shared_info_(shared_info),
       start_position_(shared_info->StartPosition()),
       end_position_(shared_info->EndPosition()),
       function_literal_id_(shared_info->function_literal_id()) {
   DCHECK(!shared_info->is_toplevel());
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
+
+  if (recordreplay::IsRecordingOrReplaying() &&
+      (!IsMainThread() || !RecordReplayHasDefaultContext())) {
+    flags_.set_record_replay_ignore(true);
+  }
 
   character_stream_->Seek(start_position_);
 
@@ -1796,11 +1786,6 @@ size_t NumRunningBackgroundCompileTasks() {
 }
 
 void BackgroundCompileTask::Run() {
-<<<<<<< HEAD
-  gNumRunningBackgroundCompileTasks++;
-
-||||||| 7cbb7db789
-=======
   RwxMemoryWriteScope::SetDefaultPermissionsForNewThread();
   DCHECK_NE(ThreadId::Current(), isolate_for_local_isolate_->thread_id());
   LocalIsolate isolate(isolate_for_local_isolate_, ThreadKind::kBackground);
@@ -1820,7 +1805,8 @@ void BackgroundCompileTask::RunOnMainThread(Isolate* isolate) {
 
 void BackgroundCompileTask::Run(
     LocalIsolate* isolate, ReusableUnoptimizedCompileState* reusable_state) {
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
+  gNumRunningBackgroundCompileTasks++;
+
   TimedHistogramScope timer(timer_);
 
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("v8.compile"),
@@ -1932,6 +1918,8 @@ void BackgroundCompileTask::Run(
   outer_function_sfi_ = isolate->heap()->NewPersistentMaybeHandle(maybe_result);
   DCHECK(isolate->heap()->ContainsPersistentHandle(script_.location()));
   persistent_handles_ = isolate->heap()->DetachPersistentHandles();
+
+  gNumRunningBackgroundCompileTasks--;
 }
 
 // A class which traverses the constant pools of newly compiled
@@ -2228,14 +2216,6 @@ MaybeHandle<SharedFunctionInfo> BackgroundCompileTask::FinalizeScript(
       LOG(isolate, ScriptDetails(*script));
     }
   }
-<<<<<<< HEAD
-
-  gNumRunningBackgroundCompileTasks--;
-}
-||||||| 7cbb7db789
-}
-=======
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
 
   ReportStatistics(isolate);
 
@@ -2765,6 +2745,10 @@ bool Compiler::FinalizeBackgroundCompileTask(BackgroundCompileTask* task,
 // static
 void Compiler::CompileOptimized(Isolate* isolate, Handle<JSFunction> function,
                                 ConcurrencyMode mode, CodeKind code_kind) {
+  // The point at which optimized compilations occur can vary between recording
+  // and replaying.
+  recordreplay::AutoDisallowEvents disallow;
+
   DCHECK(CodeKindIsOptimizedJSFunction(code_kind));
   DCHECK(AllowCompilation::IsAllowed(isolate));
 
@@ -2851,21 +2835,13 @@ MaybeHandle<JSFunction> Compiler::GetFunctionFromEval(
     DCHECK(!flags.is_module());
     flags.set_parse_restriction(restriction);
 
-<<<<<<< HEAD
     if (!IsMainThread()) {
       flags.set_record_replay_ignore(true);
     }
 
-    UnoptimizedCompileState compile_state(isolate);
-    ParseInfo parse_info(isolate, flags, &compile_state);
-||||||| 7cbb7db789
-    UnoptimizedCompileState compile_state(isolate);
-    ParseInfo parse_info(isolate, flags, &compile_state);
-=======
     UnoptimizedCompileState compile_state;
     ReusableUnoptimizedCompileState reusable_state(isolate);
     ParseInfo parse_info(isolate, flags, &compile_state, &reusable_state);
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
     parse_info.set_parameters_end_pos(parameters_end_pos);
 
     MaybeHandle<ScopeInfo> maybe_outer_scope_info;
@@ -3346,35 +3322,15 @@ static void SetRecordReplayIgnoreByURL(UnoptimizedCompileFlags& flags,
 }
 
 MaybeHandle<SharedFunctionInfo> CompileScriptOnMainThread(
-<<<<<<< HEAD
     UnoptimizedCompileFlags flags, Handle<String> source,
-    const Compiler::ScriptDetails& script_details,
-    ScriptOriginOptions origin_options, NativesFlag natives,
-||||||| 7cbb7db789
-    const UnoptimizedCompileFlags flags, Handle<String> source,
-    const Compiler::ScriptDetails& script_details,
-    ScriptOriginOptions origin_options, NativesFlag natives,
-=======
-    const UnoptimizedCompileFlags flags, Handle<String> source,
     const ScriptDetails& script_details, NativesFlag natives,
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
     v8::Extension* extension, Isolate* isolate,
-<<<<<<< HEAD
-    IsCompiledScope* is_compiled_scope) {
+    MaybeHandle<Script> maybe_script, IsCompiledScope* is_compiled_scope) {
   SetRecordReplayIgnoreByURL(flags, script_details);
 
-  UnoptimizedCompileState compile_state(isolate);
-  ParseInfo parse_info(isolate, flags, &compile_state);
-||||||| 7cbb7db789
-    IsCompiledScope* is_compiled_scope) {
-  UnoptimizedCompileState compile_state(isolate);
-  ParseInfo parse_info(isolate, flags, &compile_state);
-=======
-    MaybeHandle<Script> maybe_script, IsCompiledScope* is_compiled_scope) {
   UnoptimizedCompileState compile_state;
   ReusableUnoptimizedCompileState reusable_state(isolate);
   ParseInfo parse_info(isolate, flags, &compile_state, &reusable_state);
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
   parse_info.set_extension(extension);
 
   Handle<Script> script;
@@ -3793,19 +3749,11 @@ MaybeHandle<JSFunction> Compiler::GetWrappedFunction(
     flags.set_collect_source_positions(true);
     // flags.set_eager(compile_options == ScriptCompiler::kEagerCompile);
 
-<<<<<<< HEAD
     SetRecordReplayIgnoreByURL(flags, script_details);
 
-    UnoptimizedCompileState compile_state(isolate);
-    ParseInfo parse_info(isolate, flags, &compile_state);
-||||||| 7cbb7db789
-    UnoptimizedCompileState compile_state(isolate);
-    ParseInfo parse_info(isolate, flags, &compile_state);
-=======
     UnoptimizedCompileState compile_state;
     ReusableUnoptimizedCompileState reusable_state(isolate);
     ParseInfo parse_info(isolate, flags, &compile_state, &reusable_state);
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
 
     MaybeHandle<ScopeInfo> maybe_outer_scope_info;
     if (!context->IsNativeContext()) {

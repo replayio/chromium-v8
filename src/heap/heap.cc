@@ -225,21 +225,15 @@ Heap::Heap()
       memory_pressure_level_(MemoryPressureLevel::kNone),
       safepoint_(std::make_unique<IsolateSafepoint>(this)),
       external_string_table_(this),
-<<<<<<< HEAD
-      collection_barrier_(new CollectionBarrier(this)),
-      script_ordered_lock_id_((int)recordreplay::CreateOrderedLock("Heap.script_ordered_lock_id_")) {
-||||||| 7cbb7db789
-      collection_barrier_(new CollectionBarrier(this)) {
-=======
       allocation_type_for_in_place_internalizable_strings_(
           isolate()->OwnsStringTables() ? AllocationType::kOld
                                         : AllocationType::kSharedOld),
       collection_barrier_(new CollectionBarrier(this)),
+      script_ordered_lock_id_((int)recordreplay::CreateOrderedLock("Heap.script_ordered_lock_id_")) {
       marking_state_(isolate_),
       non_atomic_marking_state_(isolate_),
       atomic_marking_state_(isolate_),
       pretenuring_handler_(this) {
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
   // Ensure old_generation_size_ is a multiple of kPageSize.
   DCHECK_EQ(0, max_old_generation_size() & (Page::kPageSize - 1));
 

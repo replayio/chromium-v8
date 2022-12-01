@@ -214,14 +214,10 @@ class BaselineAssembler {
   inline void SmiUntag(Register value);
   inline void SmiUntag(Register output, Register value);
 
-<<<<<<< HEAD
   inline void AddPointer(Register output, Immediate value);
 
-||||||| 7cbb7db789
-=======
   inline void Word32And(Register output, Register lhs, int rhs);
 
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
   inline void Switch(Register reg, int case_value_base, Label** labels,
                      int num_labels);
 

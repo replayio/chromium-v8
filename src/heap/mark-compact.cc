@@ -4316,22 +4316,11 @@ size_t CreateAndExecuteEvacuationTasks(
     }
     evacuators.push_back(std::move(evacuator));
   }
-  std::unique_ptr<JobTask> task =
-    std::make_unique<PageEvacuationJob>(isolate(), &evacuators,
-                                        std::move(evacuation_items));
   V8::GetCurrentPlatform()
-<<<<<<< HEAD
-      ->PostJob(v8::TaskPriority::kUserBlocking, std::move(task))
-||||||| 7cbb7db789
-      ->PostJob(v8::TaskPriority::kUserBlocking,
-                std::make_unique<PageEvacuationJob>(
-                    isolate(), &evacuators, std::move(evacuation_items)))
-=======
       ->CreateJob(
           v8::TaskPriority::kUserBlocking,
           std::make_unique<PageEvacuationJob>(heap->isolate(), &evacuators,
                                               std::move(evacuation_items)))
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
       ->Join();
   for (auto& evacuator : evacuators) {
     evacuator->Finalize();
@@ -4652,14 +4641,8 @@ class PointersUpdatingJob : public v8::JobTask {
         background_scope_(background_scope) {}
 
   void Run(JobDelegate* delegate) override {
-<<<<<<< HEAD
-    if (!delegate || delegate->IsJoiningThread()) {
-||||||| 7cbb7db789
-    if (delegate->IsJoiningThread()) {
-=======
     RwxMemoryWriteScope::SetDefaultPermissionsForNewThread();
     if (delegate->IsJoiningThread()) {
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
       TRACE_GC(tracer_, scope_);
       UpdatePointers(delegate);
     } else {
@@ -5216,28 +5199,13 @@ void MarkCompactCollector::UpdatePointersAfterEvacuation() {
     updating_items.push_back(
         std::make_unique<EphemeronTableUpdatingItem>(heap()));
 
-    std::unique_ptr<PointersUpdatingJob> task =
-      std::make_unique<PointersUpdatingJob>(isolate(), std::move(updating_items),
-                                            GCTracer::Scope::MC_EVACUATE_UPDATE_POINTERS_PARALLEL,
-                                            GCTracer::Scope::MC_BACKGROUND_EVACUATE_UPDATE_POINTERS);
-
     V8::GetCurrentPlatform()
-<<<<<<< HEAD
-        ->PostJob(v8::TaskPriority::kUserBlocking, std::move(task))
-||||||| 7cbb7db789
-        ->PostJob(v8::TaskPriority::kUserBlocking,
-                  std::make_unique<PointersUpdatingJob>(
-                      isolate(), std::move(updating_items),
-                      GCTracer::Scope::MC_EVACUATE_UPDATE_POINTERS_PARALLEL,
-                      GCTracer::Scope::MC_BACKGROUND_EVACUATE_UPDATE_POINTERS))
-=======
         ->CreateJob(
             v8::TaskPriority::kUserBlocking,
             std::make_unique<PointersUpdatingJob>(
                 isolate(), std::move(updating_items),
                 GCTracer::Scope::MC_EVACUATE_UPDATE_POINTERS_PARALLEL,
                 GCTracer::Scope::MC_BACKGROUND_EVACUATE_UPDATE_POINTERS))
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
         ->Join();
   }
 

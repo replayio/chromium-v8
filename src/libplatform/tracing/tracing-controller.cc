@@ -7,13 +7,6 @@
 #include <string.h>
 
 #include "include/libplatform/v8-tracing.h"
-<<<<<<< HEAD
-#include "include/v8.h"
-
-||||||| 7cbb7db789
-
-=======
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
 #include "src/base/atomicops.h"
 #include "src/base/platform/mutex.h"
 #include "src/base/platform/time.h"

@@ -250,7 +250,6 @@ v8::MaybeLocal<v8::Value> DebugStackTraceIterator::Evaluate(
   return Utils::ToLocal(value);
 }
 
-<<<<<<< HEAD
 StackFrameId DebugStackTraceIterator::FrameId() {
   DCHECK(!Done());
   return iterator_.frame()->id();
@@ -261,8 +260,6 @@ int DebugStackTraceIterator::InlineFrameIndex() {
   return inlined_frame_index_;
 }
 
-||||||| 7cbb7db789
-=======
 void DebugStackTraceIterator::PrepareRestart() {
   CHECK(!Done());
   CHECK(CanBeRestarted());
@@ -271,6 +268,5 @@ void DebugStackTraceIterator::PrepareRestart() {
                                          inlined_frame_index_);
 }
 
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
 }  // namespace internal
 }  // namespace v8

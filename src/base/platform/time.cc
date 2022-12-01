@@ -127,56 +127,20 @@ V8_INLINE int64_t ClockNow(clockid_t clk_id) {
 #endif
 }
 
-<<<<<<< HEAD
-V8_INLINE bool IsHighResolutionTimer(clockid_t clk_id) {
-  // Avoid interacting with the system when recording/replaying.
-  // Testing IsRecordingOrReplaying() here leads to link errors...
-  return true;
-  /*
-  // Limit duration of timer resolution measurement to 100 ms. If we cannot
-  // measure timer resoltuion within this time, we assume a low resolution
-  // timer.
-  int64_t end =
-      ClockNow(clk_id) + 100 * v8::base::Time::kMicrosecondsPerMillisecond;
-  int64_t start, delta;
-  do {
-    start = ClockNow(clk_id);
-    // Loop until we can detect that the clock has changed. Non-HighRes timers
-    // will increment in chunks, i.e. 15ms. By spinning until we see a clock
-    // change, we detect the minimum time between measurements.
-    do {
-      delta = ClockNow(clk_id) - start;
-    } while (delta == 0);
-  } while (delta > 1 && start < end);
-  return delta <= 1;
-  */
-||||||| 7cbb7db789
-V8_INLINE bool IsHighResolutionTimer(clockid_t clk_id) {
-  // Limit duration of timer resolution measurement to 100 ms. If we cannot
-  // measure timer resoltuion within this time, we assume a low resolution
-  // timer.
-  int64_t end =
-      ClockNow(clk_id) + 100 * v8::base::Time::kMicrosecondsPerMillisecond;
-  int64_t start, delta;
-  do {
-    start = ClockNow(clk_id);
-    // Loop until we can detect that the clock has changed. Non-HighRes timers
-    // will increment in chunks, i.e. 15ms. By spinning until we see a clock
-    // change, we detect the minimum time between measurements.
-    do {
-      delta = ClockNow(clk_id) - start;
-    } while (delta == 0);
-  } while (delta > 1 && start < end);
-  return delta <= 1;
-=======
+/*
 V8_INLINE int64_t NanosecondsNow() {
   struct timespec ts;
   clock_gettime(CLOCK_MONOTONIC, &ts);
   return int64_t{ts.tv_sec} * v8::base::Time::kNanosecondsPerSecond +
          ts.tv_nsec;
 }
+*/
 
 inline bool IsHighResolutionTimer(clockid_t clk_id) {
+  // Avoid interacting with the system when recording/replaying.
+  // Testing IsRecordingOrReplaying() here leads to link errors...
+  return true;
+  /*
   // Currently this is only needed for CLOCK_MONOTONIC. If other clocks need
   // to be checked, care must be taken to support all platforms correctly;
   // see ClockNow() above for precedent.
@@ -200,7 +164,7 @@ inline bool IsHighResolutionTimer(clockid_t clk_id) {
   // a fast desktop). If we still haven't seen a non-zero clock increment
   // in sub-microsecond range, assume a low resolution timer.
   return false;
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
+  */
 }
 
 #elif V8_OS_WIN

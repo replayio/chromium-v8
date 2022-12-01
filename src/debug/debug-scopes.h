@@ -114,15 +114,9 @@ class ScopeIterator {
 
  private:
   Isolate* isolate_;
-<<<<<<< HEAD
+  std::unique_ptr<ReusableUnoptimizedCompileState> reusable_compile_state_;
   ParseInfo* info_ = nullptr;
   bool info_owned_ = false;
-||||||| 7cbb7db789
-  std::unique_ptr<ParseInfo> info_;
-=======
-  std::unique_ptr<ReusableUnoptimizedCompileState> reusable_compile_state_;
-  std::unique_ptr<ParseInfo> info_;
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
   FrameInspector* const frame_inspector_ = nullptr;
   Handle<JSGeneratorObject> generator_;
 

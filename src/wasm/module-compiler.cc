@@ -187,26 +187,14 @@ class CompilationUnitQueues {
   Queue* GetQueueForTask(int task_id) {
     int required_queues = task_id + 1;
     {
-<<<<<<< HEAD
-      base::MutexGuard queues_guard(&queues_mutex_);
-||||||| 7cbb7db789
-      base::SharedMutexGuard<base::kShared> queues_guard(&queues_mutex_);
-=======
       std::shared_lock<std::shared_mutex> queues_guard{queues_mutex_};
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
       if (V8_LIKELY(static_cast<int>(queues_.size()) >= required_queues)) {
         return queues_[task_id].get();
       }
     }
 
     // Otherwise increase the number of queues.
-<<<<<<< HEAD
-    base::MutexGuard queues_guard(&queues_mutex_);
-||||||| 7cbb7db789
-    base::SharedMutexGuard<base::kExclusive> queues_guard(&queues_mutex_);
-=======
     std::unique_lock<std::shared_mutex> queues_guard{queues_mutex_};
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
     int num_queues = static_cast<int>(queues_.size());
 
     while (num_queues < required_queues) {
@@ -262,13 +250,7 @@ class CompilationUnitQueues {
     QueueImpl* queue;
     {
       int queue_to_add = next_queue_to_add.load(std::memory_order_relaxed);
-<<<<<<< HEAD
-      base::MutexGuard queues_guard(&queues_mutex_);
-||||||| 7cbb7db789
-      base::SharedMutexGuard<base::kShared> queues_guard(&queues_mutex_);
-=======
       std::shared_lock<std::shared_mutex> queues_guard{queues_mutex_};
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
       while (!next_queue_to_add.compare_exchange_weak(
           queue_to_add, next_task_id(queue_to_add, queues_.size()),
           std::memory_order_relaxed)) {
@@ -302,13 +284,7 @@ class CompilationUnitQueues {
   }
 
   void AddTopTierPriorityUnit(WasmCompilationUnit unit, size_t priority) {
-<<<<<<< HEAD
-    base::MutexGuard queues_guard(&queues_mutex_);
-||||||| 7cbb7db789
-    base::SharedMutexGuard<base::kShared> queues_guard(&queues_mutex_);
-=======
     std::shared_lock<std::shared_mutex> queues_guard{queues_mutex_};
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
     // Add to the individual queues in a round-robin fashion. No special care is
     // taken to balance them; they will be balanced by work stealing.
     // Priorities should only be seen as a hint here; without balancing, we
@@ -380,19 +356,11 @@ class CompilationUnitQueues {
   };
 
   struct BigUnitsQueue {
-<<<<<<< HEAD
-    BigUnitsQueue() : mutex("BigUnitsQueue.mutex") {
-      for (auto& atomic : has_units) atomic.store(false);
-||||||| 7cbb7db789
-    BigUnitsQueue() {
-      for (auto& atomic : has_units) std::atomic_init(&atomic, false);
-=======
     BigUnitsQueue() {
 #if !defined(__cpp_lib_atomic_value_initialization) || \
     __cpp_lib_atomic_value_initialization < 201911L
       for (auto& atomic : has_units) std::atomic_init(&atomic, false);
 #endif
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
     }
 
     base::Mutex mutex;
@@ -464,13 +432,7 @@ class CompilationUnitQueues {
     // Try to steal from all other queues. If this succeeds, return one of the
     // stolen units.
     {
-<<<<<<< HEAD
-      base::MutexGuard guard(&queues_mutex_);
-||||||| 7cbb7db789
-      base::SharedMutexGuard<base::kShared> guard(&queues_mutex_);
-=======
       std::shared_lock<std::shared_mutex> guard{queues_mutex_};
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
       for (size_t steal_trials = 0; steal_trials < queues_.size();
            ++steal_trials, ++steal_task_id) {
         if (steal_task_id >= static_cast<int>(queues_.size())) {
@@ -527,13 +489,7 @@ class CompilationUnitQueues {
     // Try to steal from all other queues. If this succeeds, return one of the
     // stolen units.
     {
-<<<<<<< HEAD
-      base::MutexGuard guard(&queues_mutex_);
-||||||| 7cbb7db789
-      base::SharedMutexGuard<base::kShared> guard(&queues_mutex_);
-=======
       std::shared_lock<std::shared_mutex> guard{queues_mutex_};
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
       for (size_t steal_trials = 0; steal_trials < queues_.size();
            ++steal_trials, ++steal_task_id) {
         if (steal_task_id >= static_cast<int>(queues_.size())) {
@@ -608,13 +564,7 @@ class CompilationUnitQueues {
   }
 
   // {queues_mutex_} protectes {queues_};
-<<<<<<< HEAD
-  base::Mutex queues_mutex_;
-||||||| 7cbb7db789
-  base::SharedMutex queues_mutex_;
-=======
   std::shared_mutex queues_mutex_;
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
   std::vector<std::unique_ptr<QueueImpl>> queues_;
 
   const int num_declared_functions_;
@@ -3207,17 +3157,8 @@ CompilationStateImpl::CompilationStateImpl(
     : native_module_(native_module.get()),
       native_module_weak_(std::move(native_module)),
       async_counters_(std::move(async_counters)),
-<<<<<<< HEAD
-      compilation_unit_queues_(native_module->num_functions()),
-      mutex_("CompilationStateImpl.mutex_"),
-      callbacks_mutex_("CompilationStateImpl.callbacks_mutex_"),
-      publish_mutex_("CompilationStateImpl.publish_mutex_") {}
-||||||| 7cbb7db789
-      compilation_unit_queues_(native_module->num_functions()) {}
-=======
       compilation_unit_queues_(native_module->num_functions()),
       dynamic_tiering_(dynamic_tiering) {}
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
 
 void CompilationStateImpl::InitCompileJob() {
   DCHECK_NULL(compile_job_);
@@ -4043,16 +3984,8 @@ class CompileJSToWasmWrapperJob final : public JobTask {
     // {outstanding_units_} includes the units that other workers are currently
     // working on, so we can safely ignore the {worker_count} and just return
     // the current number of outstanding units.
-<<<<<<< HEAD
-    return std::min(static_cast<size_t>(FLAG_wasm_num_compilation_tasks),
-                         outstanding_units_.load(std::memory_order_relaxed));
-||||||| 7cbb7db789
-    return std::min(static_cast<size_t>(FLAG_wasm_num_compilation_tasks),
-                    outstanding_units_.load(std::memory_order_relaxed));
-=======
     return std::min(static_cast<size_t>(v8_flags.wasm_num_compilation_tasks),
                     outstanding_units_.load(std::memory_order_relaxed));
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
   }
 
  private:

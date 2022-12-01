@@ -522,11 +522,6 @@ class V8_EXPORT_PRIVATE BytecodeArrayBuilder final {
     SetStatementPosition(stmt->position());
   }
 
-<<<<<<< HEAD
-  void SetStatementPosition(int position, bool record_replay_breakpoint = true) {
-||||||| 7cbb7db789
-  void SetStatementPosition(int position) {
-=======
   base::Optional<BytecodeSourceInfo> MaybePopSourcePosition(int scope_start) {
     if (!latest_source_info_.is_valid() ||
         latest_source_info_.source_position() < scope_start) {
@@ -542,8 +537,7 @@ class V8_EXPORT_PRIVATE BytecodeArrayBuilder final {
     latest_source_info_ = source_info;
   }
 
-  void SetStatementPosition(int position) {
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
+  void SetStatementPosition(int position, bool record_replay_breakpoint = true) {
     if (position == kNoSourcePosition) return;
     latest_source_info_.MakeStatementPosition(position);
     most_recent_source_position_ = position;

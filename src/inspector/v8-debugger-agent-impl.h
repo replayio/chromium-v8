@@ -186,17 +186,13 @@ class V8DebuggerAgentImpl : public protocol::Debugger::Backend {
 
   v8::Isolate* isolate() { return m_isolate; }
 
-<<<<<<< HEAD
   Response currentCallFrames(
       std::unique_ptr<protocol::Array<protocol::Debugger::CallFrame>>*);
   std::unique_ptr<protocol::Runtime::RemoteObject> wrapObject(int contextId,
                                                               v8::Local<v8::Value> val);
 
-||||||| 7cbb7db789
-=======
   void clearBreakDetails();
 
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
  private:
   void enableImpl();
 

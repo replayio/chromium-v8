@@ -200,31 +200,14 @@ ScavengerCollector::JobTask::JobTask(
       promotion_list_(promotion_list) {}
 
 void ScavengerCollector::JobTask::Run(JobDelegate* delegate) {
-<<<<<<< HEAD
-  Scavenger* scavenger;
-||||||| 7cbb7db789
-=======
   // The task accesses code pages and thus the permissions must be set to
   // default state.
   RwxMemoryWriteScope::SetDefaultPermissionsForNewThread();
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
   DCHECK_LT(delegate->GetTaskId(), scavengers_->size());
-<<<<<<< HEAD
-  scavenger = (*scavengers_)[delegate->GetTaskId()].get();
-  if (!delegate || delegate->IsJoiningThread()) {
-    TRACE_GC(outer_->heap_->tracer(),
-             GCTracer::Scope::SCAVENGER_SCAVENGE_PARALLEL);
-||||||| 7cbb7db789
-  Scavenger* scavenger = (*scavengers_)[delegate->GetTaskId()].get();
-  if (delegate->IsJoiningThread()) {
-    TRACE_GC(outer_->heap_->tracer(),
-             GCTracer::Scope::SCAVENGER_SCAVENGE_PARALLEL);
-=======
   Scavenger* scavenger = (*scavengers_)[delegate->GetTaskId()].get();
   if (delegate->IsJoiningThread()) {
     // This is already traced in GCTracer::Scope::SCAVENGER_SCAVENGE_PARALLEL
     // in ScavengerCollector::CollectGarbage.
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
     ProcessItems(delegate, scavenger);
   } else {
     TRACE_GC_EPOCH(outer_->heap_->tracer(),
@@ -404,24 +387,11 @@ void ScavengerCollector::CollectGarbage() {
     {
       // Parallel phase scavenging all copied and promoted objects.
       TRACE_GC(heap_->tracer(), GCTracer::Scope::SCAVENGER_SCAVENGE_PARALLEL);
-      std::unique_ptr<JobTask> task =
-        std::make_unique<JobTask>(this, &scavengers,
-                                  std::move(memory_chunks),
-                                  &copied_list, &promotion_list);
       V8::GetCurrentPlatform()
-<<<<<<< HEAD
-          ->PostJob(v8::TaskPriority::kUserBlocking, std::move(task))
-||||||| 7cbb7db789
-          ->PostJob(v8::TaskPriority::kUserBlocking,
-                    std::make_unique<JobTask>(this, &scavengers,
-                                              std::move(memory_chunks),
-                                              &copied_list, &promotion_list))
-=======
           ->CreateJob(v8::TaskPriority::kUserBlocking,
                       std::make_unique<JobTask>(this, &scavengers,
                                                 std::move(memory_chunks),
                                                 &copied_list, &promotion_list))
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
           ->Join();
       DCHECK(copied_list.IsEmpty());
       DCHECK(promotion_list.IsEmpty());

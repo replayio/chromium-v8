@@ -431,13 +431,9 @@
   V(FastApiCall)                        \
   V(FindOrderedHashMapEntry)            \
   V(FindOrderedHashMapEntryForInt32Key) \
-<<<<<<< HEAD
   V(IncrementAndCheckProgressCounter)   \
-||||||| 7cbb7db789
-=======
   V(FindOrderedHashSetEntry)            \
   V(InitializeImmutableInObject)        \
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
   V(LoadDataViewElement)                \
   V(LoadElement)                        \
   V(LoadField)                          \

@@ -2332,14 +2332,7 @@ DeoptimizationData OptimizedFrame::GetDeoptimizationData(
       return DeoptimizationData::cast(code.deoptimization_data());
     }
   }
-<<<<<<< HEAD
-  recordreplay::Diagnostic("OptimizedFrame::GetDeoptimizationData NoIndex");
-  *deopt_index = Safepoint::kNoDeoptimizationIndex;
-||||||| 7cbb7db789
-  *deopt_index = Safepoint::kNoDeoptimizationIndex;
-=======
   *deopt_index = SafepointEntry::kNoDeoptIndex;
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
   return DeoptimizationData();
 }
 
@@ -2358,19 +2351,9 @@ void OptimizedFrame::GetFunctions(
   DisallowGarbageCollection no_gc;
   int deopt_index = SafepointEntry::kNoDeoptIndex;
   DeoptimizationData const data = GetDeoptimizationData(&deopt_index);
-<<<<<<< HEAD
-  CHECK(!data.is_null());
-  CHECK_NE(Safepoint::kNoDeoptimizationIndex, deopt_index);
-  FixedArray const literal_array = data.LiteralArray();
-||||||| 7cbb7db789
-  DCHECK(!data.is_null());
-  DCHECK_NE(Safepoint::kNoDeoptimizationIndex, deopt_index);
-  FixedArray const literal_array = data.LiteralArray();
-=======
   DCHECK(!data.is_null());
   DCHECK_NE(SafepointEntry::kNoDeoptIndex, deopt_index);
   DeoptimizationLiteralArray const literal_array = data.LiteralArray();
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
 
   TranslationArrayIterator it(data.TranslationByteArray(),
                               data.TranslationIndex(deopt_index).value());

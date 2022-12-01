@@ -196,10 +196,7 @@ class EffectControlLinearizer {
   void LowerTransitionElementsKind(Node* node);
   Node* LowerLoadFieldByIndex(Node* node);
   Node* LowerLoadMessage(Node* node);
-<<<<<<< HEAD
   Node* LowerIncrementAndCheckProgressCounter(Node* node);
-||||||| 7cbb7db789
-=======
   Node* AdaptFastCallTypedArrayArgument(Node* node,
                                         ElementsKind expected_elements_kind,
                                         GraphAssemblerLabel<0>* bailout);
@@ -222,7 +219,6 @@ class EffectControlLinearizer {
                      const CFunctionInfo* c_signature, int c_arg_count,
                      Node* stack_slot);
   Node* GenerateSlowApiCall(Node* node);
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
   Node* LowerFastApiCall(Node* node);
   Node* LowerLoadTypedElement(Node* node);
   Node* LowerLoadDataViewElement(Node* node);

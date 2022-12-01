@@ -1581,13 +1581,8 @@ bool Isolate::MayAccess(Handle<Context> accessing_context,
 }
 
 Object Isolate::StackOverflow() {
-<<<<<<< HEAD
   recordreplay::InvalidateRecording("Stack overflow");
 
-  if (FLAG_correctness_fuzzer_suppressions) {
-||||||| 7cbb7db789
-  if (FLAG_correctness_fuzzer_suppressions) {
-=======
   // Whoever calls this method should not have overflown the stack limit by too
   // much. Otherwise we risk actually running out of stack space.
   // We allow for up to 8kB overflow, because we typically allow up to 4KB
@@ -1604,7 +1599,6 @@ Object Isolate::StackOverflow() {
 #endif
 
   if (v8_flags.correctness_fuzzer_suppressions) {
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
     FATAL("Aborting on stack overflow");
   }
 
@@ -1689,7 +1683,6 @@ void Isolate::RequestInterrupt(InterruptCallback callback, void* data) {
 extern void RecordReplayTriggerProgressInterrupt();
 
 void Isolate::InvokeApiInterruptCallbacks() {
-<<<<<<< HEAD
   if (recordreplay::IsRecordingOrReplaying("interrupts")) {
     // When recording, we can't invoke API interrupt callbacks at arbitrary points
     // where we check for interrupts, as we won't be able to invoke those callbacks
@@ -1705,14 +1698,7 @@ void Isolate::InvokeApiInterruptCallbacks() {
     return;
   }
 
-  RuntimeCallTimerScope runtimeTimer(
-      this, RuntimeCallCounterId::kInvokeApiInterruptCallbacks);
-||||||| 7cbb7db789
-  RuntimeCallTimerScope runtimeTimer(
-      this, RuntimeCallCounterId::kInvokeApiInterruptCallbacks);
-=======
   RCS_SCOPE(this, RuntimeCallCounterId::kInvokeApiInterruptCallbacks);
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
   // Note: callback below should be called outside of execution access lock.
   while (true) {
     InterruptEntry entry;
@@ -3488,20 +3474,12 @@ v8::PageAllocator* Isolate::page_allocator() const {
   return isolate_allocator_->page_allocator();
 }
 
-<<<<<<< HEAD
 extern void RecordReplayOnMainThreadIsolateCreated(Isolate* isolate);
 
-Isolate::Isolate(std::unique_ptr<i::IsolateAllocator> isolate_allocator)
-    : isolate_data_(this),
-||||||| 7cbb7db789
-Isolate::Isolate(std::unique_ptr<i::IsolateAllocator> isolate_allocator)
-    : isolate_data_(this),
-=======
 Isolate::Isolate(std::unique_ptr<i::IsolateAllocator> isolate_allocator,
                  bool is_shared)
     : isolate_data_(this, isolate_allocator->GetPtrComprCageBase()),
       is_shared_(is_shared),
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
       isolate_allocator_(std::move(isolate_allocator)),
       id_(isolate_counter.fetch_add(1, std::memory_order_relaxed)),
       allocator_(new TracingAccountingAllocator(this)),
@@ -5573,7 +5551,12 @@ void Isolate::CountUsage(v8::Isolate::UseCounterFeature feature) {
   }
 }
 
-<<<<<<< HEAD
+void Isolate::CountUsage(v8::Isolate::UseCounterFeature feature, int count) {
+  for (int i = 0; i < count; ++i) {
+    CountUsage(feature);
+  }
+}
+
 // Start disallowed script IDs at a value that won't conflict with regular IDs,
 // which start at one and increment from there.
 static int gNextDisallowedScriptId = 1 << 30;
@@ -5588,17 +5571,6 @@ int Isolate::GetNextScriptId() {
 
   return heap()->NextScriptId();
 }
-||||||| 7cbb7db789
-int Isolate::GetNextScriptId() { return heap()->NextScriptId(); }
-=======
-void Isolate::CountUsage(v8::Isolate::UseCounterFeature feature, int count) {
-  for (int i = 0; i < count; ++i) {
-    CountUsage(feature);
-  }
-}
-
-int Isolate::GetNextScriptId() { return heap()->NextScriptId(); }
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
 
 // static
 std::string Isolate::GetTurboCfgFileName(Isolate* isolate) {

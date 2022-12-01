@@ -30,14 +30,8 @@
 #include "src/inspector/v8-inspector-session-impl.h"
 #include "src/inspector/v8-runtime-agent-impl.h"
 #include "src/interpreter/bytecode-array-iterator.h"
-<<<<<<< HEAD
-#include "src/interpreter/interpreter.h"
 #include "src/json/json-parser.h"
 #include "src/json/json-stringifier.h"
-||||||| 7cbb7db789
-#include "src/interpreter/interpreter.h"
-=======
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
 #include "src/logging/counters.h"
 #include "src/logging/runtime-call-stats-scope.h"
 #include "src/objects/api-callbacks-inl.h"
@@ -2423,17 +2417,10 @@ void Debug::OnAfterCompile(Handle<Script> script) {
   ProcessCompileEvent(false, script);
 }
 
-<<<<<<< HEAD
 static void RecordReplayRegisterScript(Handle<Script> script);
 
 void Debug::DoProcessCompileEvent(bool has_compile_error, Handle<Script> script) {
-
-||||||| 7cbb7db789
-void Debug::ProcessCompileEvent(bool has_compile_error, Handle<Script> script) {
-=======
-void Debug::ProcessCompileEvent(bool has_compile_error, Handle<Script> script) {
   RCS_SCOPE(isolate_, RuntimeCallCounterId::kDebugger);
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
   // Ignore temporary scripts.
   if (script->id() == Script::kTemporaryScriptId) return;
   // TODO(kozyatinskiy): teach devtools to work with liveedit scripts better
@@ -2972,7 +2959,19 @@ bool Debug::GetTemporaryObjectTrackingDisabled() const {
   return false;
 }
 
-<<<<<<< HEAD
+void Debug::PrepareRestartFrame(JavaScriptFrame* frame,
+                                int inlined_frame_index) {
+  if (frame->is_optimized()) Deoptimizer::DeoptimizeFunction(frame->function());
+
+  thread_local_.restart_frame_id_ = frame->id();
+  thread_local_.restart_inline_frame_index_ = inlined_frame_index;
+
+  // TODO(crbug.com/1303521): A full "StepInto" is probably not needed. Get the
+  // necessary bits out of PrepareSTep into a separate method or fold them
+  // into Debug::PrepareRestartFrame.
+  PrepareStep(StepInto);
+}
+
 // Record Replay handlers and associated helpers. These ought to be in their
 // own file, but it's easier to put them here.
 
@@ -3978,22 +3977,6 @@ std::string RecordReplayBasicValueContents(Handle<Object> value) {
   return "Unknown";
 }
 
-||||||| 7cbb7db789
-=======
-void Debug::PrepareRestartFrame(JavaScriptFrame* frame,
-                                int inlined_frame_index) {
-  if (frame->is_optimized()) Deoptimizer::DeoptimizeFunction(frame->function());
-
-  thread_local_.restart_frame_id_ = frame->id();
-  thread_local_.restart_inline_frame_index_ = inlined_frame_index;
-
-  // TODO(crbug.com/1303521): A full "StepInto" is probably not needed. Get the
-  // necessary bits out of PrepareSTep into a separate method or fold them
-  // into Debug::PrepareRestartFrame.
-  PrepareStep(StepInto);
-}
-
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
 }  // namespace internal
 
 namespace i = internal;

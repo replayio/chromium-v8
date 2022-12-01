@@ -4,13 +4,6 @@
 
 #include <vector>
 
-<<<<<<< HEAD
-#include "src/api/api-inl.h"
-#include "src/codegen/compiler.h"
-||||||| 7cbb7db789
-#include "src/codegen/compiler.h"
-=======
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
 #include "src/common/globals.h"
 #include "src/debug/debug-coverage.h"
 #include "src/debug/debug-scopes.h"

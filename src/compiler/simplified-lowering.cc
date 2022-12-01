@@ -4031,15 +4031,9 @@ class RepresentationSelector {
 
       case IrOpcode::kDateNow:
         VisitInputs<T>(node);
-<<<<<<< HEAD
-        return SetOutput<T>(node, MachineRepresentation::kTaggedPointer);
+        return SetOutput<T>(node, MachineRepresentation::kTagged);
       case IrOpcode::kIncrementAndCheckProgressCounter:
         return;
-||||||| 7cbb7db789
-        return SetOutput<T>(node, MachineRepresentation::kTaggedPointer);
-=======
-        return SetOutput<T>(node, MachineRepresentation::kTagged);
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
       case IrOpcode::kFrameState:
         return VisitFrameState<T>(FrameState{node});
       case IrOpcode::kStateValues:

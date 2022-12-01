@@ -811,24 +811,6 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   inline void set_pending_message(Object message_obj);
 
   THREAD_LOCAL_TOP_ADDRESS(Object, scheduled_exception)
-<<<<<<< HEAD
-
-  inline Object pending_message();
-  inline void set_pending_message(Object message_obj);
-  inline void clear_pending_message();
-  Address pending_message_obj_address() {
-    return reinterpret_cast<Address>(&thread_local_top()->pending_message_obj_);
-  }
-
-||||||| 7cbb7db789
-
-  inline void clear_pending_message();
-  Address pending_message_obj_address() {
-    return reinterpret_cast<Address>(&thread_local_top()->pending_message_obj_);
-  }
-
-=======
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
   inline Object scheduled_exception();
   inline bool has_scheduled_exception();
   inline void clear_scheduled_exception();
@@ -1307,16 +1289,7 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
     return descriptor_lookup_cache_;
   }
 
-<<<<<<< HEAD
-  HandleScopeData* handle_scope_data() {
-    DCHECK(pthread_self() == owning_thread_);
-    return &handle_scope_data_;
-  }
-||||||| 7cbb7db789
-  HandleScopeData* handle_scope_data() { return &handle_scope_data_; }
-=======
   V8_INLINE HandleScopeData* handle_scope_data() { return &handle_scope_data_; }
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
 
   HandleScopeImplementer* handle_scope_implementer() const {
     DCHECK(handle_scope_implementer_);

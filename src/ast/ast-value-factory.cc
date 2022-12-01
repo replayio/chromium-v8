@@ -57,18 +57,10 @@ class OneByteStringStream {
 
 }  // namespace
 
-<<<<<<< HEAD
 extern bool RecordReplayParseShouldUseEternalHandles();
 
-template <typename LocalIsolate>
-void AstRawString::Internalize(LocalIsolate* isolate) {
-||||||| 7cbb7db789
-template <typename LocalIsolate>
-void AstRawString::Internalize(LocalIsolate* isolate) {
-=======
 template <typename IsolateT>
 void AstRawString::Internalize(IsolateT* isolate) {
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
   DCHECK(!has_string_);
   if (literal_bytes_.length() == 0) {
     set_string(isolate->factory()->empty_string());

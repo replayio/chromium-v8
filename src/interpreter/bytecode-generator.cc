@@ -3713,21 +3713,9 @@ void BytecodeGenerator::BuildReturn(int source_position) {
     builder()->StoreAccumulatorInRegister(result).CallRuntime(
         Runtime::kTraceExit, result);
   }
-<<<<<<< HEAD
-  if (info()->flags().collect_type_profile()) {
-    builder()->CollectTypeProfile(info()->literal()->return_position());
-  }
   builder()->SetStatementPosition(source_position,
                                   /* record_replay_breakpoint */ false);
   builder()->RecordReplayInstrumentation("exit");
-||||||| 7cbb7db789
-  if (info()->flags().collect_type_profile()) {
-    builder()->CollectTypeProfile(info()->literal()->return_position());
-  }
-  builder()->SetStatementPosition(source_position);
-=======
-  builder()->SetStatementPosition(source_position);
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
   builder()->Return();
 }
 
@@ -3926,10 +3914,9 @@ void BytecodeGenerator::BuildLoadNamedProperty(const Expression* object_expr,
   builder()->LoadNamedProperty(object, name, feedback_index(slot));
 }
 
-<<<<<<< HEAD
-void BytecodeGenerator::BuildStoreNamedProperty(const Expression* object_expr,
-                                                Register object,
-                                                const AstRawString* name) {
+void BytecodeGenerator::BuildSetNamedProperty(const Expression* object_expr,
+                                              Register object,
+                                              const AstRawString* name) {
   if (recordreplay::IsRecordingOrReplaying("emit-opcodes") &&
       !record_replay_has_track_this_ &&
       object_expr->IsThisExpression() &&
@@ -3938,15 +3925,6 @@ void BytecodeGenerator::BuildStoreNamedProperty(const Expression* object_expr,
     record_replay_has_track_this_ = true;
   }
 
-||||||| 7cbb7db789
-void BytecodeGenerator::BuildStoreNamedProperty(const Expression* object_expr,
-                                                Register object,
-                                                const AstRawString* name) {
-=======
-void BytecodeGenerator::BuildSetNamedProperty(const Expression* object_expr,
-                                              Register object,
-                                              const AstRawString* name) {
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
   Register value;
   if (!execution_result()->IsEffect()) {
     value = register_allocator()->NewRegister();

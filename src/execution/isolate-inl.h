@@ -76,28 +76,6 @@ bool Isolate::has_pending_exception() {
   return !thread_local_top()->pending_exception_.IsTheHole(this);
 }
 
-<<<<<<< HEAD
-Object Isolate::pending_message() {
-  return thread_local_top()->pending_message_obj_;
-}
-
-void Isolate::set_pending_message(Object message_obj) {
-  thread_local_top()->pending_message_obj_ = message_obj;
-}
-
-void Isolate::clear_pending_message() {
-  thread_local_top()->pending_message_obj_ =
-      ReadOnlyRoots(this).the_hole_value();
-}
-
-||||||| 7cbb7db789
-void Isolate::clear_pending_message() {
-  thread_local_top()->pending_message_obj_ =
-      ReadOnlyRoots(this).the_hole_value();
-}
-
-=======
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
 Object Isolate::scheduled_exception() {
   DCHECK(has_scheduled_exception());
   DCHECK(!thread_local_top()->scheduled_exception_.IsException(this));

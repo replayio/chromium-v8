@@ -103,20 +103,8 @@ class ElapsedTimer final {
   TimeDelta Elapsed(TimeTicks now) const {
     DCHECK(!now.IsNull());
     DCHECK(IsStarted());
-<<<<<<< HEAD
-    TimeDelta elapsed = Now() - start_ticks_;
-    // Not sure why this fails sometimes when replaying.
-    //DCHECK_GE(elapsed.InMicroseconds(), 0);
-    if (elapsed.InMicroseconds() < 0) {
-      return TimeDelta();
-    }
-||||||| 7cbb7db789
-    TimeDelta elapsed = Now() - start_ticks_;
-    DCHECK_GE(elapsed.InMicroseconds(), 0);
-=======
     TimeDelta elapsed = now - start_ticks();
     DCHECK_GE(elapsed.InMicroseconds(), 0);
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
     return elapsed;
   }
 
@@ -130,14 +118,8 @@ class ElapsedTimer final {
 
  private:
   static V8_INLINE TimeTicks Now() {
-<<<<<<< HEAD
     recordreplay::AutoPassThroughEvents pt;
-    TimeTicks now = TimeTicks::HighResolutionNow();
-||||||| 7cbb7db789
-    TimeTicks now = TimeTicks::HighResolutionNow();
-=======
     TimeTicks now = TimeTicks::Now();
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
     DCHECK(!now.IsNull());
     return now;
   }

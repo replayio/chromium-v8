@@ -80,22 +80,10 @@ LocalHeap::LocalHeap(Heap* heap, ThreadKind kind,
       prev_(nullptr),
       next_(nullptr),
       handles_(new LocalHandles),
-<<<<<<< HEAD
-      persistent_handles_(std::move(persistent_handles)),
-      marking_barrier_(new MarkingBarrier(this)),
-      old_space_allocator_(this, heap->old_space()) {
-  recordreplay::Diagnostic("LocalHeap Create %p", this);
-
-||||||| 7cbb7db789
-      persistent_handles_(std::move(persistent_handles)),
-      marking_barrier_(new MarkingBarrier(this)),
-      old_space_allocator_(this, heap->old_space()) {
-=======
       persistent_handles_(std::move(persistent_handles)) {
   DCHECK_IMPLIES(!is_main_thread(), heap_->deserialization_complete());
   if (!is_main_thread()) SetUp();
 
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
   heap_->safepoint()->AddLocalHeap(this, [this] {
     if (!is_main_thread()) {
       WriteBarrier::SetForThread(marking_barrier_.get());
@@ -271,36 +259,8 @@ void LocalHeap::ParkSlowPath() {
 }
 
 void LocalHeap::UnparkSlowPath() {
-<<<<<<< HEAD
-  if (is_main_thread()) {
-    ThreadState expected = kParkedCollectionRequested;
-    CHECK(state_.compare_exchange_strong(expected, kCollectionRequested));
-    heap_->CollectGarbageForBackground(this);
-  } else {
-    recordreplay::AutoDisallowEvents disallow;
-    while (true) {
-      ThreadState expected = kParked;
-      if (!state_.compare_exchange_strong(expected, kRunning)) {
-        CHECK_EQ(expected, kParkedSafepointRequested);
-        TRACE_GC1(heap_->tracer(), GCTracer::Scope::BACKGROUND_UNPARK,
-                  ThreadKind::kBackground);
-        heap_->safepoint()->WaitInUnpark();
-      } else {
-||||||| 7cbb7db789
-  if (is_main_thread()) {
-    ThreadState expected = kParkedCollectionRequested;
-    CHECK(state_.compare_exchange_strong(expected, kCollectionRequested));
-    heap_->CollectGarbageForBackground(this);
-  } else {
-    while (true) {
-      ThreadState expected = kParked;
-      if (!state_.compare_exchange_strong(expected, kRunning)) {
-        CHECK_EQ(expected, kParkedSafepointRequested);
-        TRACE_GC1(heap_->tracer(), GCTracer::Scope::BACKGROUND_UNPARK,
-                  ThreadKind::kBackground);
-        heap_->safepoint()->WaitInUnpark();
-      } else {
-=======
+  recordreplay::AutoDisallowEvents disallow;
+
   while (true) {
     ThreadState current_state = ThreadState::Parked();
     if (state_.CompareExchangeStrong(current_state, ThreadState::Running()))
@@ -329,7 +289,6 @@ void LocalHeap::UnparkSlowPath() {
           heap_->CollectGarbageForBackground(this);
         }
 
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
         return;
       }
     } else {
@@ -362,6 +321,8 @@ void LocalHeap::EnsureParkedBeforeDestruction() {
 }
 
 void LocalHeap::SafepointSlowPath() {
+  recordreplay::AutoDisallowEvents disallow;
+
   ThreadState current_state = state_.load_relaxed();
   DCHECK(current_state.IsRunning());
 
@@ -377,33 +338,10 @@ void LocalHeap::SafepointSlowPath() {
       heap_->CollectGarbageForBackground(this);
     }
   } else {
-<<<<<<< HEAD
-    recordreplay::AutoDisallowEvents disallow;
-    TRACE_GC1(heap_->tracer(), GCTracer::Scope::BACKGROUND_SAFEPOINT,
-              ThreadKind::kBackground);
-    ThreadState expected = kSafepointRequested;
-    CHECK(state_.compare_exchange_strong(expected, kSafepoint));
-    heap_->safepoint()->WaitInSafepoint();
-    // This might be a bit surprising, GlobalSafepoint transitions the state
-    // from Safepoint (--> Running) --> Parked when returning from the
-    // safepoint.
-    Unpark();
-||||||| 7cbb7db789
-    TRACE_GC1(heap_->tracer(), GCTracer::Scope::BACKGROUND_SAFEPOINT,
-              ThreadKind::kBackground);
-    ThreadState expected = kSafepointRequested;
-    CHECK(state_.compare_exchange_strong(expected, kSafepoint));
-    heap_->safepoint()->WaitInSafepoint();
-    // This might be a bit surprising, GlobalSafepoint transitions the state
-    // from Safepoint (--> Running) --> Parked when returning from the
-    // safepoint.
-    Unpark();
-=======
     DCHECK(current_state.IsSafepointRequested());
     DCHECK(!current_state.IsCollectionRequested());
 
     SleepInSafepoint();
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
   }
 }
 
@@ -461,31 +399,11 @@ void LocalHeap::UnmarkLinearAllocationArea() {
   code_space_allocator_->UnmarkLinearAllocationArea();
 }
 
-<<<<<<< HEAD
-bool LocalHeap::TryPerformCollection() {
-  if (is_main_thread()) {
-    heap_->CollectGarbageForBackground(this);
-    return true;
-  } else {
-    recordreplay::AutoDisallowEvents disallow;
-
-    LocalHeap* main_thread = heap_->isolate()->main_thread_local_heap();
-    ThreadState current = main_thread->state_relaxed();
-||||||| 7cbb7db789
-bool LocalHeap::TryPerformCollection() {
-  if (is_main_thread()) {
-    heap_->CollectGarbageForBackground(this);
-    return true;
-  } else {
-    LocalHeap* main_thread = heap_->isolate()->main_thread_local_heap();
-    ThreadState current = main_thread->state_relaxed();
-=======
 void LocalHeap::MarkSharedLinearAllocationAreaBlack() {
   if (shared_old_space_allocator_) {
     shared_old_space_allocator_->MarkLinearAllocationAreaBlack();
   }
 }
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
 
 void LocalHeap::UnmarkSharedLinearAllocationArea() {
   if (shared_old_space_allocator_) {
@@ -534,27 +452,8 @@ Address LocalHeap::PerformCollectionAndAllocateAgain(
 void LocalHeap::AddGCEpilogueCallback(GCEpilogueCallback* callback, void* data,
                                       GCType gc_type) {
   DCHECK(!IsParked());
-<<<<<<< HEAD
-  std::pair<GCEpilogueCallback*, void*> callback_and_data(callback, data);
-  DCHECK_EQ(std::find(gc_epilogue_callbacks_.begin(),
-                      gc_epilogue_callbacks_.end(), callback_and_data),
-            gc_epilogue_callbacks_.end());
-
-  recordreplay::Diagnostic("LocalHeap::AddGCEpilogueCallback Start %p", this);
-  recordreplay::Diagnostic("LocalHeap::AddGCEpilogueCallback #1 %lu",
-                           gc_epilogue_callbacks_.size());
-
-  gc_epilogue_callbacks_.push_back(callback_and_data);
-||||||| 7cbb7db789
-  std::pair<GCEpilogueCallback*, void*> callback_and_data(callback, data);
-  DCHECK_EQ(std::find(gc_epilogue_callbacks_.begin(),
-                      gc_epilogue_callbacks_.end(), callback_and_data),
-            gc_epilogue_callbacks_.end());
-  gc_epilogue_callbacks_.push_back(callback_and_data);
-=======
   gc_epilogue_callbacks_.Add(callback, LocalIsolate::FromHeap(this), gc_type,
                              data);
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
 }
 
 void LocalHeap::RemoveGCEpilogueCallback(GCEpilogueCallback* callback,

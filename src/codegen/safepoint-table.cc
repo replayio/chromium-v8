@@ -57,36 +57,6 @@ int SafepointTable::find_return_pc(int pc_offset) {
 }
 
 SafepointEntry SafepointTable::FindEntry(Address pc) const {
-<<<<<<< HEAD
-  unsigned pc_offset = static_cast<unsigned>(pc - instruction_start_);
-  // We use kMaxUInt32 as sentinel value, so check that we don't hit that.
-  DCHECK_NE(kMaxUInt32, pc_offset);
-  unsigned len = length();
-  CHECK_GT(len, 0);
-  // If pc == kMaxUInt32, then this entry covers all call sites in the function.
-  if (len == 1 && GetPcOffset(0) == kMaxUInt32) return GetEntry(0);
-  for (unsigned i = 0; i < len; i++) {
-    // TODO(kasperl): Replace the linear search with binary search.
-    if (GetPcOffset(i) == pc_offset ||
-        (has_deopt_ &&
-         GetTrampolinePcOffset(i) == static_cast<int>(pc_offset))) {
-      recordreplay::Diagnostic("SafepointTable::FindEntry %u %u", pc_offset, i);
-      return GetEntry(i);
-||||||| 7cbb7db789
-  unsigned pc_offset = static_cast<unsigned>(pc - instruction_start_);
-  // We use kMaxUInt32 as sentinel value, so check that we don't hit that.
-  DCHECK_NE(kMaxUInt32, pc_offset);
-  unsigned len = length();
-  CHECK_GT(len, 0);
-  // If pc == kMaxUInt32, then this entry covers all call sites in the function.
-  if (len == 1 && GetPcOffset(0) == kMaxUInt32) return GetEntry(0);
-  for (unsigned i = 0; i < len; i++) {
-    // TODO(kasperl): Replace the linear search with binary search.
-    if (GetPcOffset(i) == pc_offset ||
-        (has_deopt_ &&
-         GetTrampolinePcOffset(i) == static_cast<int>(pc_offset))) {
-      return GetEntry(i);
-=======
   int pc_offset = static_cast<int>(pc - instruction_start_);
 
   // Check if the PC is pointing at a trampoline.
@@ -105,7 +75,6 @@ SafepointEntry SafepointTable::FindEntry(Address pc) const {
     if (i == length_ - 1 || GetEntry(i + 1).pc() > pc_offset) {
       DCHECK_LE(entry.pc(), pc_offset);
       return entry;
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
     }
   }
   UNREACHABLE();

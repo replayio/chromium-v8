@@ -1084,16 +1084,12 @@ class V8_EXPORT_PRIVATE SimplifiedOperatorBuilder final
 #endif
 
   const Operator* DateNow();
-<<<<<<< HEAD
   const Operator* IncrementAndCheckProgressCounter();
-||||||| 7cbb7db789
-=======
   // Unsigned32Divide is a special operator to express the division of two
   // Unsigned32 inputs and truncating the result to Unsigned32. It's semantics
   // is equivalent to NumberFloor(NumberDivide(x:Unsigned32, y:Unsigned32)) but
   // is required to allow consistent typing of the graph.
   const Operator* Unsigned32Divide();
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
 
   // Represents the inputs necessary to construct a fast and a slow API call.
   const Operator* FastApiCall(

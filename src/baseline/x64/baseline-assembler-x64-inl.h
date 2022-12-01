@@ -567,19 +567,15 @@ void BaselineAssembler::AddSmi(Register lhs, Smi rhs) {
   }
 }
 
-<<<<<<< HEAD
 void BaselineAssembler::AddPointer(Register output, Immediate value) {
   __ addq(output, value);
 }
 
-||||||| 7cbb7db789
-=======
 void BaselineAssembler::Word32And(Register output, Register lhs, int rhs) {
   Move(output, lhs);
   __ andq(output, Immediate(rhs));
 }
 
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
 void BaselineAssembler::Switch(Register reg, int case_value_base,
                                Label** labels, int num_labels) {
   ASM_CODE_COMMENT(masm_);

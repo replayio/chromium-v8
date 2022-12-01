@@ -352,43 +352,10 @@ void ScopeIterator::TryParseAndRetrieveScopes(ReparseStrategy strategy) {
            scope_info->scope_type() == FUNCTION_SCOPE);
   }
 
-<<<<<<< HEAD
   info_ = ParseWithCache(flags, script, maybe_outer_scope,
                          shared_info, isolate_, &info_owned_);
-||||||| 7cbb7db789
-  UnoptimizedCompileState compile_state(isolate_);
-=======
-  UnoptimizedCompileState compile_state;
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
 
-<<<<<<< HEAD
   if (info_) {
-||||||| 7cbb7db789
-  info_ = std::make_unique<ParseInfo>(isolate_, flags, &compile_state);
-
-  const bool parse_result =
-      flags.is_toplevel()
-          ? parsing::ParseProgram(info_.get(), script, maybe_outer_scope,
-                                  isolate_, parsing::ReportStatisticsMode::kNo)
-          : parsing::ParseFunction(info_.get(), shared_info, isolate_,
-                                   parsing::ReportStatisticsMode::kNo);
-
-  if (parse_result) {
-=======
-  reusable_compile_state_ =
-      std::make_unique<ReusableUnoptimizedCompileState>(isolate_);
-  info_ = std::make_unique<ParseInfo>(isolate_, flags, &compile_state,
-                                      reusable_compile_state_.get());
-
-  const bool parse_result =
-      flags.is_toplevel()
-          ? parsing::ParseProgram(info_.get(), script, maybe_outer_scope,
-                                  isolate_, parsing::ReportStatisticsMode::kNo)
-          : parsing::ParseFunction(info_.get(), shared_info, isolate_,
-                                   parsing::ReportStatisticsMode::kNo);
-
-  if (parse_result) {
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
     DeclarationScope* literal_scope = info_->literal()->scope();
 
     ScopeChainRetriever scope_chain_retriever(literal_scope, function_,
@@ -616,20 +583,8 @@ ScopeIterator::ScopeType ScopeIterator::Type() const {
   if (InInnerScope()) {
     switch (current_scope_->scope_type()) {
       case FUNCTION_SCOPE:
-<<<<<<< HEAD
-        // This assertion busts sometimes when stress testing the Record Replay
-        // driver by gathering the stack at every point.
-        //DCHECK_IMPLIES(NeedsAndHasContext(),
-        //               context_->IsFunctionContext() ||
-        //                   context_->IsDebugEvaluateContext());
-||||||| 7cbb7db789
-        DCHECK_IMPLIES(NeedsAndHasContext(),
-                       context_->IsFunctionContext() ||
-                           context_->IsDebugEvaluateContext());
-=======
         DCHECK_IMPLIES(NeedsContext(), context_->IsFunctionContext() ||
                                            context_->IsDebugEvaluateContext());
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
         return ScopeTypeLocal;
       case MODULE_SCOPE:
         DCHECK_IMPLIES(NeedsContext(), context_->IsModuleContext());

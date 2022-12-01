@@ -1528,17 +1528,13 @@ Type Typer::Visitor::TypeJSObjectIsArray(Node* node) { return Type::Boolean(); }
 
 Type Typer::Visitor::TypeDateNow(Node* node) { return Type::Number(); }
 
-<<<<<<< HEAD
 Type Typer::Visitor::TypeIncrementAndCheckProgressCounter(Node* node) { return Type::Any(); }
 
-||||||| 7cbb7db789
-=======
 Type Typer::Visitor::TypeUnsigned32Divide(Node* node) {
   Type lhs = Operand(node, 0);
   return Type::Range(0, lhs.Max(), zone());
 }
 
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
 Type Typer::Visitor::JSCallTyper(Type fun, Typer* t) {
   if (!fun.IsHeapConstant() || !fun.AsHeapConstant()->Ref().IsJSFunction()) {
     return Type::NonInternal();

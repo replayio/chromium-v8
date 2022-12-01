@@ -271,18 +271,12 @@ Object StackGuard::HandleInterrupts() {
   isolate_->heap()->VerifyNewSpaceTop();
 #endif
 
-<<<<<<< HEAD
   // Interrupts must happen at deterministic points, ignore them when code is running
   // while events are disallowed, such as during command callbacks.
   if (recordreplay::AreEventsDisallowed())
     return ReadOnlyRoots(isolate_).undefined_value();
 
-  if (FLAG_verify_predictable) {
-||||||| 7cbb7db789
-  if (FLAG_verify_predictable) {
-=======
   if (v8_flags.verify_predictable) {
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
     // Advance synthetic time by making a time request.
     isolate_->heap()->MonotonicallyIncreasingTimeInMs();
   }

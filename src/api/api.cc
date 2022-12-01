@@ -165,35 +165,17 @@
 #endif  // V8_OS_WIN64
 #endif  // V8_OS_WIN
 
-<<<<<<< HEAD
-#include <dlfcn.h>
-
-||||||| 7cbb7db789
-=======
 #if defined(V8_OS_WIN) && defined(V8_ENABLE_ETW_STACK_WALKING)
 #include "src/diagnostics/etw-jit-win.h"
 #endif
 
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
 // Has to be the last include (doesn't have include guards):
 #include "src/api/api-macros.h"
 
-<<<<<<< HEAD
-#define TRACE_BS(...)                                     \
-  do {                                                    \
-    if (i::FLAG_trace_backing_store) PrintF(__VA_ARGS__); \
-  } while (false)
+#include <dlfcn.h>
 
 extern const char* gCrashReason;
 
-||||||| 7cbb7db789
-#define TRACE_BS(...)                                     \
-  do {                                                    \
-    if (i::FLAG_trace_backing_store) PrintF(__VA_ARGS__); \
-  } while (false)
-
-=======
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
 namespace v8 {
 
 static OOMErrorCallback g_oom_error_callback = nullptr;
@@ -220,42 +202,22 @@ static ScriptOrigin GetScriptOriginForScript(i::Isolate* i_isolate,
 
 // --- E x c e p t i o n   B e h a v i o r ---
 
-<<<<<<< HEAD
-void i::FatalProcessOutOfMemory(i::Isolate* isolate, const char* location) {
-  i::V8::FatalProcessOutOfMemory(isolate, location, false);
-}
-
 static __attribute__((noinline)) void BusyWait() {
   fprintf(stderr, "Busy-waiting ... (pid %d)\n", getpid());
   volatile int x = 1;
   while (x) {}
 }
 
-||||||| 7cbb7db789
-void i::FatalProcessOutOfMemory(i::Isolate* isolate, const char* location) {
-  i::V8::FatalProcessOutOfMemory(isolate, location, false);
-}
-
-=======
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
 // When V8 cannot allocate memory FatalProcessOutOfMemory is called. The default
 // OOM error handler is called and execution is stopped.
-<<<<<<< HEAD
-void i::V8::FatalProcessOutOfMemory(i::Isolate* isolate, const char* location,
-                                    bool is_heap_oom) {
+void i::V8::FatalProcessOutOfMemory(i::Isolate* i_isolate, const char* location,
+                                    const OOMDetails& details) {
   gCrashReason = location;
 
   if (getenv("RECORD_REPLAY_WAIT_AT_FATAL_ERROR")) {
     BusyWait();
   }
 
-||||||| 7cbb7db789
-void i::V8::FatalProcessOutOfMemory(i::Isolate* isolate, const char* location,
-                                    bool is_heap_oom) {
-=======
-void i::V8::FatalProcessOutOfMemory(i::Isolate* i_isolate, const char* location,
-                                    const OOMDetails& details) {
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
   char last_few_messages[Heap::kTraceRingBufferSize + 1];
   char js_stacktrace[Heap::kStacktraceBufferSize + 1];
   i::HeapStats heap_stats;
@@ -5200,23 +5162,9 @@ Maybe<PropertyAttribute> v8::Object::GetRealNamedPropertyAttributes(
 
 Local<v8::Object> v8::Object::Clone() {
   auto self = i::Handle<i::JSObject>::cast(Utils::OpenHandle(this));
-<<<<<<< HEAD
-  auto isolate = self->GetIsolate();
-
-  // https://linear.app/replay/issue/RUN-482
-  recordreplay::Diagnostic("Object::Clone %p %p", *self, isolate);
-
-  ENTER_V8_NO_SCRIPT_NO_EXCEPTION(isolate);
-  i::Handle<i::JSObject> result = isolate->factory()->CopyJSObject(self);
-||||||| 7cbb7db789
-  auto isolate = self->GetIsolate();
-  ENTER_V8_NO_SCRIPT_NO_EXCEPTION(isolate);
-  i::Handle<i::JSObject> result = isolate->factory()->CopyJSObject(self);
-=======
   auto i_isolate = self->GetIsolate();
   ENTER_V8_NO_SCRIPT_NO_EXCEPTION(i_isolate);
   i::Handle<i::JSObject> result = i_isolate->factory()->CopyJSObject(self);
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
   return Utils::ToLocal(result);
 }
 
@@ -9884,41 +9832,6 @@ String::Value::Value(v8::Isolate* v8_isolate, v8::Local<v8::Value> obj)
 
 String::Value::~Value() { i::DeleteArray(str_); }
 
-<<<<<<< HEAD
-#define DEFINE_ERROR(NAME, name)                                         \
-  Local<Value> Exception::NAME(v8::Local<v8::String> raw_message) {      \
-    i::Isolate* isolate = i::Isolate::Current();                         \
-    LOG_API(isolate, NAME, New);                                         \
-    ENTER_V8_NO_SCRIPT_NO_EXCEPTION(isolate);                            \
-    i::Object error;                                                     \
-    {                                                                    \
-      i::HandleScope scope(isolate);                                     \
-      i::Handle<i::String> message = Utils::OpenHandle(*raw_message);    \
-      std::unique_ptr<char[]> message_str = message->ToCString();        \
-      if (!recordreplay::AreEventsDisallowed()) {                        \
-        recordreplay::Assert("CreateException %s %s", #NAME, message_str.get()); \
-      }                                                                  \
-      i::Handle<i::JSFunction> constructor = isolate->name##_function(); \
-      error = *isolate->factory()->NewError(constructor, message);       \
-    }                                                                    \
-    i::Handle<i::Object> result(error, isolate);                         \
-    return Utils::ToLocal(result);                                       \
-||||||| 7cbb7db789
-#define DEFINE_ERROR(NAME, name)                                         \
-  Local<Value> Exception::NAME(v8::Local<v8::String> raw_message) {      \
-    i::Isolate* isolate = i::Isolate::Current();                         \
-    LOG_API(isolate, NAME, New);                                         \
-    ENTER_V8_NO_SCRIPT_NO_EXCEPTION(isolate);                            \
-    i::Object error;                                                     \
-    {                                                                    \
-      i::HandleScope scope(isolate);                                     \
-      i::Handle<i::String> message = Utils::OpenHandle(*raw_message);    \
-      i::Handle<i::JSFunction> constructor = isolate->name##_function(); \
-      error = *isolate->factory()->NewError(constructor, message);       \
-    }                                                                    \
-    i::Handle<i::Object> result(error, isolate);                         \
-    return Utils::ToLocal(result);                                       \
-=======
 #define DEFINE_ERROR(NAME, name)                                           \
   Local<Value> Exception::NAME(v8::Local<v8::String> raw_message) {        \
     i::Isolate* i_isolate = i::Isolate::Current();                         \
@@ -9928,12 +9841,15 @@ String::Value::~Value() { i::DeleteArray(str_); }
     {                                                                      \
       i::HandleScope scope(i_isolate);                                     \
       i::Handle<i::String> message = Utils::OpenHandle(*raw_message);      \
+      std::unique_ptr<char[]> message_str = message->ToCString();          \
+      if (!recordreplay::AreEventsDisallowed()) {                          \
+        recordreplay::Assert("CreateException %s %s", #NAME, message_str.get()); \
+      }                                                                    \
       i::Handle<i::JSFunction> constructor = i_isolate->name##_function(); \
       error = *i_isolate->factory()->NewError(constructor, message);       \
     }                                                                      \
     i::Handle<i::Object> result(error, i_isolate);                         \
     return Utils::ToLocal(result);                                         \
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
   }
 
 DEFINE_ERROR(RangeError, range_error)
