@@ -9978,212 +9978,209 @@ static void* (*gJSONCreateObject)(size_t, const char**, void**);
 static char* (*gJSONToString)(void*);
 static void (*gJSONFree)(void*);
 static void (*gRecordReplayOnAnnotation)(const char* kind, const char* contents);
-
-static void (*gRecordReplayOnMouseEvent)(const char* aKind, size_t aClientX, size_t aClientY);
+static void (*gRecordReplayOnMouseEvent)(const char* aKind, size_t aClientX,
+                                         size_t aClientY);
 static void (*gRecordReplayOnKeyEvent)(const char* aKind, const char* aKey);
 static void (*gRecordReplayOnNavigationEvent)(const char* aKind,
                                               const char* aUrl);
 
 namespace internal {
-  bool gRecordReplayHasCheckpoint;
 
-  void RecordReplayOnNewSource(Isolate * isolate, const char* id,
-                               const char* kind, const char* url) {
-    if (gRecordReplayHasCheckpoint) {
-      gRecordReplayOnNewSource(id, kind, url);
-    }
+bool gRecordReplayHasCheckpoint;
+
+void RecordReplayOnNewSource(Isolate* isolate, const char* id,
+                             const char* kind, const char* url) {
+  if (gRecordReplayHasCheckpoint) {
+    gRecordReplayOnNewSource(id, kind, url);
+  }
+}
+
+void RecordReplayOnConsoleMessage(size_t bookmark) {
+  if (gRecordReplayHasCheckpoint) {
+    gRecordReplayOnConsoleMessage(bookmark);
+  }
+}
+
+extern "C" void V8RecordReplayOnConsoleMessage(size_t bookmark) {
+  RecordReplayOnConsoleMessage(bookmark);
+}
+
+static Handle<Object>* gCurrentException;
+
+extern "C" void V8RecordReplayGetCurrentException(MaybeLocal<Value>* exception) {
+  CHECK(IsMainThread());
+  if (gCurrentException) {
+    *exception = Utils::ToLocal(*gCurrentException);
+  }
+}
+
+void RecordReplayOnExceptionUnwind(Isolate* isolate) {
+  CHECK(gRecordingOrReplaying);
+  CHECK(IsMainThread());
+  CHECK(!gCurrentException);
+
+  if (!gRecordReplayHasCheckpoint) {
+    return;
   }
 
-  void RecordReplayOnConsoleMessage(size_t bookmark) {
-    if (gRecordReplayHasCheckpoint) {
-      gRecordReplayOnConsoleMessage(bookmark);
-    }
+  HandleScope scope(isolate);
+
+  CHECK(isolate->has_pending_exception());
+  Handle<Object> exception(isolate->pending_exception(), isolate);
+  if (isolate->is_catchable_by_javascript(*exception)) {
+    isolate->clear_pending_exception();
+    Handle<Object> message(isolate->pending_message(), isolate);
+    isolate->clear_pending_message();
+    gCurrentException = &exception;
+    gRecordReplayOnExceptionUnwind();
+    gCurrentException = nullptr;
+    CHECK(!isolate->has_pending_exception());
+    isolate->set_pending_exception(*exception);
+    isolate->set_pending_message(*message);
+  }
+}
+
+uint64_t* gProgressCounter;
+
+bool gRecordReplayInstrumentationEnabled;
+
+void RecordReplayChangeInstrument(bool enabled) {
+  CHECK(!enabled || recordreplay::IsReplaying());
+  gRecordReplayInstrumentationEnabled = enabled;
+
+  // All optimized code needs to be recompiled when instrumentation changes,
+  // as instrumentation calls will be optimized out when instrumentation is
+  // disabled.
+  Isolate* isolate = Isolate::Current();
+  Deoptimizer::DeoptimizeAll(isolate);
+}
+
+uint64_t gTargetProgress;
+
+void RecordReplaySetTargetProgress(uint64_t progress) {
+  CHECK(IsMainThread());
+  gTargetProgress = progress;
+}
+
+void RecordReplayTriggerProgressInterrupt() {
+  CHECK(recordreplay::IsRecording() && IsMainThread());
+  gRecordReplayTriggerProgressInterrupt();
+}
+
+void RecordReplayOnTargetProgressReached() {
+  CHECK(IsMainThread());
+  gRecordReplayProgressReached();
+}
+
+static void RecordReplayProgressInterruptCallback() {
+  CHECK(IsMainThread());
+  Isolate* isolate = Isolate::Current();
+  isolate->RecordReplayInvokeApiInterruptCallbacksAtProgress();
+}
+
+void RecordReplayInstrument(const char* kind, const char* function, int offset) {
+  gRecordReplayOnInstrument(kind, function, offset);
+}
+
+extern void TrackObjectsCallback(bool track_objects);
+
+extern char* CommandCallback(const char* command, const char* params);
+extern void ClearPauseDataCallback();
+
+bool gRecordReplayAssertValues;
+bool gRecordReplayAssertProgress;
+
+// Only finish recordings if there were interesting sources loaded
+// into the process.
+static char* gRecordReplayInterestingSource;
+
+void RecordReplayAddInterestingSource(const char* url) {
+  if (!*url) {
+    // Always ignore sources with missing URLs.
+    return;
   }
 
-  extern "C" void V8RecordReplayOnConsoleMessage(size_t bookmark) {
-    RecordReplayOnConsoleMessage(bookmark);
+  static bool gDumpSources = getenv("RECORD_REPLAY_PRINT_SOURCES");
+  if (gDumpSources) {
+    recordreplay::Print("NewSource %s", url);
   }
 
-  static Handle<Object>* gCurrentException;
+  if (!gRecordReplayInterestingSource) {
+    gRecordReplayInterestingSource = strdup(url);
+    gRecordReplayRememberRecording();
+  }
+}
 
-  extern "C" void V8RecordReplayGetCurrentException(MaybeLocal<Value> *
-                                                    exception) {
-    CHECK(IsMainThread());
-    if (gCurrentException) {
-      *exception = Utils::ToLocal(*gCurrentException);
-    }
+// Processes which didn't paint anything will optionally be ignored,
+// even if they have interesting sources.
+static std::atomic<bool> gRecordReplayHasPaint;
+
+static bool ShouldFinishRecording() {
+  if (!gRecordReplayInterestingSource) {
+    return false;
   }
 
-  void RecordReplayOnExceptionUnwind(Isolate * isolate) {
-    CHECK(gRecordingOrReplaying);
-    CHECK(IsMainThread());
-    CHECK(!gCurrentException);
-
-    if (!gRecordReplayHasCheckpoint) {
-      return;
-    }
-
-    HandleScope scope(isolate);
-
-    CHECK(isolate->has_pending_exception());
-    Handle<Object> exception(isolate->pending_exception(), isolate);
-    if (isolate->is_catchable_by_javascript(*exception)) {
-      isolate->clear_pending_exception();
-      Handle<Object> message(isolate->pending_message(), isolate);
-      isolate->clear_pending_message();
-      gCurrentException = &exception;
-      gRecordReplayOnExceptionUnwind();
-      gCurrentException = nullptr;
-      CHECK(!isolate->has_pending_exception());
-      isolate->set_pending_exception(*exception);
-      isolate->set_pending_message(*message);
-    }
+  if (getenv("RECORD_REPLAY_IGNORE_NON_PAINTING_CONTENT") && !gRecordReplayHasPaint) {
+    return false;
   }
 
-  uint64_t* gProgressCounter;
+  return true;
+}
 
-  bool gRecordReplayInstrumentationEnabled;
-
-  void RecordReplayChangeInstrument(bool enabled) {
-    CHECK(!enabled || recordreplay::IsReplaying());
-    gRecordReplayInstrumentationEnabled = enabled;
-
-    // All optimized code needs to be recompiled when instrumentation changes,
-    // as instrumentation calls will be optimized out when instrumentation is
-    // disabled.
-    Isolate* isolate = Isolate::Current();
-    Deoptimizer::DeoptimizeAll(isolate);
+// Add metadata for the recording the first time an HTML page is parsed.
+void RecordReplayAddHTMLParse(const char* url) {
+  // Ignore uninteresting URLs.
+  if (!url || !*url || !strncmp(url, "about:", 6) || !strncmp(url, "chrome", 6)) {
+    return;
   }
 
-  uint64_t gTargetProgress;
-
-  void RecordReplaySetTargetProgress(uint64_t progress) {
-    CHECK(IsMainThread());
-    gTargetProgress = progress;
+  static bool gHasHTMLParse = false;
+  if (gHasHTMLParse) {
+    return;
   }
+  gHasHTMLParse = true;
 
-  void RecordReplayTriggerProgressInterrupt() {
-    CHECK(recordreplay::IsRecording() && IsMainThread());
-    gRecordReplayTriggerProgressInterrupt();
+  void* str = gJSONCreateString(url);
+
+  const char* property = "uri";
+  void* object = gJSONCreateObject(1, &property, &str);
+
+  char* objectStr = gJSONToString(object);
+  gRecordReplayAddMetadata(objectStr);
+
+  free(objectStr);
+  gJSONFree(str);
+  gJSONFree(object);
+}
+
+// For posting tasks to the main thread.
+static Isolate* gMainThreadIsolate;
+
+void RecordReplayOnMainThreadIsolateCreated(Isolate* isolate) {
+  CHECK(!gMainThreadIsolate);
+  gMainThreadIsolate = isolate;
+}
+
+static Eternal<v8::Context>* gDefaultContext;
+
+extern "C" void V8RecordReplaySetDefaultContext(v8::Isolate* isolate, v8::Local<v8::Context> cx) {
+  if (IsMainThread() && !gDefaultContext) {
+    gDefaultContext = new Eternal<v8::Context>(isolate, cx);
   }
+}
 
-  void RecordReplayOnTargetProgressReached() {
-    CHECK(IsMainThread());
-    gRecordReplayProgressReached();
-  }
+extern "C" void V8RecordReplayGetDefaultContext(v8::Isolate* isolate, v8::Local<v8::Context>* cx) {
+  CHECK(IsMainThread() && gDefaultContext);
+  *cx = gDefaultContext->Get(isolate);
+}
 
-  static void RecordReplayProgressInterruptCallback() {
-    CHECK(IsMainThread());
-    Isolate* isolate = Isolate::Current();
-    isolate->RecordReplayInvokeApiInterruptCallbacksAtProgress();
-  }
+bool RecordReplayHasDefaultContext() {
+  return !!gDefaultContext;
+}
 
-  void RecordReplayInstrument(const char* kind, const char* function,
-                              int offset) {
-    gRecordReplayOnInstrument(kind, function, offset);
-  }
+extern void RecordReplayInitInstrumentationState();
 
-  extern void TrackObjectsCallback(bool track_objects);
-
-  extern char* CommandCallback(const char* command, const char* params);
-  extern void ClearPauseDataCallback();
-
-  bool gRecordReplayAssertValues;
-  bool gRecordReplayAssertProgress;
-
-  // Only finish recordings if there were interesting sources loaded
-  // into the process.
-  static char* gRecordReplayInterestingSource;
-
-  void RecordReplayAddInterestingSource(const char* url) {
-    if (!*url) {
-      // Always ignore sources with missing URLs.
-      return;
-    }
-
-    static bool gDumpSources = getenv("RECORD_REPLAY_PRINT_SOURCES");
-    if (gDumpSources) {
-      recordreplay::Print("NewSource %s", url);
-    }
-
-    if (!gRecordReplayInterestingSource) {
-      gRecordReplayInterestingSource = strdup(url);
-      gRecordReplayRememberRecording();
-    }
-  }
-
-  // Processes which didn't paint anything will optionally be ignored,
-  // even if they have interesting sources.
-  static std::atomic<bool> gRecordReplayHasPaint;
-
-  static bool ShouldFinishRecording() {
-    if (!gRecordReplayInterestingSource) {
-      return false;
-    }
-
-    if (getenv("RECORD_REPLAY_IGNORE_NON_PAINTING_CONTENT") &&
-        !gRecordReplayHasPaint) {
-      return false;
-    }
-
-    return true;
-  }
-
-  // Add metadata for the recording the first time an HTML page is parsed.
-  void RecordReplayAddHTMLParse(const char* url) {
-    // Ignore uninteresting URLs.
-    if (!url || !*url || !strncmp(url, "about:", 6) ||
-        !strncmp(url, "chrome", 6)) {
-      return;
-    }
-
-    static bool gHasHTMLParse = false;
-    if (gHasHTMLParse) {
-      return;
-    }
-    gHasHTMLParse = true;
-
-    void* str = gJSONCreateString(url);
-
-    const char* property = "uri";
-    void* object = gJSONCreateObject(1, &property, &str);
-
-    char* objectStr = gJSONToString(object);
-    gRecordReplayAddMetadata(objectStr);
-
-    free(objectStr);
-    gJSONFree(str);
-    gJSONFree(object);
-  }
-
-  // For posting tasks to the main thread.
-  static Isolate* gMainThreadIsolate;
-
-  void RecordReplayOnMainThreadIsolateCreated(Isolate * isolate) {
-    CHECK(!gMainThreadIsolate);
-    gMainThreadIsolate = isolate;
-  }
-
-  static Eternal<v8::Context>* gDefaultContext;
-
-  extern "C" void V8RecordReplaySetDefaultContext(v8::Isolate * isolate,
-                                                  v8::Local<v8::Context> cx) {
-    if (IsMainThread() && !gDefaultContext) {
-      gDefaultContext = new Eternal<v8::Context>(isolate, cx);
-    }
-  }
-
-  extern "C" void V8RecordReplayGetDefaultContext(v8::Isolate * isolate,
-                                                  v8::Local<v8::Context> * cx) {
-    CHECK(IsMainThread() && gDefaultContext);
-    *cx = gDefaultContext->Get(isolate);
-  }
-
-  bool RecordReplayHasDefaultContext() { return !!gDefaultContext; }
-
-  extern void RecordReplayInitInstrumentationState();
-
-}  // namespace internal
+} // namespace internal
 
 static std::vector<std::string>* gRecordReplayDisabledFeatures;
 
@@ -10590,16 +10587,9 @@ extern "C" bool V8IsRecording() {
   return recordreplay::IsRecording();
 }
 
-bool divergenceDetected = false;
-
 extern "C" bool V8RecordReplayHasDivergedFromRecording() {
   if (recordreplay::IsRecordingOrReplaying()) {
-    auto val = gRecordReplayHasDivergedFromRecording();
-    if (val && recordreplay::IsReplaying() && !divergenceDetected) {
-      divergenceDetected = true;
-      recordreplay::Print("####### [CHROMDEBUG] REPLAY DIVERGENCE DETECTED #######");
-    }
-    return val;
+    return gRecordReplayHasDivergedFromRecording();
   }
   return false;
 }
@@ -10751,7 +10741,6 @@ extern "C" void V8RecordReplayOnNavigationEvent(const char* kind, const char* ur
   //  https://github.com/replayio/gecko-dev/blob/67254b1846b996c69063082ada18c54ceebfbe6d/toolkit/recordreplay/ProcessRecordReplay.cpp#L966
   gRecordReplayOnNavigationEvent(kind, url);
 }
-
 
 template <typename Src, typename Dst>
 static inline void CastPointer(const Src src, Dst* dst) {
@@ -10952,8 +10941,10 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
 
   RecordReplayLoadSymbol(handle, "RecordReplayOnMouseEvent",
                          gRecordReplayOnMouseEvent);
-  RecordReplayLoadSymbol(handle, "RecordReplayOnKeyEvent", gRecordReplayOnKeyEvent);
-  RecordReplayLoadSymbol(handle, "RecordReplayOnNavigationEvent", gRecordReplayOnNavigationEvent);
+  RecordReplayLoadSymbol(handle, "RecordReplayOnKeyEvent",
+                         gRecordReplayOnKeyEvent);
+  RecordReplayLoadSymbol(handle, "RecordReplayOnNavigationEvent",
+                         gRecordReplayOnNavigationEvent);
 
   void (*setDefaultCommandCallback)(char* (*callback)(const char* command, const char* params));
   RecordReplayLoadSymbol(handle, "RecordReplaySetDefaultCommandCallback", setDefaultCommandCallback);
