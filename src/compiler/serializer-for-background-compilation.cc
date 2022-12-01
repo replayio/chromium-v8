@@ -114,7 +114,8 @@ namespace compiler {
   V(RecordReplayNotifyActivity)      \
   V(RecordReplayInstrumentation)     \
   V(RecordReplayInstrumentationGenerator) \
-  V(RecordReplayAssertValue)
+  V(RecordReplayAssertValue)         \
+  V(RecordReplayTrackObjectId)
 
 #define BINARY_OP_LIST(V) \
   V(Add)                  \

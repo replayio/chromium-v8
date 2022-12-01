@@ -2859,6 +2859,14 @@ IGNITION_HANDLER(RecordReplayAssertValue, InterpreterAssembler) {
   Dispatch();
 }
 
+IGNITION_HANDLER(RecordReplayTrackObjectId, InterpreterAssembler) {
+  TNode<Context> context = GetContext();
+  TNode<Object> object = LoadRegisterAtOperandIndex(0);
+  CallRuntime(Runtime::kRecordReplayTrackObjectId,
+              context, object);
+  Dispatch();
+}
+
 // ForInEnumerate <receiver>
 //
 // Enumerates the enumerable keys of the |receiver| and either returns the
