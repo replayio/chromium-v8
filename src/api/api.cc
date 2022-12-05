@@ -9978,6 +9978,11 @@ static void* (*gJSONCreateObject)(size_t, const char**, void**);
 static char* (*gJSONToString)(void*);
 static void (*gJSONFree)(void*);
 static void (*gRecordReplayOnAnnotation)(const char* kind, const char* contents);
+static void (*gRecordReplayOnMouseEvent)(const char* aKind, size_t aClientX,
+                                         size_t aClientY);
+static void (*gRecordReplayOnKeyEvent)(const char* aKind, const char* aKey);
+static void (*gRecordReplayOnNavigationEvent)(const char* aKind,
+                                              const char* aUrl);
 
 namespace internal {
 
@@ -10708,6 +10713,36 @@ extern "C" void V8RecordReplayOnAnnotation(const char* kind, const char* content
   }
 }
 
+extern "C" void V8RecordReplayOnMouseEvent(const char* kind, size_t clientX,
+                                           size_t clientY) {
+  DCHECK(recordreplay::IsRecordingOrReplaying());
+  if (!internal::gRecordReplayHasCheckpoint) {
+    return;
+  }
+  // TODO: make sure event name (kind) is correct
+  gRecordReplayOnMouseEvent(kind, clientX, clientY);
+}
+
+extern "C" void V8RecordReplayOnKeyEvent(const char* kind, const char* key) {
+  DCHECK(recordreplay::IsRecordingOrReplaying());
+  if (!internal::gRecordReplayHasCheckpoint) {
+    return;
+  }
+  // TODO: make sure event name (kind) is correct
+  gRecordReplayOnKeyEvent(kind, key);
+}
+
+extern "C" void V8RecordReplayOnNavigationEvent(const char* kind, const char* url) {
+  DCHECK(recordreplay::IsRecordingOrReplaying());
+  if (!internal::gRecordReplayHasCheckpoint) {
+    return;
+  }
+  // TODO: double check empty urls, about: urls, chrome: urls etc.
+  //  → compare w/
+  //  https://github.com/replayio/gecko-dev/blob/67254b1846b996c69063082ada18c54ceebfbe6d/toolkit/recordreplay/ProcessRecordReplay.cpp#L966
+  gRecordReplayOnNavigationEvent(kind, url);
+}
+
 template <typename Src, typename Dst>
 static inline void CastPointer(const Src src, Dst* dst) {
   static_assert(sizeof(Src) == sizeof(uintptr_t), "bad size");
@@ -10904,6 +10939,13 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   RecordReplayLoadSymbol(handle, "RecordReplayJSONToString", gJSONToString);
   RecordReplayLoadSymbol(handle, "RecordReplayJSONFree", gJSONFree);
   RecordReplayLoadSymbol(handle, "RecordReplayOnAnnotation", gRecordReplayOnAnnotation);
+
+  RecordReplayLoadSymbol(handle, "RecordReplayOnMouseEvent",
+                         gRecordReplayOnMouseEvent);
+  RecordReplayLoadSymbol(handle, "RecordReplayOnKeyEvent",
+                         gRecordReplayOnKeyEvent);
+  RecordReplayLoadSymbol(handle, "RecordReplayOnNavigationEvent",
+                         gRecordReplayOnNavigationEvent);
 
   void (*setDefaultCommandCallback)(char* (*callback)(const char* command, const char* params));
   RecordReplayLoadSymbol(handle, "RecordReplaySetDefaultCommandCallback", setDefaultCommandCallback);

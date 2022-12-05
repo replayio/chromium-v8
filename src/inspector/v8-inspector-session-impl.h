@@ -92,6 +92,12 @@ class V8InspectorSessionImpl : public V8InspectorSession,
       v8::Local<v8::Context>, v8::Local<v8::Value>, StringView groupName,
       bool generatePreview) override;
 
+  // Replay edit: Return objectId
+  virtual std::u16string wrapObjectGetObjectId(v8::Local<v8::Context>,
+                                               v8::Local<v8::Value>,
+                                               StringView groupName,
+                                               bool generatePreview) override;
+
   V8InspectorSession::Inspectable* inspectedObject(unsigned num);
   static const unsigned kInspectedObjectBufferSize = 5;
 
