@@ -54,54 +54,6 @@ namespace v8 {
 namespace internal {
 namespace wasm {
 
-struct AutoOrderedLock {
-  AutoOrderedLock(int id) : id_(id) { recordreplay::OrderedLock(id_); }
-  ~AutoOrderedLock() { recordreplay::OrderedUnlock(id_); }
-  int id_;
-};
-
-template <typename T>
-class OrderedAtomic {
- public:
-  OrderedAtomic(const char* name = "atomic") {
-    ordered_lock_id_ = (int)recordreplay::CreateOrderedLock(name);
-  }
-
-  OrderedAtomic(T initial, const char* name = "atomic") : value_(initial) {
-    ordered_lock_id_ = (int)recordreplay::CreateOrderedLock(name);
-  }
-
-  T load(std::memory_order memory_order = std::memory_order_seq_cst) const {
-    AutoOrderedLock ordered(ordered_lock_id_);
-    return value_.load(memory_order);
-  }
-
-  void store(T v, std::memory_order memory_order = std::memory_order_seq_cst) {
-    AutoOrderedLock ordered(ordered_lock_id_);
-    value_.store(v, memory_order);
-  }
-
-  T fetch_add(T v, std::memory_order memory_order = std::memory_order_seq_cst) {
-    AutoOrderedLock ordered(ordered_lock_id_);
-    return value_.fetch_add(v, memory_order);
-  }
-
-  T fetch_sub(T v, std::memory_order memory_order = std::memory_order_seq_cst) {
-    AutoOrderedLock ordered(ordered_lock_id_);
-    return value_.fetch_sub(v, memory_order);
-  }
-
-  bool compare_exchange_weak(T& a, T b,
-                             std::memory_order memory_order = std::memory_order_seq_cst) {
-    AutoOrderedLock ordered(ordered_lock_id_);
-    return value_.compare_exchange_weak(a, b, memory_order);
-  }
-
- private:
-  int ordered_lock_id_;
-  std::atomic<T> value_;
-};
-
 namespace {
 
 enum class CompileStrategy : uint8_t {
@@ -161,15 +113,14 @@ class CompilationUnitQueues {
   };
 
   explicit CompilationUnitQueues(int num_declared_functions)
-      : queues_mutex_("CompilationUnitQueues.queues_mutex_"),
-        num_declared_functions_(num_declared_functions) {
+      : num_declared_functions_(num_declared_functions) {
     // Add one first queue, to add units to.
     queues_.emplace_back(std::make_unique<QueueImpl>(0));
 
 #if !defined(__cpp_lib_atomic_value_initialization) || \
     __cpp_lib_atomic_value_initialization < 201911L
     for (auto& atomic_counter : num_units_) {
-      atomic_counter.store(0);
+      std::atomic_init(&atomic_counter, size_t{0});
     }
 #endif
 
@@ -196,7 +147,6 @@ class CompilationUnitQueues {
     // Otherwise increase the number of queues.
     std::unique_lock<std::shared_mutex> queues_guard{queues_mutex_};
     int num_queues = static_cast<int>(queues_.size());
-
     while (num_queues < required_queues) {
       int steal_from = num_queues + 1;
       queues_.emplace_back(std::make_unique<QueueImpl>(steal_from));
@@ -366,7 +316,7 @@ class CompilationUnitQueues {
     base::Mutex mutex;
 
     // Can be read concurrently to check whether any elements are in the queue.
-    OrderedAtomic<bool> has_units[kNumTiers];
+    std::atomic<bool> has_units[kNumTiers];
 
     // Protected by {mutex}:
     std::priority_queue<BigUnit> units[kNumTiers];
@@ -374,13 +324,13 @@ class CompilationUnitQueues {
 
   struct QueueImpl : public Queue {
     explicit QueueImpl(int next_steal_task_id)
-        : mutex("QueueImpl.mutex"), next_steal_task_id(next_steal_task_id) {}
+        : next_steal_task_id(next_steal_task_id) {}
 
     // Number of units after which the task processing this queue should publish
     // compilation results. Updated (reduced, using relaxed ordering) when new
     // queues are allocated. If there is only one thread running, we can delay
     // publishing arbitrarily.
-    OrderedAtomic<int> publish_limit{kMaxInt, "publish_limit"};
+    std::atomic<int> publish_limit{kMaxInt};
 
     base::Mutex mutex;
 
@@ -571,7 +521,7 @@ class CompilationUnitQueues {
 
   BigUnitsQueue big_units_queue_;
 
-  OrderedAtomic<size_t> num_units_[kNumTiers];
+  std::atomic<size_t> num_units_[kNumTiers];
   std::atomic<size_t> num_priority_units_{0};
   std::unique_ptr<std::atomic<bool>[]> top_tier_compiled_;
   std::atomic<int> next_queue_to_add{0};
@@ -758,7 +708,7 @@ class CompilationStateImpl {
 
   // Number of wrappers to be compiled. Initialized once, counted down in
   // {GetNextJSToWasmWrapperCompilationUnit}.
-  OrderedAtomic<size_t> outstanding_js_to_wasm_wrappers_{0, "outstanding_js_to_wasm_wrappers_"};
+  std::atomic<size_t> outstanding_js_to_wasm_wrappers_{0};
   // Wrapper compilation units are stored in shared_ptrs so that they are kept
   // alive by the tasks even if the NativeModule dies.
   std::vector<std::shared_ptr<JSToWasmWrapperCompilationUnit>>
@@ -1646,7 +1596,6 @@ CompilationExecutionResult ExecuteCompilationUnits(
   // worker threads start at 1 (thus the "+ 1").
   static_assert(kMainTaskId == 0);
   int task_id = delegate ? (int{delegate->GetTaskId()} + 1) : kMainTaskId;
-
   DCHECK_LE(0, task_id);
   CompilationUnitQueues::Queue* queue;
   base::Optional<WasmCompilationUnit> unit;
@@ -1702,9 +1651,7 @@ CompilationExecutionResult ExecuteCompilationUnits(
 
       // (synchronized): Publish the compilation result and get the next unit.
       BackgroundCompileScope compile_scope(native_module);
-      if (compile_scope.cancelled()) {
-        return kYield;
-      }
+      if (compile_scope.cancelled()) return kYield;
 
       if (!results_to_publish.back().succeeded()) {
         compile_scope.compilation_state()->SetError();
@@ -2021,9 +1968,7 @@ class BackgroundCompileJob final : public JobTask {
 
   size_t GetMaxConcurrency(size_t worker_count) const override {
     BackgroundCompileScope compile_scope(native_module_);
-    if (compile_scope.cancelled()) {
-      return 0;
-    }
+    if (compile_scope.cancelled()) return 0;
     // NumOutstandingCompilations() does not reflect the units that running
     // workers are processing, thus add the current worker count to that number.
     return std::min(
@@ -3917,7 +3862,7 @@ void CompilationStateImpl::WaitForCompilationEvent(
   };
 
   auto semaphore = std::make_shared<base::Semaphore>(0);
-  auto done = std::make_shared<OrderedAtomic<bool>>(false, "CompilationStateImpl::WaitForCompilationEvent.done");
+  auto done = std::make_shared<std::atomic<bool>>(false);
   base::EnumSet<CompilationEvent> events{expect_event,
                                          CompilationEvent::kFailedCompilation};
   {
@@ -3929,7 +3874,7 @@ void CompilationStateImpl::WaitForCompilationEvent(
 
   class WaitForEventDelegate final : public JobDelegate {
    public:
-    explicit WaitForEventDelegate(std::shared_ptr<OrderedAtomic<bool>> done)
+    explicit WaitForEventDelegate(std::shared_ptr<std::atomic<bool>> done)
         : done_(std::move(done)) {}
 
     bool ShouldYield() override {
@@ -3943,7 +3888,7 @@ void CompilationStateImpl::WaitForCompilationEvent(
     uint8_t GetTaskId() override { return kMainTaskId; }
 
    private:
-    std::shared_ptr<OrderedAtomic<bool>> done_;
+    std::shared_ptr<std::atomic<bool>> done_;
   };
 
   WaitForEventDelegate delegate{done};

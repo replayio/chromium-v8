@@ -2294,6 +2294,7 @@ void BaselineCompiler::VisitRecordReplayIncExecutionProgressCounter() {
     CallRuntime(Runtime::kRecordReplayAssertExecutionProgress,
                 __ FunctionOperand());
   } else {
+    /*
     BaselineAssembler::ScratchRegisterScope scratch_scope(&basm_);
     Register reg1 = scratch_scope.AcquireScratch();
     Register reg2 = scratch_scope.AcquireScratch();
@@ -2307,6 +2308,7 @@ void BaselineCompiler::VisitRecordReplayIncExecutionProgressCounter() {
     __ JumpIf(Condition::kNotEqual, &done, Label::kNear);
     CallRuntime(Runtime::kRecordReplayTargetProgressReached);
     __ Bind(&done);
+    */
   }
 }
 

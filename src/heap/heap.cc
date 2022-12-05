@@ -229,11 +229,11 @@ Heap::Heap()
           isolate()->OwnsStringTables() ? AllocationType::kOld
                                         : AllocationType::kSharedOld),
       collection_barrier_(new CollectionBarrier(this)),
-      script_ordered_lock_id_((int)recordreplay::CreateOrderedLock("Heap.script_ordered_lock_id_")) {
       marking_state_(isolate_),
       non_atomic_marking_state_(isolate_),
       atomic_marking_state_(isolate_),
-      pretenuring_handler_(this) {
+      pretenuring_handler_(this),
+      script_ordered_lock_id_((int)recordreplay::CreateOrderedLock("Heap.script_ordered_lock_id_")) {
   // Ensure old_generation_size_ is a multiple of kPageSize.
   DCHECK_EQ(0, max_old_generation_size() & (Page::kPageSize - 1));
 

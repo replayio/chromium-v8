@@ -46,6 +46,8 @@
 #include "src/wasm/wasm-objects-inl.h"
 #endif  // V8_ENABLE_WEBASSEMBLY
 
+#include "src/objects/js-collection-inl.h"
+
 namespace v8 {
 namespace internal {
 
@@ -2983,8 +2985,7 @@ extern void RecordReplayOnNewSource(Isolate* isolate, const char* id,
                                     const char* kind, const char* url);
 
 static Handle<String> CStringToHandle(Isolate* isolate, const char* str) {
-  Vector<const char> nstr(str, strlen(str));
-  return isolate->factory()->NewStringFromUtf8(nstr).ToHandleChecked();
+  return isolate->factory()->NewStringFromUtf8(base::CStrVector(str)).ToHandleChecked();
 }
 
 static Handle<Object> GetProperty(Isolate* isolate,
@@ -3432,7 +3433,7 @@ static Handle<Object> RecordReplayCountStackFrames(Isolate* isolate,
   size_t count = 0;
   for (StackFrameIterator it(isolate); !it.done(); it.Advance()) {
     StackFrame* frame = it.frame();
-    if (frame->type() != StackFrame::OPTIMIZED && frame->type() != StackFrame::INTERPRETED) {
+    if (!frame->is_java_script()) {
       continue;
     }
     std::vector<FrameSummary> frames;
@@ -3780,50 +3781,61 @@ static std::string StringPrintf(const char* format, ...) {
 // are used when replaying.
 struct ContextObjectIdMap {
   v8::Global<v8::Context> context_;
-  v8::Global<v8::debug::WeakMap> object_ids_;
+  v8::Global<v8::Value> object_ids_;
 };
 typedef std::vector<ContextObjectIdMap> ContextObjectIdMapVector;
 static ContextObjectIdMapVector* gRecordReplayObjectIds;
 
-static Local<v8::debug::WeakMap> GetObjectIdMapForContext(v8::Isolate* isolate, Local<v8::Context> cx) {
+static Local<v8::Value> GetObjectIdMapForContext(v8::Isolate* v8_isolate, Local<v8::Context> cx) {
+  Isolate* isolate = (Isolate*)v8_isolate;
+
   if (!gRecordReplayObjectIds) {
     gRecordReplayObjectIds = new ContextObjectIdMapVector();
   }
 
   for (const auto& entry : *gRecordReplayObjectIds) {
     if (entry.context_ == cx) {
-      return entry.object_ids_.Get(isolate);
+      return entry.object_ids_.Get(v8_isolate);
     }
   }
 
+  Handle<Object> object_ids = isolate->factory()->NewJSWeakMap();
+
   ContextObjectIdMap new_entry;
-  new_entry.context_.Reset(isolate, cx);
-  new_entry.object_ids_.Reset(isolate, v8::debug::WeakMap::New(isolate));
+  new_entry.context_.Reset(v8_isolate, cx);
+  new_entry.object_ids_.Reset(v8_isolate, v8::Utils::ToLocal(object_ids));
   gRecordReplayObjectIds->push_back(std::move(new_entry));
-  return gRecordReplayObjectIds->back().object_ids_.Get(isolate);
+  return gRecordReplayObjectIds->back().object_ids_.Get(v8_isolate);
 }
 
 extern bool gRecordReplayAssertTrackedObjects;
 
 static int gNextObjectId = 1;
 
-int RecordReplayObjectId(v8::Isolate* isolate, v8::Local<v8::Context> cx,
-                         v8::Local<v8::Value> object, bool allow_create) {
+int RecordReplayObjectId(v8::Isolate* v8_isolate, v8::Local<v8::Context> cx,
+                         v8::Local<v8::Value> v8_object, bool allow_create) {
   CHECK(IsMainThread());
 
-  if (!object->IsObject()) {
+  if (!v8_object->IsObject()) {
     return 0;
   }
 
-  Local<v8::debug::WeakMap> object_ids = GetObjectIdMapForContext(isolate, cx);
+  Isolate* isolate = (Isolate*)v8_isolate;
+  Handle<Object> object = Utils::OpenHandle(*v8_object);
 
-  v8::Local<v8::Value> idValue;
-  if (object_ids->Get(cx, object).ToLocal(&idValue) && idValue->IsInt32()) {
-    int id = idValue.As<v8::Int32>()->Value();
-    if (gRecordReplayAssertTrackedObjects) {
-      recordreplay::Assert("ReuseObjectId %d", id);
+  Local<v8::Value> object_ids_val = GetObjectIdMapForContext(v8_isolate, cx);
+  Handle<JSWeakMap> object_ids = Handle<JSWeakMap>::cast(Utils::OpenHandle(*object_ids_val));
+
+  Handle<Object> existing(EphemeronHashTable::cast(object_ids->table()).Lookup(object), isolate);
+  if (!existing->IsTheHole(isolate)) {
+    v8::Local<v8::Value> id_value = v8::Utils::ToLocal(existing);
+    if (id_value->IsInt32()) {
+      int id = id_value.As<v8::Int32>()->Value();
+      if (gRecordReplayAssertTrackedObjects) {
+        recordreplay::Assert("ReuseObjectId %d", id);
+      }
+      return id;
     }
-    return id;
   }
 
   if (!allow_create) {
@@ -3836,14 +3848,10 @@ int RecordReplayObjectId(v8::Isolate* isolate, v8::Local<v8::Context> cx,
     recordreplay::Assert("NewObjectId %d", id);
   }
 
-  Local<Value> id_value = v8::Integer::New(isolate, id);
-  auto rv = object_ids->Set(cx, object, id_value);
+  Local<Value> id_value = v8::Integer::New(v8_isolate, id);
 
-  // Note: Sometimes this Set() call fails, for unknown reasons. Include an assertion
-  // as hopefully failures will happen consistently.
-  if (rv.IsEmpty() && gRecordReplayAssertTrackedObjects) {
-    recordreplay::Assert("SetObjectIdFailed %d", id);
-  }
+  int32_t hash = object->GetOrCreateHash(isolate).value();
+  JSWeakCollection::Set(object_ids, object, Utils::OpenHandle(*id_value), hash);
 
   return id;
 }

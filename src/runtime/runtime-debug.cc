@@ -32,6 +32,8 @@
 #include <sys/time.h>
 #include <unistd.h>
 
+#include "src/api/api-inl.h"
+
 namespace v8 {
 namespace internal {
 
@@ -984,7 +986,7 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
 
   HandleScope scope(isolate);
   DCHECK_EQ(1, args.length());
-  CONVERT_ARG_HANDLE_CHECKED(JSFunction, function, 0);
+  Handle<JSFunction> function = args.at<JSFunction>(0);
 
   Handle<SharedFunctionInfo> shared(function->shared(), isolate);
   Handle<Script> script(Script::cast(shared->script()), isolate);
@@ -1037,7 +1039,7 @@ static std::string GetStackLocation(Isolate* isolate) {
   strcpy(location, "<no frame>");
   for (StackFrameIterator it(isolate); !it.done(); it.Advance()) {
     StackFrame* frame = it.frame();
-    if (frame->type() != StackFrame::OPTIMIZED && frame->type() != StackFrame::INTERPRETED) {
+    if (!frame->is_java_script()) {
       continue;
     }
     std::vector<FrameSummary> frames;
@@ -1109,9 +1111,9 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertValue) {
 
   HandleScope scope(isolate);
   DCHECK_EQ(3, args.length());
-  CONVERT_ARG_HANDLE_CHECKED(JSFunction, function, 0);
-  CONVERT_NUMBER_CHECKED(int32_t, index, Int32, args[1]);
-  CONVERT_ARG_HANDLE_CHECKED(Object, value, 2);
+  Handle<JSFunction> function = args.at<JSFunction>(0);
+  int32_t index = NumberToInt32(args[1]);
+  Handle<Object> value = args.at(2);
 
   Handle<Script> script(Script::cast(function->shared().script()), isolate);
   CHECK(RecordReplayHasRegisteredScript(*script));
@@ -1291,8 +1293,8 @@ RUNTIME_FUNCTION(Runtime_RecordReplayInstrumentation) {
 
   HandleScope scope(isolate);
   DCHECK_EQ(2, args.length());
-  CONVERT_ARG_HANDLE_CHECKED(JSFunction, function, 0);
-  CONVERT_NUMBER_CHECKED(int32_t, index, Int32, args[1]);
+  Handle<JSFunction> function = args.at<JSFunction>(0);
+  int32_t index = NumberToInt32(args[1]);
 
   OnInstrumentation(isolate, function, index);
 
@@ -1311,9 +1313,9 @@ int RecordReplayCurrentGeneratorIdRaw() {
 RUNTIME_FUNCTION(Runtime_RecordReplayInstrumentationGenerator) {
   HandleScope scope(isolate);
   DCHECK_EQ(3, args.length());
-  CONVERT_ARG_HANDLE_CHECKED(JSFunction, function, 0);
-  CONVERT_NUMBER_CHECKED(int32_t, index, Int32, args[1]);
-  CONVERT_ARG_HANDLE_CHECKED(Object, generator_object, 2);
+  Handle<JSFunction> function = args.at<JSFunction>(0);
+  int32_t index = NumberToInt32(args[1]);
+  Handle<Object> generator_object = args.at(2);
 
   // Note: RecordReplayObjectId calls have to occur in the same places when
   // replaying (regardless of whether instrumentation is enabled) so that objects
@@ -1335,7 +1337,7 @@ RUNTIME_FUNCTION(Runtime_RecordReplayInstrumentationGenerator) {
 
 RUNTIME_FUNCTION(Runtime_RecordReplayTrackObjectId) {
   DCHECK_EQ(1, args.length());
-  CONVERT_ARG_HANDLE_CHECKED(Object, value, 0);
+  Handle<Object> value = args.at(0);
 
   v8::Isolate* v8_isolate = (v8::Isolate*) isolate;
   RecordReplayObjectId(v8_isolate, v8_isolate->GetCurrentContext(),

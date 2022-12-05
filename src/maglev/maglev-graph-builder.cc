@@ -3381,6 +3381,41 @@ void MaglevGraphBuilder::VisitIncBlockCounter() {
   BuildCallBuiltin<Builtin::kIncBlockCounter>({closure, coverage_array_slot});
 }
 
+void MaglevGraphBuilder::VisitRecordReplayIncExecutionProgressCounter() {
+  ValueNode* closure = GetClosure();
+  BuildCallRuntime(Runtime::kRecordReplayAssertExecutionProgress, {closure});
+}
+
+void MaglevGraphBuilder::VisitRecordReplayNotifyActivity() {
+  BuildCallRuntime(Runtime::kRecordReplayNotifyActivity, {});
+}
+
+void MaglevGraphBuilder::VisitRecordReplayInstrumentation() {
+  ValueNode* closure = GetClosure();
+  ValueNode* index = GetSmiConstant(iterator_.GetIndexOperand(0));
+  BuildCallRuntime(Runtime::kRecordReplayInstrumentation, {closure, index});
+}
+
+void MaglevGraphBuilder::VisitRecordReplayInstrumentationGenerator() {
+  ValueNode* closure = GetClosure();
+  ValueNode* index = GetSmiConstant(iterator_.GetIndexOperand(0));
+  ValueNode* generator_object = LoadRegisterTagged(1);
+  BuildCallRuntime(Runtime::kRecordReplayInstrumentationGenerator,
+                   {closure, index, generator_object});
+}
+
+void MaglevGraphBuilder::VisitRecordReplayAssertValue() {
+  ValueNode* closure = GetClosure();
+  ValueNode* index = GetSmiConstant(iterator_.GetIndexOperand(0));
+  ValueNode* value = GetAccumulatorTagged();
+  BuildCallRuntime(Runtime::kRecordReplayAssertValue, {closure, index, value});
+}
+
+void MaglevGraphBuilder::VisitRecordReplayTrackObjectId() {
+  ValueNode* object = LoadRegisterTagged(0);
+  BuildCallRuntime(Runtime::kRecordReplayTrackObjectId, {object});
+}
+
 void MaglevGraphBuilder::VisitAbort() {
   AbortReason reason = static_cast<AbortReason>(GetFlag8Operand(0));
   BuildAbort(reason);

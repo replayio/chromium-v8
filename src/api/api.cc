@@ -3147,7 +3147,7 @@ int Message::ErrorLevel() const {
 
 extern "C" int V8GetMessageRecordReplayBookmark(v8::Local<v8::Message> message) {
   auto self = Utils::OpenHandle(*message);
-  ASSERT_NO_SCRIPT_NO_EXCEPTION(self->GetIsolate());
+  DCHECK_NO_SCRIPT_NO_EXCEPTION(self->GetIsolate());
   return self->record_replay_bookmark();
 }
 
@@ -11692,10 +11692,8 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   internal::FLAG_parallel_scavenge = false;
   internal::FLAG_scavenge_task = false;
 
-  // Incremental/compacting GC are also disabled for now. These could probably
-  // be supported for now it's not worth the bother.
+  // Incremental GC is also disabled for now.
   internal::FLAG_incremental_marking = false;
-  internal::FLAG_never_compact = true;
 
   // Disable wasm background compilation.
   internal::FLAG_wasm_num_compilation_tasks = 0;

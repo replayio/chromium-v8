@@ -23,6 +23,8 @@
 #include "src/inspector/v8-value-utils.h"
 #include "src/inspector/v8-webdriver-serializer.h"
 
+extern "C" bool V8RecordReplayHasDivergedFromRecording();
+
 namespace v8_inspector {
 
 using protocol::Response;
@@ -1380,19 +1382,8 @@ bool ValueMirror::getProperties(v8::Local<v8::Context> context,
     }
   }
 
-<<<<<<< HEAD
-  bool formatAccessorsAsProperties =
-      !V8RecordReplayHasDivergedFromRecording() &&
-      clientFor(context)->formatAccessorsAsProperties(object);
-  auto iterator = v8::debug::PropertyIterator::Create(context, object);
-||||||| 7cbb7db789
-  bool formatAccessorsAsProperties =
-      clientFor(context)->formatAccessorsAsProperties(object);
-  auto iterator = v8::debug::PropertyIterator::Create(context, object);
-=======
   auto iterator = v8::debug::PropertyIterator::Create(context, object,
                                                       nonIndexedPropertiesOnly);
->>>>>>> 237de893e1c0a0628a57d0f5797483d3add7f005
   if (!iterator) {
     CHECK(tryCatch.HasCaught());
     return false;

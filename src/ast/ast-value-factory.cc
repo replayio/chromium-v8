@@ -36,6 +36,8 @@
 #include "src/strings/string-hasher.h"
 #include "src/utils/utils-inl.h"
 
+#include "src/handles/global-handles.h"
+
 namespace v8 {
 namespace internal {
 

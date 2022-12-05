@@ -21,6 +21,8 @@
 #include "src/inspector/value-mirror.h"
 #include "src/tracing/trace-event.h"
 
+#include "include/v8.h"
+
 namespace v8_inspector {
 
 namespace {

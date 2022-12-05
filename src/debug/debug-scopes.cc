@@ -203,9 +203,11 @@ static ParseInfo* ParseNoCache(UnoptimizedCompileFlags flags, Handle<Script> scr
                                Isolate* isolate) {
   // Even though the ParseInfo outlives this frame, this seems to only be used
   // during the actual parse and can be a local variable.
-  UnoptimizedCompileState compile_state(isolate);
+  UnoptimizedCompileState compile_state;
+  std::unique_ptr<ReusableUnoptimizedCompileState> reusable_compile_state =
+      std::make_unique<ReusableUnoptimizedCompileState>(isolate);
 
-  ParseInfo* info = new ParseInfo(isolate, flags, &compile_state);
+  ParseInfo* info = new ParseInfo(isolate, flags, &compile_state, reusable_compile_state.get());
 
   const bool parse_result =
       flags.is_toplevel()

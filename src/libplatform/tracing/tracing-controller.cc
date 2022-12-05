@@ -24,6 +24,8 @@
 #include "src/libplatform/tracing/trace-event-listener.h"
 #endif  // V8_USE_PERFETTO
 
+#include "v8.h"
+
 #ifdef V8_USE_PERFETTO
 class JsonOutputWriter : public perfetto::trace_processor::json::OutputWriter {
  public:

@@ -3302,7 +3302,7 @@ Handle<Script> NewScript(
 }
 
 static void SetRecordReplayIgnoreByURL(UnoptimizedCompileFlags& flags,
-                                       const Compiler::ScriptDetails& script_details) {
+                                       const ScriptDetails& script_details) {
   if (!recordreplay::IsRecordingOrReplaying()) {
     return;
   }
