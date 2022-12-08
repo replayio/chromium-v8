@@ -4,6 +4,8 @@
 
 #include "src/inspector/v8-inspector-session-impl.h"
 
+#include <string>
+
 #include "../../third_party/inspector_protocol/crdtp/cbor.h"
 #include "../../third_party/inspector_protocol/crdtp/dispatch.h"
 #include "../../third_party/inspector_protocol/crdtp/json.h"
@@ -319,6 +321,25 @@ V8InspectorSessionImpl::wrapObject(v8::Local<v8::Context> context,
                                    v8::Local<v8::Value> value,
                                    StringView groupName, bool generatePreview) {
   return wrapObject(context, value, toString16(groupName), generatePreview);
+}
+
+// Replay edit: Return objectId
+std::u16string V8InspectorSessionImpl::wrapObjectGetObjectId(
+    v8::Local<v8::Context> context, v8::Local<v8::Value> value,
+    StringView groupName, bool generatePreview) {
+  auto remoteObject =
+      wrapObject(context, value, toString16(groupName), generatePreview);
+
+  String16 defaultValue("");
+  const String16& objectId = remoteObject->getObjectId(defaultValue);
+  // StringView* objectIdStringView = new StringView(objectId.characters16(),
+  // objectId.length());
+
+  // create new string and assign to result
+  // NOTE: StringView does not own its memory and String16 is not part of the
+  // API, so we have to use std::*string
+  auto* chrs = reinterpret_cast<const char16_t*>(objectId.characters16());
+  return std::u16string(chrs, objectId.length());
 }
 
 std::unique_ptr<protocol::Runtime::RemoteObject>
