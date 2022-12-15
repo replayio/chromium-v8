@@ -89,6 +89,9 @@ void* OS::RemapShared(void* old_address, void* new_address, size_t size) {
 std::vector<OS::MemoryRange> OS::GetFreeMemoryRangesWithin(
     OS::Address boundary_start, OS::Address boundary_end, size_t minimum_size,
     size_t alignment) {
+  // Reading from /proc/self/maps isn't supported when recording/replaying.
+  if (recordreplay::IsRecordingOrReplaying()) return {};
+
   std::vector<OS::MemoryRange> result = {};
   // This function assumes that the layout of the file is as follows:
   // hex_start_addr-hex_end_addr rwxp <unused data> [binary_file_name]
