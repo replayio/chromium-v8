@@ -1827,6 +1827,10 @@ Handle<JSMessageObject> Isolate::CreateMessageOrAbort(
 }
 
 Object Isolate::ThrowInternal(Object raw_exception, MessageLocation* location) {
+  // https://linear.app/replay/issue/RUN-885
+  if (!recordreplay::AreEventsDisallowed())
+    recordreplay::Assert("Isolate::ThrowInternal");
+
   DCHECK(!has_pending_exception());
   IF_WASM(DCHECK_IMPLIES, trap_handler::IsTrapHandlerEnabled(),
           !trap_handler::IsThreadInWasm());
