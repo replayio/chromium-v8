@@ -44,6 +44,8 @@
 #include "src/base/platform/platform-posix.h"
 #include "src/base/platform/platform.h"
 
+#include "v8.h"
+
 namespace v8 {
 namespace base {
 
