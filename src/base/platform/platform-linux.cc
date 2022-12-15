@@ -177,6 +177,9 @@ namespace {
 std::unique_ptr<std::vector<MemoryRegion>> ParseProcSelfMaps(
     FILE* fp, std::function<bool(const MemoryRegion&)> predicate,
     bool early_stopping) {
+  // Reading from /proc/self/maps isn't supported when recording/replaying.
+  if (recordreplay::IsRecordingOrReplaying()) return nullptr;
+
   auto result = std::make_unique<std::vector<MemoryRegion>>();
 
   if (!fp) fp = fopen("/proc/self/maps", "r");
