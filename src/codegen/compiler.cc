@@ -3933,6 +3933,10 @@ MaybeHandle<CodeT> Compiler::CompileOptimizedOSR(Isolate* isolate,
                                                  Handle<JSFunction> function,
                                                  BytecodeOffset osr_offset,
                                                  ConcurrencyMode mode) {
+  // The point at which optimized compilations occur can vary between recording
+  // and replaying.
+  recordreplay::AutoDisallowEvents disallow;
+
   DCHECK(IsOSR(osr_offset));
 
   if (V8_UNLIKELY(isolate->serializer_enabled())) return {};
