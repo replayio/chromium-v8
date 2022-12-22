@@ -10840,6 +10840,24 @@ void RecordReplayAddInterestingSource(const char* url) {
   if (!gRecordReplayInterestingSource) {
     gRecordReplayInterestingSource = strdup(url);
     gRecordReplayRememberRecording();
+
+    // Add the recording to a recording ID file if specified.
+    char* env = getenv("RECORD_REPLAY_RECORDING_ID_FILE");
+    if (env) {
+      FILE* file = fopen(env, "a");
+      if (file) {
+        const char* recordingId = recordreplay::GetRecordingId();
+        // Include the first interesting source found when writing the
+        // recording ID out, to help distinguish between different content
+        // processes which Chromium will create for content from different
+        // origins.
+        fprintf(file, "%s %s\n", recordingId, gRecordReplayInterestingSource);
+        fclose(file);
+        recordreplay::Print("Found content, saving recording ID %s", recordingId);
+      } else {
+        recordreplay::Print("Error: Could not open %s for adding recording ID", env);
+      }
+    }
   }
 }
 
@@ -11536,24 +11554,6 @@ extern "C" const char* V8RecordReplayCrashReasonCallback();
 
 static void DoFinishRecording() {
   recordreplay::Print("DoFinishRecording");
-
-  // Add the recording to a recording ID file if specified.
-  char* env = getenv("RECORD_REPLAY_RECORDING_ID_FILE");
-  if (env) {
-    FILE* file = fopen(env, "a");
-    if (file) {
-      const char* recordingId = recordreplay::GetRecordingId();
-      // Include the first interesting source found when writing the
-      // recording ID out, to help distinguish between different content
-      // processes which Chromium will create for content from different
-      // origins.
-      fprintf(file, "%s %s\n", recordingId, internal::gRecordReplayInterestingSource);
-      fclose(file);
-      recordreplay::Print("Found content, saving recording ID %s", recordingId);
-    } else {
-      recordreplay::Print("Error: Could not open %s for adding recording ID", env);
-    }
-  }
 
   gRecordReplayFinishRecording();
 
