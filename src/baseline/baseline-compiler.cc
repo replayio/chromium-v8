@@ -2317,24 +2317,28 @@ void BaselineCompiler::VisitRecordReplayNotifyActivity() {
 }
 
 void BaselineCompiler::VisitRecordReplayInstrumentation() {
+  SaveAccumulatorScope accumulator_scope(&basm_);
   uint32_t index = Index(0);
   CallRuntime(Runtime::kRecordReplayInstrumentation,
               __ FunctionOperand(), Smi::FromInt(index));
 }
 
 void BaselineCompiler::VisitRecordReplayInstrumentationGenerator() {
+  SaveAccumulatorScope accumulator_scope(&basm_);
   uint32_t index = Index(0);
   CallRuntime(Runtime::kRecordReplayInstrumentationGenerator,
               __ FunctionOperand(), Smi::FromInt(index), RegisterOperand(1));
 }
 
 void BaselineCompiler::VisitRecordReplayAssertValue() {
+  SaveAccumulatorScope accumulator_scope(&basm_);
   CallRuntime(Runtime::kRecordReplayAssertValue,
               __ FunctionOperand(), Smi::FromInt(Index(0)),
               kInterpreterAccumulatorRegister);
 }
 
 void BaselineCompiler::VisitRecordReplayTrackObjectId() {
+  SaveAccumulatorScope accumulator_scope(&basm_);
   CallRuntime(Runtime::kRecordReplayTrackObjectId, RegisterOperand(0));
 }
 

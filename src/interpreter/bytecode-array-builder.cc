@@ -879,7 +879,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::LoadNamedPropertyFromSuper(
 BytecodeArrayBuilder& BytecodeArrayBuilder::LoadKeyedProperty(
     Register object, int feedback_slot) {
   OutputGetKeyedProperty(object, feedback_slot);
-  RecordReplayAssertValue("GetKeyedProperty");
+  RecordReplayAssertValue("LoadKeyedProperty");
   return *this;
 }
 
@@ -932,7 +932,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::SetNamedProperty(
 
 BytecodeArrayBuilder& BytecodeArrayBuilder::DefineNamedOwnProperty(
     Register object, const AstRawString* name, int feedback_slot) {
-  RecordReplayAssertValue(std::string("StoreNamedOwnProperty " + name->to_string()));
+  RecordReplayAssertValue(std::string("DefineNamedOwnProperty " + name->to_string()));
   size_t name_index = GetConstantPoolEntry(name);
   // Ensure that the store operation is in sync with the IC slot kind.
   DCHECK_EQ(
@@ -945,7 +945,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::DefineNamedOwnProperty(
 BytecodeArrayBuilder& BytecodeArrayBuilder::SetKeyedProperty(
     Register object, Register key, int feedback_slot,
     LanguageMode language_mode) {
-  RecordReplayAssertValue("StoreKeyedProperty");
+  RecordReplayAssertValue("SetKeyedProperty");
   // Ensure that language mode is in sync with the IC slot kind.
   DCHECK_EQ(GetLanguageModeFromSlotKind(feedback_vector_spec()->GetKind(
                 FeedbackVector::ToSlot(feedback_slot))),
