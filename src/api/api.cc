@@ -11751,10 +11751,10 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   internal::FLAG_compilation_cache = false;
 
   if (!V8RecordReplayFeatureEnabled("use-baseline-jit")) {
-    v8_flags.sparkplug = false;
+    internal::v8_flags.sparkplug = false;
   }
   if (!V8RecordReplayFeatureEnabled("use-optimizing-jit")) {
-    v8_flags.turbofan = false;
+    internal::v8_flags.turbofan = false;
   }
 
   // Write out our pid to a file if specified.
