@@ -11022,6 +11022,12 @@ static const char* gRecordReplayKnownFeatures[] = {
 
   // Install hook used by react devtools backend.
   "react-devtools-backend",
+
+  // Use baseline JIT compiler.
+  "use-baseline-jit",
+
+  // Use optimizing JIT compiler.
+  "use-optimizing-jit",
 };
 
 static inline void RecordReplayCheckKnownFeature(const char* feature) {
@@ -11743,6 +11749,13 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
 
   // The compilation cache can interfere with getting consistent script IDs.
   internal::FLAG_compilation_cache = false;
+
+  if (!V8RecordReplayFeatureEnabled("use-baseline-jit")) {
+    v8_flags.sparkplug = false;
+  }
+  if (!V8RecordReplayFeatureEnabled("use-optimizing-jit")) {
+    v8_flags.turbofan = false;
+  }
 
   // Write out our pid to a file if specified.
   char* env = getenv("RECORD_REPLAY_PID_FILE");
