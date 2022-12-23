@@ -3569,6 +3569,12 @@ bool RecordReplayIgnoreScriptByURL(const char* url) {
   return !strcmp(url, "record-replay-internal");
 }
 
+// Return whether a script is an uninteresting internal URL, but which still needs
+// to be registered with the recorder so that breakpoints can be created.
+bool RecordReplayIsInternalScriptURL(const char* url) {
+  return !strcmp(url, "record-replay-react-devtools");
+}
+
 extern bool RecordReplayHasDefaultContext();
 
 typedef std::unordered_set<int> ScriptIdSet;
@@ -3621,7 +3627,9 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
     return;
   }
 
-  RecordReplayAddInterestingSource(url.c_str());
+  if (!RecordReplayIsInternalScriptURL(url.c_str())) {
+    RecordReplayAddInterestingSource(url.c_str());
+  }
 
   // It's not clear how we can distinguish inline scripts from HTML files vs.
   // scripts loaded in other ways here. Use the initial position of the script
