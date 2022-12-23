@@ -26,6 +26,8 @@
 #include "src/heap/cppgc/stats-collector.h"
 #include "src/heap/cppgc/task-handle.h"
 
+#include "v8.h"
+
 namespace cppgc::internal {
 
 namespace {
@@ -807,7 +809,7 @@ class Sweeper::SweeperImpl final {
 
   bool SweepForAllocationIfRunning(NormalPageSpace* space, size_t size,
                                    v8::base::TimeDelta max_duration) {
-    recordreplay::AutoDisallowEvents disallow;
+    v8::recordreplay::AutoDisallowEvents disallow;
 
     if (!is_in_progress_) return false;
 
