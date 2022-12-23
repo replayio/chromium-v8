@@ -83,37 +83,6 @@ inline Dst BitwiseCast(const Src src) {
   return temp;
 }
 
-static void (*gRecordReplayAssertFn)(const char*, va_list);
-
-static void RecordReplayAssert(const char* format, ...) {
-  if (!gRecordReplayAssertFn) {
-    void* fnptr = dlsym(RTLD_DEFAULT, "RecordReplayAssert");
-    if (!fnptr) {
-      return;
-    }
-    gRecordReplayAssertFn = BitwiseCast<void (*)(const char*, va_list)>(fnptr);
-  }
-
-  va_list ap;
-  va_start(ap, format);
-  gRecordReplayAssertFn(format, ap);
-  va_end(ap);
-}
-
-static void (*gRecordReplayBytesFn)(const char*, void*, size_t);
-
-static void RecordReplayBytes(const char* why, void* data, size_t nbytes) {
-  if (!gRecordReplayBytesFn) {
-    void* fnptr = dlsym(RTLD_DEFAULT, "RecordReplayBytes");
-    if (!fnptr) {
-      return;
-    }
-    gRecordReplayBytesFn = BitwiseCast<void (*)(const char*, void*, size_t)>(fnptr);
-  }
-
-  gRecordReplayBytesFn(why, data, nbytes);
-}
-
 static V8_INLINE void __cpuid(int cpu_info[4], int info_type) {
 // Clear ecx to align with __cpuid() of MSVC:
 // https://msdn.microsoft.com/en-us/library/hskdteyh.aspx
@@ -133,11 +102,6 @@ static V8_INLINE void __cpuid(int cpu_info[4], int info_type) {
                      "=d"(cpu_info[3])
                    : "a"(info_type), "c"(0));
 #endif  // defined(__i386__) && defined(__pic__)
-
-  // When recording/replaying we might replay on a different CPU than we
-  // recorded on. Force the CPU info to match.
-  RecordReplayAssert("__cpuid %d", info_type);
-  RecordReplayBytes("__cpuid", cpu_info, 4 * sizeof(int));
 }
 
 #endif  // !V8_LIBC_MSVCRT

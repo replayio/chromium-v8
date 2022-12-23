@@ -3917,6 +3917,19 @@ extern "C" void V8RecordReplaySetAPIObjectIdCallback(int (*callback)(v8::Local<v
   gGetAPIObjectIdCallback = callback;
 }
 
+// Get a string that can be included in recording assertions.
+static std::string ToReadableString(const char* str) {
+  std::ostringstream o;
+  for (; *str; str++) {
+    if ((int)*str >= 32 && (int)*str <= 126) {
+      o << *str;
+    } else {
+      o << "\\" << (int)*str;
+    }
+  }
+  return o.str();
+}
+
 // Get a string describing a value which can be used in assertions.
 // Only basic information about the value is obtained, to keep things fast.
 std::string RecordReplayBasicValueContents(Handle<Object> value) {
@@ -3944,7 +3957,8 @@ std::string RecordReplayBasicValueContents(Handle<Object> value) {
     String str = String::cast(*value);
     if (str.length() <= 200) {
       std::unique_ptr<char[]> name = str.ToCString();
-      return StringPrintf("String %s", name.get());
+      std::string readable_name = ToReadableString(name.get());
+      return StringPrintf("String %s", readable_name.c_str());
     }
     return StringPrintf("LongString %d", str.length());
   }

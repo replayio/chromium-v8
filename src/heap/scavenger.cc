@@ -457,7 +457,13 @@ void ScavengerCollector::CollectGarbage() {
     }
   }
 
+  // https://linear.app/replay/issue/RUN-885
+  recordreplay::Diagnostic("ScavengerCollector::CollectGarbage #5");
+
   ProcessWeakReferences(&ephemeron_table_list);
+
+  // https://linear.app/replay/issue/RUN-885
+  recordreplay::Diagnostic("ScavengerCollector::CollectGarbage #6");
 
   // Set age mark.
   semi_space_new_space->set_age_mark(semi_space_new_space->top());
@@ -762,6 +768,9 @@ void ScavengerCollector::ProcessWeakReferences(
 void ScavengerCollector::ClearYoungEphemerons(
     EphemeronTableList* ephemeron_table_list) {
   ephemeron_table_list->Iterate([this](EphemeronHashTable table) {
+    // https://linear.app/replay/issue/RUN-885
+    recordreplay::Diagnostic("ScavengerCollector::ClearYoungEphemerons #1 %d %d",
+                             table.NumberOfElements(), table.Capacity());
     for (InternalIndex i : table.IterateEntries()) {
       // Keys in EphemeronHashTables must be heap objects.
       HeapObjectSlot key_slot(

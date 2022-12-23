@@ -10833,6 +10833,7 @@ static bool gRecordReplayHasPaint;
 // Whether we've determined this is an interesting recording.
 static bool gRecordReplayInterestingRecording;
 
+// This should be called whenever any of the state it tests is updated.
 static void MaybeMarkInterestingRecording() {
   CHECK(IsMainThread());
 
@@ -10864,7 +10865,7 @@ static void MaybeMarkInterestingRecording() {
       // origins.
       fprintf(file, "%s %s\n", recordingId, gRecordReplayInterestingSource);
       fclose(file);
-      recordreplay::Print("Found content, saving recording ID %s", recordingId);
+      recordreplay::Print("Found content, saved recording %s to %s", recordingId, env);
     } else {
       recordreplay::Print("Error: Could not open %s for adding recording ID", env);
     }

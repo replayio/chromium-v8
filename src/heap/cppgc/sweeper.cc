@@ -807,6 +807,8 @@ class Sweeper::SweeperImpl final {
 
   bool SweepForAllocationIfRunning(NormalPageSpace* space, size_t size,
                                    v8::base::TimeDelta max_duration) {
+    recordreplay::AutoDisallowEvents disallow;
+
     if (!is_in_progress_) return false;
 
     // Bail out for recursive sweeping calls. This can happen when finalizers
