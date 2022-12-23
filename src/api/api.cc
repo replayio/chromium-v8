@@ -11449,7 +11449,7 @@ extern "C" size_t V8RecordReplayPaintStart() {
     return 0;
   }
   internal::gRecordReplayHasPaint = true;
-  MaybeMarkInterestingRecording();
+  internal::MaybeMarkInterestingRecording();
   return gRecordReplayPaintStart();
 }
 
