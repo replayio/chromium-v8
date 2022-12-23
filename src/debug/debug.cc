@@ -3572,7 +3572,8 @@ bool RecordReplayIgnoreScriptByURL(const char* url) {
 // Return whether a script is an uninteresting internal URL, but which still needs
 // to be registered with the recorder so that breakpoints can be created.
 bool RecordReplayIsInternalScriptURL(const char* url) {
-  return !strcmp(url, "record-replay-react-devtools");
+  return !strcmp(url, "record-replay-react-devtools") ||
+         !strncmp(url, "extensions::", 12);
 }
 
 extern bool RecordReplayHasDefaultContext();

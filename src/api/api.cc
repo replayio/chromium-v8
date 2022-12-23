@@ -10826,6 +10826,51 @@ bool gRecordReplayAssertTrackedObjects;
 // into the process.
 static char* gRecordReplayInterestingSource;
 
+// Processes which didn't paint anything will optionally be ignored,
+// even if they have interesting sources.
+static bool gRecordReplayHasPaint;
+
+// Whether we've determined this is an interesting recording.
+static bool gRecordReplayInterestingRecording;
+
+static void MaybeMarkInterestingRecording() {
+  CHECK(IsMainThread());
+
+  if (gRecordReplayInterestingRecording) {
+    return;
+  }
+
+  if (!gRecordReplayInterestingSource) {
+    return;
+  }
+
+  if (getenv("RECORD_REPLAY_IGNORE_NON_PAINTING_CONTENT") && !gRecordReplayHasPaint) {
+    return;
+  }
+
+  gRecordReplayInterestingRecording = true;
+
+  gRecordReplayRememberRecording();
+
+  // Add the recording to a recording ID file if specified.
+  char* env = getenv("RECORD_REPLAY_RECORDING_ID_FILE");
+  if (env) {
+    FILE* file = fopen(env, "a");
+    if (file) {
+      const char* recordingId = recordreplay::GetRecordingId();
+      // Include the first interesting source found when writing the
+      // recording ID out, to help distinguish between different content
+      // processes which Chromium will create for content from different
+      // origins.
+      fprintf(file, "%s %s\n", recordingId, gRecordReplayInterestingSource);
+      fclose(file);
+      recordreplay::Print("Found content, saving recording ID %s", recordingId);
+    } else {
+      recordreplay::Print("Error: Could not open %s for adding recording ID", env);
+    }
+  }
+}
+
 void RecordReplayAddInterestingSource(const char* url) {
   if (!*url) {
     // Always ignore sources with missing URLs.
@@ -10839,42 +10884,8 @@ void RecordReplayAddInterestingSource(const char* url) {
 
   if (!gRecordReplayInterestingSource) {
     gRecordReplayInterestingSource = strdup(url);
-    gRecordReplayRememberRecording();
-
-    // Add the recording to a recording ID file if specified.
-    char* env = getenv("RECORD_REPLAY_RECORDING_ID_FILE");
-    if (env) {
-      FILE* file = fopen(env, "a");
-      if (file) {
-        const char* recordingId = recordreplay::GetRecordingId();
-        // Include the first interesting source found when writing the
-        // recording ID out, to help distinguish between different content
-        // processes which Chromium will create for content from different
-        // origins.
-        fprintf(file, "%s %s\n", recordingId, gRecordReplayInterestingSource);
-        fclose(file);
-        recordreplay::Print("Found content, saving recording ID %s", recordingId);
-      } else {
-        recordreplay::Print("Error: Could not open %s for adding recording ID", env);
-      }
-    }
+    MaybeMarkInterestingRecording();
   }
-}
-
-// Processes which didn't paint anything will optionally be ignored,
-// even if they have interesting sources.
-static std::atomic<bool> gRecordReplayHasPaint;
-
-static bool ShouldFinishRecording() {
-  if (!gRecordReplayInterestingSource) {
-    return false;
-  }
-
-  if (getenv("RECORD_REPLAY_IGNORE_NON_PAINTING_CONTENT") && !gRecordReplayHasPaint) {
-    return false;
-  }
-
-  return true;
 }
 
 // Add metadata for the recording the first time an HTML page is parsed.
@@ -11434,13 +11445,17 @@ extern "C" void V8RecordReplayOnNetworkStreamEnd(const char* id, size_t length) 
 
 extern "C" size_t V8RecordReplayPaintStart() {
   DCHECK(recordreplay::IsRecordingOrReplaying());
-  return internal::gRecordReplayHasCheckpoint ? gRecordReplayPaintStart() : 0;
+  if (!internal::gRecordReplayHasCheckpoint) {
+    return 0;
+  }
+  internal::gRecordReplayHasPaint = true;
+  MaybeMarkInterestingRecording();
+  return gRecordReplayPaintStart();
 }
 
 extern "C" void V8RecordReplayPaintFinished(size_t bookmark) {
   DCHECK(recordreplay::IsRecordingOrReplaying());
   if (bookmark) {
-    internal::gRecordReplayHasPaint = true;
     gRecordReplayPaintFinished(bookmark);
   }
 }
@@ -11595,7 +11610,7 @@ extern "C" void V8RecordReplayMaybeTerminate(void (*callback)(void*), void* data
 extern "C" V8_EXPORT void V8RecordReplayFinishRecording() {
   recordreplay::Assert("V8RecordReplayFinishRecording");
   if (recordreplay::IsRecordingOrReplaying()) {
-    if (internal::ShouldFinishRecording()) {
+    if (internal::gRecordReplayInterestingRecording) {
       if (IsMainThread()) {
         DoFinishRecording();
       } else {
