@@ -52,6 +52,8 @@
 #include "src/inspector/v8-value-utils.h"
 #include "src/tracing/trace-event.h"
 
+#include "v8.h"
+
 namespace v8_inspector {
 
 namespace V8RuntimeAgentImplState {
