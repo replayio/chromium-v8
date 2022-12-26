@@ -101,6 +101,9 @@ class ConsoleHelper {
 
   void reportCall(ConsoleAPIType type,
                   const std::vector<v8::Local<v8::Value>>& arguments) {
+    // https://linear.app/replay/issue/RUN-885
+    v8::recordreplay::Assert("ConsoleHelper::reportCall %d", (int)type);
+
     if (!m_groupId) return;
     std::unique_ptr<V8ConsoleMessage> message =
         V8ConsoleMessage::createForConsoleAPI(
