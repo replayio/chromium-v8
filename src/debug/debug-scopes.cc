@@ -248,7 +248,8 @@ static ParseInfo* ParseWithCache(UnoptimizedCompileFlags flags, Handle<Script> s
   // sent by the recorder (in which case events are disallowed). We also don't
   // cache when the outer scope was specified, as it isn't clear how this affects
   // the parse results and is only used in evaluated scripts.
-  if (!recordreplay::AreEventsDisallowed() ||
+  if (!recordreplay::IsRecordingOrReplaying("use-parse-cache") ||
+      !recordreplay::AreEventsDisallowed() ||
       !IsMainThread() ||
       !maybe_outer_scope.is_null()) {
     ParseInfo* info = ParseNoCache(flags, script, maybe_outer_scope, shared_info, isolate);
