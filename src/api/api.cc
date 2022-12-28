@@ -11040,9 +11040,6 @@ static const char* gRecordReplayKnownFeatures[] = {
 
   // Use optimizing JIT compiler.
   "use-optimizing-jit",
-
-  // Use replaying specific cache for debug scopes.
-  "use-parse-cache",
 };
 
 static inline void RecordReplayCheckKnownFeature(const char* feature) {

@@ -36,8 +36,6 @@
 #include "src/strings/string-hasher.h"
 #include "src/utils/utils-inl.h"
 
-#include "src/handles/global-handles.h"
-
 namespace v8 {
 namespace internal {
 
@@ -59,8 +57,6 @@ class OneByteStringStream {
 
 }  // namespace
 
-extern bool RecordReplayParseShouldUseEternalHandles();
-
 template <typename IsolateT>
 void AstRawString::Internalize(IsolateT* isolate) {
   DCHECK(!has_string_);
@@ -73,16 +69,6 @@ void AstRawString::Internalize(IsolateT* isolate) {
     TwoByteStringKey key(raw_hash_field_,
                          base::Vector<const uint16_t>::cast(literal_bytes_));
     set_string(isolate->factory()->InternalizeStringWithKey(&key));
-  }
-
-  if (RecordReplayParseShouldUseEternalHandles()) {
-    CHECK(IsMainThread());
-    Isolate* new_isolate = reinterpret_cast<Isolate*>(isolate);
-
-    int index = -1;
-    new_isolate->eternal_handles()->Create(new_isolate, *string(), &index);
-    Handle<Object> eternal = new_isolate->eternal_handles()->Get(index);
-    set_string(Handle<String>::cast(eternal));
   }
 }
 
