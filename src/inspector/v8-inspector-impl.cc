@@ -52,6 +52,8 @@
 #include "src/inspector/v8-stack-trace-impl.h"
 #include "src/inspector/value-mirror.h"
 
+#include "v8.h"
+
 namespace v8_inspector {
 
 std::unique_ptr<V8Inspector> V8Inspector::create(v8::Isolate* isolate,

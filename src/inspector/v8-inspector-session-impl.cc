@@ -26,6 +26,8 @@
 #include "src/inspector/v8-runtime-agent-impl.h"
 #include "src/inspector/v8-schema-agent-impl.h"
 
+#include "v8.h"
+
 namespace v8_inspector {
 namespace {
 using v8_crdtp::span;
