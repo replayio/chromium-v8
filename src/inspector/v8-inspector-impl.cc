@@ -407,6 +407,9 @@ void V8InspectorImpl::forEachSession(
 
   // Retrieve by ids each time since |callback| may destroy some contexts.
   for (auto& sessionId : ids) {
+    // https://linear.app/replay/issue/RUN-885
+    v8::recordreplay::Assert("V8InspectorImpl::forEachSession #1 %d", sessionId);
+
     it = m_sessions.find(contextGroupId);
     if (it == m_sessions.end()) continue;
     auto sessionIt = it->second.find(sessionId);
