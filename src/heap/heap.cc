@@ -2103,9 +2103,6 @@ GCTracer::Scope::ScopeId CollectorScopeId(GarbageCollector collector) {
 size_t Heap::PerformGarbageCollection(
     GarbageCollector collector, GarbageCollectionReason gc_reason,
     const char* collector_reason, const v8::GCCallbackFlags gc_callback_flags) {
-  // https://linear.app/replay/issue/RUN-885
-  recordreplay::Diagnostic("Heap::PerformGarbageCollection Start");
-
   DisallowJavascriptExecution no_js(isolate());
 
   if (IsYoungGenerationCollector(collector)) {
@@ -2256,9 +2253,6 @@ size_t Heap::PerformGarbageCollection(
       HeapVerifier::VerifyHeapIfEnabled(client->heap());
     });
   }
-
-  // https://linear.app/replay/issue/RUN-885
-  recordreplay::Diagnostic("Heap::PerformGarbageCollection Done");
 
   return freed_global_handles;
 }

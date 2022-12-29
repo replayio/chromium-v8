@@ -151,10 +151,6 @@ std::unique_ptr<V8InspectorSession> V8InspectorImpl::connect(
     int contextGroupId, V8Inspector::Channel* channel, StringView state,
     ClientTrustLevel client_trust_level) {
   int sessionId = ++m_lastSessionId;
-
-  // https://linear.app/replay/issue/RUN-885
-  v8::recordreplay::Assert("V8InspectorImpl::connect %d %d", contextGroupId, sessionId);
-
   std::unique_ptr<V8InspectorSessionImpl> session =
       V8InspectorSessionImpl::create(this, contextGroupId, sessionId, channel,
                                      state, client_trust_level);
@@ -163,10 +159,6 @@ std::unique_ptr<V8InspectorSession> V8InspectorImpl::connect(
 }
 
 void V8InspectorImpl::disconnect(V8InspectorSessionImpl* session) {
-  // https://linear.app/replay/issue/RUN-885
-  v8::recordreplay::Assert("V8InspectorImpl::disconnect %d %d %d",
-                           v8::recordreplay::PointerId(session), session->contextGroupId(), session->sessionId());
-
   auto& map = m_sessions[session->contextGroupId()];
   map.erase(session->sessionId());
   if (map.empty()) m_sessions.erase(session->contextGroupId());
@@ -410,23 +402,13 @@ void V8InspectorImpl::forEachSession(
     int contextGroupId,
     const std::function<void(V8InspectorSessionImpl*)>& callback) {
   auto it = m_sessions.find(contextGroupId);
-
-  // https://linear.app/replay/issue/RUN-885
-  v8::recordreplay::Assert("V8InspectorImpl::forEachSession %d %d", contextGroupId, it != m_sessions.end());
-
   if (it == m_sessions.end()) return;
   std::vector<int> ids;
   ids.reserve(it->second.size());
   for (auto& sessionIt : it->second) ids.push_back(sessionIt.first);
 
-  // https://linear.app/replay/issue/RUN-885
-  v8::recordreplay::Assert("V8InspectorImpl::forEachSession #1 %d", (int)ids.size());
-
   // Retrieve by ids each time since |callback| may destroy some contexts.
   for (auto& sessionId : ids) {
-    // https://linear.app/replay/issue/RUN-885
-    v8::recordreplay::Assert("V8InspectorImpl::forEachSession #2 %d", sessionId);
-
     it = m_sessions.find(contextGroupId);
     if (it == m_sessions.end()) continue;
     auto sessionIt = it->second.find(sessionId);

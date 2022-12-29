@@ -117,11 +117,6 @@ V8InspectorSessionImpl::V8InspectorSessionImpl(
       m_consoleAgent(nullptr),
       m_schemaAgent(nullptr),
       m_clientTrustLevel(clientTrustLevel) {
-  // https://linear.app/replay/issue/RUN-885
-  v8::recordreplay::RegisterPointer("V8InspectorSessionImpl", this);
-  v8::recordreplay::Assert("V8InspectorSessionImpl::V8InspectorSessionImpl %d %d",
-                           contextGroupId, sessionId);
-
   m_state->getBoolean("use_binary_protocol", &use_binary_protocol_);
 
   m_runtimeAgent.reset(new V8RuntimeAgentImpl(
@@ -160,9 +155,6 @@ V8InspectorSessionImpl::V8InspectorSessionImpl(
 }
 
 V8InspectorSessionImpl::~V8InspectorSessionImpl() {
-  // https://linear.app/replay/issue/RUN-885
-  v8::recordreplay::UnregisterPointer(this);
-
   v8::Isolate::Scope scope(m_inspector->isolate());
   discardInjectedScripts();
   m_consoleAgent->disable();
@@ -236,10 +228,6 @@ void V8InspectorSessionImpl::FallThrough(int callId,
 }
 
 void V8InspectorSessionImpl::FlushProtocolNotifications() {
-  // https://linear.app/replay/issue/RUN-885
-  v8::recordreplay::Assert("V8InspectorSessionImpl::FlushProtocolNotifications %d",
-                           v8::recordreplay::PointerId(this));
-
   m_channel->flushProtocolNotifications();
 }
 

@@ -564,12 +564,18 @@ void V8ConsoleMessageStorage::addMessage(
 
   TraceV8ConsoleMessageEvent(message->origin(), message->type());
 
+  // https://linear.app/replay/issue/RUN-885
+  v8::recordreplay::Assert("V8ConsoleMessageStorage::addMessage #1");
+
   inspector->forEachSession(
       contextGroupId, [&message](V8InspectorSessionImpl* session) {
         if (message->origin() == V8MessageOrigin::kConsole)
           session->consoleAgent()->messageAdded(message.get());
         session->runtimeAgent()->messageAdded(message.get());
       });
+
+  // https://linear.app/replay/issue/RUN-885
+  v8::recordreplay::Assert("V8ConsoleMessageStorage::addMessage #2");
 
   // After notifying the inspector about the message, listeners will know about
   // the message contents if any commands are sent within RecordReplayOnConsoleMessage.

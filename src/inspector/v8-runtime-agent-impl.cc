@@ -996,14 +996,8 @@ void V8RuntimeAgentImpl::messageAdded(V8ConsoleMessage* message) {
 
 bool V8RuntimeAgentImpl::reportMessage(V8ConsoleMessage* message,
                                        bool generatePreview) {
-  // https://linear.app/replay/issue/RUN-885
-  v8::recordreplay::Assert("V8RuntimeAgentImpl::reportMessage");
-
   message->reportToFrontend(&m_frontend, m_session, generatePreview);
   m_frontend.flush();
-
-  // https://linear.app/replay/issue/RUN-885
-  v8::recordreplay::Assert("V8RuntimeAgentImpl::reportMessage #1");
 
   return m_inspector->hasConsoleMessageStorage(m_session->contextGroupId());
 }
