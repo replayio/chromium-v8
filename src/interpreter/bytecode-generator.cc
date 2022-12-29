@@ -1432,14 +1432,6 @@ void BytecodeGenerator::GenerateBytecodeBody() {
   if (recordreplay::IsRecordingOrReplaying("emit-opcodes")) {
     builder()->RecordReplayOnProgress();
 
-    if (gRecordReplayAssertValues) {
-      int num_parameters = closure_scope()->num_parameters();
-      for (int i = 0; i < num_parameters; i++) {
-        Register parameter(builder()->Parameter(i));
-        builder()->LoadAccumulatorWithRegister(parameter).RecordReplayAssertValue("Parameter");
-      }
-    }
-
     if (IsResumableFunction(literal->kind())) {
       builder()->RecordReplayInstrumentationGenerator("generator", generator_object());
     } else {
@@ -3607,6 +3599,8 @@ void BytecodeGenerator::BuildVariableLoad(Variable* variable,
       if (hole_check_mode == HoleCheckMode::kRequired) {
         BuildThrowIfHole(variable);
       }
+
+      builder()->RecordReplayAssertValue("Parameter");
       break;
     }
     case VariableLocation::UNALLOCATED: {
