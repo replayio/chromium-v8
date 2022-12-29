@@ -3721,7 +3721,7 @@ char* CommandCallback(const char* command, const char* params) {
 
   MaybeHandle<Object> maybeParams = JsonParser<uint8_t>::Parse(isolate, paramsStr, undefined);
   if (maybeParams.is_null()) {
-    recordreplay::Diagnostic("Error: CommandCallbackWrapper Parse %s failed", params);
+    recordreplay::Diagnostic("Error: CommandCallback Parse %s failed", params);
     IMMEDIATE_CRASH();
   }
   Handle<Object> paramsObj = maybeParams.ToHandleChecked();
@@ -3730,7 +3730,10 @@ char* CommandCallback(const char* command, const char* params) {
   for (const InternalCommandCallback& cb : gInternalCommandCallbacks) {
     if (!strcmp(cb.mCommand, command)) {
       rv = cb.mCallback(isolate, paramsObj);
-      CHECK(!rv.is_null());
+      if (rv.is_null()) {
+        recordreplay::Diagnostic("Error: CommandCallback internal command %s failed", command);
+        IMMEDIATE_CRASH();
+      }
     }
   }
   if (rv.is_null()) {
@@ -3742,7 +3745,10 @@ char* CommandCallback(const char* command, const char* params) {
     callArgs[0] = CStringToHandle(isolate, command);
     callArgs[1] = paramsObj;
     rv = Execution::Call(isolate, callback, undefined, 2, callArgs);
-    CHECK(!rv.is_null());
+    if (rv.is_null()) {
+      recordreplay::Diagnostic("Error: CommandCallback generic command %s failed", command);
+      IMMEDIATE_CRASH();
+    }
   }
 
   Handle<Object> rvStr =
