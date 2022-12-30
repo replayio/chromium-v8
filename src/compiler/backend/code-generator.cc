@@ -468,6 +468,8 @@ base::OwnedVector<byte> CodeGenerator::GetProtectedInstructionsData() {
 }
 
 MaybeHandle<Code> CodeGenerator::FinalizeCode() {
+  recordreplay::AutoDisallowEvents disallow;
+
   if (result_ != kSuccess) {
     tasm()->AbortedCodeGeneration();
     return MaybeHandle<Code>();
