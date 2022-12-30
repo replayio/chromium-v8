@@ -523,8 +523,24 @@ void ValueSerializer::WriteString(Handle<String> string) {
   DCHECK(flat.IsFlat());
   if (flat.IsOneByte()) {
     base::Vector<const uint8_t> chars = flat.ToOneByteVector();
-    WriteTag(SerializationTag::kOneByteString);
-    WriteOneByteString(chars);
+
+    // Whether a string has a one or two byte representation can vary when
+    // replaying due to JIT and other VM behavior. Only write out strings
+    // as two bytes to ensure serialized buffers have a consistent size.
+    if (recordreplay::IsRecordingOrReplaying("values")) {
+      base::ScopedVector<base::uc16> new_chars(chars.length());
+      for (int i = 0; i < chars.length(); i++)
+        new_chars[i] = chars[i];
+      uint32_t byte_length = new_chars.length() * sizeof(base::uc16);
+      // The existing reading code expects 16-byte strings to be aligned.
+      if ((buffer_size_ + 1 + BytesNeededForVarint(byte_length)) & 1)
+        WriteTag(SerializationTag::kPadding);
+      WriteTag(SerializationTag::kTwoByteString);
+      WriteTwoByteString(new_chars);
+    } else {
+      WriteTag(SerializationTag::kOneByteString);
+      WriteOneByteString(chars);
+    }
   } else if (flat.IsTwoByte()) {
     base::Vector<const base::uc16> chars = flat.ToUC16Vector();
     uint32_t byte_length = chars.length() * sizeof(base::uc16);
