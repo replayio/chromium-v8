@@ -10,11 +10,12 @@
 #define V8_WASM_GRAPH_BUILDER_INTERFACE_H_
 
 #include "src/wasm/decoder.h"
-#include "src/wasm/wasm-opcodes.h"
 #include "src/wasm/wasm-result.h"
 
 namespace v8 {
 namespace internal {
+
+class AccountingAllocator;
 
 namespace compiler {  // external declarations from compiler.
 class NodeOriginTable;
@@ -28,12 +29,23 @@ struct FunctionBody;
 class WasmFeatures;
 struct WasmModule;
 
+enum InlinedStatus {
+  // Inlined function whose call node has IfSuccess/IfException outputs.
+  kInlinedHandledCall,
+  // Inlined function whose call node does not have IfSuccess/IfException
+  // outputs.
+  kInlinedNonHandledCall,
+  // Not an inlined call.
+  kRegularFunction
+};
+
 V8_EXPORT_PRIVATE DecodeResult
 BuildTFGraph(AccountingAllocator* allocator, const WasmFeatures& enabled,
              const WasmModule* module, compiler::WasmGraphBuilder* builder,
              WasmFeatures* detected, const FunctionBody& body,
              std::vector<compiler::WasmLoopInfo>* loop_infos,
-             compiler::NodeOriginTable* node_origins);
+             compiler::NodeOriginTable* node_origins, int func_index,
+             InlinedStatus inlined_status);
 
 }  // namespace wasm
 }  // namespace internal

@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 //
-// Flags: --allow-natives-syntax --opt --no-always-opt
-// Flags: --no-stress-flush-bytecode
+// Flags: --allow-natives-syntax --turbofan --no-always-turbofan
+// Flags: --no-stress-flush-code --concurrent-recompilation
 //
 // Tests tracking of constness of properties stored in dictionary
 // mode prototypes.
@@ -692,4 +692,43 @@ function testbench(o, proto, update_proto, check_constness) {
   }
 
   assertEquals(2, read_xy(o)[0]);
+})();
+
+// Invalidation by replacing a prototype. Just like the old prototype, the new
+// prototype owns the property as an accessor, but in the form of an
+// AccessorInfo rather than an AccessorPair.
+(function() {
+  var proto1 = Object.create(null);
+  Object.defineProperty(proto1, 'length', {get() {return 1}});
+  var proto2 = Object.create(proto1);
+  var o = Object.create(proto2);
+  assertTrue(%HasFastProperties(o));
+  assertFalse(%HasFastProperties(proto1));
+  assertFalse(%HasFastProperties(proto2));
+
+  function read_length(arg_o) {
+    return arg_o.length;
+  }
+
+  %PrepareFunctionForOptimization(read_length);
+  assertEquals(1, read_length(o));
+  %DisableOptimizationFinalization();
+  %OptimizeFunctionOnNextCall(read_length, "concurrent");
+  assertEquals(1, read_length(o));
+  assertUnoptimized(read_length);
+
+  %WaitForBackgroundOptimization();
+  var other_proto1 = [];
+  Object.setPrototypeOf(proto2, other_proto1);
+  %FinalizeOptimization();
+
+  assertUnoptimized(read_length);
+  assertEquals(0, read_length(o));
+
+  if (%IsDictPropertyConstTrackingEnabled()) {
+    assertFalse(%HasFastProperties(proto1));
+    assertFalse(%HasFastProperties(proto2));
+    assertFalse(%HasFastProperties(other_proto1));
+    assertUnoptimized(read_length);
+  }
 })();

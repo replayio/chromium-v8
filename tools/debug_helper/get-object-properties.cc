@@ -7,11 +7,11 @@
 #include "debug-helper-internal.h"
 #include "heap-constants.h"
 #include "include/v8-internal.h"
-#include "src/common/external-pointer.h"
 #include "src/execution/frame-constants.h"
 #include "src/execution/frames.h"
 #include "src/execution/isolate-utils.h"
 #include "src/objects/string-inl.h"
+#include "src/sandbox/external-pointer.h"
 #include "src/strings/unicode-inl.h"
 #include "torque-generated/class-debug-readers.h"
 #include "torque-generated/debug-macros.h"
@@ -257,7 +257,7 @@ class ReadStringVisitor : public TqObjectVisitor {
   void ReadStringCharacters(const TqString* object, uintptr_t data_address) {
     int32_t length = GetOrFinish(object->GetLengthValue(accessor_));
     for (; index_ < length && index_ < limit_ && !done_; ++index_) {
-      STATIC_ASSERT(sizeof(TChar) <= sizeof(char16_t));
+      static_assert(sizeof(TChar) <= sizeof(char16_t));
       char16_t c = static_cast<char16_t>(
           GetOrFinish(ReadCharacter<TChar>(data_address, index_)));
       if (!done_) AddCharacter(c);
@@ -316,7 +316,10 @@ class ReadStringVisitor : public TqObjectVisitor {
   bool IsExternalStringCached(const TqExternalString* object) {
     // The safest way to get the instance type is to use known map pointers, in
     // case the map data is not available.
-    uintptr_t map = GetOrFinish(object->GetMapValue(accessor_));
+    Value<uintptr_t> map_ptr = object->GetMapValue(accessor_);
+    DCHECK_IMPLIES(map_ptr.validity == d::MemoryAccessResult::kOk,
+                   !v8::internal::MapWord::IsPacked(map_ptr.value));
+    uintptr_t map = GetOrFinish(map_ptr);
     if (done_) return false;
     auto instance_types = FindKnownMapInstanceTypes(map, heap_addresses_);
     // Exactly one of the matched instance types should be a string type,
@@ -346,14 +349,17 @@ class ReadStringVisitor : public TqObjectVisitor {
     if (IsExternalStringCached(object)) {
       ExternalPointer_t resource_data =
           GetOrFinish(object->GetResourceDataValue(accessor_));
-#ifdef V8_COMPRESS_POINTERS
-      uintptr_t data_address = static_cast<uintptr_t>(
-          DecodeExternalPointer(GetIsolateForPtrComprFromOnHeapAddress(
-                                    heap_addresses_.any_heap_pointer),
-                                resource_data, kExternalStringResourceDataTag));
+#ifdef V8_ENABLE_SANDBOX
+      Isolate* isolate = GetIsolateForSandbox(
+          HeapObject::unchecked_cast(Object(heap_addresses_.any_heap_pointer)));
+      ExternalPointerHandle handle =
+          static_cast<ExternalPointerHandle>(resource_data);
+      uintptr_t data_address =
+          static_cast<uintptr_t>(isolate->shared_external_pointer_table().Get(
+              handle, kExternalStringResourceDataTag));
 #else
       uintptr_t data_address = static_cast<uintptr_t>(resource_data);
-#endif  // V8_COMPRESS_POINTERS
+#endif  // V8_ENABLE_SANDBOX
       if (done_) return;
       ReadStringCharacters<TChar>(object, data_address);
     } else {
@@ -500,12 +506,13 @@ class AddInfoVisitor : public TqObjectVisitor {
     if (map_ptr.validity != d::MemoryAccessResult::kOk) {
       return;  // Can't read the JSObject. Nothing useful to do.
     }
+    DCHECK(!v8::internal::MapWord::IsPacked(map_ptr.value));
     TqMap map(map_ptr.value);
 
     // On JSObject instances, this value is the start of in-object properties.
     // The constructor function index option is only for primitives.
     auto start_offset =
-        map.GetInObjectPropertiesStartOrConstructorFunctionIndexValue(
+        map.GetInobjectPropertiesStartOrConstructorFunctionIndexValue(
             accessor_);
 
     // The total size of the object in memory. This may include over-allocated

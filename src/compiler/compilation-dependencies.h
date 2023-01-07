@@ -6,7 +6,6 @@
 #define V8_COMPILER_COMPILATION_DEPENDENCIES_H_
 
 #include "src/compiler/js-heap-broker.h"
-#include "src/objects/objects.h"
 #include "src/zone/zone-containers.h"
 
 namespace v8 {
@@ -89,20 +88,49 @@ class V8_EXPORT_PRIVATE CompilationDependencies : public ZoneObject {
   bool DependOnPromiseHookProtector();
   bool DependOnPromiseSpeciesProtector();
   bool DependOnPromiseThenProtector();
+  bool DependOnMegaDOMProtector();
 
   // Record the assumption that {site}'s {ElementsKind} doesn't change.
   void DependOnElementsKind(const AllocationSiteRef& site);
 
+  // Check that an object slot will not change during compilation.
+  void DependOnObjectSlotValue(const HeapObjectRef& object, int offset,
+                               const ObjectRef& value);
+
+  void DependOnOwnConstantElement(const JSObjectRef& holder, uint32_t index,
+                                  const ObjectRef& element);
+
+  // Record the assumption that the {value} read from {holder} at {index} on the
+  // background thread is the correct value for a given property.
+  void DependOnOwnConstantDataProperty(const JSObjectRef& holder,
+                                       const MapRef& map,
+                                       Representation representation,
+                                       FieldIndex index,
+                                       const ObjectRef& value);
+
+  // Record the assumption that the {value} read from {holder} at {index} on the
+  // background thread is the correct value for a given dictionary property.
+  void DependOnOwnConstantDictionaryProperty(const JSObjectRef& holder,
+                                             InternalIndex index,
+                                             const ObjectRef& value);
+
   // For each given map, depend on the stability of (the maps of) all prototypes
   // up to (and including) the {last_prototype}.
-  template <class MapContainer>
   void DependOnStablePrototypeChains(
-      MapContainer const& receiver_maps, WhereToStart start,
+      ZoneVector<MapRef> const& receiver_maps, WhereToStart start,
       base::Optional<JSObjectRef> last_prototype =
           base::Optional<JSObjectRef>());
 
+  // For the given map, depend on the stability of (the maps of) all prototypes
+  // up to (and including) the {last_prototype}.
+  void DependOnStablePrototypeChain(MapRef receiver_maps, WhereToStart start,
+                                    base::Optional<JSObjectRef> last_prototype =
+                                        base::Optional<JSObjectRef>());
+
   // Like DependOnElementsKind but also applies to all nested allocation sites.
   void DependOnElementsKinds(const AllocationSiteRef& site);
+
+  void DependOnConsistentJSFunctionView(const JSFunctionRef& function);
 
   // Predict the final instance size for {function}'s initial map and record
   // the assumption that this prediction is correct. In addition, register
@@ -127,17 +155,39 @@ class V8_EXPORT_PRIVATE CompilationDependencies : public ZoneObject {
   // Gather the assumption that the field representation of a field does not
   // change. The field is identified by the arguments.
   CompilationDependency const* FieldRepresentationDependencyOffTheRecord(
-      const MapRef& map, InternalIndex descriptor) const;
+      const MapRef& map, InternalIndex descriptor,
+      Representation representation) const;
 
   // Gather the assumption that the field type of a field does not change. The
   // field is identified by the arguments.
   CompilationDependency const* FieldTypeDependencyOffTheRecord(
-      const MapRef& map, InternalIndex descriptor) const;
+      const MapRef& map, InternalIndex descriptor,
+      const ObjectRef& /* Contains a FieldType underneath. */ type) const;
+
+#ifdef DEBUG
+  static bool IsFieldRepresentationDependencyOnMap(
+      const CompilationDependency* dep, const Handle<Map>& receiver_map);
+#endif  // DEBUG
+
+  struct CompilationDependencyHash {
+    size_t operator()(const CompilationDependency* dep) const;
+  };
+  struct CompilationDependencyEqual {
+    bool operator()(const CompilationDependency* lhs,
+                    const CompilationDependency* rhs) const;
+  };
 
  private:
+  bool PrepareInstall();
+  bool PrepareInstallPredictable();
+
+  using CompilationDependencySet =
+      ZoneUnorderedSet<const CompilationDependency*, CompilationDependencyHash,
+                       CompilationDependencyEqual>;
+
   Zone* const zone_;
   JSHeapBroker* const broker_;
-  ZoneForwardList<CompilationDependency const*> dependencies_;
+  CompilationDependencySet dependencies_;
 };
 
 }  // namespace compiler

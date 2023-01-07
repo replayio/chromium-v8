@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "src/base/vector.h"
 #include "src/codegen/bailout-reason.h"
 #include "src/codegen/source-position-table.h"
 #include "src/codegen/tick-counter.h"
@@ -18,7 +19,6 @@
 #include "src/objects/objects.h"
 #include "src/utils/identity-map.h"
 #include "src/utils/utils.h"
-#include "src/utils/vector.h"
 
 namespace v8 {
 
@@ -58,19 +58,18 @@ class V8_EXPORT_PRIVATE OptimizedCompilationInfo final {
   V(SourcePositions, source_positions, 4)                            \
   V(BailoutOnUninitialized, bailout_on_uninitialized, 5)             \
   V(LoopPeeling, loop_peeling, 6)                                    \
-  V(UntrustedCodeMitigations, untrusted_code_mitigations, 7)         \
-  V(SwitchJumpTable, switch_jump_table, 8)                           \
-  V(CalledWithCodeStartRegister, called_with_code_start_register, 9) \
-  V(PoisonRegisterArguments, poison_register_arguments, 10)          \
-  V(AllocationFolding, allocation_folding, 11)                       \
-  V(AnalyzeEnvironmentLiveness, analyze_environment_liveness, 12)    \
-  V(TraceTurboJson, trace_turbo_json, 13)                            \
-  V(TraceTurboGraph, trace_turbo_graph, 14)                          \
-  V(TraceTurboScheduled, trace_turbo_scheduled, 15)                  \
-  V(TraceTurboAllocation, trace_turbo_allocation, 16)                \
-  V(TraceHeapBroker, trace_heap_broker, 17)                          \
-  V(WasmRuntimeExceptionSupport, wasm_runtime_exception_support, 18) \
-  V(ConcurrentInlining, concurrent_inlining, 19)
+  V(SwitchJumpTable, switch_jump_table, 7)                           \
+  V(CalledWithCodeStartRegister, called_with_code_start_register, 8) \
+  V(AllocationFolding, allocation_folding, 9)                        \
+  V(AnalyzeEnvironmentLiveness, analyze_environment_liveness, 10)    \
+  V(TraceTurboJson, trace_turbo_json, 11)                            \
+  V(TraceTurboGraph, trace_turbo_graph, 12)                          \
+  V(TraceTurboScheduled, trace_turbo_scheduled, 13)                  \
+  V(TraceTurboAllocation, trace_turbo_allocation, 14)                \
+  V(TraceHeapBroker, trace_heap_broker, 15)                          \
+  V(WasmRuntimeExceptionSupport, wasm_runtime_exception_support, 16) \
+  V(DiscardResultForTesting, discard_result_for_testing, 17)         \
+  V(InlineJSWasmCalls, inline_js_wasm_calls, 18)
 
   enum Flag {
 #define DEF_ENUM(Camel, Lower, Bit) k##Camel = 1 << Bit,
@@ -80,7 +79,6 @@ class V8_EXPORT_PRIVATE OptimizedCompilationInfo final {
 
 #define DEF_GETTER(Camel, Lower, Bit) \
   bool Lower() const {                \
-    DCHECK(FlagGetIsValid(k##Camel)); \
     return GetFlag(k##Camel);         \
   }
   FLAGS(DEF_GETTER)
@@ -88,23 +86,24 @@ class V8_EXPORT_PRIVATE OptimizedCompilationInfo final {
 
 #define DEF_SETTER(Camel, Lower, Bit) \
   void set_##Lower() {                \
-    DCHECK(FlagSetIsValid(k##Camel)); \
     SetFlag(k##Camel);                \
   }
   FLAGS(DEF_SETTER)
 #undef DEF_SETTER
 
-#ifdef DEBUG
-  bool FlagGetIsValid(Flag flag) const;
-  bool FlagSetIsValid(Flag flag) const;
-#endif  // DEBUG
-
   // Construct a compilation info for optimized compilation.
   OptimizedCompilationInfo(Zone* zone, Isolate* isolate,
                            Handle<SharedFunctionInfo> shared,
-                           Handle<JSFunction> closure, CodeKind code_kind);
+                           Handle<JSFunction> closure, CodeKind code_kind,
+                           BytecodeOffset osr_offset);
+  // For testing.
+  OptimizedCompilationInfo(Zone* zone, Isolate* isolate,
+                           Handle<SharedFunctionInfo> shared,
+                           Handle<JSFunction> closure, CodeKind code_kind)
+      : OptimizedCompilationInfo(zone, isolate, shared, closure, code_kind,
+                                 BytecodeOffset::None()) {}
   // Construct a compilation info for stub compilation, Wasm, and testing.
-  OptimizedCompilationInfo(Vector<const char> debug_name, Zone* zone,
+  OptimizedCompilationInfo(base::Vector<const char> debug_name, Zone* zone,
                            CodeKind code_kind);
 
   OptimizedCompilationInfo(const OptimizedCompilationInfo&) = delete;
@@ -121,22 +120,14 @@ class V8_EXPORT_PRIVATE OptimizedCompilationInfo final {
   Handle<JSFunction> closure() const { return closure_; }
   Handle<Code> code() const { return code_; }
   CodeKind code_kind() const { return code_kind_; }
-  int32_t builtin_index() const { return builtin_index_; }
-  void set_builtin_index(int32_t index) { builtin_index_ = index; }
+  Builtin builtin() const { return builtin_; }
+  void set_builtin(Builtin builtin) { builtin_ = builtin; }
   BytecodeOffset osr_offset() const { return osr_offset_; }
-  JavaScriptFrame* osr_frame() const { return osr_frame_; }
   void SetNodeObserver(compiler::NodeObserver* observer) {
     DCHECK_NULL(node_observer_);
     node_observer_ = observer;
   }
   compiler::NodeObserver* node_observer() const { return node_observer_; }
-
-  void SetPoisoningMitigationLevel(PoisoningMitigationLevel poisoning_level) {
-    poisoning_level_ = poisoning_level;
-  }
-  PoisoningMitigationLevel GetPoisoningMitigationLevel() const {
-    return poisoning_level_;
-  }
 
   // Code getters and setters.
 
@@ -160,20 +151,9 @@ class V8_EXPORT_PRIVATE OptimizedCompilationInfo final {
   bool IsOptimizing() const {
     return CodeKindIsOptimizedJSFunction(code_kind());
   }
-  bool IsNativeContextIndependent() const {
-    return code_kind() == CodeKind::NATIVE_CONTEXT_INDEPENDENT;
-  }
-  bool IsTurboprop() const { return code_kind() == CodeKind::TURBOPROP; }
 #if V8_ENABLE_WEBASSEMBLY
   bool IsWasm() const { return code_kind() == CodeKind::WASM_FUNCTION; }
 #endif  // V8_ENABLE_WEBASSEMBLY
-
-  void SetOptimizingForOsr(BytecodeOffset osr_offset,
-                           JavaScriptFrame* osr_frame) {
-    DCHECK(IsOptimizing());
-    osr_offset_ = osr_offset;
-    osr_frame_ = osr_frame;
-  }
 
   void set_persistent_handles(
       std::unique_ptr<PersistentHandles> persistent_handles) {
@@ -269,11 +249,9 @@ class V8_EXPORT_PRIVATE OptimizedCompilationInfo final {
 
   // Compilation flags.
   unsigned flags_ = 0;
-  PoisoningMitigationLevel poisoning_level_ =
-      PoisoningMitigationLevel::kDontPoison;
 
   const CodeKind code_kind_;
-  int32_t builtin_index_ = -1;
+  Builtin builtin_ = Builtin::kNoBuiltinId;
 
   // We retain a reference the bytecode array specifically to ensure it doesn't
   // get flushed while we are optimizing the code.
@@ -293,7 +271,7 @@ class V8_EXPORT_PRIVATE OptimizedCompilationInfo final {
 #endif  // V8_ENABLE_WEBASSEMBLY
 
   // Entry point when compiling for OSR, {BytecodeOffset::None} otherwise.
-  BytecodeOffset osr_offset_ = BytecodeOffset::None();
+  const BytecodeOffset osr_offset_ = BytecodeOffset::None();
 
   // The zone from which the compilation pipeline working on this
   // OptimizedCompilationInfo allocates.
@@ -309,10 +287,7 @@ class V8_EXPORT_PRIVATE OptimizedCompilationInfo final {
   const int optimization_id_;
   unsigned inlined_bytecode_size_ = 0;
 
-  // The current OSR frame for specialization or {nullptr}.
-  JavaScriptFrame* osr_frame_ = nullptr;
-
-  Vector<const char> debug_name_;
+  base::Vector<const char> debug_name_;
   std::unique_ptr<char[]> trace_turbo_filename_;
 
   TickCounter tick_counter_;

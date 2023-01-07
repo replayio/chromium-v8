@@ -2,8 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "include/v8-function.h"
+#include "include/v8-isolate.h"
+#include "include/v8-local-handle.h"
 #include "include/v8-unwinder-state.h"
-#include "include/v8.h"
 #include "src/api/api-inl.h"
 #include "src/builtins/builtins.h"
 #include "src/execution/isolate.h"
@@ -124,7 +126,7 @@ void CheckCalleeSavedRegisters(const RegisterState& register_state) {
 static const void* fake_stack_base = nullptr;
 
 TEST(Unwind_BadState_Fail_CodePagesAPI) {
-  JSEntryStubs entry_stubs;  // Fields are intialized to nullptr.
+  JSEntryStubs entry_stubs;  // Fields are initialized to nullptr.
   RegisterState register_state;
   size_t pages_length = 0;
   MemoryRange* code_pages = nullptr;
@@ -166,7 +168,7 @@ TEST(Unwind_BuiltinPCInMiddle_Success_CodePagesAPI) {
   register_state.fp = stack;
 
   // Put the current PC inside of a valid builtin.
-  Code builtin = i_isolate->builtins()->builtin(Builtins::kStringEqual);
+  CodeT builtin = *BUILTIN_CODE(i_isolate, StringEqual);
   const uintptr_t offset = 40;
   CHECK_LT(offset, builtin.InstructionSize());
   register_state.pc =
@@ -223,7 +225,7 @@ TEST(Unwind_BuiltinPCAtStart_Success_CodePagesAPI) {
 
   // Put the current PC at the start of a valid builtin, so that we are setting
   // up the frame.
-  Code builtin = i_isolate->builtins()->builtin(Builtins::kStringEqual);
+  CodeT builtin = *BUILTIN_CODE(i_isolate, StringEqual);
   register_state.pc = reinterpret_cast<void*>(builtin.InstructionStart());
 
   bool unwound = v8::Unwinder::TryUnwindV8Frames(
@@ -263,7 +265,7 @@ bool PagesContainsAddress(size_t length, MemoryRange* pages,
 // Check that we can unwind when the pc is within an optimized code object on
 // the V8 heap.
 TEST(Unwind_CodeObjectPCInMiddle_Success_CodePagesAPI) {
-  FLAG_allow_natives_syntax = true;
+  v8_flags.allow_natives_syntax = true;
   LocalContext env;
   v8::Isolate* isolate = env->GetIsolate();
   Isolate* i_isolate = reinterpret_cast<Isolate*>(isolate);
@@ -294,12 +296,12 @@ TEST(Unwind_CodeObjectPCInMiddle_Success_CodePagesAPI) {
       Handle<JSFunction>::cast(v8::Utils::OpenHandle(*local_foo));
 
   // Put the current PC inside of the created code object.
-  AbstractCode abstract_code = foo->abstract_code(i_isolate);
-  // We don't produce optimized code when run with --no-opt.
-  if (!abstract_code.IsCode() && FLAG_opt == false) return;
-  CHECK(abstract_code.IsCode());
+  CodeT codet = foo->code();
+  // We don't produce optimized code when run with --no-turbofan and
+  // --no-maglev.
+  if (!codet.is_optimized_code()) return;
 
-  Code code = abstract_code.GetCode();
+  Code code = FromCodeT(codet);
   // We don't want the offset too early or it could be the `push rbp`
   // instruction (which is not at the start of generated code, because the lazy
   // deopt check happens before frame setup).
@@ -454,7 +456,7 @@ TEST(Unwind_JSEntry_Fail_CodePagesAPI) {
   CHECK_LE(pages_length, arraysize(code_pages));
   RegisterState register_state;
 
-  Code js_entry = i_isolate->heap()->builtin(Builtins::kJSEntry);
+  CodeT js_entry = *BUILTIN_CODE(i_isolate, JSEntry);
   byte* start = reinterpret_cast<byte*>(js_entry.InstructionStart());
   register_state.pc = start + 10;
 
@@ -636,7 +638,7 @@ TEST(PCIsInV8_InJSEntryRange_CodePagesAPI) {
       isolate->CopyCodePages(arraysize(code_pages), code_pages);
   CHECK_LE(pages_length, arraysize(code_pages));
 
-  Code js_entry = i_isolate->heap()->builtin(Builtins::kJSEntry);
+  CodeT js_entry = *BUILTIN_CODE(i_isolate, JSEntry);
   byte* start = reinterpret_cast<byte*>(js_entry.InstructionStart());
   size_t length = js_entry.InstructionSize();
 
@@ -651,7 +653,7 @@ TEST(PCIsInV8_InJSEntryRange_CodePagesAPI) {
 // Large code objects can be allocated in large object space. Check that this is
 // inside the CodeRange.
 TEST(PCIsInV8_LargeCodeObject_CodePagesAPI) {
-  FLAG_allow_natives_syntax = true;
+  v8_flags.allow_natives_syntax = true;
   LocalContext env;
   v8::Isolate* isolate = env->GetIsolate();
   Isolate* i_isolate = reinterpret_cast<Isolate*>(isolate);
@@ -744,7 +746,7 @@ class UnwinderTestHelper {
 UnwinderTestHelper* UnwinderTestHelper::instance_;
 
 TEST(Unwind_TwoNestedFunctions_CodePagesAPI) {
-  i::FLAG_allow_natives_syntax = true;
+  i::v8_flags.allow_natives_syntax = true;
   const char* test_script =
       "function test_unwinder_api_inner() {"
       "  TryUnwind();"

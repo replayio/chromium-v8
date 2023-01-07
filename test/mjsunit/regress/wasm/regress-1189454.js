@@ -9,13 +9,13 @@
 // these uses is a Merge or Loop node, only the input of the Merge/Loop that
 // corresponds to the trap should be marked as dead.
 
-load('test/mjsunit/wasm/wasm-module-builder.js');
+d8.file.execute('test/mjsunit/wasm/wasm-module-builder.js');
 
 var builder = new WasmModuleBuilder();
 
 builder.addStruct([makeField(kWasmI32, true)]);
 
-builder.addFunction('test', makeSig([wasmOptRefType(0)], [kWasmI32]))
+builder.addFunction('test', makeSig([wasmRefNullType(0)], [kWasmI32]))
     .addBody([
       kExprLocalGet, 0,
       kExprRefIsNull,

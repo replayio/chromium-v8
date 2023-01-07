@@ -10,8 +10,8 @@
 #include "src/objects/heap-number-inl.h"
 #include "src/objects/js-function.h"
 #include "src/objects/objects-inl.h"
-#include "test/cctest/compiler/code-assembler-tester.h"
 #include "test/cctest/compiler/function-tester.h"
+#include "test/common/code-assembler-tester.h"
 
 namespace v8 {
 namespace internal {
@@ -467,7 +467,8 @@ TEST(ExceptionHandler) {
 }
 
 TEST(TestCodeAssemblerCodeComment) {
-  i::FLAG_code_comments = true;
+#ifdef V8_CODE_COMMENTS
+  i::v8_flags.code_comments = true;
   Isolate* isolate(CcTest::InitIsolateOnce());
   const int kNumParams = 0;
   CodeAssemblerTester asm_tester(isolate, kNumParams);
@@ -486,6 +487,7 @@ TEST(TestCodeAssemblerCodeComment) {
     it.Next();
   }
   CHECK(found_comment);
+#endif  // V8_CODE_COMMENTS
 }
 
 TEST(StaticAssert) {

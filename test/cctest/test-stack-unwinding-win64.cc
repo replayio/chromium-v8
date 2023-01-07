@@ -2,8 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "src/base/win32-headers.h"
-#include "src/init/v8.h"
+#include "include/v8-external.h"
+#include "include/v8-function.h"
+#include "include/v8-isolate.h"
+#include "include/v8-local-handle.h"
+#include "include/v8-template.h"
+#include "src/base/macros.h"
 #include "test/cctest/cctest.h"
 
 #if defined(V8_OS_WIN_X64)
@@ -11,6 +15,11 @@
 #elif defined(V8_OS_WIN_ARM64)
 #define CONTEXT_PC(context) (context.Pc)
 #endif
+
+#include <windows.h>
+
+// This has to come after windows.h.
+#include <versionhelpers.h>  // For IsWindows8OrGreater().
 
 class UnwindingWin64Callbacks {
  public:
@@ -70,8 +79,8 @@ UNINITIALIZED_TEST(StackUnwindingWin64) {
     return;
   }
 
-  i::FLAG_allow_natives_syntax = true;
-  i::FLAG_win64_unwinding_info = true;
+  i::v8_flags.allow_natives_syntax = true;
+  i::v8_flags.win64_unwinding_info = true;
 
   v8::Isolate::CreateParams create_params;
   create_params.array_buffer_allocator = CcTest::array_buffer_allocator();

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -80,13 +80,17 @@ DispatchResponse DispatchResponse::ServerError(std::string message) {
   return result;
 }
 
+// static
+DispatchResponse DispatchResponse::SessionNotFound(std::string message) {
+  DispatchResponse result;
+  result.code_ = DispatchCode::SESSION_NOT_FOUND;
+  result.message_ = std::move(message);
+  return result;
+}
+
 // =============================================================================
 // Dispatchable - a shallow parser for CBOR encoded DevTools messages
 // =============================================================================
-namespace {
-constexpr size_t kEncodedEnvelopeHeaderSize = 1 + 1 + sizeof(uint32_t);
-}  // namespace
-
 Dispatchable::Dispatchable(span<uint8_t> serialized) : serialized_(serialized) {
   Status s = cbor::CheckCBORMessage(serialized);
   if (!s.ok()) {
@@ -107,9 +111,8 @@ Dispatchable::Dispatchable(span<uint8_t> serialized) : serialized_(serialized) {
   // expect to see after we're done parsing the envelope contents.
   // This way we can compare and produce an error if the contents
   // didn't fit exactly into the envelope length.
-  const size_t pos_past_envelope = tokenizer.Status().pos +
-                                   kEncodedEnvelopeHeaderSize +
-                                   tokenizer.GetEnvelopeContents().size();
+  const size_t pos_past_envelope =
+      tokenizer.Status().pos + tokenizer.GetEnvelopeHeader().outer_size();
   tokenizer.EnterEnvelope();
   if (tokenizer.TokenTag() == cbor::CBORTokenTag::ERROR_VALUE) {
     status_ = tokenizer.Status();
@@ -312,15 +315,10 @@ class ProtocolError : public Serializable {
 
 std::unique_ptr<Serializable> CreateErrorResponse(
     int call_id,
-    DispatchResponse dispatch_response,
-    const ErrorSupport* errors) {
+    DispatchResponse dispatch_response) {
   auto protocol_error =
       std::make_unique<ProtocolError>(std::move(dispatch_response));
   protocol_error->SetCallId(call_id);
-  if (errors && !errors->Errors().empty()) {
-    protocol_error->SetData(
-        std::string(errors->Errors().begin(), errors->Errors().end()));
-  }
   return protocol_error;
 }
 
@@ -476,26 +474,9 @@ void DomainDispatcher::sendResponse(int call_id,
   frontend_channel_->SendProtocolResponse(call_id, std::move(serializable));
 }
 
-bool DomainDispatcher::MaybeReportInvalidParams(
-    const Dispatchable& dispatchable,
-    const ErrorSupport& errors) {
-  if (errors.Errors().empty())
-    return false;
-  if (frontend_channel_) {
-    frontend_channel_->SendProtocolResponse(
-        dispatchable.CallId(),
-        CreateErrorResponse(
-            dispatchable.CallId(),
-            DispatchResponse::InvalidParams("Invalid parameters"), &errors));
-  }
-  return true;
-}
-
-bool DomainDispatcher::MaybeReportInvalidParams(
-    const Dispatchable& dispatchable,
-    const DeserializerState& state) {
-  if (state.status().ok())
-    return false;
+void DomainDispatcher::ReportInvalidParams(const Dispatchable& dispatchable,
+                                           const DeserializerState& state) {
+  assert(!state.status().ok());
   if (frontend_channel_) {
     frontend_channel_->SendProtocolResponse(
         dispatchable.CallId(),
@@ -503,7 +484,6 @@ bool DomainDispatcher::MaybeReportInvalidParams(
             dispatchable.CallId(),
             DispatchResponse::InvalidParams("Invalid parameters"), state));
   }
-  return true;
 }
 
 void DomainDispatcher::clearFrontend() {

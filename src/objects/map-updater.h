@@ -47,7 +47,7 @@ namespace internal {
 // - Otherwise, invalidate the outdated transition target from |target_map|, and
 //   replace its transition tree with a new branch for the updated descriptors.
 // - If the |old_map| had integrity level transition, create the new map for it.
-class MapUpdater {
+class V8_EXPORT_PRIVATE MapUpdater {
  public:
   MapUpdater(Isolate* isolate, Handle<Map> old_map);
 
@@ -67,6 +67,29 @@ class MapUpdater {
   // version and performs the steps 1-6.
   Handle<Map> Update();
 
+  // As above but does not mutate maps; instead, we attempt to replay existing
+  // transitions to find an updated map. No lock is taken.
+  static base::Optional<Map> TryUpdateNoLock(Isolate* isolate, Map old_map,
+                                             ConcurrencyMode cmode)
+      V8_WARN_UNUSED_RESULT;
+
+  static Handle<Map> ReconfigureExistingProperty(Isolate* isolate,
+                                                 Handle<Map> map,
+                                                 InternalIndex descriptor,
+                                                 PropertyKind kind,
+                                                 PropertyAttributes attributes,
+                                                 PropertyConstness constness);
+
+  static void GeneralizeField(Isolate* isolate, Handle<Map> map,
+                              InternalIndex modify_index,
+                              PropertyConstness new_constness,
+                              Representation new_representation,
+                              Handle<FieldType> new_field_type);
+
+  // Completes inobject slack tracking for the transition tree starting at the
+  // initial map.
+  static void CompleteInobjectSlackTracking(Isolate* isolate, Map initial_map);
+
  private:
   enum State {
     kInitialized,
@@ -75,6 +98,16 @@ class MapUpdater {
     kAtIntegrityLevelSource,
     kEnd
   };
+
+  // Updates map to the most up-to-date non-deprecated version.
+  static inline Handle<Map> UpdateMapNoLock(Isolate* isolate,
+                                            Handle<Map> old_map);
+
+  // Prepares for updating deprecated map to most up-to-date non-deprecated
+  // version and performs the steps 1-6.
+  // Unlike the Update() entry point it doesn't lock the map_updater_access
+  // mutex.
+  Handle<Map> UpdateImpl();
 
   // Try to reconfigure property in-place without rebuilding transition tree
   // and creating new maps. See implementation for details.
@@ -157,6 +190,16 @@ class MapUpdater {
       Handle<DescriptorArray> descriptors, InternalIndex descriptor,
       PropertyLocation location, Representation representation);
 
+  // Update field type of the given descriptor to new representation and new
+  // type. The type must be prepared for storing in descriptor array:
+  // it must be either a simple type or a map wrapped in a weak cell.
+  static void UpdateFieldType(Isolate* isolate, Handle<Map> map,
+                              InternalIndex descriptor_number,
+                              Handle<Name> name,
+                              PropertyConstness new_constness,
+                              Representation new_representation,
+                              const MaybeObjectHandle& new_wrapped_type);
+
   void GeneralizeField(Handle<Map> map, InternalIndex modify_index,
                        PropertyConstness new_constness,
                        Representation new_representation,
@@ -185,10 +228,10 @@ class MapUpdater {
   // If |modified_descriptor_.is_found()|, then the fields below form
   // an "update" of the |old_map_|'s descriptors.
   InternalIndex modified_descriptor_ = InternalIndex::NotFound();
-  PropertyKind new_kind_ = kData;
+  PropertyKind new_kind_ = PropertyKind::kData;
   PropertyAttributes new_attributes_ = NONE;
   PropertyConstness new_constness_ = PropertyConstness::kMutable;
-  PropertyLocation new_location_ = kField;
+  PropertyLocation new_location_ = PropertyLocation::kField;
   Representation new_representation_ = Representation::None();
 
   // Data specific to kField location.

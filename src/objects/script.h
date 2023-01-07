@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "include/v8-script.h"
 #include "src/base/export-template.h"
 #include "src/objects/fixed-array.h"
 #include "src/objects/objects.h"
@@ -19,6 +20,13 @@
 namespace v8 {
 
 namespace internal {
+
+class FunctionLiteral;
+class StructBodyDescriptor;
+
+namespace wasm {
+class NativeModule;
+}  // namespace wasm
 
 #include "torque-generated/src/objects/script-tq.inc"
 
@@ -38,7 +46,8 @@ class Script : public TorqueGeneratedScript<Script, Struct> {
 #if V8_ENABLE_WEBASSEMBLY
     TYPE_WASM = 3,
 #endif  // V8_ENABLE_WEBASSEMBLY
-    TYPE_INSPECTOR = 4
+    TYPE_INSPECTOR = 4,
+    TYPE_WEB_SNAPSHOT = 5
   };
 
   // Script compilation types.
@@ -53,7 +62,7 @@ class Script : public TorqueGeneratedScript<Script, Struct> {
   // [type]: the script type.
   DECL_INT_ACCESSORS(type)
 
-  DECL_ACCESSORS(eval_from_shared_or_wrapped_arguments, Object)
+  DECL_ACCESSORS(eval_from_shared_or_wrapped_arguments_or_sfi_table, Object)
 
   // [eval_from_shared]: for eval scripts the shared function info for the
   // function from which eval was called.
@@ -61,6 +70,12 @@ class Script : public TorqueGeneratedScript<Script, Struct> {
 
   // [wrapped_arguments]: for the list of arguments in a wrapped script.
   DECL_ACCESSORS(wrapped_arguments, FixedArray)
+
+  // For web snapshots: a hash table mapping function positions to indices in
+  // shared_function_infos.
+  // TODO(v8:11525): Replace with a more efficient data structure mapping
+  // function positions to weak pointers to SharedFunctionInfos directly.
+  DECL_ACCESSORS(shared_function_info_table, ObjectHashTable)
 
   // Whether the script is implicitly wrapped in a function.
   inline bool is_wrapped() const;
@@ -77,6 +92,8 @@ class Script : public TorqueGeneratedScript<Script, Struct> {
   // [shared_function_infos]: weak fixed array containing all shared
   // function infos created from this script.
   DECL_ACCESSORS(shared_function_infos, WeakFixedArray)
+
+  inline int shared_function_info_count() const;
 
 #if V8_ENABLE_WEBASSEMBLY
   // [wasm_breakpoint_infos]: the list of {BreakPointInfo} objects describing
@@ -131,15 +148,25 @@ class Script : public TorqueGeneratedScript<Script, Struct> {
   // resource is accessible. Otherwise, always return true.
   inline bool HasValidSource();
 
+  // If the script has a non-empty sourceURL comment.
+  inline bool HasSourceURLComment() const;
+
+  // Streaming compilation only attaches the source to the Script upon
+  // finalization. This predicate returns true, if this script may still be
+  // unfinalized.
+  inline bool IsMaybeUnfinalized(Isolate* isolate) const;
+
   Object GetNameOrSourceURL();
+  static Handle<String> GetScriptHash(Isolate* isolate, Handle<Script> script,
+                                      bool forceForInspector);
 
   // Retrieve source position from where eval was called.
   static int GetEvalPosition(Isolate* isolate, Handle<Script> script);
 
   // Init line_ends array with source code positions of line ends.
-  template <typename LocalIsolate>
+  template <typename IsolateT>
   EXPORT_TEMPLATE_DECLARE(V8_EXPORT_PRIVATE)
-  static void InitLineEnds(LocalIsolate* isolate, Handle<Script> script);
+  static void InitLineEnds(IsolateT* isolate, Handle<Script> script);
 
   // Carries information about a source position.
   struct PositionInfo {
@@ -166,6 +193,13 @@ class Script : public TorqueGeneratedScript<Script, Struct> {
   V8_EXPORT_PRIVATE bool GetPositionInfo(int position, PositionInfo* info,
                                          OffsetFlag offset_flag) const;
 
+  // Tells whether this script should be subject to debugging, e.g. for
+  // - scope inspection
+  // - internal break points
+  // - coverage and type profile
+  // - error stack trace
+  bool IsSubjectToDebugging() const;
+
   bool IsUserJavaScript() const;
 
   // Wrappers for GetPositionInfo
@@ -176,10 +210,19 @@ class Script : public TorqueGeneratedScript<Script, Struct> {
   int GetLineNumber(int code_pos) const;
 
   // Look through the list of existing shared function infos to find one
-  // that matches the function literal.  Return empty handle if not found.
-  template <typename LocalIsolate>
-  MaybeHandle<SharedFunctionInfo> FindSharedFunctionInfo(
-      LocalIsolate* isolate, int function_literal_id);
+  // that matches the function literal. Return empty handle if not found.
+  template <typename IsolateT>
+  static MaybeHandle<SharedFunctionInfo> FindSharedFunctionInfo(
+      Handle<Script> script, IsolateT* isolate,
+      FunctionLiteral* function_literal);
+
+  static MaybeHandle<SharedFunctionInfo> FindWebSnapshotSharedFunctionInfo(
+      Handle<Script> script, Isolate* isolate,
+      FunctionLiteral* function_literal);
+
+  static MaybeHandle<SharedFunctionInfo> FindWebSnapshotSharedFunctionInfo(
+      Handle<Script> script, LocalIsolate* isolate,
+      FunctionLiteral* function_literal);
 
   // Iterate over all script objects on the heap.
   class V8_EXPORT_PRIVATE Iterator {
@@ -196,6 +239,8 @@ class Script : public TorqueGeneratedScript<Script, Struct> {
   // Dispatched behavior.
   DECL_PRINTER(Script)
   DECL_VERIFIER(Script)
+
+  using BodyDescriptor = StructBodyDescriptor;
 
  private:
   // Bit positions in the flags field.

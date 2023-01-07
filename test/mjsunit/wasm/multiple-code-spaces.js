@@ -4,12 +4,14 @@
 
 // Flags: --allow-natives-syntax --randomize-all-allocations
 // Flags: --wasm-max-initial-code-space-reservation=1
+// Disable lazy compilation, because force easier code generation.
+// Flags: --no-wasm-lazy-compilation
 
 // Disable tier-up, to reduce execution time of this test (Liftoff generates
 // much bigger code, thus reaches the four code spaces much faster).
 // Flags: --no-wasm-tier-up
 
-load('test/mjsunit/wasm/wasm-module-builder.js');
+d8.file.execute('test/mjsunit/wasm/wasm-module-builder.js');
 
 // Instantiate bigger modules, until at least four separate code spaces have
 // been allocated.

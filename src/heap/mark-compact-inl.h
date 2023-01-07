@@ -9,7 +9,9 @@
 #include "src/codegen/assembler-inl.h"
 #include "src/heap/heap-inl.h"
 #include "src/heap/incremental-marking.h"
+#include "src/heap/index-generator.h"
 #include "src/heap/mark-compact.h"
+#include "src/heap/marking-state-inl.h"
 #include "src/heap/marking-worklist-inl.h"
 #include "src/heap/marking-worklist.h"
 #include "src/heap/objects-visiting-inl.h"
@@ -25,7 +27,7 @@ namespace internal {
 void MarkCompactCollector::MarkObject(HeapObject host, HeapObject obj) {
   if (marking_state()->WhiteToGrey(obj)) {
     local_marking_worklists()->Push(obj);
-    if (V8_UNLIKELY(FLAG_track_retaining_path)) {
+    if (V8_UNLIKELY(v8_flags.track_retaining_path)) {
       heap_->AddRetainer(host, obj);
     }
   }
@@ -34,27 +36,23 @@ void MarkCompactCollector::MarkObject(HeapObject host, HeapObject obj) {
 void MarkCompactCollector::MarkRootObject(Root root, HeapObject obj) {
   if (marking_state()->WhiteToGrey(obj)) {
     local_marking_worklists()->Push(obj);
-    if (V8_UNLIKELY(FLAG_track_retaining_path)) {
+    if (V8_UNLIKELY(v8_flags.track_retaining_path)) {
       heap_->AddRetainingRoot(root, obj);
     }
   }
 }
 
-#ifdef ENABLE_MINOR_MC
-
 void MinorMarkCompactCollector::MarkRootObject(HeapObject obj) {
   if (Heap::InYoungGeneration(obj) &&
-      non_atomic_marking_state_.WhiteToGrey(obj)) {
-    worklist_->Push(kMainThreadTask, obj);
+      non_atomic_marking_state()->WhiteToGrey(obj)) {
+    local_marking_worklists_->Push(obj);
   }
 }
-
-#endif
 
 void MarkCompactCollector::MarkExternallyReferencedObject(HeapObject obj) {
   if (marking_state()->WhiteToGrey(obj)) {
     local_marking_worklists()->Push(obj);
-    if (V8_UNLIKELY(FLAG_track_retaining_path)) {
+    if (V8_UNLIKELY(v8_flags.track_retaining_path)) {
       heap_->AddRetainingRoot(Root::kWrapperTracing, obj);
     }
   }
@@ -67,26 +65,39 @@ void MarkCompactCollector::RecordSlot(HeapObject object, ObjectSlot slot,
 
 void MarkCompactCollector::RecordSlot(HeapObject object, HeapObjectSlot slot,
                                       HeapObject target) {
-  BasicMemoryChunk* target_page = BasicMemoryChunk::FromHeapObject(target);
   MemoryChunk* source_page = MemoryChunk::FromHeapObject(object);
-  if (target_page->IsEvacuationCandidate<AccessMode::ATOMIC>() &&
-      !source_page->ShouldSkipEvacuationSlotRecording<AccessMode::ATOMIC>()) {
-    RememberedSet<OLD_TO_OLD>::Insert<AccessMode::ATOMIC>(source_page,
-                                                          slot.address());
+  if (!source_page->ShouldSkipEvacuationSlotRecording()) {
+    RecordSlot(source_page, slot, target);
   }
 }
 
 void MarkCompactCollector::RecordSlot(MemoryChunk* source_page,
                                       HeapObjectSlot slot, HeapObject target) {
   BasicMemoryChunk* target_page = BasicMemoryChunk::FromHeapObject(target);
-  if (target_page->IsEvacuationCandidate<AccessMode::ATOMIC>()) {
-    RememberedSet<OLD_TO_OLD>::Insert<AccessMode::ATOMIC>(source_page,
-                                                          slot.address());
+  if (target_page->IsEvacuationCandidate()) {
+    if (V8_EXTERNAL_CODE_SPACE_BOOL &&
+        target_page->IsFlagSet(MemoryChunk::IS_EXECUTABLE)) {
+      RememberedSet<OLD_TO_CODE>::Insert<AccessMode::ATOMIC>(source_page,
+                                                             slot.address());
+    } else {
+      RememberedSet<OLD_TO_OLD>::Insert<AccessMode::ATOMIC>(source_page,
+                                                            slot.address());
+    }
   }
 }
 
 void MarkCompactCollector::AddTransitionArray(TransitionArray array) {
-  weak_objects_.transition_arrays.Push(kMainThreadTask, array);
+  local_weak_objects()->transition_arrays_local.Push(array);
+}
+
+bool MarkCompactCollector::ShouldMarkObject(HeapObject object) const {
+  if (V8_LIKELY(!uses_shared_heap_)) return true;
+  if (v8_flags.shared_space) {
+    if (is_shared_heap_isolate_) return true;
+    return !object.InSharedHeap();
+  } else {
+    return is_shared_heap_isolate_ == object.InSharedHeap();
+  }
 }
 
 template <typename MarkingState>
@@ -122,16 +133,6 @@ void MainMarkingVisitor<MarkingState>::RecordRelocSlot(Code host,
                                                        RelocInfo* rinfo,
                                                        HeapObject target) {
   MarkCompactCollector::RecordRelocSlot(host, rinfo, target);
-}
-
-template <typename MarkingState>
-void MainMarkingVisitor<MarkingState>::MarkDescriptorArrayFromWriteBarrier(
-    DescriptorArray descriptors, int number_of_own_descriptors) {
-  // This is necessary because the Scavenger records slots only for the
-  // promoted black objects and the marking visitor of DescriptorArray skips
-  // the descriptors marked by the visitor.VisitDescriptors() below.
-  this->MarkDescriptorArrayBlack(descriptors);
-  this->VisitDescriptors(descriptors, number_of_own_descriptors);
 }
 
 template <LiveObjectIterationMode mode>
@@ -170,6 +171,7 @@ operator++(int) {
 
 template <LiveObjectIterationMode mode>
 void LiveObjectRange<mode>::iterator::AdvanceToNextValidObject() {
+  PtrComprCageBase cage_base(chunk_->heap()->isolate());
   while (!it_.Done()) {
     HeapObject object;
     int size = 0;
@@ -205,12 +207,13 @@ void LiveObjectRange<mode>::iterator::AdvanceToNextValidObject() {
         // make sure that we skip all set bits in the black area until the
         // object ends.
         HeapObject black_object = HeapObject::FromAddress(addr);
-        Object map_object = ObjectSlot(addr).Acquire_Load();
-        CHECK(map_object.IsMap());
-        map = Map::cast(map_object);
+        map = black_object.map(cage_base, kAcquireLoad);
+        // Map might be forwarded during GC.
+        DCHECK(MarkCompactCollector::IsMapOrForwarded(map));
         size = black_object.SizeFromMap(map);
-        CHECK_LE(addr + size, chunk_->area_end());
-        Address end = addr + size - kTaggedSize;
+        int aligned_size = ALIGN_TO_ALLOCATION_ALIGNMENT(size);
+        CHECK_LE(addr + aligned_size, chunk_->area_end());
+        Address end = addr + aligned_size - kTaggedSize;
         // One word filler objects do not borrow the second mark bit. We have
         // to jump over the advancing and clearing part.
         // Note that we know that we are at a one word filler when
@@ -235,12 +238,14 @@ void LiveObjectRange<mode>::iterator::AdvanceToNextValidObject() {
           object = black_object;
         }
       } else if ((mode == kGreyObjects || mode == kAllLiveObjects)) {
-        Object map_object = ObjectSlot(addr).Acquire_Load();
-        CHECK(map_object.IsMap());
-        map = Map::cast(map_object);
         object = HeapObject::FromAddress(addr);
+        Object map_object = object.map(cage_base, kAcquireLoad);
+        CHECK(map_object.IsMap(cage_base));
+        map = Map::cast(map_object);
+        DCHECK(map.IsMap(cage_base));
         size = object.SizeFromMap(map);
-        CHECK_LE(addr + size, chunk_->area_end());
+        CHECK_LE(addr + ALIGN_TO_ALLOCATION_ALIGNMENT(size),
+                 chunk_->area_end());
       }
 
       // We found a live object.
@@ -288,7 +293,65 @@ typename LiveObjectRange<mode>::iterator LiveObjectRange<mode>::end() {
   return iterator(chunk_, bitmap_, end_);
 }
 
-Isolate* MarkCompactCollectorBase::isolate() { return heap()->isolate(); }
+Isolate* CollectorBase::isolate() { return heap()->isolate(); }
+
+class YoungGenerationMarkingTask;
+
+class PageMarkingItem : public ParallelWorkItem {
+ public:
+  explicit PageMarkingItem(MemoryChunk* chunk) : chunk_(chunk) {}
+  ~PageMarkingItem() = default;
+
+  void Process(YoungGenerationMarkingTask* task);
+
+ private:
+  inline Heap* heap() { return chunk_->heap(); }
+
+  void MarkUntypedPointers(YoungGenerationMarkingTask* task);
+
+  void MarkTypedPointers(YoungGenerationMarkingTask* task);
+
+  template <typename TSlot>
+  V8_INLINE SlotCallbackResult
+  CheckAndMarkObject(YoungGenerationMarkingTask* task, TSlot slot);
+
+  MemoryChunk* chunk_;
+};
+
+enum class YoungMarkingJobType { kAtomic, kIncremental };
+
+class YoungGenerationMarkingJob : public v8::JobTask {
+ public:
+  YoungGenerationMarkingJob(Isolate* isolate, Heap* heap,
+                            MarkingWorklists* global_worklists,
+                            std::vector<PageMarkingItem> marking_items,
+                            YoungMarkingJobType young_marking_job_type)
+      : isolate_(isolate),
+        heap_(heap),
+        global_worklists_(global_worklists),
+        marking_items_(std::move(marking_items)),
+        remaining_marking_items_(marking_items_.size()),
+        generator_(marking_items_.size()),
+        young_marking_job_type_(young_marking_job_type) {}
+
+  void Run(JobDelegate* delegate) override;
+  size_t GetMaxConcurrency(size_t worker_count) const override;
+  bool incremental() const {
+    return young_marking_job_type_ == YoungMarkingJobType::kIncremental;
+  }
+
+ private:
+  void ProcessItems(JobDelegate* delegate);
+  void ProcessMarkingItems(YoungGenerationMarkingTask* task);
+
+  Isolate* isolate_;
+  Heap* heap_;
+  MarkingWorklists* global_worklists_;
+  std::vector<PageMarkingItem> marking_items_;
+  std::atomic_size_t remaining_marking_items_{0};
+  IndexGenerator generator_;
+  YoungMarkingJobType young_marking_job_type_;
+};
 
 }  // namespace internal
 }  // namespace v8

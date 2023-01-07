@@ -5,6 +5,7 @@
 #ifndef V8_BASE_LOGGING_H_
 #define V8_BASE_LOGGING_H_
 
+#include <cstdint>
 #include <cstring>
 #include <sstream>
 #include <string>
@@ -132,12 +133,6 @@ V8_BASE_EXPORT void SetDcheckFunction(void (*dcheck_Function)(const char*, int,
 
 #define DCHECK_WITH_MSG(condition, msg) void(0);
 
-#endif
-
-#if V8_HAS_CXX14_CONSTEXPR
-#define CONSTEXPR_DCHECK(cond) DCHECK(cond)
-#else
-#define CONSTEXPR_DCHECK(cond)
 #endif
 
 namespace detail {

@@ -194,9 +194,6 @@ assertEquals(run(()=>{return new Array(1, 2, 39);}).reduce((a,x)=>a+x), 42);
 assertMatches(run(() => { return %NewRegExpWithBacktrackLimit("ax", "", 50); }), "ax");
 run(() => { %CompileBaseline(()=>{}); });
 
-// Call Intrinsics
-assertEquals(run(()=>{return %_IsSmi(42)}), true);
-
 // CallRuntimeForPair
 assertEquals(run(()=>{with (f0) return f0();}), 42);
 
@@ -264,6 +261,19 @@ let gen = run(function*() {
 });
 let i = 1;
 for (let val of gen) {
+  assertEquals(i++, val);
+}
+assertEquals(4, i);
+
+// Generator with a lot of locals
+let gen_func_with_a_lot_of_locals = eval(`(function*() {
+  ${ Array(32*1024).fill().map((x,i)=>`let local_${i};`).join("\n") }
+  yield 1;
+  yield 2;
+  yield 3;
+})`);
+i = 1;
+for (let val of run(gen_func_with_a_lot_of_locals)) {
   assertEquals(i++, val);
 }
 assertEquals(4, i);

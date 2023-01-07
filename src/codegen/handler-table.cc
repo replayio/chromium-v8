@@ -23,6 +23,12 @@ HandlerTable::HandlerTable(Code code)
     : HandlerTable(code.HandlerTableAddress(), code.handler_table_size(),
                    kReturnAddressBasedEncoding) {}
 
+#ifdef V8_EXTERNAL_CODE_SPACE
+HandlerTable::HandlerTable(CodeDataContainer code)
+    : HandlerTable(code.HandlerTableAddress(), code.handler_table_size(),
+                   kReturnAddressBasedEncoding) {}
+#endif  // V8_EXTERNAL_CODE_SPACE
+
 #if V8_ENABLE_WEBASSEMBLY
 HandlerTable::HandlerTable(const wasm::WasmCode* code)
     : HandlerTable(code->handler_table(), code->handler_table_size(),
@@ -209,6 +215,8 @@ int HandlerTable::LookupReturn(int pc_offset) {
     bool operator==(const Iterator& other) const {
       return index == other.index;
     }
+    // GLIBCXX_DEBUG checks uses the <= comparator.
+    bool operator<=(const Iterator& other) { return index <= other.index; }
     Iterator& operator++() {
       index++;
       return *this;

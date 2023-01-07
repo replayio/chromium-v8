@@ -32,6 +32,58 @@ std::ostream& operator<<(std::ostream& os, StoreRepresentation rep) {
   return os << rep.representation() << ", " << rep.write_barrier_kind();
 }
 
+bool operator==(AtomicStoreParameters lhs, AtomicStoreParameters rhs) {
+  return lhs.store_representation() == rhs.store_representation() &&
+         lhs.order() == rhs.order() && lhs.kind() == rhs.kind();
+}
+
+bool operator!=(AtomicStoreParameters lhs, AtomicStoreParameters rhs) {
+  return !(lhs == rhs);
+}
+
+size_t hash_value(AtomicStoreParameters params) {
+  return base::hash_combine(hash_value(params.store_representation()),
+                            params.order(), params.kind());
+}
+
+std::ostream& operator<<(std::ostream& os, AtomicStoreParameters params) {
+  return os << params.store_representation() << ", " << params.order();
+}
+
+bool operator==(AtomicLoadParameters lhs, AtomicLoadParameters rhs) {
+  return lhs.representation() == rhs.representation() &&
+         lhs.order() == rhs.order() && lhs.kind() == rhs.kind();
+}
+
+bool operator!=(AtomicLoadParameters lhs, AtomicLoadParameters rhs) {
+  return !(lhs == rhs);
+}
+
+size_t hash_value(AtomicLoadParameters params) {
+  return base::hash_combine(params.representation(), params.order(),
+                            params.kind());
+}
+
+std::ostream& operator<<(std::ostream& os, AtomicLoadParameters params) {
+  return os << params.representation() << ", " << params.order();
+}
+
+bool operator==(AtomicOpParameters lhs, AtomicOpParameters rhs) {
+  return lhs.type() == rhs.type() && lhs.kind() == rhs.kind();
+}
+
+bool operator!=(AtomicOpParameters lhs, AtomicOpParameters rhs) {
+  return !(lhs == rhs);
+}
+
+size_t hash_value(AtomicOpParameters params) {
+  return base::hash_combine(params.type(), params.kind());
+}
+
+std::ostream& operator<<(std::ostream& os, AtomicOpParameters params) {
+  return os << params.type() << ", " << params.kind();
+}
+
 size_t hash_value(MemoryAccessKind kind) { return static_cast<size_t>(kind); }
 
 std::ostream& operator<<(std::ostream& os, MemoryAccessKind kind) {
@@ -104,8 +156,8 @@ size_t hash_value(LoadLaneParameters params) {
 }
 
 std::ostream& operator<<(std::ostream& os, LoadLaneParameters params) {
-  return os << "(" << params.kind << " " << params.rep << " " << params.laneidx
-            << ")";
+  return os << "(" << params.kind << " " << params.rep << " "
+            << static_cast<uint32_t>(params.laneidx) << ")";
 }
 
 LoadLaneParameters const& LoadLaneParametersOf(Operator const* op) {
@@ -121,19 +173,32 @@ bool operator==(LoadLaneParameters lhs, LoadLaneParameters rhs) {
 LoadRepresentation LoadRepresentationOf(Operator const* op) {
   DCHECK(IrOpcode::kLoad == op->opcode() ||
          IrOpcode::kProtectedLoad == op->opcode() ||
-         IrOpcode::kWord32AtomicLoad == op->opcode() ||
-         IrOpcode::kWord64AtomicLoad == op->opcode() ||
-         IrOpcode::kWord32AtomicPairLoad == op->opcode() ||
-         IrOpcode::kPoisonedLoad == op->opcode() ||
          IrOpcode::kUnalignedLoad == op->opcode() ||
          IrOpcode::kLoadImmutable == op->opcode());
   return OpParameter<LoadRepresentation>(op);
+}
+
+AtomicLoadParameters AtomicLoadParametersOf(Operator const* op) {
+  DCHECK(IrOpcode::kWord32AtomicLoad == op->opcode() ||
+         IrOpcode::kWord64AtomicLoad == op->opcode());
+  return OpParameter<AtomicLoadParameters>(op);
+}
+
+AtomicOpParameters AtomicOpParametersOf(Operator const* op) {
+  DCHECK(IrOpcode::isAtomicOpOpcode(IrOpcode::Value(op->opcode())));
+  return OpParameter<AtomicOpParameters>(op);
 }
 
 StoreRepresentation const& StoreRepresentationOf(Operator const* op) {
   DCHECK(IrOpcode::kStore == op->opcode() ||
          IrOpcode::kProtectedStore == op->opcode());
   return OpParameter<StoreRepresentation>(op);
+}
+
+AtomicStoreParameters const& AtomicStoreParametersOf(Operator const* op) {
+  DCHECK(IrOpcode::kWord32AtomicStore == op->opcode() ||
+         IrOpcode::kWord64AtomicStore == op->opcode());
+  return OpParameter<AtomicStoreParameters>(op);
 }
 
 UnalignedStoreRepresentation const& UnalignedStoreRepresentationOf(
@@ -147,8 +212,8 @@ size_t hash_value(StoreLaneParameters params) {
 }
 
 std::ostream& operator<<(std::ostream& os, StoreLaneParameters params) {
-  return os << "(" << params.kind << " " << params.rep << " " << params.laneidx
-            << ")";
+  return os << "(" << params.kind << " " << params.rep << " "
+            << static_cast<unsigned int>(params.laneidx) << ")";
 }
 
 StoreLaneParameters const& StoreLaneParametersOf(Operator const* op) {
@@ -182,14 +247,9 @@ StackSlotRepresentation const& StackSlotRepresentationOf(Operator const* op) {
   return OpParameter<StackSlotRepresentation>(op);
 }
 
-MachineRepresentation AtomicStoreRepresentationOf(Operator const* op) {
-  DCHECK(IrOpcode::kWord32AtomicStore == op->opcode() ||
-         IrOpcode::kWord64AtomicStore == op->opcode());
-  return OpParameter<MachineRepresentation>(op);
-}
-
 MachineType AtomicOpType(Operator const* op) {
-  return OpParameter<MachineType>(op);
+  const AtomicOpParameters params = OpParameter<AtomicOpParameters>(op);
+  return params.type();
 }
 
 size_t hash_value(ShiftKind kind) { return static_cast<size_t>(kind); }
@@ -245,24 +305,27 @@ std::ostream& operator<<(std::ostream& os, TruncateKind kind) {
 
 // The format is:
 // V(Name, properties, value_input_count, control_input_count, output_count)
-#define PURE_BINARY_OP_LIST_64(V)                                        \
-  V(Word64And, Operator::kAssociative | Operator::kCommutative, 2, 0, 1) \
-  V(Word64Or, Operator::kAssociative | Operator::kCommutative, 2, 0, 1)  \
-  V(Word64Xor, Operator::kAssociative | Operator::kCommutative, 2, 0, 1) \
-  V(Word64Shl, Operator::kNoProperties, 2, 0, 1)                         \
-  V(Word64Shr, Operator::kNoProperties, 2, 0, 1)                         \
-  V(Word64Ror, Operator::kNoProperties, 2, 0, 1)                         \
-  V(Word64Equal, Operator::kCommutative, 2, 0, 1)                        \
-  V(Int64Add, Operator::kAssociative | Operator::kCommutative, 2, 0, 1)  \
-  V(Int64Sub, Operator::kNoProperties, 2, 0, 1)                          \
-  V(Int64Mul, Operator::kAssociative | Operator::kCommutative, 2, 0, 1)  \
-  V(Int64Div, Operator::kNoProperties, 2, 1, 1)                          \
-  V(Int64Mod, Operator::kNoProperties, 2, 1, 1)                          \
-  V(Int64LessThan, Operator::kNoProperties, 2, 0, 1)                     \
-  V(Int64LessThanOrEqual, Operator::kNoProperties, 2, 0, 1)              \
-  V(Uint64Div, Operator::kNoProperties, 2, 1, 1)                         \
-  V(Uint64Mod, Operator::kNoProperties, 2, 1, 1)                         \
-  V(Uint64LessThan, Operator::kNoProperties, 2, 0, 1)                    \
+#define PURE_BINARY_OP_LIST_64(V)                                            \
+  V(Word64And, Operator::kAssociative | Operator::kCommutative, 2, 0, 1)     \
+  V(Word64Or, Operator::kAssociative | Operator::kCommutative, 2, 0, 1)      \
+  V(Word64Xor, Operator::kAssociative | Operator::kCommutative, 2, 0, 1)     \
+  V(Word64Shl, Operator::kNoProperties, 2, 0, 1)                             \
+  V(Word64Shr, Operator::kNoProperties, 2, 0, 1)                             \
+  V(Word64Ror, Operator::kNoProperties, 2, 0, 1)                             \
+  V(Word64RorLowerable, Operator::kNoProperties, 2, 1, 1)                    \
+  V(Word64Equal, Operator::kCommutative, 2, 0, 1)                            \
+  V(Int64Add, Operator::kAssociative | Operator::kCommutative, 2, 0, 1)      \
+  V(Int64Sub, Operator::kNoProperties, 2, 0, 1)                              \
+  V(Int64Mul, Operator::kAssociative | Operator::kCommutative, 2, 0, 1)      \
+  V(Int64MulHigh, Operator::kAssociative | Operator::kCommutative, 2, 0, 1)  \
+  V(Int64Div, Operator::kNoProperties, 2, 1, 1)                              \
+  V(Int64Mod, Operator::kNoProperties, 2, 1, 1)                              \
+  V(Int64LessThan, Operator::kNoProperties, 2, 0, 1)                         \
+  V(Int64LessThanOrEqual, Operator::kNoProperties, 2, 0, 1)                  \
+  V(Uint64MulHigh, Operator::kAssociative | Operator::kCommutative, 2, 0, 1) \
+  V(Uint64Div, Operator::kNoProperties, 2, 1, 1)                             \
+  V(Uint64Mod, Operator::kNoProperties, 2, 1, 1)                             \
+  V(Uint64LessThan, Operator::kNoProperties, 2, 0, 1)                        \
   V(Uint64LessThanOrEqual, Operator::kNoProperties, 2, 0, 1)
 
 // The format is:
@@ -272,6 +335,7 @@ std::ostream& operator<<(std::ostream& os, TruncateKind kind) {
   PURE_BINARY_OP_LIST_64(V)                                                \
   V(Word32Clz, Operator::kNoProperties, 1, 0, 1)                           \
   V(Word64Clz, Operator::kNoProperties, 1, 0, 1)                           \
+  V(Word64ClzLowerable, Operator::kNoProperties, 1, 1, 1)                  \
   V(Word32ReverseBytes, Operator::kNoProperties, 1, 0, 1)                  \
   V(Word64ReverseBytes, Operator::kNoProperties, 1, 0, 1)                  \
   V(Simd128ReverseBytes, Operator::kNoProperties, 1, 0, 1)                 \
@@ -288,6 +352,8 @@ std::ostream& operator<<(std::ostream& os, TruncateKind kind) {
   V(TryTruncateFloat64ToInt64, Operator::kNoProperties, 1, 0, 2)           \
   V(TryTruncateFloat32ToUint64, Operator::kNoProperties, 1, 0, 2)          \
   V(TryTruncateFloat64ToUint64, Operator::kNoProperties, 1, 0, 2)          \
+  V(TryTruncateFloat64ToInt32, Operator::kNoProperties, 1, 0, 2)           \
+  V(TryTruncateFloat64ToUint32, Operator::kNoProperties, 1, 0, 2)          \
   V(ChangeInt32ToFloat64, Operator::kNoProperties, 1, 0, 1)                \
   V(ChangeInt64ToFloat64, Operator::kNoProperties, 1, 0, 1)                \
   V(Float64SilenceNaN, Operator::kNoProperties, 1, 0, 1)                   \
@@ -403,8 +469,6 @@ std::ostream& operator<<(std::ostream& os, TruncateKind kind) {
   V(F32x4Abs, Operator::kNoProperties, 1, 0, 1)                            \
   V(F32x4Neg, Operator::kNoProperties, 1, 0, 1)                            \
   V(F32x4Sqrt, Operator::kNoProperties, 1, 0, 1)                           \
-  V(F32x4RecipApprox, Operator::kNoProperties, 1, 0, 1)                    \
-  V(F32x4RecipSqrtApprox, Operator::kNoProperties, 1, 0, 1)                \
   V(F32x4Add, Operator::kCommutative, 2, 0, 1)                             \
   V(F32x4Sub, Operator::kNoProperties, 2, 0, 1)                            \
   V(F32x4Mul, Operator::kCommutative, 2, 0, 1)                             \
@@ -559,15 +623,31 @@ std::ostream& operator<<(std::ostream& os, TruncateKind kind) {
   V(I32x4AllTrue, Operator::kNoProperties, 1, 0, 1)                        \
   V(I16x8AllTrue, Operator::kNoProperties, 1, 0, 1)                        \
   V(I8x16AllTrue, Operator::kNoProperties, 1, 0, 1)                        \
-  V(I8x16Swizzle, Operator::kNoProperties, 2, 0, 1)
+  V(I8x16RelaxedLaneSelect, Operator::kNoProperties, 3, 0, 1)              \
+  V(I16x8RelaxedLaneSelect, Operator::kNoProperties, 3, 0, 1)              \
+  V(I32x4RelaxedLaneSelect, Operator::kNoProperties, 3, 0, 1)              \
+  V(I64x2RelaxedLaneSelect, Operator::kNoProperties, 3, 0, 1)              \
+  V(F32x4RelaxedMin, Operator::kNoProperties, 2, 0, 1)                     \
+  V(F32x4RelaxedMax, Operator::kNoProperties, 2, 0, 1)                     \
+  V(F64x2RelaxedMin, Operator::kNoProperties, 2, 0, 1)                     \
+  V(F64x2RelaxedMax, Operator::kNoProperties, 2, 0, 1)                     \
+  V(I32x4RelaxedTruncF32x4S, Operator::kNoProperties, 1, 0, 1)             \
+  V(I32x4RelaxedTruncF32x4U, Operator::kNoProperties, 1, 0, 1)             \
+  V(I32x4RelaxedTruncF64x2SZero, Operator::kNoProperties, 1, 0, 1)         \
+  V(I32x4RelaxedTruncF64x2UZero, Operator::kNoProperties, 1, 0, 1)         \
+  V(I16x8RelaxedQ15MulRS, Operator::kCommutative, 2, 0, 1)                 \
+  V(I16x8DotI8x16I7x16S, Operator::kCommutative, 2, 0, 1)                  \
+  V(I32x4DotI8x16I7x16AddS, Operator::kNoProperties, 3, 0, 1)
 
 // The format is:
 // V(Name, properties, value_input_count, control_input_count, output_count)
 #define PURE_OPTIONAL_OP_LIST(V)                            \
   V(Word32Ctz, Operator::kNoProperties, 1, 0, 1)            \
   V(Word64Ctz, Operator::kNoProperties, 1, 0, 1)            \
+  V(Word64CtzLowerable, Operator::kNoProperties, 1, 1, 1)   \
   V(Word32Rol, Operator::kNoProperties, 2, 0, 1)            \
   V(Word64Rol, Operator::kNoProperties, 2, 0, 1)            \
+  V(Word64RolLowerable, Operator::kNoProperties, 2, 1, 1)   \
   V(Word32ReverseBits, Operator::kNoProperties, 1, 0, 1)    \
   V(Word64ReverseBits, Operator::kNoProperties, 1, 0, 1)    \
   V(Int32AbsWithOverflow, Operator::kNoProperties, 1, 0, 2) \
@@ -583,6 +663,8 @@ std::ostream& operator<<(std::ostream& os, TruncateKind kind) {
   V(Float64RoundTiesAway, Operator::kNoProperties, 1, 0, 1) \
   V(Float32RoundTiesEven, Operator::kNoProperties, 1, 0, 1) \
   V(Float64RoundTiesEven, Operator::kNoProperties, 1, 0, 1) \
+  V(Word32Select, Operator::kNoProperties, 3, 0, 1)         \
+  V(Word64Select, Operator::kNoProperties, 3, 0, 1)         \
   V(Float32Select, Operator::kNoProperties, 3, 0, 1)        \
   V(Float64Select, Operator::kNoProperties, 3, 0, 1)
 
@@ -593,7 +675,8 @@ std::ostream& operator<<(std::ostream& os, TruncateKind kind) {
   V(Int32SubWithOverflow, Operator::kNoProperties)                         \
   V(Int32MulWithOverflow, Operator::kAssociative | Operator::kCommutative) \
   V(Int64AddWithOverflow, Operator::kAssociative | Operator::kCommutative) \
-  V(Int64SubWithOverflow, Operator::kNoProperties)
+  V(Int64SubWithOverflow, Operator::kNoProperties)                         \
+  V(Int64MulWithOverflow, Operator::kAssociative | Operator::kCommutative)
 
 #define MACHINE_TYPE_LIST(V) \
   V(Float32)                 \
@@ -610,9 +693,12 @@ std::ostream& operator<<(std::ostream& os, TruncateKind kind) {
   V(Pointer)                 \
   V(TaggedSigned)            \
   V(TaggedPointer)           \
+  V(MapInHeader)             \
   V(AnyTagged)               \
   V(CompressedPointer)       \
-  V(AnyCompressed)
+  V(SandboxedPointer)        \
+  V(AnyCompressed)           \
+  V(Simd256)
 
 #define MACHINE_REPRESENTATION_LIST(V) \
   V(kFloat32)                          \
@@ -622,11 +708,14 @@ std::ostream& operator<<(std::ostream& os, TruncateKind kind) {
   V(kWord16)                           \
   V(kWord32)                           \
   V(kWord64)                           \
+  V(kMapWord)                          \
   V(kTaggedSigned)                     \
   V(kTaggedPointer)                    \
   V(kTagged)                           \
   V(kCompressedPointer)                \
-  V(kCompressed)
+  V(kSandboxedPointer)                 \
+  V(kCompressed)                       \
+  V(kSimd256)
 
 #define LOAD_TRANSFORM_LIST(V) \
   V(S128Load8Splat)            \
@@ -642,6 +731,30 @@ std::ostream& operator<<(std::ostream& os, TruncateKind kind) {
   V(S128Load32Zero)            \
   V(S128Load64Zero)
 
+#if TAGGED_SIZE_8_BYTES
+
+#define ATOMIC_TAGGED_TYPE_LIST(V)
+
+#define ATOMIC64_TAGGED_TYPE_LIST(V) \
+  V(TaggedSigned)                    \
+  V(TaggedPointer)                   \
+  V(AnyTagged)                       \
+  V(CompressedPointer)               \
+  V(AnyCompressed)
+
+#else
+
+#define ATOMIC_TAGGED_TYPE_LIST(V) \
+  V(TaggedSigned)                  \
+  V(TaggedPointer)                 \
+  V(AnyTagged)                     \
+  V(CompressedPointer)             \
+  V(AnyCompressed)
+
+#define ATOMIC64_TAGGED_TYPE_LIST(V)
+
+#endif  // TAGGED_SIZE_8_BYTES
+
 #define ATOMIC_U32_TYPE_LIST(V) \
   V(Uint8)                      \
   V(Uint16)                     \
@@ -656,6 +769,28 @@ std::ostream& operator<<(std::ostream& os, TruncateKind kind) {
 #define ATOMIC_U64_TYPE_LIST(V) \
   ATOMIC_U32_TYPE_LIST(V)       \
   V(Uint64)
+
+#if TAGGED_SIZE_8_BYTES
+
+#define ATOMIC_TAGGED_REPRESENTATION_LIST(V)
+
+#define ATOMIC64_TAGGED_REPRESENTATION_LIST(V) \
+  V(kTaggedSigned)                             \
+  V(kTaggedPointer)                            \
+  V(kTagged)
+
+#else
+
+#define ATOMIC_TAGGED_REPRESENTATION_LIST(V) \
+  V(kTaggedSigned)                           \
+  V(kTaggedPointer)                          \
+  V(kTagged)                                 \
+  V(kCompressedPointer)                      \
+  V(kCompressed)
+
+#define ATOMIC64_TAGGED_REPRESENTATION_LIST(V)
+
+#endif  // TAGGED_SIZE_8_BYTES
 
 #define ATOMIC_REPRESENTATION_LIST(V) \
   V(kWord8)                           \
@@ -823,13 +958,6 @@ struct MachineOperatorGlobalCache {
                                         Operator::kEliminatable, "Load", 2, 1, \
                                         1, 1, 1, 0, MachineType::Type()) {}    \
   };                                                                           \
-  struct PoisonedLoad##Type##Operator final                                    \
-      : public Operator1<LoadRepresentation> {                                 \
-    PoisonedLoad##Type##Operator()                                             \
-        : Operator1<LoadRepresentation>(                                       \
-              IrOpcode::kPoisonedLoad, Operator::kEliminatable,                \
-              "PoisonedLoad", 2, 1, 1, 1, 1, 0, MachineType::Type()) {}        \
-  };                                                                           \
   struct UnalignedLoad##Type##Operator final                                   \
       : public Operator1<LoadRepresentation> {                                 \
     UnalignedLoad##Type##Operator()                                            \
@@ -853,7 +981,6 @@ struct MachineOperatorGlobalCache {
                                         0, 0, 1, 0, 0, MachineType::Type()) {} \
   };                                                                           \
   Load##Type##Operator kLoad##Type;                                            \
-  PoisonedLoad##Type##Operator kPoisonedLoad##Type;                            \
   UnalignedLoad##Type##Operator kUnalignedLoad##Type;                          \
   ProtectedLoad##Type##Operator kProtectedLoad##Type;                          \
   LoadImmutable##Type##Operator kLoadImmutable##Type;
@@ -950,7 +1077,7 @@ struct MachineOperatorGlobalCache {
         : Operator1<StoreRepresentation>(                                  \
               IrOpcode::kProtectedStore,                                   \
               Operator::kNoDeopt | Operator::kNoRead | Operator::kNoThrow, \
-              "Store", 3, 1, 1, 0, 1, 0,                                   \
+              "ProtectedStore", 3, 1, 1, 0, 1, 0,                          \
               StoreRepresentation(MachineRepresentation::Type,             \
                                   kNoWriteBarrier)) {}                     \
   };                                                                       \
@@ -968,129 +1095,186 @@ struct MachineOperatorGlobalCache {
   MACHINE_REPRESENTATION_LIST(STORE)
 #undef STORE
 
-#define ATOMIC_LOAD(Type)                                                   \
-  struct Word32AtomicLoad##Type##Operator final                             \
-      : public Operator1<LoadRepresentation> {                              \
-    Word32AtomicLoad##Type##Operator()                                      \
-        : Operator1<LoadRepresentation>(                                    \
-              IrOpcode::kWord32AtomicLoad, Operator::kEliminatable,         \
-              "Word32AtomicLoad", 2, 1, 1, 1, 1, 0, MachineType::Type()) {} \
-  };                                                                        \
-  Word32AtomicLoad##Type##Operator kWord32AtomicLoad##Type;
+#define ATOMIC_LOAD_WITH_KIND(Type, Kind)                           \
+  struct Word32SeqCstLoad##Type##Kind##Operator                     \
+      : public Operator1<AtomicLoadParameters> {                    \
+    Word32SeqCstLoad##Type##Kind##Operator()                        \
+        : Operator1<AtomicLoadParameters>(                          \
+              IrOpcode::kWord32AtomicLoad, Operator::kNoProperties, \
+              "Word32AtomicLoad", 2, 1, 1, 1, 1, 0,                 \
+              AtomicLoadParameters(MachineType::Type(),             \
+                                   AtomicMemoryOrder::kSeqCst,      \
+                                   MemoryAccessKind::k##Kind)) {}   \
+  };                                                                \
+  Word32SeqCstLoad##Type##Kind##Operator kWord32SeqCstLoad##Type##Kind;
+#define ATOMIC_LOAD(Type)             \
+  ATOMIC_LOAD_WITH_KIND(Type, Normal) \
+  ATOMIC_LOAD_WITH_KIND(Type, Protected)
   ATOMIC_TYPE_LIST(ATOMIC_LOAD)
+#undef ATOMIC_LOAD_WITH_KIND
 #undef ATOMIC_LOAD
 
-#define ATOMIC_LOAD(Type)                                                   \
-  struct Word64AtomicLoad##Type##Operator final                             \
-      : public Operator1<LoadRepresentation> {                              \
-    Word64AtomicLoad##Type##Operator()                                      \
-        : Operator1<LoadRepresentation>(                                    \
-              IrOpcode::kWord64AtomicLoad, Operator::kEliminatable,         \
-              "Word64AtomicLoad", 2, 1, 1, 1, 1, 0, MachineType::Type()) {} \
-  };                                                                        \
-  Word64AtomicLoad##Type##Operator kWord64AtomicLoad##Type;
+#define ATOMIC_LOAD_WITH_KIND(Type, Kind)                           \
+  struct Word64SeqCstLoad##Type##Kind##Operator                     \
+      : public Operator1<AtomicLoadParameters> {                    \
+    Word64SeqCstLoad##Type##Kind##Operator()                        \
+        : Operator1<AtomicLoadParameters>(                          \
+              IrOpcode::kWord64AtomicLoad, Operator::kNoProperties, \
+              "Word64AtomicLoad", 2, 1, 1, 1, 1, 0,                 \
+              AtomicLoadParameters(MachineType::Type(),             \
+                                   AtomicMemoryOrder::kSeqCst,      \
+                                   MemoryAccessKind::k##Kind)) {}   \
+  };                                                                \
+  Word64SeqCstLoad##Type##Kind##Operator kWord64SeqCstLoad##Type##Kind;
+#define ATOMIC_LOAD(Type)             \
+  ATOMIC_LOAD_WITH_KIND(Type, Normal) \
+  ATOMIC_LOAD_WITH_KIND(Type, Protected)
   ATOMIC_U64_TYPE_LIST(ATOMIC_LOAD)
+#undef ATOMIC_LOAD_WITH_KIND
 #undef ATOMIC_LOAD
 
-#define ATOMIC_STORE(Type)                                                 \
-  struct Word32AtomicStore##Type##Operator                                 \
-      : public Operator1<MachineRepresentation> {                          \
-    Word32AtomicStore##Type##Operator()                                    \
-        : Operator1<MachineRepresentation>(                                \
+#define ATOMIC_STORE_WITH_KIND(Type, Kind)                                 \
+  struct Word32SeqCstStore##Type##Kind##Operator                           \
+      : public Operator1<AtomicStoreParameters> {                          \
+    Word32SeqCstStore##Type##Kind##Operator()                              \
+        : Operator1<AtomicStoreParameters>(                                \
               IrOpcode::kWord32AtomicStore,                                \
               Operator::kNoDeopt | Operator::kNoRead | Operator::kNoThrow, \
               "Word32AtomicStore", 3, 1, 1, 0, 1, 0,                       \
-              MachineRepresentation::Type) {}                              \
+              AtomicStoreParameters(MachineRepresentation::Type,           \
+                                    kNoWriteBarrier,                       \
+                                    AtomicMemoryOrder::kSeqCst,            \
+                                    MemoryAccessKind::k##Kind)) {}         \
   };                                                                       \
-  Word32AtomicStore##Type##Operator kWord32AtomicStore##Type;
+  Word32SeqCstStore##Type##Kind##Operator kWord32SeqCstStore##Type##Kind;
+#define ATOMIC_STORE(Type)             \
+  ATOMIC_STORE_WITH_KIND(Type, Normal) \
+  ATOMIC_STORE_WITH_KIND(Type, Protected)
   ATOMIC_REPRESENTATION_LIST(ATOMIC_STORE)
+#undef ATOMIC_STORE_WITH_KIND
 #undef ATOMIC_STORE
 
-#define ATOMIC_STORE(Type)                                                 \
-  struct Word64AtomicStore##Type##Operator                                 \
-      : public Operator1<MachineRepresentation> {                          \
-    Word64AtomicStore##Type##Operator()                                    \
-        : Operator1<MachineRepresentation>(                                \
+#define ATOMIC_STORE_WITH_KIND(Type, Kind)                                 \
+  struct Word64SeqCstStore##Type##Kind##Operator                           \
+      : public Operator1<AtomicStoreParameters> {                          \
+    Word64SeqCstStore##Type##Kind##Operator()                              \
+        : Operator1<AtomicStoreParameters>(                                \
               IrOpcode::kWord64AtomicStore,                                \
               Operator::kNoDeopt | Operator::kNoRead | Operator::kNoThrow, \
               "Word64AtomicStore", 3, 1, 1, 0, 1, 0,                       \
-              MachineRepresentation::Type) {}                              \
+              AtomicStoreParameters(MachineRepresentation::Type,           \
+                                    kNoWriteBarrier,                       \
+                                    AtomicMemoryOrder::kSeqCst,            \
+                                    MemoryAccessKind::k##Kind)) {}         \
   };                                                                       \
-  Word64AtomicStore##Type##Operator kWord64AtomicStore##Type;
+  Word64SeqCstStore##Type##Kind##Operator kWord64SeqCstStore##Type##Kind;
+#define ATOMIC_STORE(Type)             \
+  ATOMIC_STORE_WITH_KIND(Type, Normal) \
+  ATOMIC_STORE_WITH_KIND(Type, Protected)
   ATOMIC64_REPRESENTATION_LIST(ATOMIC_STORE)
+#undef ATOMIC_STORE_WITH_KIND
 #undef ATOMIC_STORE
 
-#define ATOMIC_OP(op, type)                                                    \
-  struct op##type##Operator : public Operator1<MachineType> {                  \
-    op##type##Operator()                                                       \
-        : Operator1<MachineType>(IrOpcode::k##op,                              \
+#define ATOMIC_OP(op, type, kind)                                              \
+  struct op##type##kind##Operator : public Operator1<AtomicOpParameters> {     \
+    op##type##kind##Operator()                                                 \
+        : Operator1<AtomicOpParameters>(IrOpcode::k##op,                       \
                                  Operator::kNoDeopt | Operator::kNoThrow, #op, \
-                                 3, 1, 1, 1, 1, 0, MachineType::type()) {}     \
+                                 3, 1, 1, 1, 1, 0,                             \
+                                 AtomicOpParameters(MachineType::type(),       \
+                                                    MemoryAccessKind::k##kind) \
+                                 ){}                                           \
   };                                                                           \
-  op##type##Operator k##op##type;
-#define ATOMIC_OP_LIST(type)       \
-  ATOMIC_OP(Word32AtomicAdd, type) \
-  ATOMIC_OP(Word32AtomicSub, type) \
-  ATOMIC_OP(Word32AtomicAnd, type) \
-  ATOMIC_OP(Word32AtomicOr, type)  \
-  ATOMIC_OP(Word32AtomicXor, type) \
-  ATOMIC_OP(Word32AtomicExchange, type)
+  op##type##kind##Operator k##op##type##kind;
+#define ATOMIC_OP_LIST_WITH_KIND(type, kind) \
+  ATOMIC_OP(Word32AtomicAdd, type, kind)     \
+  ATOMIC_OP(Word32AtomicSub, type, kind)     \
+  ATOMIC_OP(Word32AtomicAnd, type, kind)     \
+  ATOMIC_OP(Word32AtomicOr, type, kind)      \
+  ATOMIC_OP(Word32AtomicXor, type, kind)     \
+  ATOMIC_OP(Word32AtomicExchange, type, kind)
+#define ATOMIC_OP_LIST(type)             \
+  ATOMIC_OP_LIST_WITH_KIND(type, Normal) \
+  ATOMIC_OP_LIST_WITH_KIND(type, Protected)
   ATOMIC_TYPE_LIST(ATOMIC_OP_LIST)
+#undef ATOMIC_OP_LIST_WITH_KIND
 #undef ATOMIC_OP_LIST
-#define ATOMIC64_OP_LIST(type)     \
-  ATOMIC_OP(Word64AtomicAdd, type) \
-  ATOMIC_OP(Word64AtomicSub, type) \
-  ATOMIC_OP(Word64AtomicAnd, type) \
-  ATOMIC_OP(Word64AtomicOr, type)  \
-  ATOMIC_OP(Word64AtomicXor, type) \
-  ATOMIC_OP(Word64AtomicExchange, type)
+#define ATOMIC64_OP_LIST_WITH_KIND(type, kind) \
+  ATOMIC_OP(Word64AtomicAdd, type, kind)       \
+  ATOMIC_OP(Word64AtomicSub, type, kind)       \
+  ATOMIC_OP(Word64AtomicAnd, type, kind)       \
+  ATOMIC_OP(Word64AtomicOr, type, kind)        \
+  ATOMIC_OP(Word64AtomicXor, type, kind)       \
+  ATOMIC_OP(Word64AtomicExchange, type, kind)
+#define ATOMIC64_OP_LIST(type)             \
+  ATOMIC64_OP_LIST_WITH_KIND(type, Normal) \
+  ATOMIC64_OP_LIST_WITH_KIND(type, Protected)
   ATOMIC_U64_TYPE_LIST(ATOMIC64_OP_LIST)
+#undef ATOMIC64_OP_LIST_WITH_KIND
 #undef ATOMIC64_OP_LIST
 #undef ATOMIC_OP
 
-#define ATOMIC_COMPARE_EXCHANGE(Type)                                          \
-  struct Word32AtomicCompareExchange##Type##Operator                           \
-      : public Operator1<MachineType> {                                        \
-    Word32AtomicCompareExchange##Type##Operator()                              \
-        : Operator1<MachineType>(IrOpcode::kWord32AtomicCompareExchange,       \
+#define ATOMIC_COMPARE_EXCHANGE_WITH_KIND(Type, Kind)                          \
+  struct Word32AtomicCompareExchange##Type##Kind##Operator                     \
+      : public Operator1<AtomicOpParameters> {                                 \
+    Word32AtomicCompareExchange##Type##Kind##Operator()                        \
+        : Operator1<AtomicOpParameters>(                                       \
+                                 IrOpcode::kWord32AtomicCompareExchange,       \
                                  Operator::kNoDeopt | Operator::kNoThrow,      \
                                  "Word32AtomicCompareExchange", 4, 1, 1, 1, 1, \
-                                 0, MachineType::Type()) {}                    \
+                                 0,                                            \
+                                 AtomicOpParameters(MachineType::Type(),       \
+                                                    MemoryAccessKind::k##Kind) \
+          ) {}                                                                 \
   };                                                                           \
-  Word32AtomicCompareExchange##Type##Operator                                  \
-      kWord32AtomicCompareExchange##Type;
+  Word32AtomicCompareExchange##Type##Kind##Operator                            \
+      kWord32AtomicCompareExchange##Type##Kind;
+#define ATOMIC_COMPARE_EXCHANGE(Type)             \
+  ATOMIC_COMPARE_EXCHANGE_WITH_KIND(Type, Normal) \
+  ATOMIC_COMPARE_EXCHANGE_WITH_KIND(Type, Protected)
   ATOMIC_TYPE_LIST(ATOMIC_COMPARE_EXCHANGE)
+#undef ATOMIC_COMPARE_EXCHANGE_WITH_KIND
 #undef ATOMIC_COMPARE_EXCHANGE
 
-#define ATOMIC_COMPARE_EXCHANGE(Type)                                          \
-  struct Word64AtomicCompareExchange##Type##Operator                           \
-      : public Operator1<MachineType> {                                        \
-    Word64AtomicCompareExchange##Type##Operator()                              \
-        : Operator1<MachineType>(IrOpcode::kWord64AtomicCompareExchange,       \
+#define ATOMIC_COMPARE_EXCHANGE_WITH_KIND(Type, Kind)                          \
+  struct Word64AtomicCompareExchange##Type##Kind##Operator                     \
+      : public Operator1<AtomicOpParameters> {                                 \
+    Word64AtomicCompareExchange##Type##Kind##Operator()                        \
+        : Operator1<AtomicOpParameters>(                                       \
+                                 IrOpcode::kWord64AtomicCompareExchange,       \
                                  Operator::kNoDeopt | Operator::kNoThrow,      \
                                  "Word64AtomicCompareExchange", 4, 1, 1, 1, 1, \
-                                 0, MachineType::Type()) {}                    \
+                                 0,                                            \
+                                 AtomicOpParameters(MachineType::Type(),       \
+                                                    MemoryAccessKind::k##Kind) \
+          ) {}                                                                 \
   };                                                                           \
-  Word64AtomicCompareExchange##Type##Operator                                  \
-      kWord64AtomicCompareExchange##Type;
+  Word64AtomicCompareExchange##Type##Kind##Operator                            \
+      kWord64AtomicCompareExchange##Type##Kind;
+#define ATOMIC_COMPARE_EXCHANGE(Type)             \
+  ATOMIC_COMPARE_EXCHANGE_WITH_KIND(Type, Normal) \
+  ATOMIC_COMPARE_EXCHANGE_WITH_KIND(Type, Protected)
   ATOMIC_U64_TYPE_LIST(ATOMIC_COMPARE_EXCHANGE)
+#undef ATOMIC_COMPARE_EXCHANGE_WITH_KIND
 #undef ATOMIC_COMPARE_EXCHANGE
 
-  struct Word32AtomicPairLoadOperator : public Operator {
-    Word32AtomicPairLoadOperator()
-        : Operator(IrOpcode::kWord32AtomicPairLoad,
-                   Operator::kNoDeopt | Operator::kNoThrow,
-                   "Word32AtomicPairLoad", 2, 1, 1, 2, 1, 0) {}
+  struct Word32SeqCstPairLoadOperator : public Operator1<AtomicMemoryOrder> {
+    Word32SeqCstPairLoadOperator()
+        : Operator1<AtomicMemoryOrder>(IrOpcode::kWord32AtomicPairLoad,
+                                       Operator::kNoDeopt | Operator::kNoThrow,
+                                       "Word32AtomicPairLoad", 2, 1, 1, 2, 1, 0,
+                                       AtomicMemoryOrder::kSeqCst) {}
   };
-  Word32AtomicPairLoadOperator kWord32AtomicPairLoad;
+  Word32SeqCstPairLoadOperator kWord32SeqCstPairLoad;
 
-  struct Word32AtomicPairStoreOperator : public Operator {
-    Word32AtomicPairStoreOperator()
-        : Operator(IrOpcode::kWord32AtomicPairStore,
-                   Operator::kNoDeopt | Operator::kNoThrow,
-                   "Word32AtomicPairStore", 4, 1, 1, 0, 1, 0) {}
+  struct Word32SeqCstPairStoreOperator : public Operator1<AtomicMemoryOrder> {
+    Word32SeqCstPairStoreOperator()
+        : Operator1<AtomicMemoryOrder>(IrOpcode::kWord32AtomicPairStore,
+                                       Operator::kNoDeopt | Operator::kNoThrow,
+                                       "Word32AtomicPairStore", 4, 1, 1, 0, 1,
+                                       0, AtomicMemoryOrder::kSeqCst) {}
   };
-  Word32AtomicPairStoreOperator kWord32AtomicPairStore;
+  Word32SeqCstPairStoreOperator kWord32SeqCstPairStore;
 
 #define ATOMIC_PAIR_OP(op)                                      \
   struct Word32AtomicPair##op##Operator : public Operator {     \
@@ -1112,13 +1296,15 @@ struct MachineOperatorGlobalCache {
   };
   Word32AtomicPairCompareExchangeOperator kWord32AtomicPairCompareExchange;
 
-  struct MemoryBarrierOperator : public Operator {
+  template <AtomicMemoryOrder order>
+  struct MemoryBarrierOperator : public Operator1<AtomicMemoryOrder> {
     MemoryBarrierOperator()
-        : Operator(IrOpcode::kMemoryBarrier,
-                   Operator::kNoDeopt | Operator::kNoThrow, "MemoryBarrier", 0,
-                   1, 1, 0, 1, 0) {}
+        : Operator1<AtomicMemoryOrder>(
+              IrOpcode::kMemoryBarrier, Operator::kNoDeopt | Operator::kNoThrow,
+              "SeqCstMemoryBarrier", 0, 1, 1, 0, 1, 0, order) {}
   };
-  MemoryBarrierOperator kMemoryBarrier;
+  MemoryBarrierOperator<AtomicMemoryOrder::kSeqCst> kSeqCstMemoryBarrier;
+  MemoryBarrierOperator<AtomicMemoryOrder::kAcqRel> kAcqRelMemoryBarrier;
 
   // The {BitcastWordToTagged} operator must not be marked as pure (especially
   // not idempotent), because otherwise the splitting logic in the Scheduler
@@ -1149,36 +1335,12 @@ struct MachineOperatorGlobalCache {
   };
   BitcastMaybeObjectToWordOperator kBitcastMaybeObjectToWord;
 
-  struct TaggedPoisonOnSpeculation : public Operator {
-    TaggedPoisonOnSpeculation()
-        : Operator(IrOpcode::kTaggedPoisonOnSpeculation,
-                   Operator::kEliminatable | Operator::kNoWrite,
-                   "TaggedPoisonOnSpeculation", 1, 1, 1, 1, 1, 0) {}
+  struct AbortCSADcheckOperator : public Operator {
+    AbortCSADcheckOperator()
+        : Operator(IrOpcode::kAbortCSADcheck, Operator::kNoThrow,
+                   "AbortCSADcheck", 1, 1, 1, 0, 1, 0) {}
   };
-  TaggedPoisonOnSpeculation kTaggedPoisonOnSpeculation;
-
-  struct Word32PoisonOnSpeculation : public Operator {
-    Word32PoisonOnSpeculation()
-        : Operator(IrOpcode::kWord32PoisonOnSpeculation,
-                   Operator::kEliminatable | Operator::kNoWrite,
-                   "Word32PoisonOnSpeculation", 1, 1, 1, 1, 1, 0) {}
-  };
-  Word32PoisonOnSpeculation kWord32PoisonOnSpeculation;
-
-  struct Word64PoisonOnSpeculation : public Operator {
-    Word64PoisonOnSpeculation()
-        : Operator(IrOpcode::kWord64PoisonOnSpeculation,
-                   Operator::kEliminatable | Operator::kNoWrite,
-                   "Word64PoisonOnSpeculation", 1, 1, 1, 1, 1, 0) {}
-  };
-  Word64PoisonOnSpeculation kWord64PoisonOnSpeculation;
-
-  struct AbortCSAAssertOperator : public Operator {
-    AbortCSAAssertOperator()
-        : Operator(IrOpcode::kAbortCSAAssert, Operator::kNoThrow,
-                   "AbortCSAAssert", 1, 1, 1, 0, 1, 0) {}
-  };
-  AbortCSAAssertOperator kAbortCSAAssert;
+  AbortCSADcheckOperator kAbortCSADcheck;
 
   struct DebugBreakOperator : public Operator {
     DebugBreakOperator()
@@ -1186,13 +1348,6 @@ struct MachineOperatorGlobalCache {
                    1, 1, 0, 1, 0) {}
   };
   DebugBreakOperator kDebugBreak;
-
-  struct UnsafePointerAddOperator final : public Operator {
-    UnsafePointerAddOperator()
-        : Operator(IrOpcode::kUnsafePointerAdd, Operator::kKontrol,
-                   "UnsafePointerAdd", 2, 1, 1, 1, 1, 0) {}
-  };
-  UnsafePointerAddOperator kUnsafePointerAdd;
 
   struct StackPointerGreaterThanOperator : public Operator1<StackCheckKind> {
     explicit StackPointerGreaterThanOperator(StackCheckKind kind)
@@ -1213,6 +1368,19 @@ struct MachineOperatorGlobalCache {
   STACK_POINTER_GREATER_THAN(CodeStubAssembler)
   STACK_POINTER_GREATER_THAN(Wasm)
 #undef STACK_POINTER_GREATER_THAN
+
+  struct I8x16SwizzleOperator final : public Operator1<bool> {
+    I8x16SwizzleOperator()
+        : Operator1<bool>(IrOpcode::kI8x16Swizzle, Operator::kPure,
+                          "I8x16Swizzle", 2, 0, 0, 1, 0, 0, false) {}
+  };
+  I8x16SwizzleOperator kI8x16Swizzle;
+  struct I8x16RelaxedSwizzleOperator final : public Operator1<bool> {
+    I8x16RelaxedSwizzleOperator()
+        : Operator1<bool>(IrOpcode::kI8x16Swizzle, Operator::kPure,
+                          "I8x16RelaxedSwizzle", 2, 0, 0, 1, 0, 0, true) {}
+  };
+  I8x16RelaxedSwizzleOperator kI8x16RelaxedSwizzle;
 };
 
 struct CommentOperator : public Operator1<const char*> {
@@ -1331,7 +1499,14 @@ PURE_OPTIONAL_OP_LIST(PURE)
 OVERFLOW_OP_LIST(OVERFLOW_OP)
 #undef OVERFLOW_OP
 
+const Operator* MachineOperatorBuilder::TraceInstruction(uint32_t markid) {
+  return zone_->New<Operator1<uint32_t>>(
+      IrOpcode::kTraceInstruction, Operator::kNoDeopt | Operator::kNoThrow,
+      "TraceInstruction", 0, 1, 1, 0, 1, 0, markid);
+}
+
 const Operator* MachineOperatorBuilder::Load(LoadRepresentation rep) {
+  DCHECK(!rep.IsMapWord());
 #define LOAD(Type)                  \
   if (rep == MachineType::Type()) { \
     return &cache_.kLoad##Type;     \
@@ -1351,16 +1526,6 @@ const Operator* MachineOperatorBuilder::LoadImmutable(LoadRepresentation rep) {
 #define LOAD(Type)                       \
   if (rep == MachineType::Type()) {      \
     return &cache_.kLoadImmutable##Type; \
-  }
-  MACHINE_TYPE_LIST(LOAD)
-#undef LOAD
-  UNREACHABLE();
-}
-
-const Operator* MachineOperatorBuilder::PoisonedLoad(LoadRepresentation rep) {
-#define LOAD(Type)                      \
-  if (rep == MachineType::Type()) {     \
-    return &cache_.kPoisonedLoad##Type; \
   }
   MACHINE_TYPE_LIST(LOAD)
 #undef LOAD
@@ -1491,6 +1656,7 @@ const Operator* MachineOperatorBuilder::StackSlot(MachineRepresentation rep,
 }
 
 const Operator* MachineOperatorBuilder::Store(StoreRepresentation store_rep) {
+  DCHECK_NE(store_rep.representation(), MachineRepresentation::kMapWord);
   switch (store_rep.representation()) {
 #define STORE(kRep)                                              \
   case MachineRepresentation::kRep:                              \
@@ -1534,10 +1700,6 @@ const Operator* MachineOperatorBuilder::ProtectedStore(
   UNREACHABLE();
 }
 
-const Operator* MachineOperatorBuilder::UnsafePointerAdd() {
-  return &cache_.kUnsafePointerAdd;
-}
-
 const Operator* MachineOperatorBuilder::StackPointerGreaterThan(
     StackCheckKind kind) {
   switch (kind) {
@@ -1565,8 +1727,8 @@ const Operator* MachineOperatorBuilder::BitcastMaybeObjectToWord() {
   return &cache_.kBitcastMaybeObjectToWord;
 }
 
-const Operator* MachineOperatorBuilder::AbortCSAAssert() {
-  return &cache_.kAbortCSAAssert;
+const Operator* MachineOperatorBuilder::AbortCSADcheck() {
+  return &cache_.kAbortCSADcheck;
 }
 
 const Operator* MachineOperatorBuilder::DebugBreak() {
@@ -1577,202 +1739,372 @@ const Operator* MachineOperatorBuilder::Comment(const char* msg) {
   return zone_->New<CommentOperator>(msg);
 }
 
-const Operator* MachineOperatorBuilder::MemBarrier() {
-  return &cache_.kMemoryBarrier;
+const Operator* MachineOperatorBuilder::MemoryBarrier(AtomicMemoryOrder order) {
+  switch (order) {
+    case AtomicMemoryOrder::kSeqCst:
+      return &cache_.kSeqCstMemoryBarrier;
+    case AtomicMemoryOrder::kAcqRel:
+      return &cache_.kAcqRelMemoryBarrier;
+    default:
+      UNREACHABLE();
+  }
 }
 
 const Operator* MachineOperatorBuilder::Word32AtomicLoad(
-    LoadRepresentation rep) {
-#define LOAD(Type)                          \
-  if (rep == MachineType::Type()) {         \
-    return &cache_.kWord32AtomicLoad##Type; \
+    AtomicLoadParameters params) {
+#define CACHED_LOAD_WITH_KIND(Type, Kind)               \
+  if (params.representation() == MachineType::Type() && \
+      params.order() == AtomicMemoryOrder::kSeqCst &&   \
+      params.kind() == MemoryAccessKind::k##Kind) {     \
+    return &cache_.kWord32SeqCstLoad##Type##Kind;       \
+  }
+#define CACHED_LOAD(Type)             \
+  CACHED_LOAD_WITH_KIND(Type, Normal) \
+  CACHED_LOAD_WITH_KIND(Type, Protected)
+  ATOMIC_TYPE_LIST(CACHED_LOAD)
+#undef CACHED_LOAD_WITH_KIND
+#undef CACHED_LOAD
+
+#define LOAD(Type)                                            \
+  if (params.representation() == MachineType::Type()) {       \
+    return zone_->New<Operator1<AtomicLoadParameters>>(       \
+        IrOpcode::kWord32AtomicLoad, Operator::kNoProperties, \
+        "Word32AtomicLoad", 2, 1, 1, 1, 1, 0, params);        \
   }
   ATOMIC_TYPE_LIST(LOAD)
+  ATOMIC_TAGGED_TYPE_LIST(LOAD)
 #undef LOAD
+
   UNREACHABLE();
 }
 
 const Operator* MachineOperatorBuilder::Word32AtomicStore(
-    MachineRepresentation rep) {
-#define STORE(kRep)                          \
-  if (rep == MachineRepresentation::kRep) {  \
-    return &cache_.kWord32AtomicStore##kRep; \
+    AtomicStoreParameters params) {
+#define CACHED_STORE_WITH_KIND(kRep, Kind)                      \
+  if (params.representation() == MachineRepresentation::kRep && \
+      params.order() == AtomicMemoryOrder::kSeqCst &&           \
+      params.kind() == MemoryAccessKind::k##Kind) {             \
+    return &cache_.kWord32SeqCstStore##kRep##Kind;              \
+  }
+#define CACHED_STORE(kRep)            \
+  CACHED_STORE_WITH_KIND(kRep, Normal) \
+  CACHED_STORE_WITH_KIND(kRep, Protected)
+  ATOMIC_REPRESENTATION_LIST(CACHED_STORE)
+#undef CACHED_STORE_WITH_KIND
+#undef CACHED_STORE
+
+#define STORE(kRep)                                                  \
+  if (params.representation() == MachineRepresentation::kRep) {      \
+    return zone_->New<Operator1<AtomicStoreParameters>>(             \
+        IrOpcode::kWord32AtomicStore,                                \
+        Operator::kNoDeopt | Operator::kNoRead | Operator::kNoThrow, \
+        "Word32AtomicStore", 3, 1, 1, 0, 1, 0, params);              \
   }
   ATOMIC_REPRESENTATION_LIST(STORE)
+  ATOMIC_TAGGED_REPRESENTATION_LIST(STORE)
 #undef STORE
   UNREACHABLE();
 }
 
-const Operator* MachineOperatorBuilder::Word32AtomicExchange(MachineType type) {
-#define EXCHANGE(kType)                          \
-  if (type == MachineType::kType()) {            \
-    return &cache_.kWord32AtomicExchange##kType; \
+const Operator* MachineOperatorBuilder::Word32AtomicExchange(
+    AtomicOpParameters params) {
+#define EXCHANGE_WITH_KIND(kType, Kind)                \
+  if (params.type() == MachineType::kType()            \
+      && params.kind() == MemoryAccessKind::k##Kind) { \
+    return &cache_.kWord32AtomicExchange##kType##Kind; \
   }
+#define EXCHANGE(kType) \
+  EXCHANGE_WITH_KIND(kType, Normal) \
+  EXCHANGE_WITH_KIND(kType, Protected)
   ATOMIC_TYPE_LIST(EXCHANGE)
+#undef EXCHANGE_WITH_KIND
 #undef EXCHANGE
   UNREACHABLE();
 }
 
 const Operator* MachineOperatorBuilder::Word32AtomicCompareExchange(
-    MachineType type) {
-#define COMPARE_EXCHANGE(kType)                         \
-  if (type == MachineType::kType()) {                   \
-    return &cache_.kWord32AtomicCompareExchange##kType; \
+    AtomicOpParameters params) {
+#define COMPARE_EXCHANGE_WITH_KIND(kType, Kind)               \
+  if (params.type() == MachineType::kType()                   \
+      && params.kind() == MemoryAccessKind::k##Kind) {        \
+    return &cache_.kWord32AtomicCompareExchange##kType##Kind; \
   }
+#define COMPARE_EXCHANGE(kType)             \
+  COMPARE_EXCHANGE_WITH_KIND(kType, Normal) \
+  COMPARE_EXCHANGE_WITH_KIND(kType, Protected)
   ATOMIC_TYPE_LIST(COMPARE_EXCHANGE)
+#undef COMPARE_EXCHANGE_WITH_KIND
 #undef COMPARE_EXCHANGE
   UNREACHABLE();
 }
 
-const Operator* MachineOperatorBuilder::Word32AtomicAdd(MachineType type) {
-#define ADD(kType)                          \
-  if (type == MachineType::kType()) {       \
-    return &cache_.kWord32AtomicAdd##kType; \
+const Operator* MachineOperatorBuilder::Word32AtomicAdd(
+    AtomicOpParameters params) {
+#define OP_WITH_KIND(kType, Kind)                      \
+  if (params.type() == MachineType::kType()            \
+      && params.kind() == MemoryAccessKind::k##Kind) { \
+    return &cache_.kWord32AtomicAdd##kType##Kind;      \
   }
-  ATOMIC_TYPE_LIST(ADD)
-#undef ADD
+#define OP(kType)             \
+  OP_WITH_KIND(kType, Normal) \
+  OP_WITH_KIND(kType, Protected)
+  ATOMIC_TYPE_LIST(OP)
+#undef OP_WITH_KIND
+#undef OP
   UNREACHABLE();
 }
 
-const Operator* MachineOperatorBuilder::Word32AtomicSub(MachineType type) {
-#define SUB(kType)                          \
-  if (type == MachineType::kType()) {       \
-    return &cache_.kWord32AtomicSub##kType; \
+const Operator* MachineOperatorBuilder::Word32AtomicSub(
+    AtomicOpParameters params) {
+#define OP_WITH_KIND(kType, Kind)                      \
+  if (params.type() == MachineType::kType()            \
+      && params.kind() == MemoryAccessKind::k##Kind) { \
+    return &cache_.kWord32AtomicSub##kType##Kind;      \
   }
-  ATOMIC_TYPE_LIST(SUB)
-#undef SUB
+#define OP(kType)             \
+  OP_WITH_KIND(kType, Normal) \
+  OP_WITH_KIND(kType, Protected)
+  ATOMIC_TYPE_LIST(OP)
+#undef OP_WITH_KIND
+#undef OP
   UNREACHABLE();
 }
 
-const Operator* MachineOperatorBuilder::Word32AtomicAnd(MachineType type) {
-#define AND(kType)                          \
-  if (type == MachineType::kType()) {       \
-    return &cache_.kWord32AtomicAnd##kType; \
+const Operator* MachineOperatorBuilder::Word32AtomicAnd(
+    AtomicOpParameters params) {
+#define OP_WITH_KIND(kType, Kind)                      \
+  if (params.type() == MachineType::kType()            \
+      && params.kind() == MemoryAccessKind::k##Kind) { \
+    return &cache_.kWord32AtomicAnd##kType##Kind;      \
   }
-  ATOMIC_TYPE_LIST(AND)
-#undef AND
+#define OP(kType)             \
+  OP_WITH_KIND(kType, Normal) \
+  OP_WITH_KIND(kType, Protected)
+  ATOMIC_TYPE_LIST(OP)
+#undef OP_WITH_KIND
+#undef OP
   UNREACHABLE();
 }
 
-const Operator* MachineOperatorBuilder::Word32AtomicOr(MachineType type) {
-#define OR(kType)                          \
-  if (type == MachineType::kType()) {      \
-    return &cache_.kWord32AtomicOr##kType; \
+const Operator* MachineOperatorBuilder::Word32AtomicOr(
+    AtomicOpParameters params) {
+#define OP_WITH_KIND(kType, Kind)                      \
+  if (params.type() == MachineType::kType()            \
+      && params.kind() == MemoryAccessKind::k##Kind) { \
+    return &cache_.kWord32AtomicOr##kType##Kind;       \
   }
-  ATOMIC_TYPE_LIST(OR)
-#undef OR
+#define OP(kType)             \
+  OP_WITH_KIND(kType, Normal) \
+  OP_WITH_KIND(kType, Protected)
+  ATOMIC_TYPE_LIST(OP)
+#undef OP_WITH_KIND
+#undef OP
   UNREACHABLE();
 }
 
-const Operator* MachineOperatorBuilder::Word32AtomicXor(MachineType type) {
-#define XOR(kType)                          \
-  if (type == MachineType::kType()) {       \
-    return &cache_.kWord32AtomicXor##kType; \
+const Operator* MachineOperatorBuilder::Word32AtomicXor(
+    AtomicOpParameters params) {
+#define OP_WITH_KIND(kType, Kind)                      \
+  if (params.type() == MachineType::kType()            \
+      && params.kind() == MemoryAccessKind::k##Kind) { \
+    return &cache_.kWord32AtomicXor##kType##Kind;      \
   }
-  ATOMIC_TYPE_LIST(XOR)
-#undef XOR
+#define OP(kType)             \
+  OP_WITH_KIND(kType, Normal) \
+  OP_WITH_KIND(kType, Protected)
+  ATOMIC_TYPE_LIST(OP)
+#undef OP_WITH_KIND
+#undef OP
   UNREACHABLE();
 }
 
 const Operator* MachineOperatorBuilder::Word64AtomicLoad(
-    LoadRepresentation rep) {
-#define LOAD(Type)                          \
-  if (rep == MachineType::Type()) {         \
-    return &cache_.kWord64AtomicLoad##Type; \
+    AtomicLoadParameters params) {
+#define CACHED_LOAD_WITH_KIND(Type, Kind)               \
+  if (params.representation() == MachineType::Type() && \
+      params.order() == AtomicMemoryOrder::kSeqCst &&   \
+      params.kind() == MemoryAccessKind::k##Kind) {     \
+    return &cache_.kWord64SeqCstLoad##Type##Kind;       \
+  }
+#define CACHED_LOAD(Type)             \
+  CACHED_LOAD_WITH_KIND(Type, Normal) \
+  CACHED_LOAD_WITH_KIND(Type, Protected)
+  ATOMIC_U64_TYPE_LIST(CACHED_LOAD)
+#undef CACHED_LOAD_WITH_KIND
+#undef CACHED_LOAD
+
+#define LOAD(Type)                                            \
+  if (params.representation() == MachineType::Type()) {       \
+    return zone_->New<Operator1<AtomicLoadParameters>>(       \
+        IrOpcode::kWord64AtomicLoad, Operator::kNoProperties, \
+        "Word64AtomicLoad", 2, 1, 1, 1, 1, 0, params);        \
   }
   ATOMIC_U64_TYPE_LIST(LOAD)
+  ATOMIC64_TAGGED_TYPE_LIST(LOAD)
 #undef LOAD
+
   UNREACHABLE();
 }
 
 const Operator* MachineOperatorBuilder::Word64AtomicStore(
-    MachineRepresentation rep) {
-#define STORE(kRep)                          \
-  if (rep == MachineRepresentation::kRep) {  \
-    return &cache_.kWord64AtomicStore##kRep; \
+    AtomicStoreParameters params) {
+#define CACHED_STORE_WITH_KIND(kRep, Kind)                      \
+  if (params.representation() == MachineRepresentation::kRep && \
+      params.order() == AtomicMemoryOrder::kSeqCst &&           \
+      params.kind() == MemoryAccessKind::k##Kind) {             \
+    return &cache_.kWord64SeqCstStore##kRep##Kind;              \
+  }
+#define CACHED_STORE(kRep)            \
+  CACHED_STORE_WITH_KIND(kRep, Normal) \
+  CACHED_STORE_WITH_KIND(kRep, Protected)
+  ATOMIC64_REPRESENTATION_LIST(CACHED_STORE)
+#undef CACHED_STORE_WITH_KIND
+#undef CACHED_STORE
+
+#define STORE(kRep)                                                  \
+  if (params.representation() == MachineRepresentation::kRep) {      \
+    return zone_->New<Operator1<AtomicStoreParameters>>(             \
+        IrOpcode::kWord64AtomicStore,                                \
+        Operator::kNoDeopt | Operator::kNoRead | Operator::kNoThrow, \
+        "Word64AtomicStore", 3, 1, 1, 0, 1, 0, params);              \
   }
   ATOMIC64_REPRESENTATION_LIST(STORE)
+  ATOMIC64_TAGGED_REPRESENTATION_LIST(STORE)
 #undef STORE
+
   UNREACHABLE();
 }
 
-const Operator* MachineOperatorBuilder::Word64AtomicAdd(MachineType type) {
-#define ADD(kType)                          \
-  if (type == MachineType::kType()) {       \
-    return &cache_.kWord64AtomicAdd##kType; \
+const Operator* MachineOperatorBuilder::Word64AtomicAdd(
+    AtomicOpParameters params) {
+#define OP_WITH_KIND(kType, Kind)                      \
+  if (params.type() == MachineType::kType()            \
+      && params.kind() == MemoryAccessKind::k##Kind) { \
+    return &cache_.kWord64AtomicAdd##kType##Kind;      \
   }
-  ATOMIC_U64_TYPE_LIST(ADD)
-#undef ADD
+#define OP(kType)             \
+  OP_WITH_KIND(kType, Normal) \
+  OP_WITH_KIND(kType, Protected)
+  ATOMIC_U64_TYPE_LIST(OP)
+#undef OP_WITH_KIND
+#undef OP
   UNREACHABLE();
 }
 
-const Operator* MachineOperatorBuilder::Word64AtomicSub(MachineType type) {
-#define SUB(kType)                          \
-  if (type == MachineType::kType()) {       \
-    return &cache_.kWord64AtomicSub##kType; \
+const Operator* MachineOperatorBuilder::Word64AtomicSub(
+    AtomicOpParameters params) {
+#define OP_WITH_KIND(kType, Kind)                      \
+  if (params.type() == MachineType::kType()            \
+      && params.kind() == MemoryAccessKind::k##Kind) { \
+    return &cache_.kWord64AtomicSub##kType##Kind;      \
   }
-  ATOMIC_U64_TYPE_LIST(SUB)
-#undef SUB
+#define OP(kType)             \
+  OP_WITH_KIND(kType, Normal) \
+  OP_WITH_KIND(kType, Protected)
+  ATOMIC_U64_TYPE_LIST(OP)
+#undef OP_WITH_KIND
+#undef OP
   UNREACHABLE();
 }
 
-const Operator* MachineOperatorBuilder::Word64AtomicAnd(MachineType type) {
-#define AND(kType)                          \
-  if (type == MachineType::kType()) {       \
-    return &cache_.kWord64AtomicAnd##kType; \
+const Operator* MachineOperatorBuilder::Word64AtomicAnd(
+    AtomicOpParameters params) {
+#define OP_WITH_KIND(kType, Kind)                      \
+  if (params.type() == MachineType::kType()            \
+      && params.kind() == MemoryAccessKind::k##Kind) { \
+    return &cache_.kWord64AtomicAnd##kType##Kind;      \
   }
-  ATOMIC_U64_TYPE_LIST(AND)
-#undef AND
+#define OP(kType)             \
+  OP_WITH_KIND(kType, Normal) \
+  OP_WITH_KIND(kType, Protected)
+  ATOMIC_U64_TYPE_LIST(OP)
+#undef OP_WITH_KIND
+#undef OP
   UNREACHABLE();
 }
 
-const Operator* MachineOperatorBuilder::Word64AtomicOr(MachineType type) {
-#define OR(kType)                          \
-  if (type == MachineType::kType()) {      \
-    return &cache_.kWord64AtomicOr##kType; \
+const Operator* MachineOperatorBuilder::Word64AtomicOr(
+    AtomicOpParameters params) {
+#define OP_WITH_KIND(kType, Kind)                      \
+  if (params.type() == MachineType::kType()            \
+      && params.kind() == MemoryAccessKind::k##Kind) { \
+    return &cache_.kWord64AtomicOr##kType##Kind;      \
   }
-  ATOMIC_U64_TYPE_LIST(OR)
-#undef OR
+#define OP(kType)             \
+  OP_WITH_KIND(kType, Normal) \
+  OP_WITH_KIND(kType, Protected)
+  ATOMIC_U64_TYPE_LIST(OP)
+#undef OP_WITH_KIND
+#undef OP
   UNREACHABLE();
 }
 
-const Operator* MachineOperatorBuilder::Word64AtomicXor(MachineType type) {
-#define XOR(kType)                          \
-  if (type == MachineType::kType()) {       \
-    return &cache_.kWord64AtomicXor##kType; \
+const Operator* MachineOperatorBuilder::Word64AtomicXor(
+    AtomicOpParameters params) {
+#define OP_WITH_KIND(kType, Kind)                      \
+  if (params.type() == MachineType::kType()            \
+      && params.kind() == MemoryAccessKind::k##Kind) { \
+    return &cache_.kWord64AtomicXor##kType##Kind;      \
   }
-  ATOMIC_U64_TYPE_LIST(XOR)
-#undef XOR
+#define OP(kType)             \
+  OP_WITH_KIND(kType, Normal) \
+  OP_WITH_KIND(kType, Protected)
+  ATOMIC_U64_TYPE_LIST(OP)
+#undef OP_WITH_KIND
+#undef OP
   UNREACHABLE();
 }
 
-const Operator* MachineOperatorBuilder::Word64AtomicExchange(MachineType type) {
-#define EXCHANGE(kType)                          \
-  if (type == MachineType::kType()) {            \
-    return &cache_.kWord64AtomicExchange##kType; \
+const Operator* MachineOperatorBuilder::Word64AtomicExchange(
+    AtomicOpParameters params) {
+#define OP_WITH_KIND(kType, Kind)                           \
+  if (params.type() == MachineType::kType()                 \
+      && params.kind() == MemoryAccessKind::k##Kind) {      \
+    return &cache_.kWord64AtomicExchange##kType##Kind;      \
   }
-  ATOMIC_U64_TYPE_LIST(EXCHANGE)
-#undef EXCHANGE
+#define OP(kType)             \
+  OP_WITH_KIND(kType, Normal) \
+  OP_WITH_KIND(kType, Protected)
+  ATOMIC_U64_TYPE_LIST(OP)
+#undef OP_WITH_KIND
+#undef OP
   UNREACHABLE();
 }
 
 const Operator* MachineOperatorBuilder::Word64AtomicCompareExchange(
-    MachineType type) {
-#define COMPARE_EXCHANGE(kType)                         \
-  if (type == MachineType::kType()) {                   \
-    return &cache_.kWord64AtomicCompareExchange##kType; \
+    AtomicOpParameters params) {
+#define OP_WITH_KIND(kType, Kind)                             \
+  if (params.type() == MachineType::kType()                   \
+      && params.kind() == MemoryAccessKind::k##Kind) {        \
+    return &cache_.kWord64AtomicCompareExchange##kType##Kind; \
   }
-  ATOMIC_U64_TYPE_LIST(COMPARE_EXCHANGE)
-#undef COMPARE_EXCHANGE
+#define OP(kType)             \
+  OP_WITH_KIND(kType, Normal) \
+  OP_WITH_KIND(kType, Protected)
+  ATOMIC_U64_TYPE_LIST(OP)
+#undef OP_WITH_KIND
+#undef OP
   UNREACHABLE();
 }
 
-const Operator* MachineOperatorBuilder::Word32AtomicPairLoad() {
-  return &cache_.kWord32AtomicPairLoad;
+const Operator* MachineOperatorBuilder::Word32AtomicPairLoad(
+    AtomicMemoryOrder order) {
+  if (order == AtomicMemoryOrder::kSeqCst) {
+    return &cache_.kWord32SeqCstPairLoad;
+  }
+  return zone_->New<Operator1<AtomicMemoryOrder>>(
+      IrOpcode::kWord32AtomicPairLoad, Operator::kNoDeopt | Operator::kNoThrow,
+      "Word32AtomicPairLoad", 2, 1, 1, 2, 1, 0, order);
 }
 
-const Operator* MachineOperatorBuilder::Word32AtomicPairStore() {
-  return &cache_.kWord32AtomicPairStore;
+const Operator* MachineOperatorBuilder::Word32AtomicPairStore(
+    AtomicMemoryOrder order) {
+  if (order == AtomicMemoryOrder::kSeqCst) {
+    return &cache_.kWord32SeqCstPairStore;
+  }
+  return zone_->New<Operator1<AtomicMemoryOrder>>(
+      IrOpcode::kWord32AtomicPairStore, Operator::kNoDeopt | Operator::kNoThrow,
+      "Word32AtomicPairStore", 4, 1, 1, 0, 1, 0, order);
 }
 
 const Operator* MachineOperatorBuilder::Word32AtomicPairAdd() {
@@ -1801,18 +2133,6 @@ const Operator* MachineOperatorBuilder::Word32AtomicPairExchange() {
 
 const Operator* MachineOperatorBuilder::Word32AtomicPairCompareExchange() {
   return &cache_.kWord32AtomicPairCompareExchange;
-}
-
-const Operator* MachineOperatorBuilder::TaggedPoisonOnSpeculation() {
-  return &cache_.kTaggedPoisonOnSpeculation;
-}
-
-const Operator* MachineOperatorBuilder::Word32PoisonOnSpeculation() {
-  return &cache_.kWord32PoisonOnSpeculation;
-}
-
-const Operator* MachineOperatorBuilder::Word64PoisonOnSpeculation() {
-  return &cache_.kWord64PoisonOnSpeculation;
 }
 
 #define EXTRACT_LANE_OP(Type, Sign, lane_count)                      \
@@ -1875,7 +2195,8 @@ std::ostream& operator<<(std::ostream& os, S128ImmediateParameter const& p) {
 }
 
 S128ImmediateParameter const& S128ImmediateParameterOf(Operator const* op) {
-  DCHECK(IrOpcode::kS128Const == op->opcode());
+  DCHECK(IrOpcode::kI8x16Shuffle == op->opcode() ||
+         IrOpcode::kS128Const == op->opcode());
   return OpParameter<S128ImmediateParameter>(op);
 }
 
@@ -1885,33 +2206,19 @@ const Operator* MachineOperatorBuilder::S128Const(const uint8_t value[16]) {
       S128ImmediateParameter(value));
 }
 
-ShuffleParameter const& ShuffleParameterOf(Operator const* op) {
-  DCHECK(IrOpcode::kI8x16Shuffle == op->opcode());
-  return OpParameter<ShuffleParameter>(op);
+const Operator* MachineOperatorBuilder::I8x16Shuffle(
+    const uint8_t shuffle[16]) {
+  return zone_->New<Operator1<S128ImmediateParameter>>(
+      IrOpcode::kI8x16Shuffle, Operator::kPure, "Shuffle", 2, 0, 0, 1, 0, 0,
+      S128ImmediateParameter(shuffle));
 }
 
-bool operator==(ShuffleParameter const& lhs, ShuffleParameter const& rhs) {
-  return (lhs.imm() == rhs.imm()) && (lhs.is_swizzle() == rhs.is_swizzle());
-}
-
-bool operator!=(ShuffleParameter const& lhs, ShuffleParameter const& rhs) {
-  return !(lhs == rhs);
-}
-
-size_t hash_value(ShuffleParameter const& p) {
-  return base::hash_combine(p.imm(), p.is_swizzle());
-}
-
-std::ostream& operator<<(std::ostream& os, ShuffleParameter const& p) {
-  os << p.imm() << "  (is_swizzle: " << p.is_swizzle() << ")";
-  return os;
-}
-
-const Operator* MachineOperatorBuilder::I8x16Shuffle(const uint8_t shuffle[16],
-                                                     bool is_swizzle) {
-  return zone_->New<Operator1<ShuffleParameter>>(
-      IrOpcode::kI8x16Shuffle, Operator::kPure, "I8x16Shuffle", 2, 0, 0, 1, 0,
-      0, ShuffleParameter(shuffle, is_swizzle));
+const Operator* MachineOperatorBuilder::I8x16Swizzle(bool relaxed) {
+  if (relaxed) {
+    return &cache_.kI8x16RelaxedSwizzle;
+  } else {
+    return &cache_.kI8x16Swizzle;
+  }
 }
 
 StackCheckKind StackCheckKindOf(Operator const* op) {
@@ -1929,8 +2236,12 @@ StackCheckKind StackCheckKindOf(Operator const* op) {
 #undef ATOMIC_TYPE_LIST
 #undef ATOMIC_U64_TYPE_LIST
 #undef ATOMIC_U32_TYPE_LIST
+#undef ATOMIC_TAGGED_TYPE_LIST
+#undef ATOMIC64_TAGGED_TYPE_LIST
 #undef ATOMIC_REPRESENTATION_LIST
+#undef ATOMIC_TAGGED_REPRESENTATION_LIST
 #undef ATOMIC64_REPRESENTATION_LIST
+#undef ATOMIC64_TAGGED_REPRESENTATION_LIST
 #undef SIMD_LANE_OP_LIST
 #undef STACK_SLOT_CACHED_SIZES_ALIGNMENTS_LIST
 #undef LOAD_TRANSFORM_LIST

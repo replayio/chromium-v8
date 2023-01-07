@@ -35,6 +35,7 @@ namespace interpreter {
 
 #define UNSIGNED_FIXED_SCALAR_OPERAND_TYPE_LIST(V)    \
   V(Flag8, OperandTypeInfo::kFixedUnsignedByte)       \
+  V(Flag16, OperandTypeInfo::kFixedUnsignedShort)     \
   V(IntrinsicId, OperandTypeInfo::kFixedUnsignedByte) \
   V(RuntimeId, OperandTypeInfo::kFixedUnsignedShort)  \
   V(NativeContextIndex, OperandTypeInfo::kFixedUnsignedByte)
@@ -151,7 +152,6 @@ class BytecodeOperands : public AllStatic {
 #undef OPERAND_SCALE_COUNT
 
   static constexpr int OperandScaleAsIndex(OperandScale operand_scale) {
-#if V8_HAS_CXX14_CONSTEXPR
 #ifdef DEBUG
     int result = static_cast<int>(operand_scale) >> 1;
     switch (operand_scale) {
@@ -167,7 +167,6 @@ class BytecodeOperands : public AllStatic {
       default:
         UNREACHABLE();
     }
-#endif
 #endif
     return static_cast<int>(operand_scale) >> 1;
   }

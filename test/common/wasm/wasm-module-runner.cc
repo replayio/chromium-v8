@@ -27,8 +27,8 @@ MaybeHandle<WasmModuleObject> CompileForTesting(Isolate* isolate,
                                                 ErrorThrower* thrower,
                                                 const ModuleWireBytes& bytes) {
   auto enabled_features = WasmFeatures::FromIsolate(isolate);
-  MaybeHandle<WasmModuleObject> module = isolate->wasm_engine()->SyncCompile(
-      isolate, enabled_features, thrower, bytes);
+  MaybeHandle<WasmModuleObject> module =
+      GetWasmEngine()->SyncCompile(isolate, enabled_features, thrower, bytes);
   DCHECK_EQ(thrower->error(), module.is_null());
   return module;
 }
@@ -38,40 +38,41 @@ MaybeHandle<WasmInstanceObject> CompileAndInstantiateForTesting(
   MaybeHandle<WasmModuleObject> module =
       CompileForTesting(isolate, thrower, bytes);
   if (module.is_null()) return {};
-  return isolate->wasm_engine()->SyncInstantiate(
-      isolate, thrower, module.ToHandleChecked(), {}, {});
+  return GetWasmEngine()->SyncInstantiate(isolate, thrower,
+                                          module.ToHandleChecked(), {}, {});
 }
 
-OwnedVector<WasmValue> MakeDefaultInterpreterArguments(Isolate* isolate,
-                                                       const FunctionSig* sig) {
+base::OwnedVector<WasmValue> MakeDefaultInterpreterArguments(
+    Isolate* isolate, const FunctionSig* sig) {
   size_t param_count = sig->parameter_count();
-  auto arguments = OwnedVector<WasmValue>::New(param_count);
+  auto arguments = base::OwnedVector<WasmValue>::New(param_count);
 
   for (size_t i = 0; i < param_count; ++i) {
     switch (sig->GetParam(i).kind()) {
       case kI32:
-        arguments[i] = WasmValue(int32_t{0});
+        arguments[i] = WasmValue(static_cast<int32_t>(i));
         break;
       case kI64:
-        arguments[i] = WasmValue(int64_t{0});
+        arguments[i] = WasmValue(static_cast<int64_t>(i));
         break;
       case kF32:
-        arguments[i] = WasmValue(0.0f);
+        arguments[i] = WasmValue(static_cast<float>(i));
         break;
       case kF64:
-        arguments[i] = WasmValue(0.0);
+        arguments[i] = WasmValue(static_cast<double>(i));
         break;
-      case kS128:
-        arguments[i] = WasmValue(Simd128{});
+      case kS128: {
+        uint8_t s128_bytes[sizeof(Simd128)] = {static_cast<uint8_t>(i)};
+        arguments[i] = WasmValue(Simd128{s128_bytes});
         break;
-      case kOptRef:
+      }
+      case kRefNull:
         arguments[i] =
             WasmValue(Handle<Object>::cast(isolate->factory()->null_value()),
                       sig->GetParam(i));
         break;
       case kRef:
       case kRtt:
-      case kRttWithDepth:
       case kI8:
       case kI16:
       case kVoid:
@@ -83,10 +84,10 @@ OwnedVector<WasmValue> MakeDefaultInterpreterArguments(Isolate* isolate,
   return arguments;
 }
 
-OwnedVector<Handle<Object>> MakeDefaultArguments(Isolate* isolate,
-                                                 const FunctionSig* sig) {
+base::OwnedVector<Handle<Object>> MakeDefaultArguments(Isolate* isolate,
+                                                       const FunctionSig* sig) {
   size_t param_count = sig->parameter_count();
-  auto arguments = OwnedVector<Handle<Object>>::New(param_count);
+  auto arguments = base::OwnedVector<Handle<Object>>::New(param_count);
 
   for (size_t i = 0; i < param_count; ++i) {
     switch (sig->GetParam(i).kind()) {
@@ -96,17 +97,16 @@ OwnedVector<Handle<Object>> MakeDefaultArguments(Isolate* isolate,
       case kS128:
         // Argument here for kS128 does not matter as we should error out before
         // hitting this case.
-        arguments[i] = handle(Smi::zero(), isolate);
+        arguments[i] = handle(Smi::FromInt(static_cast<int>(i)), isolate);
         break;
       case kI64:
-        arguments[i] = BigInt::FromInt64(isolate, 0);
+        arguments[i] = BigInt::FromInt64(isolate, static_cast<int64_t>(i));
         break;
-      case kOptRef:
+      case kRefNull:
         arguments[i] = isolate->factory()->null_value();
         break;
       case kRef:
       case kRtt:
-      case kRttWithDepth:
       case kI8:
       case kI16:
       case kVoid:

@@ -13,6 +13,8 @@
 #include "src/base/platform/time.h"
 #include "src/init/v8.h"
 
+#include "v8.h"
+
 namespace v8 {
 
 class TaskRunner;
@@ -22,9 +24,11 @@ namespace metrics {
 
 class Recorder : public std::enable_shared_from_this<Recorder> {
  public:
-  V8_EXPORT_PRIVATE void SetRecorder(
+  V8_EXPORT_PRIVATE void SetEmbedderRecorder(
       Isolate* isolate,
       const std::shared_ptr<v8::metrics::Recorder>& embedder_recorder);
+
+  V8_EXPORT_PRIVATE bool HasEmbedderRecorder() const;
 
   V8_EXPORT_PRIVATE void NotifyIsolateDisposal();
 

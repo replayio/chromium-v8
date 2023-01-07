@@ -4,7 +4,7 @@
 
 // Flags: --expose-wasm
 
-load('test/mjsunit/wasm/wasm-module-builder.js');
+d8.file.execute('test/mjsunit/wasm/wasm-module-builder.js');
 
 function assertEq(val, expected) {
   assertSame(expected, val);
@@ -691,14 +691,12 @@ assertTrue(setDesc.configurable);
 
 // 'WebAssembly.Table.prototype.set' method
 let set = setDesc.value;
-assertEq(set.length, 2);
+assertEq(set.length, 1);
 assertFalse(isConstructor(set));
 assertThrows(
     () => set.call(), TypeError, /Receiver is not a WebAssembly.Table/);
 assertThrows(
     () => set.call({}), TypeError, /Receiver is not a WebAssembly.Table/);
-assertThrows(
-    () => set.call(tbl1, 0), TypeError, /must be null or a WebAssembly function/);
 assertThrows(
     () => set.call(tbl1, undefined), TypeError,
     /must be convertible to a valid number/);
@@ -717,18 +715,19 @@ assertThrows(
   /must be convertible to a valid number/);
 assertThrows(
     () => set.call(tbl1, 0, undefined), TypeError,
-    /must be null or a WebAssembly function/);
+    /Argument 1 is invalid for table: /);
 assertThrows(
     () => set.call(tbl1, undefined, undefined), TypeError,
     /must be convertible to a valid number/);
 assertThrows(
     () => set.call(tbl1, 0, {}), TypeError,
-    /must be null or a WebAssembly function/);
-assertThrows(() => set.call(tbl1, 0, function() {
-}), TypeError, /must be null or a WebAssembly function/);
+    /Argument 1 is invalid for table:.*null.*or a Wasm function object/);
+assertThrows(
+    () => set.call(tbl1, 0, function() {}), TypeError,
+    /Argument 1 is invalid for table:.*null.*or a Wasm function object/);
 assertThrows(
     () => set.call(tbl1, 0, Math.sin), TypeError,
-    /must be null or a WebAssembly function/);
+    /Argument 1 is invalid for table:.*null.*or a Wasm function object/);
 assertThrows(
     () => set.call(tbl1, {valueOf() { throw Error('hai') }}, null), Error,
     'hai');
@@ -765,7 +764,7 @@ assertThrows(
     () => tbl.grow(-Infinity), TypeError, /must be convertible to a valid number/);
 assertEq(tbl.grow(0), 1);
 assertEq(tbl.length, 1);
-assertEq(tbl.grow(1, 4), 1);
+assertEq(tbl.grow(1, null, 4), 1);
 assertEq(tbl.length, 2);
 assertEq(tbl.length, 2);
 assertThrows(() => tbl.grow(1), Error, /failed to grow table by \d+/);

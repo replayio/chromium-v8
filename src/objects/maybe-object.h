@@ -36,7 +36,7 @@ class MaybeObject : public TaggedImpl<HeapObjectReferenceType::WEAK, Address> {
 #endif
 
  private:
-  template <typename TFieldType, int kFieldOffset>
+  template <typename TFieldType, int kFieldOffset, typename CompressionScheme>
   friend class TaggedField;
 };
 
@@ -54,7 +54,7 @@ class HeapObjectReference : public MaybeObject {
   V8_INLINE static HeapObjectReference From(Object object,
                                             HeapObjectReferenceType type);
 
-  V8_INLINE static HeapObjectReference ClearedValue(IsolateRoot isolate);
+  V8_INLINE static HeapObjectReference ClearedValue(PtrComprCageBase cage_base);
 
   template <typename THeapObjectSlot>
   V8_INLINE static void Update(THeapObjectSlot slot, HeapObject value);

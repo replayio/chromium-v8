@@ -105,7 +105,6 @@ std::vector<std::string> CCGenerator::ProcessArgumentsCommon(
   std::vector<std::string> args;
   for (auto it = parameter_types.rbegin(); it != parameter_types.rend(); ++it) {
     const Type* type = *it;
-    VisitResult arg;
     if (type->IsConstexpr()) {
       args.push_back(std::move(constexpr_arguments.back()));
       constexpr_arguments.pop_back();
@@ -386,10 +385,10 @@ void CCGenerator::EmitInstruction(const LoadReferenceInstruction& instruction,
     out() << "  " << result_name << " = ";
     if (instruction.type->IsSubtypeOf(TypeOracle::GetTaggedType())) {
       // Currently, all of the tagged loads we emit are for smi values, so there
-      // is no point in providing an IsolateRoot. If at some point we start
+      // is no point in providing an PtrComprCageBase. If at some point we start
       // emitting loads for tagged fields which might be HeapObjects, then we
-      // should plumb an IsolateRoot through the generated functions that need
-      // it.
+      // should plumb an PtrComprCageBase through the generated functions that
+      // need it.
       if (!instruction.type->IsSubtypeOf(TypeOracle::GetSmiType())) {
         Error(
             "Not supported in C++ output: LoadReference on non-smi tagged "

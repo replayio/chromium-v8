@@ -14,7 +14,7 @@
 #include "src/base/bits.h"
 #include "src/base/hashmap-entry.h"
 #include "src/base/logging.h"
-#include "src/base/platform/wrappers.h"
+#include "src/base/platform/memory.h"
 
 namespace v8 {
 namespace base {
@@ -198,7 +198,7 @@ TemplateHashMapImpl<Key, Value, MatchFun, AllocationPolicy>::
   impl_.capacity_ = original->capacity();
   impl_.occupancy_ = original->occupancy();
   impl_.map_ = impl_.allocator().template NewArray<Entry>(capacity());
-  base::Memcpy(impl_.map_, original->impl_.map_, capacity() * sizeof(Entry));
+  memcpy(impl_.map_, original->impl_.map_, capacity() * sizeof(Entry));
 }
 
 template <typename Key, typename Value, typename MatchFun,
@@ -530,8 +530,8 @@ class TemplateHashMap
                                    AllocationPolicy>;
 
  public:
-  STATIC_ASSERT(sizeof(Key*) == sizeof(void*));    // NOLINT
-  STATIC_ASSERT(sizeof(Value*) == sizeof(void*));  // NOLINT
+  static_assert(sizeof(Key*) == sizeof(void*));
+  static_assert(sizeof(Value*) == sizeof(void*));
   struct value_type {
     Key* first;
     Value* second;

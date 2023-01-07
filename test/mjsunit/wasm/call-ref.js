@@ -4,7 +4,7 @@
 
 // Flags: --experimental-wasm-type-reflection --experimental-wasm-gc
 
-load("test/mjsunit/wasm/wasm-module-builder.js");
+d8.file.execute("test/mjsunit/wasm/wasm-module-builder.js");
 
 (function Test1() {
   var exporting_instance = (function () {
@@ -40,28 +40,31 @@ load("test/mjsunit/wasm/wasm-module-builder.js");
     builder.addFunction("main", makeSig(
       [wasmRefType(sig_index), kWasmI32, kWasmI32], [kWasmI32]))
       .addBody([kExprLocalGet, 1, kExprLocalGet, 2, kExprLocalGet, 0,
-                kExprCallRef])
+                kExprCallRef, sig_index])
       .exportFunc();
 
     builder.addFunction("test_local", kSig_i_v)
       .addBody([kExprI32Const, 55, kExprI32Const, 42,
-                kExprRefFunc, locally_defined_function.index, kExprCallRef])
+                kExprRefFunc, locally_defined_function.index,
+                kExprCallRef, sig_index])
       .exportFunc();
 
     builder.addFunction("test_js_import", kSig_i_v)
       .addBody([kExprI32Const, 15, kExprI32Const, 42,
-                kExprRefFunc, imported_js_function_index, kExprCallRef])
+                kExprRefFunc, imported_js_function_index,
+                kExprCallRef, sig_index])
       .exportFunc();
 
     builder.addFunction("test_wasm_import", kSig_i_v)
       .addBody([kExprI32Const, 15, kExprI32Const, 42,
-                kExprRefFunc, imported_wasm_function_index, kExprCallRef])
+                kExprRefFunc, imported_wasm_function_index,
+                kExprCallRef, sig_index])
       .exportFunc();
 
     builder.addFunction("test_js_api_import", kSig_i_v)
       .addBody([kExprI32Const, 3, kExprI32Const, 7,
                 kExprRefFunc, imported_js_api_function_index,
-                kExprCallRef])
+                kExprCallRef, sig_index])
       .exportFunc();
 
     builder.addExport("reexported_js_function", imported_js_function_index);
@@ -114,4 +117,21 @@ load("test/mjsunit/wasm/wasm-module-builder.js");
       {parameters:['i32', 'i32'], results: ['i32']},
       function(a) { return a * a; }),
     10, 15));
+})();
+
+(function TestFromJSSlowPath() {
+  var builder = new WasmModuleBuilder();
+  var sig_index = builder.addType(kSig_i_i);
+
+  builder.addFunction("main", makeSig(
+      [wasmRefType(sig_index), kWasmI32], [kWasmI32]))
+      .addBody([kExprLocalGet, 1, kExprLocalGet, 0, kExprCallRef, sig_index])
+      .exportFunc();
+
+  var instance = builder.instantiate({});
+
+  var fun = new WebAssembly.Function(
+      { parameters: ['i32'], results: ['i32'] }, (a) => undefined);
+  // {undefined} is converted to 0.
+  assertEquals(0, instance.exports.main(fun, 1000));
 })();

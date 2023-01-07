@@ -7,14 +7,14 @@
 #include <sstream>
 
 #include "src/base/optional.h"
-#include "src/base/platform/wrappers.h"
+#include "src/base/platform/memory.h"
 #include "src/codegen/assembler-inl.h"
 #include "src/codegen/macro-assembler-inl.h"
 #include "src/compiler/linkage.h"
 #include "src/compiler/wasm-compiler.h"
 #include "src/utils/ostreams.h"
 #include "src/wasm/baseline/liftoff-register.h"
-#include "src/wasm/function-body-decoder-impl.h"
+#include "src/wasm/object-access.h"
 #include "src/wasm/wasm-linkage.h"
 #include "src/wasm/wasm-opcodes.h"
 
@@ -390,6 +390,10 @@ enum MergeAllowConstants : bool {
   kConstantsAllowed = true,
   kConstantsNotAllowed = false
 };
+enum MergeAllowRegisters : bool {
+  kRegistersAllowed = true,
+  kRegistersNotAllowed = false
+};
 enum ReuseRegisters : bool {
   kReuseRegisters = true,
   kNoReuseRegisters = false
@@ -398,6 +402,7 @@ void InitMergeRegion(LiftoffAssembler::CacheState* state,
                      const VarState* source, VarState* target, uint32_t count,
                      MergeKeepStackSlots keep_stack_slots,
                      MergeAllowConstants allow_constants,
+                     MergeAllowRegisters allow_registers,
                      ReuseRegisters reuse_registers, LiftoffRegList used_regs) {
   RegisterReuseMap register_reuse_map;
   for (const VarState* source_end = source + count; source < source_end;
@@ -408,18 +413,21 @@ void InitMergeRegion(LiftoffAssembler::CacheState* state,
       continue;
     }
     base::Optional<LiftoffRegister> reg;
-    // First try: Keep the same register, if it's free.
-    if (source->is_reg() && state->is_free(source->reg())) {
-      reg = source->reg();
-    }
-    // Second try: Use the same register we used before (if we reuse registers).
-    if (!reg && reuse_registers) {
-      reg = register_reuse_map.Lookup(source->reg());
-    }
-    // Third try: Use any free register.
-    RegClass rc = reg_class_for(source->kind());
-    if (!reg && state->has_unused_register(rc, used_regs)) {
-      reg = state->unused_register(rc, used_regs);
+    if (allow_registers) {
+      // First try: Keep the same register, if it's free.
+      if (source->is_reg() && state->is_free(source->reg())) {
+        reg = source->reg();
+      }
+      // Second try: Use the same register we used before (if we reuse
+      // registers).
+      if (!reg && reuse_registers) {
+        reg = register_reuse_map.Lookup(source->reg());
+      }
+      // Third try: Use any free register.
+      RegClass rc = reg_class_for(source->kind());
+      if (!reg && state->has_unused_register(rc, used_regs)) {
+        reg = state->unused_register(rc, used_regs);
+      }
     }
     if (!reg) {
       // No free register; make this a stack slot.
@@ -446,6 +454,10 @@ void LiftoffAssembler::CacheState::InitMerge(const CacheState& source,
     SetInstanceCacheRegister(source.cached_instance);
   }
 
+  if (source.cached_mem_start != no_reg) {
+    SetMemStartCacheRegister(source.cached_mem_start);
+  }
+
   uint32_t stack_base = stack_depth + num_locals;
   uint32_t target_height = stack_base + arity;
   uint32_t discarded = source.stack_height() - target_height;
@@ -461,11 +473,20 @@ void LiftoffAssembler::CacheState::InitMerge(const CacheState& source,
   // multiple times need to be copied to another free register. Compute the list
   // of used registers.
   LiftoffRegList used_regs;
-  for (auto& src : VectorOf(source_begin, num_locals)) {
+  for (auto& src : base::VectorOf(source_begin, num_locals)) {
     if (src.is_reg()) used_regs.set(src.reg());
   }
-  for (auto& src : VectorOf(source_begin + stack_base + discarded, arity)) {
-    if (src.is_reg()) used_regs.set(src.reg());
+  // If there is more than one operand in the merge region, a stack-to-stack
+  // move can interfere with a register reload, which would not be handled
+  // correctly by the StackTransferRecipe. To avoid this, spill all registers in
+  // this region.
+  MergeAllowRegisters allow_registers =
+      arity <= 1 ? kRegistersAllowed : kRegistersNotAllowed;
+  if (allow_registers) {
+    for (auto& src :
+         base::VectorOf(source_begin + stack_base + discarded, arity)) {
+      if (src.is_reg()) used_regs.set(src.reg());
+    }
   }
 
   // Initialize the merge region. If this region moves, try to turn stack slots
@@ -474,12 +495,22 @@ void LiftoffAssembler::CacheState::InitMerge(const CacheState& source,
       discarded == 0 ? kKeepStackSlots : kTurnStackSlotsIntoRegisters;
   InitMergeRegion(this, source_begin + stack_base + discarded,
                   target_begin + stack_base, arity, keep_merge_stack_slots,
-                  kConstantsNotAllowed, kNoReuseRegisters, used_regs);
+                  kConstantsNotAllowed, allow_registers, kNoReuseRegisters,
+                  used_regs);
+  // Shift spill offsets down to keep slots contiguous.
+  int offset = stack_base == 0 ? StaticStackFrameSize()
+                               : source.stack_state[stack_base - 1].offset();
+  auto merge_region = base::VectorOf(target_begin + stack_base, arity);
+  for (VarState& var : merge_region) {
+    offset = LiftoffAssembler::NextSpillOffset(var.kind(), offset);
+    var.set_offset(offset);
+  }
 
   // Initialize the locals region. Here, stack slots stay stack slots (because
   // they do not move). Try to keep register in registers, but avoid duplicates.
   InitMergeRegion(this, source_begin, target_begin, num_locals, kKeepStackSlots,
-                  kConstantsNotAllowed, kNoReuseRegisters, used_regs);
+                  kConstantsNotAllowed, kRegistersAllowed, kNoReuseRegisters,
+                  used_regs);
   // Consistency check: All the {used_regs} are really in use now.
   DCHECK_EQ(used_regs, used_registers & used_regs);
 
@@ -489,7 +520,7 @@ void LiftoffAssembler::CacheState::InitMerge(const CacheState& source,
   // source region, ensure to use the same register twice in the target region.
   InitMergeRegion(this, source_begin + num_locals, target_begin + num_locals,
                   stack_depth, kKeepStackSlots, kConstantsAllowed,
-                  kReuseRegisters, used_regs);
+                  kRegistersAllowed, kReuseRegisters, used_regs);
 }
 
 void LiftoffAssembler::CacheState::Steal(const CacheState& source) {
@@ -535,25 +566,31 @@ void LiftoffAssembler::CacheState::GetTaggedSlotsForOOLCode(
   }
 }
 
-void LiftoffAssembler::CacheState::DefineSafepoint(Safepoint& safepoint) {
-  for (const auto& slot : stack_state) {
+void LiftoffAssembler::CacheState::DefineSafepoint(
+    SafepointTableBuilder::Safepoint& safepoint) {
+  // Go in reversed order to set the higher bits first; this avoids cost for
+  // growing the underlying bitvector.
+  for (const auto& slot : base::Reversed(stack_state)) {
     if (is_reference(slot.kind())) {
       DCHECK(slot.is_stack());
-      safepoint.DefinePointerSlot(GetSafepointIndexForStackSlot(slot));
+      safepoint.DefineTaggedStackSlot(GetSafepointIndexForStackSlot(slot));
     }
   }
 }
 
 void LiftoffAssembler::CacheState::DefineSafepointWithCalleeSavedRegisters(
-    Safepoint& safepoint) {
+    SafepointTableBuilder::Safepoint& safepoint) {
   for (const auto& slot : stack_state) {
     if (!is_reference(slot.kind())) continue;
     if (slot.is_stack()) {
-      safepoint.DefinePointerSlot(GetSafepointIndexForStackSlot(slot));
+      safepoint.DefineTaggedStackSlot(GetSafepointIndexForStackSlot(slot));
     } else {
       DCHECK(slot.is_reg());
-      safepoint.DefineRegister(slot.reg().gp().code());
+      safepoint.DefineTaggedRegister(slot.reg().gp().code());
     }
+  }
+  if (cached_instance != no_reg) {
+    safepoint.DefineTaggedRegister(cached_instance.code());
   }
 }
 
@@ -590,6 +627,11 @@ LiftoffRegister LiftoffAssembler::LoadToRegister(VarState slot,
                                                  LiftoffRegList pinned) {
   if (slot.is_reg()) return slot.reg();
   LiftoffRegister reg = GetUnusedRegister(reg_class_for(slot.kind()), pinned);
+  return LoadToRegister(slot, reg);
+}
+
+LiftoffRegister LiftoffAssembler::LoadToRegister(VarState slot,
+                                                 LiftoffRegister reg) {
   if (slot.is_const()) {
     LoadConstant(reg, slot.constant());
   } else {
@@ -676,17 +718,36 @@ void LiftoffAssembler::PrepareLoopArgs(int num) {
   }
 }
 
-void LiftoffAssembler::MaterializeMergedConstants(uint32_t arity) {
-  // Materialize constants on top of the stack ({arity} many), and locals.
+void LiftoffAssembler::PrepareForBranch(uint32_t arity, LiftoffRegList pinned) {
   VarState* stack_base = cache_state_.stack_state.data();
   for (auto slots :
-       {VectorOf(stack_base + cache_state_.stack_state.size() - arity, arity),
-        VectorOf(stack_base, num_locals())}) {
+       {base::VectorOf(stack_base + cache_state_.stack_state.size() - arity,
+                       arity),
+        base::VectorOf(stack_base, num_locals())}) {
     for (VarState& slot : slots) {
+      if (slot.is_reg()) {
+        // Registers used more than once can't be used for merges.
+        if (cache_state_.get_use_count(slot.reg()) > 1) {
+          RegClass rc = reg_class_for(slot.kind());
+          if (cache_state_.has_unused_register(rc, pinned)) {
+            LiftoffRegister dst_reg = cache_state_.unused_register(rc, pinned);
+            Move(dst_reg, slot.reg(), slot.kind());
+            cache_state_.inc_used(dst_reg);
+            cache_state_.dec_used(slot.reg());
+            slot.MakeRegister(dst_reg);
+          } else {
+            Spill(slot.offset(), slot.reg(), slot.kind());
+            cache_state_.dec_used(slot.reg());
+            slot.MakeStack();
+          }
+        }
+        continue;
+      }
+      // Materialize constants.
       if (!slot.is_const()) continue;
       RegClass rc = reg_class_for(slot.kind());
-      if (cache_state_.has_unused_register(rc)) {
-        LiftoffRegister reg = cache_state_.unused_register(rc);
+      if (cache_state_.has_unused_register(rc, pinned)) {
+        LiftoffRegister reg = cache_state_.unused_register(rc, pinned);
         LoadConstant(reg, slot.constant());
         cache_state_.inc_used(reg);
         slot.MakeRegister(reg);
@@ -698,6 +759,26 @@ void LiftoffAssembler::MaterializeMergedConstants(uint32_t arity) {
   }
 }
 
+#ifdef DEBUG
+namespace {
+bool SlotInterference(const VarState& a, const VarState& b) {
+  return a.is_stack() && b.is_stack() &&
+         b.offset() > a.offset() - value_kind_size(a.kind()) &&
+         b.offset() - value_kind_size(b.kind()) < a.offset();
+}
+
+bool SlotInterference(const VarState& a, base::Vector<const VarState> v) {
+  // Check the first 16 entries in {v}, then increase the step size to avoid
+  // quadratic runtime on huge stacks. This logic checks 41 of the first 100
+  // slots, 77 of the first 1000 and 115 of the first 10000.
+  for (size_t idx = 0, end = v.size(); idx < end; idx += 1 + idx / 16) {
+    if (SlotInterference(a, v[idx])) return true;
+  }
+  return false;
+}
+}  // namespace
+#endif
+
 void LiftoffAssembler::MergeFullStackWith(CacheState& target,
                                           const CacheState& source) {
   DCHECK_EQ(source.stack_height(), target.stack_height());
@@ -706,12 +787,18 @@ void LiftoffAssembler::MergeFullStackWith(CacheState& target,
   StackTransferRecipe transfers(this);
   for (uint32_t i = 0, e = source.stack_height(); i < e; ++i) {
     transfers.TransferStackSlot(target.stack_state[i], source.stack_state[i]);
+    DCHECK(!SlotInterference(target.stack_state[i],
+                             base::VectorOf(source.stack_state.data() + i + 1,
+                                            source.stack_height() - i - 1)));
   }
 
   // Full stack merging is only done for forward jumps, so we can just clear the
-  // instance cache register at the target in case of mismatch.
+  // cache registers at the target in case of mismatch.
   if (source.cached_instance != target.cached_instance) {
     target.ClearCachedInstanceRegister();
+  }
+  if (source.cached_mem_start != target.cached_mem_start) {
+    target.ClearCachedMemStartRegister();
   }
 }
 
@@ -732,27 +819,77 @@ void LiftoffAssembler::MergeStackWith(CacheState& target, uint32_t arity,
   for (uint32_t i = 0; i < target_stack_base; ++i) {
     transfers.TransferStackSlot(target.stack_state[i],
                                 cache_state_.stack_state[i]);
+    DCHECK(!SlotInterference(
+        target.stack_state[i],
+        base::VectorOf(cache_state_.stack_state.data() + i + 1,
+                       target_stack_base - i - 1)));
+    DCHECK(!SlotInterference(
+        target.stack_state[i],
+        base::VectorOf(cache_state_.stack_state.data() + stack_base, arity)));
   }
   for (uint32_t i = 0; i < arity; ++i) {
     transfers.TransferStackSlot(target.stack_state[target_stack_base + i],
                                 cache_state_.stack_state[stack_base + i]);
+    DCHECK(!SlotInterference(
+        target.stack_state[target_stack_base + i],
+        base::VectorOf(cache_state_.stack_state.data() + stack_base + i + 1,
+                       arity - i - 1)));
   }
 
-  if (cache_state_.cached_instance != target.cached_instance &&
-      target.cached_instance != no_reg) {
+  // Check whether the cached instance and/or memory start need to be moved to
+  // another register. Register moves are executed as part of the
+  // {StackTransferRecipe}. Remember whether the register content has to be
+  // reloaded after executing the stack transfers.
+  bool reload_instance = false;
+  bool reload_mem_start = false;
+  for (auto tuple :
+       {std::make_tuple(&reload_instance, cache_state_.cached_instance,
+                        &target.cached_instance),
+        std::make_tuple(&reload_mem_start, cache_state_.cached_mem_start,
+                        &target.cached_mem_start)}) {
+    bool* reload = std::get<0>(tuple);
+    Register src_reg = std::get<1>(tuple);
+    Register* dst_reg = std::get<2>(tuple);
+    // If the registers match, or the destination has no cache register, nothing
+    // needs to be done.
+    if (src_reg == *dst_reg || *dst_reg == no_reg) continue;
+    // On forward jumps, just reset the cached register in the target state.
     if (jump_direction == kForwardJump) {
-      // On forward jumps, just reset the cached instance in the target state.
-      target.ClearCachedInstanceRegister();
+      target.ClearCacheRegister(dst_reg);
+    } else if (src_reg != no_reg) {
+      // If the source has the content but in the wrong register, execute a
+      // register move as part of the stack transfer.
+      transfers.MoveRegister(LiftoffRegister{*dst_reg},
+                             LiftoffRegister{src_reg}, kPointerKind);
     } else {
-      // On backward jumps, we already generated code assuming that the instance
-      // is available in that register. Thus move it there.
-      if (cache_state_.cached_instance == no_reg) {
-        LoadInstanceFromFrame(target.cached_instance);
-      } else {
-        Move(target.cached_instance, cache_state_.cached_instance,
-             kPointerKind);
-      }
+      // Otherwise (the source state has no cached content), we reload later.
+      *reload = true;
     }
+  }
+
+  // Now execute stack transfers and register moves/loads.
+  transfers.Execute();
+
+  if (reload_instance) {
+    LoadInstanceFromFrame(target.cached_instance);
+  }
+  if (reload_mem_start) {
+    // {target.cached_instance} already got restored above, so we can use it
+    // if it exists.
+    Register instance = target.cached_instance;
+    if (instance == no_reg) {
+      // We don't have the instance available yet. Store it into the target
+      // mem_start, so that we can load the mem_start from there.
+      instance = target.cached_mem_start;
+      LoadInstanceFromFrame(instance);
+    }
+    LoadFromInstance(
+        target.cached_mem_start, instance,
+        ObjectAccess::ToTagged(WasmInstanceObject::kMemoryStartOffset),
+        sizeof(size_t));
+#ifdef V8_ENABLE_SANDBOX
+    DecodeSandboxedPointer(target.cached_mem_start);
+#endif
   }
 }
 
@@ -784,7 +921,7 @@ void LiftoffAssembler::SpillAllRegisters() {
     Spill(slot.offset(), slot.reg(), slot.kind());
     slot.MakeStack();
   }
-  cache_state_.ClearCachedInstanceRegister();
+  cache_state_.ClearAllCacheRegisters();
   cache_state_.reset_used_registers();
 }
 
@@ -793,9 +930,21 @@ void LiftoffAssembler::ClearRegister(
     LiftoffRegList pinned) {
   if (reg == cache_state()->cached_instance) {
     cache_state()->ClearCachedInstanceRegister();
+    // We can return immediately. The instance is only used to load information
+    // at the beginning of an instruction when values don't have to be in
+    // specific registers yet. Therefore the instance should never be one of the
+    // {possible_uses}.
+    for (Register* use : possible_uses) {
+      USE(use);
+      DCHECK_NE(reg, *use);
+    }
     return;
-  }
-  if (cache_state()->is_used(LiftoffRegister(reg))) {
+  } else if (reg == cache_state()->cached_mem_start) {
+    cache_state()->ClearCachedMemStartRegister();
+    // The memory start may be among the {possible_uses}, e.g. for an atomic
+    // compare exchange. Therefore it is necessary to iterate over the
+    // {possible_uses} below, and we cannot return early.
+  } else if (cache_state()->is_used(LiftoffRegister(reg))) {
     SpillRegister(LiftoffRegister(reg));
   }
   Register replacement = no_reg;
@@ -891,7 +1040,7 @@ void LiftoffAssembler::PrepareCall(const ValueKindSig* sig,
   constexpr size_t kInputShift = 1;
 
   // Spill all cache slots which are not being used as parameters.
-  cache_state_.ClearCachedInstanceRegister();
+  cache_state_.ClearAllCacheRegisters();
   for (VarState* it = cache_state_.stack_state.end() - 1 - num_params;
        it >= cache_state_.stack_state.begin() &&
        !cache_state_.used_registers.is_empty();
@@ -957,7 +1106,7 @@ void LiftoffAssembler::PrepareCall(const ValueKindSig* sig,
 
   // Reload the instance from the stack.
   if (!target_instance) {
-    FillInstanceInto(instance_reg);
+    LoadInstanceFromFrame(instance_reg);
   }
 }
 
@@ -1025,7 +1174,7 @@ void LiftoffAssembler::Move(LiftoffRegister dst, LiftoffRegister src,
 }
 
 void LiftoffAssembler::ParallelRegisterMove(
-    Vector<const ParallelRegisterMoveTuple> tuples) {
+    base::Vector<const ParallelRegisterMoveTuple> tuples) {
   StackTransferRecipe stack_transfers(this);
   for (auto tuple : tuples) {
     if (tuple.dst == tuple.src) continue;
@@ -1058,6 +1207,16 @@ void LiftoffAssembler::MoveToReturnLocations(
   }
 
   // Slow path for multi-return.
+  // We sometimes allocate a register to perform stack-to-stack moves, which can
+  // cause a spill in the cache state. Conservatively save and restore the
+  // original state in case it is needed after the current instruction
+  // (conditional branch).
+  CacheState saved_state;
+#if DEBUG
+  uint32_t saved_state_frozenness = cache_state_.frozen;
+  cache_state_.frozen = 0;
+#endif
+  saved_state.Split(*cache_state());
   int call_desc_return_idx = 0;
   DCHECK_LE(sig->return_count(), cache_state_.stack_height());
   VarState* slots = cache_state_.stack_state.end() - sig->return_count();
@@ -1108,7 +1267,19 @@ void LiftoffAssembler::MoveToReturnLocations(
       }
     }
   }
+  cache_state()->Steal(saved_state);
+#if DEBUG
+  cache_state_.frozen = saved_state_frozenness;
+#endif
 }
+
+#if DEBUG
+void LiftoffRegList::Print() const {
+  std::ostringstream os;
+  os << *this << "\n";
+  PrintF("%s", os.str().c_str());
+}
+#endif
 
 #ifdef ENABLE_SLOW_DCHECKS
 bool LiftoffAssembler::ValidateCacheState() const {
@@ -1125,13 +1296,15 @@ bool LiftoffAssembler::ValidateCacheState() const {
     }
     used_regs.set(reg);
   }
-  if (cache_state_.cached_instance != no_reg) {
-    DCHECK(!used_regs.has(cache_state_.cached_instance));
-    int liftoff_code =
-        LiftoffRegister{cache_state_.cached_instance}.liftoff_code();
-    used_regs.set(cache_state_.cached_instance);
-    DCHECK_EQ(0, register_use_count[liftoff_code]);
-    register_use_count[liftoff_code] = 1;
+  for (Register cache_reg :
+       {cache_state_.cached_instance, cache_state_.cached_mem_start}) {
+    if (cache_reg != no_reg) {
+      DCHECK(!used_regs.has(cache_reg));
+      int liftoff_code = LiftoffRegister{cache_reg}.liftoff_code();
+      used_regs.set(cache_reg);
+      DCHECK_EQ(0, register_use_count[liftoff_code]);
+      register_use_count[liftoff_code] = 1;
+    }
   }
   bool valid = memcmp(register_use_count, cache_state_.register_use_count,
                       sizeof(register_use_count)) == 0 &&
@@ -1171,6 +1344,10 @@ LiftoffRegister LiftoffAssembler::SpillAdjacentFpRegisters(
   if (last_fp.fp().code() % 2 == 0) {
     pinned.set(last_fp);
   }
+  // If half of an adjacent pair is pinned, consider the whole pair pinned.
+  // Otherwise the code below would potentially spill the pinned register
+  // (after first spilling the unpinned half of the pair).
+  pinned = pinned.SpreadSetBitsToAdjacentFpRegs();
 
   // We can try to optimize the spilling here:
   // 1. Try to get a free fp register, either:
@@ -1202,6 +1379,7 @@ LiftoffRegister LiftoffAssembler::SpillAdjacentFpRegisters(
 }
 
 void LiftoffAssembler::SpillRegister(LiftoffRegister reg) {
+  DCHECK(!cache_state_.frozen);
   int remaining_uses = cache_state_.get_use_count(reg);
   DCHECK_LT(0, remaining_uses);
   for (uint32_t idx = cache_state_.stack_height() - 1;; --idx) {
@@ -1238,7 +1416,7 @@ std::ostream& operator<<(std::ostream& os, VarState slot) {
   os << name(slot.kind()) << ":";
   switch (slot.loc()) {
     case VarState::kStack:
-      return os << "s";
+      return os << "s0x" << std::hex << slot.offset() << std::dec;
     case VarState::kRegister:
       return os << slot.reg();
     case VarState::kIntConst:
@@ -1252,10 +1430,13 @@ bool CheckCompatibleStackSlotTypes(ValueKind a, ValueKind b) {
   if (is_object_reference(a)) {
     // Since Liftoff doesn't do accurate type tracking (e.g. on loop back
     // edges), we only care that pointer types stay amongst pointer types.
-    // It's fine if ref/optref overwrite each other.
+    // It's fine if ref/ref null overwrite each other.
     DCHECK(is_object_reference(b));
+  } else if (is_rtt(a)) {
+    // Same for rtt/rtt_with_depth.
+    DCHECK(is_rtt(b));
   } else {
-    // All other types (primitive numbers, RTTs, bottom/stmt) must be equal.
+    // All other types (primitive numbers, bottom/stmt) must be equal.
     DCHECK_EQ(a, b);
   }
   return true;  // Dummy so this can be called via DCHECK.

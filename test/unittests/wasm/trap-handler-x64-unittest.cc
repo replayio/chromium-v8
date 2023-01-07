@@ -7,7 +7,7 @@
 #if V8_OS_LINUX || V8_OS_FREEBSD
 #include <signal.h>
 #include <ucontext.h>
-#elif V8_OS_MACOSX
+#elif V8_OS_DARWIN
 #include <signal.h>
 #include <sys/ucontext.h>
 #elif V8_OS_WIN
@@ -22,15 +22,14 @@
 #include "include/v8-wasm-trap-handler-win.h"
 #endif
 #include "src/base/page-allocator.h"
+#include "src/base/vector.h"
 #include "src/codegen/assembler-inl.h"
 #include "src/codegen/macro-assembler-inl.h"
 #include "src/execution/simulator.h"
 #include "src/objects/backing-store.h"
 #include "src/trap-handler/trap-handler.h"
 #include "src/utils/allocation.h"
-#include "src/utils/vector.h"
 #include "src/wasm/wasm-engine.h"
-
 #include "test/common/assembler-tester.h"
 #include "test/unittests/test-utils.h"
 
@@ -41,7 +40,7 @@ namespace wasm {
 namespace {
 constexpr Register scratch = r10;
 bool g_test_handler_executed = false;
-#if V8_OS_LINUX || V8_OS_MACOSX || V8_OS_FREEBSD
+#if V8_OS_LINUX || V8_OS_DARWIN || V8_OS_FREEBSD
 struct sigaction g_old_segv_action;
 struct sigaction g_old_fpe_action;
 struct sigaction g_old_bus_action;  // We get SIGBUS on Mac sometimes.
@@ -82,8 +81,9 @@ class TrapHandlerTest : public TestWithIsolate,
   void SetUp() override {
     InstallFallbackHandler();
     SetupTrapHandler(GetParam());
-    backing_store_ = BackingStore::AllocateWasmMemory(i_isolate(), 1, 1,
-                                                      SharedFlag::kNotShared);
+    backing_store_ = BackingStore::AllocateWasmMemory(
+        i_isolate(), 1, 1, WasmMemoryFlag::kWasmMemory32,
+        SharedFlag::kNotShared);
     CHECK(backing_store_);
     EXPECT_TRUE(backing_store_->has_guard_regions());
     // The allocated backing store ends with a guard page.
@@ -97,7 +97,7 @@ class TrapHandlerTest : public TestWithIsolate,
   }
 
   void InstallFallbackHandler() {
-#if V8_OS_LINUX || V8_OS_MACOSX || V8_OS_FREEBSD
+#if V8_OS_LINUX || V8_OS_DARWIN || V8_OS_FREEBSD
     // Set up a signal handler to recover from the expected crash.
     struct sigaction action;
     action.sa_sigaction = SignalHandler;
@@ -125,7 +125,7 @@ class TrapHandlerTest : public TestWithIsolate,
     // Clean up the trap handler
     trap_handler::RemoveTrapHandler();
     if (!g_test_handler_executed) {
-#if V8_OS_LINUX || V8_OS_MACOSX || V8_OS_FREEBSD
+#if V8_OS_LINUX || V8_OS_DARWIN || V8_OS_FREEBSD
       // The test handler cleans up the signal handler setup in the test. If the
       // test handler was not called, we have to do the cleanup ourselves.
       EXPECT_EQ(0, sigaction(SIGSEGV, &g_old_segv_action, nullptr));
@@ -156,7 +156,7 @@ class TrapHandlerTest : public TestWithIsolate,
         reinterpret_cast<Address>(desc.buffer + recovery_offset);
   }
 
-#if V8_OS_LINUX || V8_OS_MACOSX || V8_OS_FREEBSD
+#if V8_OS_LINUX || V8_OS_DARWIN || V8_OS_FREEBSD
   static void SignalHandler(int signal, siginfo_t* info, void* context) {
     if (g_use_as_first_chance_handler) {
       if (v8::TryHandleWebAssemblyTrapPosix(signal, info, context)) {
@@ -175,7 +175,7 @@ class TrapHandlerTest : public TestWithIsolate,
     ucontext_t* uc = reinterpret_cast<ucontext_t*>(context);
 #if V8_OS_LINUX
     uc->uc_mcontext.gregs[REG_RIP] = g_recovery_address;
-#elif V8_OS_MACOSX
+#elif V8_OS_DARWIN
     uc->uc_mcontext->__ss.__rip = g_recovery_address;
 #elif V8_OS_FREEBSD
     uc->uc_mcontext.mc_rip = g_recovery_address;
@@ -210,14 +210,14 @@ class TrapHandlerTest : public TestWithIsolate,
   void GenerateSetThreadInWasmFlagCode(MacroAssembler* masm) {
     masm->Move(scratch,
                i_isolate()->thread_local_top()->thread_in_wasm_flag_address_,
-               RelocInfo::NONE);
+               RelocInfo::NO_INFO);
     masm->movl(MemOperand(scratch, 0), Immediate(1));
   }
 
   void GenerateResetThreadInWasmFlagCode(MacroAssembler* masm) {
     masm->Move(scratch,
                i_isolate()->thread_local_top()->thread_in_wasm_flag_address_,
-               RelocInfo::NONE);
+               RelocInfo::NO_INFO);
     masm->movl(MemOperand(scratch, 0), Immediate(0));
   }
 
@@ -246,7 +246,9 @@ class TrapHandlerTest : public TestWithIsolate,
         .Call();
     EXPECT_TRUE(g_test_handler_executed);
     g_test_handler_executed = false;
-    if (check_wasm_flag) EXPECT_FALSE(GetThreadInWasmFlag());
+    if (check_wasm_flag) {
+      EXPECT_FALSE(GetThreadInWasmFlag());
+    }
   }
 
   bool test_handler_executed() { return g_test_handler_executed; }
@@ -275,10 +277,10 @@ TEST_P(TrapHandlerTest, TestTrapHandlerRecovery) {
                       buffer_->CreateView());
   __ Push(scratch);
   GenerateSetThreadInWasmFlagCode(&masm);
-  __ Move(scratch, crash_address_, RelocInfo::NONE);
-  int crash_offset = __ pc_offset();
+  __ Move(scratch, crash_address_, RelocInfo::NO_INFO);
+  uint32_t crash_offset = __ pc_offset();
   __ testl(MemOperand(scratch, 0), Immediate(1));
-  int recovery_offset = __ pc_offset();
+  uint32_t recovery_offset = __ pc_offset();
   GenerateResetThreadInWasmFlagCode(&masm);
   __ Pop(scratch);
   __ Ret();
@@ -300,10 +302,10 @@ TEST_P(TrapHandlerTest, TestReleaseHandlerData) {
                       buffer_->CreateView());
   __ Push(scratch);
   GenerateSetThreadInWasmFlagCode(&masm);
-  __ Move(scratch, crash_address_, RelocInfo::NONE);
-  int crash_offset = __ pc_offset();
+  __ Move(scratch, crash_address_, RelocInfo::NO_INFO);
+  uint32_t crash_offset = __ pc_offset();
   __ testl(MemOperand(scratch, 0), Immediate(1));
-  int recovery_offset = __ pc_offset();
+  uint32_t recovery_offset = __ pc_offset();
   GenerateResetThreadInWasmFlagCode(&masm);
   __ Pop(scratch);
   __ Ret();
@@ -331,10 +333,10 @@ TEST_P(TrapHandlerTest, TestNoThreadInWasmFlag) {
   MacroAssembler masm(nullptr, AssemblerOptions{}, CodeObjectRequired::kNo,
                       buffer_->CreateView());
   __ Push(scratch);
-  __ Move(scratch, crash_address_, RelocInfo::NONE);
-  int crash_offset = __ pc_offset();
+  __ Move(scratch, crash_address_, RelocInfo::NO_INFO);
+  uint32_t crash_offset = __ pc_offset();
   __ testl(MemOperand(scratch, 0), Immediate(1));
-  int recovery_offset = __ pc_offset();
+  uint32_t recovery_offset = __ pc_offset();
   __ Pop(scratch);
   __ Ret();
   CodeDesc desc;
@@ -355,11 +357,11 @@ TEST_P(TrapHandlerTest, TestCrashInWasmNoProtectedInstruction) {
                       buffer_->CreateView());
   __ Push(scratch);
   GenerateSetThreadInWasmFlagCode(&masm);
-  int no_crash_offset = __ pc_offset();
-  __ Move(scratch, crash_address_, RelocInfo::NONE);
+  uint32_t no_crash_offset = __ pc_offset();
+  __ Move(scratch, crash_address_, RelocInfo::NO_INFO);
   __ testl(MemOperand(scratch, 0), Immediate(1));
   // Offset where the crash is not happening.
-  int recovery_offset = __ pc_offset();
+  uint32_t recovery_offset = __ pc_offset();
   GenerateResetThreadInWasmFlagCode(&masm);
   __ Pop(scratch);
   __ Ret();
@@ -382,10 +384,10 @@ TEST_P(TrapHandlerTest, TestCrashInWasmWrongCrashType) {
   __ Push(scratch);
   GenerateSetThreadInWasmFlagCode(&masm);
   __ xorq(scratch, scratch);
-  int crash_offset = __ pc_offset();
+  uint32_t crash_offset = __ pc_offset();
   __ divq(scratch);
   // Offset where the crash is not happening.
-  int recovery_offset = __ pc_offset();
+  uint32_t recovery_offset = __ pc_offset();
   GenerateResetThreadInWasmFlagCode(&masm);
   __ Pop(scratch);
   __ Ret();
@@ -442,10 +444,10 @@ TEST_P(TrapHandlerTest, TestCrashInOtherThread) {
   MacroAssembler masm(nullptr, AssemblerOptions{}, CodeObjectRequired::kNo,
                       buffer_->CreateView());
   __ Push(scratch);
-  __ Move(scratch, crash_address_, RelocInfo::NONE);
-  int crash_offset = __ pc_offset();
+  __ Move(scratch, crash_address_, RelocInfo::NO_INFO);
+  uint32_t crash_offset = __ pc_offset();
   __ testl(MemOperand(scratch, 0), Immediate(1));
-  int recovery_offset = __ pc_offset();
+  uint32_t recovery_offset = __ pc_offset();
   __ Pop(scratch);
   __ Ret();
   CodeDesc desc;
@@ -468,9 +470,11 @@ TEST_P(TrapHandlerTest, TestCrashInOtherThread) {
 }
 #endif
 
+#if !V8_OS_FUCHSIA
 INSTANTIATE_TEST_SUITE_P(Traps, TrapHandlerTest,
                          ::testing::Values(kDefault, kCallback),
                          PrintTrapHandlerTestParam);
+#endif  // !V8_OS_FUCHSIA
 
 #undef __
 }  // namespace wasm

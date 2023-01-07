@@ -52,15 +52,15 @@ def PrepareBuildDir(arch, mode):
   build_ninja = os.path.join(build_dir, "build.ninja")
   if not os.path.exists(build_ninja):
     code = _Call("gn gen %s" % build_dir)
-    if code != 0: raise Error("gn gen failed")
+    if code != 0: raise Exception("gn gen failed")
   else:
     _Call("ninja -C %s build.ninja" % build_dir)
   return build_dir
 
 def AddTargetsForArch(arch, combined):
   build_dir = PrepareBuildDir(arch, "debug")
-  commands = compile_db.ProcessCompileDatabaseIfNeeded(
-                compile_db.GenerateWithNinja(build_dir, ["all"]))
+  commands = compile_db.ProcessCompileDatabase(
+                compile_db.GenerateWithNinja(build_dir, ["all"]), [])
   added = 0
   for c in commands:
     key = c["file"]

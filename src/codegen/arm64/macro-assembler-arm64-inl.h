@@ -7,12 +7,12 @@
 
 #include <ctype.h>
 
-#include "src/common/globals.h"
-
 #include "src/base/bits.h"
 #include "src/codegen/arm64/assembler-arm64-inl.h"
 #include "src/codegen/arm64/assembler-arm64.h"
 #include "src/codegen/macro-assembler.h"
+#include "src/common/globals.h"
+#include "src/execution/isolate-data.h"
 
 namespace v8 {
 namespace internal {
@@ -101,7 +101,7 @@ void TurboAssembler::CcmpTagged(const Register& rn, const Operand& operand,
   }
 }
 
-void MacroAssembler::Ccmn(const Register& rn, const Operand& operand,
+void TurboAssembler::Ccmn(const Register& rn, const Operand& operand,
                           StatusFlags nzcv, Condition cond) {
   DCHECK(allow_macro_instructions());
   if (operand.IsImmediate() && (operand.ImmediateValue() < 0)) {
@@ -531,6 +531,15 @@ void TurboAssembler::Fccmp(const VRegister& fn, const VRegister& fm,
   fccmp(fn, fm, nzcv, cond);
 }
 
+void TurboAssembler::Fccmp(const VRegister& fn, const double value,
+                           StatusFlags nzcv, Condition cond) {
+  DCHECK(allow_macro_instructions());
+  UseScratchRegisterScope temps(this);
+  VRegister tmp = temps.AcquireSameSizeAs(fn);
+  Fmov(tmp, value);
+  Fccmp(fn, tmp, nzcv, cond);
+}
+
 void TurboAssembler::Fcmp(const VRegister& fn, const VRegister& fm) {
   DCHECK(allow_macro_instructions());
   fcmp(fn, fm);
@@ -671,7 +680,7 @@ void TurboAssembler::Fmov(VRegister vd, double imm) {
   if (IsImmFP64(imm)) {
     fmov(vd, imm);
   } else {
-    uint64_t bits = bit_cast<uint64_t>(imm);
+    uint64_t bits = base::bit_cast<uint64_t>(imm);
     if (vd.IsScalar()) {
       if (bits == 0) {
         fmov(vd, xzr);
@@ -698,7 +707,7 @@ void TurboAssembler::Fmov(VRegister vd, float imm) {
   if (IsImmFP32(imm)) {
     fmov(vd, imm);
   } else {
-    uint32_t bits = bit_cast<uint32_t>(imm);
+    uint32_t bits = base::bit_cast<uint32_t>(imm);
     if (vd.IsScalar()) {
       if (bits == 0) {
         fmov(vd, wzr);
@@ -894,13 +903,6 @@ void TurboAssembler::Ror(const Register& rd, const Register& rn,
   rorv(rd, rn, rm);
 }
 
-void MacroAssembler::Sbfiz(const Register& rd, const Register& rn, unsigned lsb,
-                           unsigned width) {
-  DCHECK(allow_macro_instructions());
-  DCHECK(!rd.IsZero());
-  sbfiz(rd, rn, lsb, width);
-}
-
 void TurboAssembler::Sbfx(const Register& rd, const Register& rn, unsigned lsb,
                           unsigned width) {
   DCHECK(allow_macro_instructions());
@@ -942,7 +944,7 @@ void TurboAssembler::Smull(const Register& rd, const Register& rn,
   smull(rd, rn, rm);
 }
 
-void MacroAssembler::Smulh(const Register& rd, const Register& rn,
+void TurboAssembler::Smulh(const Register& rd, const Register& rn,
                            const Register& rm) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
@@ -954,6 +956,13 @@ void TurboAssembler::Umull(const Register& rd, const Register& rn,
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
   umaddl(rd, rn, rm, xzr);
+}
+
+void TurboAssembler::Umulh(const Register& rd, const Register& rn,
+                           const Register& rm) {
+  DCHECK(allow_macro_instructions());
+  DCHECK(!rd.IsZero());
+  umulh(rd, rn, rm);
 }
 
 void TurboAssembler::Sxtb(const Register& rd, const Register& rn) {
@@ -979,6 +988,13 @@ void TurboAssembler::Ubfiz(const Register& rd, const Register& rn, unsigned lsb,
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
   ubfiz(rd, rn, lsb, width);
+}
+
+void TurboAssembler::Sbfiz(const Register& rd, const Register& rn, unsigned lsb,
+                           unsigned width) {
+  DCHECK(allow_macro_instructions());
+  DCHECK(!rd.IsZero());
+  sbfiz(rd, rn, lsb, width);
 }
 
 void TurboAssembler::Ubfx(const Register& rd, const Register& rn, unsigned lsb,
@@ -1037,27 +1053,26 @@ void TurboAssembler::InitializeRootRegister() {
   ExternalReference isolate_root = ExternalReference::isolate_root(isolate());
   Mov(kRootRegister, Operand(isolate_root));
 #ifdef V8_COMPRESS_POINTERS_IN_SHARED_CAGE
-  Mov(kPointerCageBaseRegister, Operand(isolate_root));
+  LoadRootRelative(kPtrComprCageBaseRegister, IsolateData::cage_base_offset());
 #endif
 }
 
-void MacroAssembler::SmiTag(Register dst, Register src) {
+void TurboAssembler::SmiTag(Register dst, Register src) {
   DCHECK(dst.Is64Bits() && src.Is64Bits());
   DCHECK(SmiValuesAre32Bits() || SmiValuesAre31Bits());
   Lsl(dst, src, kSmiShift);
 }
 
-void MacroAssembler::SmiTag(Register smi) { SmiTag(smi, smi); }
+void TurboAssembler::SmiTag(Register smi) { SmiTag(smi, smi); }
 
 void TurboAssembler::SmiUntag(Register dst, Register src) {
   DCHECK(dst.Is64Bits() && src.Is64Bits());
-  if (FLAG_enable_slow_asserts) {
+  if (v8_flags.enable_slow_asserts) {
     AssertSmi(src);
   }
   DCHECK(SmiValuesAre32Bits() || SmiValuesAre31Bits());
   if (COMPRESS_POINTERS_BOOL) {
-    Asr(dst.W(), src.W(), kSmiShift);
-    Sxtw(dst, dst);
+    Sbfx(dst, src.W(), kSmiShift, kSmiValueSize);
   } else {
     Asr(dst, src, kSmiShift);
   }
@@ -1091,9 +1106,22 @@ void TurboAssembler::SmiUntag(Register dst, const MemOperand& src) {
 
 void TurboAssembler::SmiUntag(Register smi) { SmiUntag(smi, smi); }
 
+void TurboAssembler::SmiToInt32(Register smi) {
+  DCHECK(smi.Is64Bits());
+  if (v8_flags.enable_slow_asserts) {
+    AssertSmi(smi);
+  }
+  DCHECK(SmiValuesAre32Bits() || SmiValuesAre31Bits());
+  if (COMPRESS_POINTERS_BOOL) {
+    Asr(smi.W(), smi.W(), kSmiShift);
+  } else {
+    Lsr(smi, smi, kSmiShift);
+  }
+}
+
 void TurboAssembler::JumpIfSmi(Register value, Label* smi_label,
                                Label* not_smi_label) {
-  STATIC_ASSERT((kSmiTagSize == 1) && (kSmiTag == 0));
+  static_assert((kSmiTagSize == 1) && (kSmiTag == 0));
   // Check if the tag bit is set.
   if (smi_label) {
     Tbz(value, 0, smi_label);
@@ -1200,7 +1228,7 @@ void TurboAssembler::Poke(const CPURegister& src, const Operand& offset) {
 
   if (offset.IsImmediate()) {
     DCHECK_GE(offset.ImmediateValue(), 0);
-  } else if (emit_debug_code()) {
+  } else if (v8_flags.debug_code) {
     Cmp(xzr, offset);
     Check(le, AbortReason::kStackAccessBelowStackPointer);
   }
@@ -1212,7 +1240,7 @@ template <TurboAssembler::LoadLRMode lr_mode>
 void TurboAssembler::Peek(const CPURegister& dst, const Operand& offset) {
   if (offset.IsImmediate()) {
     DCHECK_GE(offset.ImmediateValue(), 0);
-  } else if (emit_debug_code()) {
+  } else if (v8_flags.debug_code) {
     Cmp(xzr, offset);
     Check(le, AbortReason::kStackAccessBelowStackPointer);
   }
@@ -1228,58 +1256,6 @@ void TurboAssembler::Peek(const CPURegister& dst, const Operand& offset) {
 #endif
 }
 
-template <TurboAssembler::StoreLRMode lr_mode>
-void TurboAssembler::PushCPURegList(CPURegList registers) {
-  DCHECK_IMPLIES((lr_mode == kDontStoreLR), !registers.IncludesAliasOf(lr));
-#ifdef V8_ENABLE_CONTROL_FLOW_INTEGRITY
-  if (lr_mode == kSignLR && registers.IncludesAliasOf(lr)) {
-    Pacibsp();
-  }
-#endif
-
-  int size = registers.RegisterSizeInBytes();
-  DCHECK_EQ(0, (size * registers.Count()) % 16);
-
-  // Push up to four registers at a time.
-  while (!registers.IsEmpty()) {
-    int count_before = registers.Count();
-    const CPURegister& src0 = registers.PopHighestIndex();
-    const CPURegister& src1 = registers.PopHighestIndex();
-    const CPURegister& src2 = registers.PopHighestIndex();
-    const CPURegister& src3 = registers.PopHighestIndex();
-    int count = count_before - registers.Count();
-    PushHelper(count, size, src0, src1, src2, src3);
-  }
-}
-
-template <TurboAssembler::LoadLRMode lr_mode>
-void TurboAssembler::PopCPURegList(CPURegList registers) {
-  int size = registers.RegisterSizeInBytes();
-  DCHECK_EQ(0, (size * registers.Count()) % 16);
-
-#ifdef V8_ENABLE_CONTROL_FLOW_INTEGRITY
-  bool contains_lr = registers.IncludesAliasOf(lr);
-  DCHECK_IMPLIES((lr_mode == kDontLoadLR), !contains_lr);
-#endif
-
-  // Pop up to four registers at a time.
-  while (!registers.IsEmpty()) {
-    int count_before = registers.Count();
-    const CPURegister& dst0 = registers.PopLowestIndex();
-    const CPURegister& dst1 = registers.PopLowestIndex();
-    const CPURegister& dst2 = registers.PopLowestIndex();
-    const CPURegister& dst3 = registers.PopLowestIndex();
-    int count = count_before - registers.Count();
-    PopHelper(count, size, dst0, dst1, dst2, dst3);
-  }
-
-#ifdef V8_ENABLE_CONTROL_FLOW_INTEGRITY
-  if (lr_mode == kAuthLR && contains_lr) {
-    Autibsp();
-  }
-#endif
-}
-
 void TurboAssembler::Claim(int64_t count, uint64_t unit_size) {
   DCHECK_GE(count, 0);
   uint64_t size = count * unit_size;
@@ -1288,7 +1264,7 @@ void TurboAssembler::Claim(int64_t count, uint64_t unit_size) {
     return;
   }
   DCHECK_EQ(size % 16, 0);
-#if V8_OS_WIN
+#ifdef V8_TARGET_OS_WIN
   while (size > kStackPageSize) {
     Sub(sp, sp, kStackPageSize);
     Str(xzr, MemOperand(sp));
@@ -1310,7 +1286,7 @@ void TurboAssembler::Claim(const Register& count, uint64_t unit_size) {
   }
   AssertPositiveOrZero(count);
 
-#if V8_OS_WIN
+#ifdef V8_TARGET_OS_WIN
   // "Functions that allocate 4k or more worth of stack must ensure that each
   // page prior to the final page is touched in order." Source:
   // https://docs.microsoft.com/en-us/cpp/build/arm64-windows-abi-conventions?view=vs-2019#stack
@@ -1397,8 +1373,8 @@ void TurboAssembler::PushArgument(const Register& arg) { Push(padreg, arg); }
 void TurboAssembler::CompareAndBranch(const Register& lhs, const Operand& rhs,
                                       Condition cond, Label* label) {
   if (rhs.IsImmediate() && (rhs.ImmediateValue() == 0) &&
-      ((cond == eq) || (cond == ne))) {
-    if (cond == eq) {
+      ((cond == eq) || (cond == ne) || (cond == hi) || (cond == ls))) {
+    if ((cond == eq) || (cond == ls)) {
       Cbz(lhs, label);
     } else {
       Cbnz(lhs, label);

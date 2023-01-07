@@ -5,11 +5,13 @@
 #ifndef V8_JSON_JSON_PARSER_H_
 #define V8_JSON_JSON_PARSER_H_
 
+#include "include/v8-callbacks.h"
 #include "src/base/small-vector.h"
+#include "src/base/strings.h"
+#include "src/common/high-allocation-throughput-scope.h"
 #include "src/execution/isolate.h"
 #include "src/heap/factory.h"
 #include "src/objects/objects.h"
-#include "src/zone/zone-containers.h"
 
 namespace v8 {
 namespace internal {
@@ -101,20 +103,25 @@ struct JsonProperty {
 class JsonParseInternalizer {
  public:
   static MaybeHandle<Object> Internalize(Isolate* isolate,
-                                         Handle<Object> object,
-                                         Handle<Object> reviver);
+                                         Handle<Object> result,
+                                         Handle<Object> reviver,
+                                         Handle<String> source);
 
  private:
-  JsonParseInternalizer(Isolate* isolate, Handle<JSReceiver> reviver)
-      : isolate_(isolate), reviver_(reviver) {}
+  JsonParseInternalizer(Isolate* isolate, Handle<JSReceiver> reviver,
+                        Handle<String> source)
+      : isolate_(isolate), reviver_(reviver), source_(source) {}
 
   MaybeHandle<Object> InternalizeJsonProperty(Handle<JSReceiver> holder,
-                                              Handle<String> key);
+                                              Handle<String> key,
+                                              Handle<Object> val_node);
 
-  bool RecurseAndApply(Handle<JSReceiver> holder, Handle<String> name);
+  bool RecurseAndApply(Handle<JSReceiver> holder, Handle<String> name,
+                       Handle<Object> val_node);
 
   Isolate* isolate_;
   Handle<JSReceiver> reviver_;
+  Handle<String> source_;
 };
 
 enum class JsonToken : uint8_t {
@@ -141,19 +148,29 @@ class JsonParser final {
   using SeqString = typename CharTraits<Char>::String;
   using SeqExternalString = typename CharTraits<Char>::ExternalString;
 
+  V8_WARN_UNUSED_RESULT static bool CheckRawJson(Isolate* isolate,
+                                                 Handle<String> source) {
+    return JsonParser(isolate, source).ParseRawJson();
+  }
+
   V8_WARN_UNUSED_RESULT static MaybeHandle<Object> Parse(
       Isolate* isolate, Handle<String> source, Handle<Object> reviver) {
+    HighAllocationThroughputScope high_throughput_scope(
+        V8::GetCurrentPlatform());
     Handle<Object> result;
     ASSIGN_RETURN_ON_EXCEPTION(isolate, result,
-                               JsonParser(isolate, source).ParseJson(), Object);
+                               JsonParser(isolate, source).ParseJson(reviver),
+                               Object);
     if (reviver->IsCallable()) {
-      return JsonParseInternalizer::Internalize(isolate, result, reviver);
+      return JsonParseInternalizer::Internalize(isolate, result, reviver,
+                                                source);
     }
     return result;
   }
 
-  static constexpr uc32 kEndOfString = static_cast<uc32>(-1);
-  static constexpr uc32 kInvalidUnicodeCharacter = static_cast<uc32>(-1);
+  static constexpr base::uc32 kEndOfString = static_cast<base::uc32>(-1);
+  static constexpr base::uc32 kInvalidUnicodeCharacter =
+      static_cast<base::uc32>(-1);
 
  private:
   template <typename T>
@@ -182,16 +199,18 @@ class JsonParser final {
   ~JsonParser();
 
   // Parse a string containing a single JSON value.
-  MaybeHandle<Object> ParseJson();
+  MaybeHandle<Object> ParseJson(Handle<Object> reviver);
+
+  bool ParseRawJson();
 
   void advance() { ++cursor_; }
 
-  uc32 CurrentCharacter() {
+  base::uc32 CurrentCharacter() {
     if (V8_UNLIKELY(is_at_end())) return kEndOfString;
     return *cursor_;
   }
 
-  uc32 NextCharacter() {
+  base::uc32 NextCharacter() {
     advance();
     return CurrentCharacter();
   }
@@ -205,17 +224,21 @@ class JsonParser final {
     advance();
   }
 
-  void Expect(JsonToken token) {
+  void Expect(JsonToken token,
+              base::Optional<MessageTemplate> errorMessage = base::nullopt) {
     if (V8_LIKELY(peek() == token)) {
       advance();
     } else {
-      ReportUnexpectedToken(peek());
+      errorMessage ? ReportUnexpectedToken(peek(), errorMessage.value())
+                   : ReportUnexpectedToken(peek());
     }
   }
 
-  void ExpectNext(JsonToken token) {
+  void ExpectNext(
+      JsonToken token,
+      base::Optional<MessageTemplate> errorMessage = base::nullopt) {
     SkipWhitespace();
-    Expect(token);
+    errorMessage ? Expect(token, errorMessage.value()) : Expect(token);
   }
 
   bool Check(JsonToken token) {
@@ -231,7 +254,7 @@ class JsonParser final {
     // There's at least 1 character, we always consume a character and compare
     // the next character. The first character was compared before we jumped
     // to ScanLiteral.
-    STATIC_ASSERT(N > 2);
+    static_assert(N > 2);
     size_t remaining = static_cast<size_t>(end_ - cursor_);
     if (V8_LIKELY(remaining >= N - 1 &&
                   CompareCharsEqual(s + 1, cursor_ + 1, N - 2))) {
@@ -263,7 +286,7 @@ class JsonParser final {
   // four-digit hex escapes (uXXXX). Any other use of backslashes is invalid.
   JsonString ScanJsonString(bool needs_internalization);
   JsonString ScanJsonPropertyKey(JsonContinuation* cont);
-  uc32 ScanUnicodeCharacter();
+  base::uc32 ScanUnicodeCharacter();
   Handle<String> MakeString(const JsonString& string,
                             Handle<String> hint = Handle<String>());
 
@@ -286,7 +309,8 @@ class JsonParser final {
   // Parse a single JSON value from input (grammar production JSONValue).
   // A JSON value is either a (double-quoted) string literal, a number literal,
   // one of "true", "false", or "null", or an object or array literal.
-  MaybeHandle<Object> ParseJsonValue();
+  template <bool should_track_json_source>
+  MaybeHandle<Object> ParseJsonValue(Handle<Object> reviver);
 
   Handle<Object> BuildJsonObject(
       const JsonContinuation& cont,
@@ -295,10 +319,22 @@ class JsonParser final {
       const JsonContinuation& cont,
       const SmallVector<Handle<Object>>& element_stack);
 
+  static const int kMaxContextCharacters = 10;
+  static const int kMinOriginalSourceLengthForContext =
+      (kMaxContextCharacters * 2) + 1;
+
   // Mark that a parsing error has happened at the current character.
-  void ReportUnexpectedCharacter(uc32 c);
+  void ReportUnexpectedCharacter(base::uc32 c);
+  bool IsSpecialString();
+  MessageTemplate GetErrorMessageWithEllipses(Handle<Object>& arg,
+                                              Handle<Object>& arg2, int pos);
+  MessageTemplate LookUpErrorMessageForJsonToken(JsonToken token,
+                                                 Handle<Object>& arg,
+                                                 Handle<Object>& arg2, int pos);
   // Mark that a parsing error has happened at the current token.
-  void ReportUnexpectedToken(JsonToken token);
+  void ReportUnexpectedToken(
+      JsonToken token,
+      base::Optional<MessageTemplate> errorMessage = base::nullopt);
 
   inline Isolate* isolate() { return isolate_; }
   inline Factory* factory() { return isolate_->factory(); }
@@ -306,8 +342,8 @@ class JsonParser final {
 
   static const int kInitialSpecialStringLength = 32;
 
-  static void UpdatePointersCallback(v8::Isolate* v8_isolate, v8::GCType type,
-                                     v8::GCCallbackFlags flags, void* parser) {
+  static void UpdatePointersCallback(LocalIsolate*, GCType, GCCallbackFlags,
+                                     void* parser) {
     reinterpret_cast<JsonParser<Char>*>(parser)->UpdatePointers();
   }
 

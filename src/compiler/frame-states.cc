@@ -55,8 +55,8 @@ std::ostream& operator<<(std::ostream& os, FrameStateType type) {
     case FrameStateType::kUnoptimizedFunction:
       os << "UNOPTIMIZED_FRAME";
       break;
-    case FrameStateType::kArgumentsAdaptor:
-      os << "ARGUMENTS_ADAPTOR";
+    case FrameStateType::kInlinedExtraArguments:
+      os << "INLINED_EXTRA_ARGUMENTS";
       break;
     case FrameStateType::kConstructStub:
       os << "CONSTRUCT_STUB";
@@ -111,8 +111,8 @@ uint8_t DeoptimizerParameterCountFor(ContinuationFrameStateMode mode) {
 }
 
 FrameState CreateBuiltinContinuationFrameStateCommon(
-    JSGraph* jsgraph, FrameStateType frame_type, Builtins::Name name,
-    Node* closure, Node* context, Node** parameters, int parameter_count,
+    JSGraph* jsgraph, FrameStateType frame_type, Builtin name, Node* closure,
+    Node* context, Node** parameters, int parameter_count,
     Node* outer_frame_state,
     Handle<SharedFunctionInfo> shared = Handle<SharedFunctionInfo>(),
     const wasm::FunctionSig* signature = nullptr) {
@@ -147,8 +147,8 @@ FrameState CreateBuiltinContinuationFrameStateCommon(
 }  // namespace
 
 FrameState CreateStubBuiltinContinuationFrameState(
-    JSGraph* jsgraph, Builtins::Name name, Node* context,
-    Node* const* parameters, int parameter_count, Node* outer_frame_state,
+    JSGraph* jsgraph, Builtin name, Node* context, Node* const* parameters,
+    int parameter_count, Node* outer_frame_state,
     ContinuationFrameStateMode mode, const wasm::FunctionSig* signature) {
   Callable callable = Builtins::CallableFor(jsgraph->isolate(), name);
   CallInterfaceDescriptor descriptor = callable.descriptor();
@@ -180,7 +180,7 @@ FrameState CreateStubBuiltinContinuationFrameState(
 
   FrameStateType frame_state_type = FrameStateType::kBuiltinContinuation;
 #if V8_ENABLE_WEBASSEMBLY
-  if (name == Builtins::kJSToWasmLazyDeoptContinuation) {
+  if (name == Builtin::kJSToWasmLazyDeoptContinuation) {
     CHECK_NOT_NULL(signature);
     frame_state_type = FrameStateType::kJSToWasmBuiltinContinuation;
   }
@@ -201,20 +201,20 @@ FrameState CreateJSWasmCallBuiltinContinuationFrameState(
       jsgraph->SmiConstant(wasm_return_kind ? wasm_return_kind.value() : -1);
   Node* lazy_deopt_parameters[] = {node_return_type};
   return CreateStubBuiltinContinuationFrameState(
-      jsgraph, Builtins::kJSToWasmLazyDeoptContinuation, context,
+      jsgraph, Builtin::kJSToWasmLazyDeoptContinuation, context,
       lazy_deopt_parameters, arraysize(lazy_deopt_parameters),
       outer_frame_state, ContinuationFrameStateMode::LAZY, signature);
 }
 #endif  // V8_ENABLE_WEBASSEMBLY
 
 FrameState CreateJavaScriptBuiltinContinuationFrameState(
-    JSGraph* jsgraph, const SharedFunctionInfoRef& shared, Builtins::Name name,
+    JSGraph* jsgraph, const SharedFunctionInfoRef& shared, Builtin name,
     Node* target, Node* context, Node* const* stack_parameters,
     int stack_parameter_count, Node* outer_frame_state,
     ContinuationFrameStateMode mode) {
   // Depending on {mode}, final parameters are added by the deoptimizer
   // and aren't explicitly passed in the frame state.
-  DCHECK_EQ(Builtins::GetStackParameterCount(name) + 1,  // add receiver
+  DCHECK_EQ(Builtins::GetStackParameterCount(name),
             stack_parameter_count + DeoptimizerParameterCountFor(mode));
 
   Node* argc = jsgraph->Constant(Builtins::GetStackParameterCount(name));
@@ -252,7 +252,7 @@ FrameState CreateGenericLazyDeoptContinuationFrameState(
   Node* stack_parameters[]{receiver};
   const int stack_parameter_count = arraysize(stack_parameters);
   return CreateJavaScriptBuiltinContinuationFrameState(
-      graph, shared, Builtins::kGenericLazyDeoptContinuation, target, context,
+      graph, shared, Builtin::kGenericLazyDeoptContinuation, target, context,
       stack_parameters, stack_parameter_count, outer_frame_state,
       ContinuationFrameStateMode::LAZY);
 }

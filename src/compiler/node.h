@@ -50,7 +50,7 @@ class V8_EXPORT_PRIVATE Node final {
 
   const Operator* op() const { return op_; }
 
-  IrOpcode::Value opcode() const {
+  constexpr IrOpcode::Value opcode() const {
     DCHECK_GE(IrOpcode::kLast, op_->opcode());
     return static_cast<IrOpcode::Value>(op_->opcode());
   }
@@ -98,6 +98,7 @@ class V8_EXPORT_PRIVATE Node final {
   void EnsureInputCount(Zone* zone, int new_input_count);
 
   int UseCount() const;
+  int BranchUseCount() const;
   void ReplaceUses(Node* replace_to);
 
   class InputEdges;

@@ -49,8 +49,8 @@
 
 #include <fcntl.h>
 #include <unistd.h>
-#include <vector>
 
+#include "src/base/platform/platform.h"
 #include "src/codegen/assembler.h"
 #include "src/codegen/external-reference.h"
 #include "src/codegen/label.h"
@@ -93,7 +93,7 @@ class V8_EXPORT_PRIVATE Operand {
  public:
   // immediate
   V8_INLINE explicit Operand(intptr_t immediate,
-                             RelocInfo::Mode rmode = RelocInfo::NONE)
+                             RelocInfo::Mode rmode = RelocInfo::NO_INFO)
       : rmode_(rmode) {
     value_.immediate = immediate;
   }
@@ -103,7 +103,7 @@ class V8_EXPORT_PRIVATE Operand {
     value_.immediate = static_cast<intptr_t>(f.address());
   }
   explicit Operand(Handle<HeapObject> handle);
-  V8_INLINE explicit Operand(Smi value) : rmode_(RelocInfo::NONE) {
+  V8_INLINE explicit Operand(Smi value) : rmode_(RelocInfo::NO_INFO) {
     value_.immediate = static_cast<intptr_t>(value.ptr());
   }
 
@@ -111,7 +111,6 @@ class V8_EXPORT_PRIVATE Operand {
   V8_INLINE explicit Operand(Register rm);
 
   static Operand EmbeddedNumber(double value);  // Smi or HeapNumber
-  static Operand EmbeddedStringConstant(const StringConstantBase* str);
 
   // Return true if this is a register operand.
   V8_INLINE bool is_reg() const { return rm_.is_valid(); }
@@ -120,13 +119,13 @@ class V8_EXPORT_PRIVATE Operand {
 
   inline intptr_t immediate() const {
     DCHECK(!rm_.is_valid());
-    DCHECK(!is_heap_object_request());
+    DCHECK(!is_heap_number_request());
     return value_.immediate;
   }
 
-  HeapObjectRequest heap_object_request() const {
-    DCHECK(is_heap_object_request());
-    return value_.heap_object_request;
+  HeapNumberRequest heap_number_request() const {
+    DCHECK(is_heap_number_request());
+    return value_.heap_number_request;
   }
 
   inline void setBits(int n) {
@@ -136,12 +135,12 @@ class V8_EXPORT_PRIVATE Operand {
 
   Register rm() const { return rm_; }
 
-  bool is_heap_object_request() const {
-    DCHECK_IMPLIES(is_heap_object_request_, !rm_.is_valid());
-    DCHECK_IMPLIES(is_heap_object_request_,
+  bool is_heap_number_request() const {
+    DCHECK_IMPLIES(is_heap_number_request_, !rm_.is_valid());
+    DCHECK_IMPLIES(is_heap_number_request_,
                    rmode_ == RelocInfo::FULL_EMBEDDED_OBJECT ||
                        rmode_ == RelocInfo::CODE_TARGET);
-    return is_heap_object_request_;
+    return is_heap_number_request_;
   }
 
   RelocInfo::Mode rmode() const { return rmode_; }
@@ -150,10 +149,10 @@ class V8_EXPORT_PRIVATE Operand {
   Register rm_ = no_reg;
   union Value {
     Value() {}
-    HeapObjectRequest heap_object_request;  // if is_heap_object_request_
+    HeapNumberRequest heap_number_request;  // if is_heap_number_request_
     intptr_t immediate;                     // otherwise
   } value_;                                 // valid if rm_ == no_reg
-  bool is_heap_object_request_ = false;
+  bool is_heap_number_request_ = false;
 
   RelocInfo::Mode rmode_;
 
@@ -1055,6 +1054,7 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
   void DataAlign(int m);
   // Aligns code to something that's optimal for a jump target for the platform.
   void CodeTargetAlign();
+  void LoopHeaderAlign() { CodeTargetAlign(); }
 
   void breakpoint(bool do_print) {
     if (do_print) {
@@ -1271,6 +1271,7 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
 
   // Load Address Instructions
   void larl(Register r, Label* l);
+  void lgrl(Register r, Label* l);
 
   // Exception-generating instructions and debugging support
   void stop(Condition cond = al, int32_t code = kDefaultStopCode,
@@ -1304,15 +1305,15 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
 
   // Record a deoptimization reason that can be used by a log or cpu profiler.
   // Use --trace-deopt to enable.
-  void RecordDeoptReason(DeoptimizeReason reason, SourcePosition position,
-                         int id);
+  void RecordDeoptReason(DeoptimizeReason reason, uint32_t node_id,
+                         SourcePosition position, int id);
 
   // Writes a single byte or word of data in the code stream.  Used
   // for inline tables, e.g., jump-tables.
   void db(uint8_t data);
-  void dd(uint32_t data, RelocInfo::Mode rmode = RelocInfo::NONE);
-  void dq(uint64_t data, RelocInfo::Mode rmode = RelocInfo::NONE);
-  void dp(uintptr_t data, RelocInfo::Mode rmode = RelocInfo::NONE);
+  void dd(uint32_t data, RelocInfo::Mode rmode = RelocInfo::NO_INFO);
+  void dq(uint64_t data, RelocInfo::Mode rmode = RelocInfo::NO_INFO);
+  void dp(uintptr_t data, RelocInfo::Mode rmode = RelocInfo::NO_INFO);
 
   // Read/patch instructions
   SixByteInstr instr_at(int pos) {
@@ -1365,7 +1366,7 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
   // not have to check for overflow. The same is true for writes of large
   // relocation info entries.
   static constexpr int kGap = 32;
-  STATIC_ASSERT(AssemblerBase::kMinimalBufferSize >= 2 * kGap);
+  static_assert(AssemblerBase::kMinimalBufferSize >= 2 * kGap);
 
  protected:
   int buffer_space() const { return reloc_info_writer.pos() - pc_; }
@@ -1465,7 +1466,7 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
   void bind_to(Label* L, int pos);
   void next(Label* L);
 
-  void AllocateAndInstallRequestedHeapObjects(Isolate* isolate);
+  void AllocateAndInstallRequestedHeapNumbers(Isolate* isolate);
 
   int WriteCodeComments();
 
@@ -1488,7 +1489,9 @@ class V8_EXPORT_PRIVATE V8_NODISCARD UseScratchRegisterScope {
   Register Acquire();
 
   // Check if we have registers available to acquire.
-  bool CanAcquire() const { return *assembler_->GetScratchRegisterList() != 0; }
+  bool CanAcquire() const {
+    return !assembler_->GetScratchRegisterList()->is_empty();
+  }
 
  private:
   friend class Assembler;

@@ -4,13 +4,14 @@
 
 #include <iomanip>
 
-#include "include/v8.h"
-#include "src/api/api.h"
+#include "include/v8-exception.h"
+#include "include/v8-local-handle.h"
+#include "include/v8-primitive.h"
+#include "include/v8-value.h"
 #include "src/wasm/wasm-module-builder.h"
 #include "test/cctest/cctest.h"
-#include "test/cctest/compiler/node-observer-tester.h"
 #include "test/cctest/test-api.h"
-#include "test/common/wasm/flag-utils.h"
+#include "test/common/node-observer-tester.h"
 #include "test/common/wasm/test-signatures.h"
 #include "test/common/wasm/wasm-macro-gen.h"
 
@@ -262,16 +263,19 @@ enum TestMode { kJSToWasmInliningDisabled, kJSToWasmInliningEnabled };
 class FastJSWasmCallTester {
  public:
   FastJSWasmCallTester()
-      : allow_natives_syntax_(&i::FLAG_allow_natives_syntax, true),
-        inline_js_wasm_calls_(&i::FLAG_turbo_inline_js_wasm_calls, true),
-        stress_background_compile_(&i::FLAG_stress_background_compile, false),
-        allocator_(),
+      : allocator_(),
         zone_(&allocator_, ZONE_NAME),
-        builder_(zone_.New<WasmModuleBuilder>(&zone_)) {}
+        builder_(zone_.New<WasmModuleBuilder>(&zone_)) {
+    i::v8_flags.allow_natives_syntax = true;
+    i::v8_flags.turbo_inline_js_wasm_calls = true;
+    i::v8_flags.stress_background_compile = false;
+    i::v8_flags.concurrent_osr = false;  // Seems to mess with %ObserveNode.
+  }
 
   void DeclareCallback(const char* name, FunctionSig* signature,
                        const char* module) {
-    builder_->AddImport(CStrVector(name), signature, CStrVector(module));
+    builder_->AddImport(base::CStrVector(name), signature,
+                        base::CStrVector(module));
   }
 
   void AddExportedFunction(const ExportedFunction& exported_func) {
@@ -280,7 +284,7 @@ class FastJSWasmCallTester {
     func->EmitCode(exported_func.code.data(),
                    static_cast<uint32_t>(exported_func.code.size()));
     func->Emit(kExprEnd);
-    builder_->AddExport(CStrVector(exported_func.name.c_str()),
+    builder_->AddExport(base::CStrVector(exported_func.name.c_str()),
                         kExternalFunction, func->func_index());
 
     // JS-to-Wasm inlining is disabled when targeting 32 bits if the Wasm
@@ -591,23 +595,25 @@ class FastJSWasmCallTester {
 
   v8::Local<v8::Value> CompileRunWithJSWasmCallNodeObserver(
       const std::string& js_code) {
+    // Note: Make sure to not capture stack locations (e.g. `this`) here since
+    // these lambdas are executed on another thread.
+    const auto test_mode = test_mode_;
     compiler::ModificationObserver js_wasm_call_observer(
         [](const compiler::Node* node) {
           CHECK_EQ(compiler::IrOpcode::kJSCall, node->opcode());
         },
-        [this](const compiler::Node* node,
-               const compiler::ObservableNodeState& old_state)
+        [test_mode](const compiler::Node* node,
+                    const compiler::ObservableNodeState& old_state)
             -> compiler::NodeObserver::Observation {
           if (old_state.opcode() != node->opcode()) {
             CHECK_EQ(compiler::IrOpcode::kJSCall, old_state.opcode());
 
             // JS-to-Wasm inlining is disabled when targeting 32 bits if the
             // Wasm function signature contains an I64.
-            if (test_mode_ == kJSToWasmInliningEnabled) {
-              CHECK_EQ(compiler::IrOpcode::kJSWasmCall, node->opcode());
-            } else {
-              CHECK_EQ(compiler::IrOpcode::kCall, node->opcode());
-            }
+            CHECK_EQ(test_mode == kJSToWasmInliningEnabled
+                         ? compiler::IrOpcode::kJSWasmCall
+                         : compiler::IrOpcode::kCall,
+                     node->opcode());
 
             return compiler::NodeObserver::Observation::kStop;
           }
@@ -740,9 +746,6 @@ class FastJSWasmCallTester {
     return string_stream.str();
   }
 
-  i::FlagScope<bool> allow_natives_syntax_;
-  i::FlagScope<bool> inline_js_wasm_calls_;
-  i::FlagScope<bool> stress_background_compile_;
   AccountingAllocator allocator_;
   Zone zone_;
   WasmModuleBuilder* builder_;

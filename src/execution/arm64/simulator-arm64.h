@@ -15,7 +15,6 @@
 #include <vector>
 
 #include "src/base/compiler-specific.h"
-#include "src/base/platform/wrappers.h"
 #include "src/codegen/arm64/assembler-arm64.h"
 #include "src/codegen/arm64/decoder-arm64.h"
 #include "src/codegen/assembler.h"
@@ -251,7 +250,7 @@ class SimMemory {
     DCHECK((sizeof(value) == 1) || (sizeof(value) == 2) ||
            (sizeof(value) == 4) || (sizeof(value) == 8) ||
            (sizeof(value) == 16));
-    base::Memcpy(&value, reinterpret_cast<const char*>(address), sizeof(value));
+    memcpy(&value, reinterpret_cast<const char*>(address), sizeof(value));
     return value;
   }
 
@@ -261,7 +260,7 @@ class SimMemory {
     DCHECK((sizeof(value) == 1) || (sizeof(value) == 2) ||
            (sizeof(value) == 4) || (sizeof(value) == 8) ||
            (sizeof(value) == 16));
-    base::Memcpy(reinterpret_cast<char*>(address), &value, sizeof(value));
+    memcpy(reinterpret_cast<char*>(address), &value, sizeof(value));
   }
 };
 
@@ -327,7 +326,7 @@ class SimRegisterBase {
       // All AArch64 registers are zero-extending.
       memset(value_ + sizeof(new_value), 0, kSizeInBytes - sizeof(new_value));
     }
-    base::Memcpy(&value_, &new_value, sizeof(T));
+    memcpy(&value_, &new_value, sizeof(T));
     NotifyRegisterWrite();
   }
 
@@ -340,8 +339,7 @@ class SimRegisterBase {
     DCHECK_GE(lane, 0);
     DCHECK_LE(sizeof(new_value) + (lane * sizeof(new_value)),
               static_cast<unsigned>(kSizeInBytes));
-    base::Memcpy(&value_[lane * sizeof(new_value)], &new_value,
-                 sizeof(new_value));
+    memcpy(&value_[lane * sizeof(new_value)], &new_value, sizeof(new_value));
     NotifyRegisterWrite();
   }
 
@@ -351,7 +349,7 @@ class SimRegisterBase {
     DCHECK_GE(lane, 0);
     DCHECK_LE(sizeof(result) + (lane * sizeof(result)),
               static_cast<unsigned>(kSizeInBytes));
-    base::Memcpy(&result, &value_[lane * sizeof(result)], sizeof(result));
+    memcpy(&result, &value_[lane * sizeof(result)], sizeof(result));
     return result;
   }
 
@@ -439,7 +437,7 @@ class LogicVRegister {
   int64_t IntLeftJustified(VectorFormat vform, int index) const {
     uint64_t value = UintLeftJustified(vform, index);
     int64_t result;
-    base::Memcpy(&result, &value, sizeof(result));
+    memcpy(&result, &value, sizeof(result));
     return result;
   }
 
@@ -675,13 +673,13 @@ class Simulator : public DecoderVisitor, public SimulatorBase {
     explicit CallArgument(T argument) {
       bits_ = 0;
       DCHECK(sizeof(argument) <= sizeof(bits_));
-      base::Memcpy(&bits_, &argument, sizeof(argument));
+      memcpy(&bits_, &argument, sizeof(argument));
       type_ = X_ARG;
     }
 
     explicit CallArgument(double argument) {
       DCHECK(sizeof(argument) == sizeof(bits_));
-      base::Memcpy(&bits_, &argument, sizeof(argument));
+      memcpy(&bits_, &argument, sizeof(argument));
       type_ = D_ARG;
     }
 
@@ -692,10 +690,10 @@ class Simulator : public DecoderVisitor, public SimulatorBase {
       // Make the D register a NaN to try to trap errors if the callee expects a
       // double. If it expects a float, the callee should ignore the top word.
       DCHECK(sizeof(kFP64SignallingNaN) == sizeof(bits_));
-      base::Memcpy(&bits_, &kFP64SignallingNaN, sizeof(kFP64SignallingNaN));
+      memcpy(&bits_, &kFP64SignallingNaN, sizeof(kFP64SignallingNaN));
       // Write the float payload to the S register.
       DCHECK(sizeof(argument) <= sizeof(bits_));
-      base::Memcpy(&bits_, &argument, sizeof(argument));
+      memcpy(&bits_, &argument, sizeof(argument));
       type_ = D_ARG;
     }
 
@@ -762,8 +760,8 @@ class Simulator : public DecoderVisitor, public SimulatorBase {
   // Simulation helpers.
   template <typename T>
   void set_pc(T new_pc) {
-    DCHECK(sizeof(T) == sizeof(pc_));
-    base::Memcpy(&pc_, &new_pc, sizeof(T));
+    static_assert(sizeof(T) == sizeof(pc_));
+    memcpy(&pc_, &new_pc, sizeof(T));
     pc_modified_ = true;
   }
   Instruction* pc() { return pc_; }
@@ -1055,7 +1053,7 @@ class Simulator : public DecoderVisitor, public SimulatorBase {
     static_assert(sizeof(result) <= sizeof(raw),
                   "Template type must be <= 64 bits.");
     // Copy the result and truncate to fit. This assumes a little-endian host.
-    base::Memcpy(&result, &raw, sizeof(result));
+    memcpy(&result, &raw, sizeof(result));
     return result;
   }
 
@@ -1115,7 +1113,7 @@ class Simulator : public DecoderVisitor, public SimulatorBase {
   // As above, but don't automatically log the register update.
   template <typename T>
   void set_vreg_no_log(unsigned code, T value) {
-    STATIC_ASSERT((sizeof(value) == kBRegSize) ||
+    static_assert((sizeof(value) == kBRegSize) ||
                   (sizeof(value) == kHRegSize) ||
                   (sizeof(value) == kSRegSize) ||
                   (sizeof(value) == kDRegSize) || (sizeof(value) == kQRegSize));
@@ -1503,24 +1501,36 @@ class Simulator : public DecoderVisitor, public SimulatorBase {
                                        AddrMode addr_mode);
   void CheckMemoryAccess(uintptr_t address, uintptr_t stack);
 
+  // "Probe" if an address range can be read. This is currently implemented
+  // by doing a 1-byte read of the last accessed byte, since the assumption is
+  // that if the last byte is accessible, also all lower bytes are accessible
+  // (which holds true for Wasm).
+  // Returns true if the access was successful, false if the access raised a
+  // signal which was then handled by the trap handler (also see
+  // {trap_handler::ProbeMemory}). If the access raises a signal which is not
+  // handled by the trap handler (e.g. because the current PC is not registered
+  // as a protected instruction), the signal will propagate and make the process
+  // crash. If no trap handler is available, this always returns true.
+  bool ProbeMemory(uintptr_t address, uintptr_t access_size);
+
   // Memory read helpers.
   template <typename T, typename A>
   T MemoryRead(A address) {
     T value;
-    STATIC_ASSERT((sizeof(value) == 1) || (sizeof(value) == 2) ||
+    static_assert((sizeof(value) == 1) || (sizeof(value) == 2) ||
                   (sizeof(value) == 4) || (sizeof(value) == 8) ||
                   (sizeof(value) == 16));
-    base::Memcpy(&value, reinterpret_cast<const void*>(address), sizeof(value));
+    memcpy(&value, reinterpret_cast<const void*>(address), sizeof(value));
     return value;
   }
 
   // Memory write helpers.
   template <typename T, typename A>
   void MemoryWrite(A address, T value) {
-    STATIC_ASSERT((sizeof(value) == 1) || (sizeof(value) == 2) ||
+    static_assert((sizeof(value) == 1) || (sizeof(value) == 2) ||
                   (sizeof(value) == 4) || (sizeof(value) == 8) ||
                   (sizeof(value) == 16));
-    base::Memcpy(reinterpret_cast<void*>(address), &value, sizeof(value));
+    memcpy(reinterpret_cast<void*>(address), &value, sizeof(value));
   }
 
   template <typename T>
@@ -2438,6 +2448,9 @@ class Simulator : public DecoderVisitor, public SimulatorBase {
 
   V8_EXPORT_PRIVATE void CallImpl(Address entry, CallArgument* args);
 
+  void CallAnyCTypeFunction(Address target_address,
+                            const EncodedCSignature& signature);
+
   // Read floating point return values.
   template <typename T>
   typename std::enable_if<std::is_floating_point<T>::value, T>::type
@@ -2500,7 +2513,7 @@ class Simulator : public DecoderVisitor, public SimulatorBase {
   }
 
   int log_parameters_;
-  // Instruction counter only valid if FLAG_stop_sim_at isn't 0.
+  // Instruction counter only valid if v8_flags.stop_sim_at isn't 0.
   int icount_for_stop_sim_at_;
   Isolate* isolate_;
 };
