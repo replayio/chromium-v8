@@ -34,11 +34,14 @@
 #define V8_HAS_PTHREAD_JIT_WRITE_PROTECT 0
 #endif
 
-#if defined(V8_OS_LINUX) && defined(V8_HOST_ARCH_X64)
-#define V8_HAS_PKU_JIT_WRITE_PROTECT 1
-#else
+// [replay] disable this to avoid dealing w/ dlsym
+// see https://linear.app/replay/issue/RUN-1085/chromium-108-crash-getkeypermission
+// #if defined(V8_OS_LINUX) && defined(V8_HOST_ARCH_X64)
+// #define V8_HAS_PKU_JIT_WRITE_PROTECT 1
+// #else
+// #define V8_HAS_PKU_JIT_WRITE_PROTECT 0
+// #endif
 #define V8_HAS_PKU_JIT_WRITE_PROTECT 0
-#endif
 
 #if defined(V8_TARGET_ARCH_IA32) || defined(V8_TARGET_ARCH_X64)
 #define V8_TARGET_ARCH_STORES_RETURN_ADDRESS_ON_STACK true
