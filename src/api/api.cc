@@ -11014,6 +11014,9 @@ static const char* gRecordReplayKnownFeatures[] = {
   // Creating multiple worker threads for rendering is disabled.
   "no-render-workers",
 
+  // Page timing metrics are not sent at non-deterministic points.
+  "no-page-timing-metrics",
+
   // Notify the recorder about paints.
   "notify-paints",
 
