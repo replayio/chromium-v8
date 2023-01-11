@@ -10709,6 +10709,7 @@ static void* (*gJSONCreateObject)(size_t, const char**, void**);
 static char* (*gJSONToString)(void*);
 static void (*gJSONFree)(void*);
 static void (*gRecordReplayOnAnnotation)(const char* kind, const char* contents);
+static void (*gRecordReplayOnEvent)(const char* aEvent, bool aBefore);
 static void (*gRecordReplayOnMouseEvent)(const char* aKind, size_t aClientX,
                                          size_t aClientY);
 static void (*gRecordReplayOnKeyEvent)(const char* aKind, const char* aKey);
@@ -11487,6 +11488,15 @@ extern "C" void V8RecordReplayOnAnnotation(const char* kind, const char* content
   }
 }
 
+extern "C" void V8RecordReplayOnEvent(const char* aEvent, bool aBefore) {
+  DCHECK(recordreplay::IsRecordingOrReplaying());
+  if (!internal::gRecordReplayHasCheckpoint) {
+    return;
+  }
+  
+  gRecordReplayOnEvent(aEvent, aBefore);
+}
+
 extern "C" void V8RecordReplayOnMouseEvent(const char* kind, size_t clientX,
                                            size_t clientY) {
   DCHECK(recordreplay::IsRecordingOrReplaying());
@@ -11696,6 +11706,8 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   RecordReplayLoadSymbol(handle, "RecordReplayJSONFree", gJSONFree);
   RecordReplayLoadSymbol(handle, "RecordReplayOnAnnotation", gRecordReplayOnAnnotation);
 
+  RecordReplayLoadSymbol(handle, "RecordReplayOnEvent",
+                         gRecordReplayOnEvent);
   RecordReplayLoadSymbol(handle, "RecordReplayOnMouseEvent",
                          gRecordReplayOnMouseEvent);
   RecordReplayLoadSymbol(handle, "RecordReplayOnKeyEvent",
