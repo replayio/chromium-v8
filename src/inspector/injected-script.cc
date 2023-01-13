@@ -52,14 +52,14 @@
 #include "src/inspector/v8-value-utils.h"
 #include "src/inspector/value-mirror.h"
 
+#include "v8.h"
+
 namespace v8 {
   namespace internal {
     extern int RecordReplayObjectId(v8::Isolate* isolate, Local<v8::Context> cx,
                                     v8::Local<v8::Value> object, bool allow_create);
   }
 }
-
-extern "C" bool V8RecordReplayHasDivergedFromRecording();
 
 namespace v8_inspector {
 
@@ -1139,7 +1139,7 @@ Response InjectedScript::bindRemoteObjectIfNeeded(
     // Persistent IDs are not tracked when recording by default, so they are only
     // provided when the CDP is being used to inspect state while replaying and
     // diverged from the recording.
-    if (V8RecordReplayHasDivergedFromRecording()) {
+    if (v8::recordreplay::HasDivergedFromRecording()) {
       int persistentId = v8::internal::RecordReplayObjectId(isolate, context, value,
                                                             /* allow_create */ false);
       if (persistentId) {

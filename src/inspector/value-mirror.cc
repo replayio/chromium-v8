@@ -23,7 +23,7 @@
 #include "src/inspector/v8-value-utils.h"
 #include "src/inspector/v8-webdriver-serializer.h"
 
-extern "C" bool V8RecordReplayHasDivergedFromRecording();
+#include "v8.h"
 
 namespace v8_inspector {
 
@@ -1670,7 +1670,7 @@ std::unique_ptr<ValueMirror> ValueMirror::create(v8::Local<v8::Context> context,
   if (value->IsSymbol()) {
     return std::make_unique<SymbolMirror>(value.As<v8::Symbol>());
   }
-  if (!V8RecordReplayHasDivergedFromRecording()) {
+  if (!v8::recordreplay::HasDivergedFromRecording()) {
     auto clientSubtype = (value->IsUndefined() || value->IsObject())
                             ? clientFor(context)->valueSubtype(value)
                             : nullptr;

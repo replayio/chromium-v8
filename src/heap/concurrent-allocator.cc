@@ -183,6 +183,8 @@ ConcurrentAllocator::AllocateFromSpaceFreeList(size_t min_size_in_bytes,
          origin == AllocationOrigin::kGC);
   DCHECK_IMPLIES(!local_heap_, origin == AllocationOrigin::kGC);
 
+  recordreplay::AutoDisallowEvents disallow;
+
   base::Optional<std::pair<Address, size_t>> result =
       space_->TryAllocationFromFreeListBackground(min_size_in_bytes,
                                                   max_size_in_bytes, origin);
