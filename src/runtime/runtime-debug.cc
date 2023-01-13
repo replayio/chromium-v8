@@ -952,11 +952,9 @@ extern bool gRecordReplayAssertProgress;
 
 extern bool RecordReplayHasRegisteredScript(Script script);
 
-extern "C" bool V8RecordReplayHasDivergedFromRecording();
-
 static inline bool RecordReplayBytecodeAllowed() {
   return IsMainThread()
-      && (!recordreplay::AreEventsDisallowed() || V8RecordReplayHasDivergedFromRecording());
+      && (!recordreplay::AreEventsDisallowed() || recordreplay::HasDivergedFromRecording());
 }
 
 #else // !RECORD_REPLAY_CHECK_OPCODES

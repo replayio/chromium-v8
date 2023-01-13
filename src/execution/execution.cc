@@ -17,8 +17,6 @@
 #include "src/wasm/wasm-engine.h"
 #endif  // V8_ENABLE_WEBASSEMBLY
 
-extern "C" bool V8RecordReplayHasDivergedFromRecording();
-
 namespace v8 {
 namespace internal {
 
@@ -387,7 +385,7 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
         // Ignore the script execution callback when running scripts to inspect
         // state while recording/replaying.
         !recordreplay::AreEventsDisallowed() &&
-        !V8RecordReplayHasDivergedFromRecording()) {
+        !recordreplay::HasDivergedFromRecording()) {
       v8::Context::AbortScriptExecutionCallback callback =
           v8::ToCData<v8::Context::AbortScriptExecutionCallback>(
               context->script_execution_callback());
