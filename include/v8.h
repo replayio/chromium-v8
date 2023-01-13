@@ -111,11 +111,15 @@ static void OrderedUnlock(int lock);
 static void InvalidateRecording(const char* why);
 static void NewCheckpoint();
 
-static bool AreEventsDisallowed();
 static void BeginPassThroughEvents();
 static void EndPassThroughEvents();
+static bool AreEventsPassedThrough();
+
 static void BeginDisallowEvents();
 static void EndDisallowEvents();
+static bool AreEventsDisallowed();
+
+static bool HasDivergedFromRecording();
 
 struct AutoPassThroughEvents {
   AutoPassThroughEvents() { BeginPassThroughEvents(); }

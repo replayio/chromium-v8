@@ -10671,6 +10671,7 @@ static void (*gRecordReplayAssertBytes)(const char* why, const void* ptr, size_t
 static void (*gRecordReplayBytes)(const char* why, void* buf, size_t size);
 static uintptr_t (*gRecordReplayValue)(const char* why, uintptr_t v);
 static bool (*gRecordReplayAreEventsDisallowed)();
+static bool (*gRecordReplayAreEventsPassedThrough)();
 static void (*gRecordReplayProgressReached)();
 static void (*gRecordReplayTriggerProgressInterrupt)();
 static void (*gRecordReplayBeginPassThroughEvents)();
@@ -10972,6 +10973,9 @@ static const char* gRecordReplayKnownFeatures[] = {
   // Behavior changes in places when events are disallowed.
   "disallow-events",
 
+  // Behavior changes in places when events are passed through.
+  "pass-through-events",
+
   // Don't compile "use asm" scripts as wasm.
   "no-asm-wasm",
 
@@ -11220,8 +11224,19 @@ extern "C" bool V8RecordReplayAreEventsDisallowed() {
   return recordreplay::AreEventsDisallowed();
 }
 
+bool recordreplay::AreEventsPassedThrough() {
+  if (IsRecordingOrReplaying("pass-through-events")) {
+    return gRecordReplayAreEventsPassedThrough();
+  }
+  return false;
+}
+
+extern "C" bool V8RecordReplayAreEventsPassedThrough() {
+  return recordreplay::AreEventsPassedThrough();
+}
+
 void recordreplay::BeginPassThroughEvents() {
-  if (IsRecordingOrReplaying()) {
+  if (IsRecordingOrReplaying("pass-through-events")) {
     gRecordReplayBeginPassThroughEvents();
   }
 }
@@ -11231,7 +11246,7 @@ extern "C" void V8RecordReplayBeginPassThroughEvents() {
 }
 
 void recordreplay::EndPassThroughEvents() {
-  if (IsRecordingOrReplaying()) {
+  if (IsRecordingOrReplaying("pass-through-events")) {
     gRecordReplayEndPassThroughEvents();
   }
 }
@@ -11361,11 +11376,15 @@ extern "C" bool V8IsRecording() {
   return recordreplay::IsRecording();
 }
 
-extern "C" bool V8RecordReplayHasDivergedFromRecording() {
+bool recordreplay::HasDivergedFromRecording() {
   if (recordreplay::IsRecordingOrReplaying()) {
     return gRecordReplayHasDivergedFromRecording();
   }
   return false;
+}
+
+extern "C" bool V8RecordReplayHasDivergedFromRecording() {
+  return recordreplay::HasDivergedFromRecording();
 }
 
 void recordreplay::RegisterPointer(const char* name, const void* ptr) {
@@ -11669,6 +11688,7 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   RecordReplayLoadSymbol(handle, "RecordReplayValue", gRecordReplayValue);
   RecordReplayLoadSymbol(handle, "RecordReplayOnInstrument", gRecordReplayOnInstrument);
   RecordReplayLoadSymbol(handle, "RecordReplayAreEventsDisallowed", gRecordReplayAreEventsDisallowed);
+  RecordReplayLoadSymbol(handle, "RecordReplayAreEventsPassedThrough", gRecordReplayAreEventsPassedThrough);
   RecordReplayLoadSymbol(handle, "RecordReplayProgressReached", gRecordReplayProgressReached);
   RecordReplayLoadSymbol(handle, "RecordReplayTriggerProgressInterrupt", gRecordReplayTriggerProgressInterrupt);
   RecordReplayLoadSymbol(handle, "RecordReplayBeginPassThroughEvents", gRecordReplayBeginPassThroughEvents);
