@@ -250,6 +250,27 @@ v8::MaybeLocal<v8::Value> DebugStackTraceIterator::Evaluate(
   return Utils::ToLocal(value);
 }
 
+MaybeLocal<v8::Value> DebugStackTraceIterator::GetFrameArguments() {
+  i::SafeForInterruptsScope safe_for_interrupt_scope(isolate_);
+  StackFrameId frame_id = iterator_.frame()->id();
+  StackTraceFrameIterator it(isolate, frame_id);
+  if (it.is_javascript()) {
+    JavaScriptFrame* frame = it.javascript_frame();
+    recordreplay::Print("DDBG GetFrameArguments [...arguments] 1");
+    Handle<JSObject> args = Accessors::FunctionGetArguments(frame, 0);
+    MaybeHandle<Object> maybe_result(args);
+    recordreplay::Print("DDBG GetFrameArguments [...arguments] 2");
+
+    Handle<Object> value;
+    if (maybe_result.ToHandle(&value)) {
+      return Utils::ToLocal(value);
+    }
+    isolate_->OptionalRescheduleException(false);
+  }
+
+  return v8::MaybeLocal<v8::Value>();
+}
+
 StackFrameId DebugStackTraceIterator::FrameId() {
   DCHECK(!Done());
   return iterator_.frame()->id();

@@ -130,6 +130,10 @@ class V8DebuggerAgentImpl : public protocol::Debugger::Backend {
       Maybe<double> timeout,
       std::unique_ptr<protocol::Runtime::RemoteObject>* result,
       Maybe<protocol::Runtime::ExceptionDetails>*) override;
+
+  v8::MaybeLocal<v8::Value> V8DebuggerAgentImpl::getArgumentsOfCallFrame(
+    const String16& callFrameId);
+
   Response setVariableValue(
       int scopeNumber, const String16& variableName,
       std::unique_ptr<protocol::Runtime::CallArgument> newValue,

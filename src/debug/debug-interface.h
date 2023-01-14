@@ -499,6 +499,8 @@ class V8_EXPORT_PRIVATE StackTraceIterator {
   virtual v8::MaybeLocal<v8::Value> Evaluate(v8::Local<v8::String> source,
                                              bool throw_on_side_effect) = 0;
 
+  virtual MaybeHandle<Object> GetFrameArguments() = 0;
+
   virtual internal::StackFrameId FrameId() = 0;
   virtual int InlineFrameIndex() = 0;
 };
