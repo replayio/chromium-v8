@@ -511,9 +511,8 @@ void V8InspectorSessionImpl::resume(bool terminateOnResume) {
 
 void V8InspectorSessionImpl::stepOver() { m_debuggerAgent->stepOver({}); }
 
-v8::MaybeLocal<v8::Value> V8InspectorSessionImpl::getArgumentsOfCallFrame(
-    const String16& callFrameId) {
-  return m_debuggerAgent->getArgumentsOfCallFrame(callFrameId);
+v8::MaybeLocal<v8::Value> V8InspectorSessionImpl::getArgumentsOfCallFrame(StringView callFrameId) {
+  return m_debuggerAgent->getArgumentsOfCallFrame(toString16(callFrameId));
 }
 
 std::vector<std::unique_ptr<
