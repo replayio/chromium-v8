@@ -131,7 +131,7 @@ class V8DebuggerAgentImpl : public protocol::Debugger::Backend {
       std::unique_ptr<protocol::Runtime::RemoteObject>* result,
       Maybe<protocol::Runtime::ExceptionDetails>*) override;
 
-  v8::MaybeLocal<v8::Value> V8DebuggerAgentImpl::getArgumentsOfCallFrame(
+  v8::MaybeLocal<v8::Value> getArgumentsOfCallFrame(
     const String16& callFrameId);
 
   Response setVariableValue(

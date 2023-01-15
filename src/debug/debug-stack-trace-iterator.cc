@@ -253,7 +253,7 @@ v8::MaybeLocal<v8::Value> DebugStackTraceIterator::Evaluate(
 MaybeLocal<v8::Value> DebugStackTraceIterator::GetFrameArguments() {
   i::SafeForInterruptsScope safe_for_interrupt_scope(isolate_);
   StackFrameId frame_id = iterator_.frame()->id();
-  StackTraceFrameIterator it(isolate, frame_id);
+  StackTraceFrameIterator it(isolate_, frame_id);
   if (it.is_javascript()) {
     JavaScriptFrame* frame = it.javascript_frame();
     recordreplay::Print("DDBG GetFrameArguments [...arguments] 1");

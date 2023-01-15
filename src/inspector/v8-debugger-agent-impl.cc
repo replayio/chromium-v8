@@ -1470,9 +1470,9 @@ v8::MaybeLocal<v8::Value> V8DebuggerAgentImpl::getArgumentsOfCallFrame(
   InjectedScript::CallFrameScope scope(m_session, callFrameId);
   Response response = scope.initialize();
   if (!response.IsSuccess()) {
-    recordreplay::Print(
-        "[RuntimeError] getArgumentsOfCallFrame failed (Code: %d): %s",
-        response.Code(), response.Message().c_str());
+    // recordreplay::Print(
+    //     "[RuntimeError] getArgumentsOfCallFrame failed (Code: %d): %s",
+    //     response.Code(), response.Message().c_str());
     v8::MaybeLocal<v8::Value> emptyValue;
     return emptyValue;
   }
