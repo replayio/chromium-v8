@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <string.h>
-
 #include "src/debug/debug-evaluate.h"
 
 #include "src/builtins/accessors.h"
@@ -127,14 +125,12 @@ MaybeHandle<Object> DebugEvaluate::Local(Isolate* isolate,
 
   Handle<Context> context = context_builder.evaluation_context();
   Handle<JSObject> receiver(context->global_proxy(), isolate);
-
   MaybeHandle<Object> maybe_result =
       Evaluate(isolate, context_builder.outer_info(), context, receiver, source,
                throw_on_side_effect);
   if (!maybe_result.is_null()) context_builder.UpdateValues();
   return maybe_result;
 }
-
 
 MaybeHandle<Object> DebugEvaluate::WithTopmostArguments(Isolate* isolate,
                                                         Handle<String> source) {
