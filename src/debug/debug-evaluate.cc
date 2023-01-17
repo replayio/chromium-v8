@@ -128,27 +128,6 @@ MaybeHandle<Object> DebugEvaluate::Local(Isolate* isolate,
   Handle<Context> context = context_builder.evaluation_context();
   Handle<JSObject> receiver(context->global_proxy(), isolate);
 
-  if (recordreplay::IsReplaying()) {
-    // [replay] hackfix `arguments`
-    //    -> https://linear.app/replay/issue/RUN-1061#comment-803ef520
-
-    // copy only part of the source (we don't care about the whole thing)
-    int srcLen;
-    std::unique_ptr<char[]> src = source->ToCString(
-        AllowNullsFlag::DISALLOW_NULLS, RobustnessFlag::ROBUST_STRING_TRAVERSAL,
-        0, 20, &srcLen);
-    recordreplay::Print("DDBG evaluateOnFrame 0 %s", src.get());
-    if (!strcmp(src.get(), "[...arguments]")) {
-      // -> early out hackfix
-      // TODO: ideally, convert to array first
-      recordreplay::Print("DDBG evaluateOnFrame [...arguments] 1");
-      Handle<JSObject> args = Accessors::FunctionGetArguments(frame, 0);
-      MaybeHandle<Object> maybe_result(args);
-      recordreplay::Print("DDBG evaluateOnFrame [...arguments] 2");
-      return maybe_result;
-    }
-  }
-
   MaybeHandle<Object> maybe_result =
       Evaluate(isolate, context_builder.outer_info(), context, receiver, source,
                throw_on_side_effect);
