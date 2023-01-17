@@ -256,10 +256,8 @@ MaybeLocal<v8::Value> DebugStackTraceIterator::GetFrameArguments() {
   StackTraceFrameIterator it(isolate_, frame_id);
   if (it.is_javascript()) {
     JavaScriptFrame* frame = it.javascript_frame();
-    recordreplay::Print("DDBG GetFrameArguments [...arguments] 1");
     Handle<JSObject> args = Accessors::FunctionGetArguments(frame, 0);
     MaybeHandle<Object> maybe_result(args);
-    recordreplay::Print("DDBG GetFrameArguments [...arguments] 2");
 
     Handle<Object> value;
     if (maybe_result.ToHandle(&value)) {
