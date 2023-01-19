@@ -2390,6 +2390,8 @@ void Heap::CompleteSweepingYoung(GarbageCollector collector) {
 }
 
 void Heap::EnsureSweepingCompletedForObject(HeapObject object) {
+  recordreplay::AutoDisallowEvents disallow;
+
   if (!sweeping_in_progress()) return;
 
   BasicMemoryChunk* basic_chunk = BasicMemoryChunk::FromHeapObject(object);
