@@ -10677,6 +10677,7 @@ static void (*gRecordReplayTriggerProgressInterrupt)();
 static void (*gRecordReplayBeginPassThroughEvents)();
 static void (*gRecordReplayEndPassThroughEvents)();
 static void (*gRecordReplayBeginDisallowEvents)();
+static void (*gRecordReplayBeginDisallowEventsWithLabel)(const char* label);
 static void (*gRecordReplayEndDisallowEvents)();
 static size_t (*gRecordReplayCreateOrderedLock)(const char* name);
 static void (*gRecordReplayOrderedLock)(int lock);
@@ -11261,8 +11262,18 @@ void recordreplay::BeginDisallowEvents() {
   }
 }
 
+void recordreplay::BeginDisallowEventsWithLabel(const char* label) {
+  if (IsRecordingOrReplaying()) {
+    gRecordReplayBeginDisallowEventsWithLabel(label);
+  }
+}
+
 extern "C" void V8RecordReplayBeginDisallowEvents() {
   recordreplay::BeginDisallowEvents();
+}
+
+extern "C" void V8RecordReplayBeginDisallowEventsWithLabel(const char* label) {
+  recordreplay::BeginDisallowEventsWithLabel(label);
 }
 
 void recordreplay::EndDisallowEvents() {
@@ -11694,6 +11705,7 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   RecordReplayLoadSymbol(handle, "RecordReplayBeginPassThroughEvents", gRecordReplayBeginPassThroughEvents);
   RecordReplayLoadSymbol(handle, "RecordReplayEndPassThroughEvents", gRecordReplayEndPassThroughEvents);
   RecordReplayLoadSymbol(handle, "RecordReplayBeginDisallowEvents", gRecordReplayBeginDisallowEvents);
+  RecordReplayLoadSymbol(handle, "RecordReplayBeginDisallowEventsWithLabel", gRecordReplayBeginDisallowEventsWithLabel);
   RecordReplayLoadSymbol(handle, "RecordReplayEndDisallowEvents", gRecordReplayEndDisallowEvents);
   RecordReplayLoadSymbol(handle, "RecordReplayInvalidateRecording", gRecordReplayInvalidateRecording);
   RecordReplayLoadSymbol(handle, "RecordReplayNewCheckpoint", gRecordReplayNewCheckpoint);

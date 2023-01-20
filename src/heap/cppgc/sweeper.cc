@@ -809,7 +809,7 @@ class Sweeper::SweeperImpl final {
 
   bool SweepForAllocationIfRunning(NormalPageSpace* space, size_t size,
                                    v8::base::TimeDelta max_duration) {
-    v8::recordreplay::AutoDisallowEvents disallow;
+    v8::recordreplay::AutoDisallowEvents disallow("Sweeper::SweepForAllocationIfRunning");
 
     if (!is_in_progress_) return false;
 

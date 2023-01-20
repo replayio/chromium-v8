@@ -259,7 +259,7 @@ void LocalHeap::ParkSlowPath() {
 }
 
 void LocalHeap::UnparkSlowPath() {
-  recordreplay::AutoDisallowEvents disallow;
+  recordreplay::AutoDisallowEvents disallow("LocalHeap::UnparkSlowPath");
 
   while (true) {
     ThreadState current_state = ThreadState::Parked();
@@ -321,7 +321,7 @@ void LocalHeap::EnsureParkedBeforeDestruction() {
 }
 
 void LocalHeap::SafepointSlowPath() {
-  recordreplay::AutoDisallowEvents disallow;
+  recordreplay::AutoDisallowEvents disallow("LocalHeap::SafepointSlowPath");
 
   ThreadState current_state = state_.load_relaxed();
   DCHECK(current_state.IsRunning());
