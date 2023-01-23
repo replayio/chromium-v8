@@ -146,8 +146,7 @@ class V8DebuggerAgentImpl : public protocol::Debugger::Backend {
   Response getCallFrames(
       std::unique_ptr<protocol::Array<protocol::Debugger::CallFrame>>* out_callFrames) override;
   Response getTopFrameLocation(Maybe<protocol::Debugger::Location>* out_location) override;
-  Response getPendingException(
-      std::unique_ptr<protocol::Runtime::RemoteObject>* out_exception) override;
+  Response getPendingException(Maybe<protocol::Runtime::RemoteObject>* out_exception) override;
 
   bool enabled() const { return m_enabled; }
 
