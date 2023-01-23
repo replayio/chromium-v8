@@ -11025,6 +11025,9 @@ static const char* gRecordReplayKnownFeatures[] = {
   // Page timing metrics are not sent at non-deterministic points.
   "no-page-timing-metrics",
 
+  // Disable the interactive detector related metrics, which can behave non-deterministically.
+  "no-interactive-detector",
+
   // Notify the recorder about paints.
   "notify-paints",
 
