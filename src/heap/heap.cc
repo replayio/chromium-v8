@@ -2390,7 +2390,7 @@ void Heap::CompleteSweepingYoung(GarbageCollector collector) {
 }
 
 void Heap::EnsureSweepingCompletedForObject(HeapObject object) {
-  recordreplay::AutoDisallowEvents disallow;
+  recordreplay::AutoDisallowEvents disallow("Heap::EnsureSweepingCompletedForObject");
 
   if (!sweeping_in_progress()) return;
 
@@ -7307,7 +7307,7 @@ void Heap::FinishSweepingIfOutOfWork() {
 }
 
 void Heap::EnsureSweepingCompleted(SweepingForcedFinalizationMode mode) {
-  recordreplay::AutoDisallowEvents disallow;
+  recordreplay::AutoDisallowEvents disallow("Heap::EnsureSweepingCompleted");
 
   if (sweeper()->sweeping_in_progress()) {
     TRACE_GC_EPOCH(tracer(), GCTracer::Scope::MC_COMPLETE_SWEEPING,
