@@ -7307,6 +7307,8 @@ void Heap::FinishSweepingIfOutOfWork() {
 }
 
 void Heap::EnsureSweepingCompleted(SweepingForcedFinalizationMode mode) {
+  recordreplay::AutoDisallowEvents disallow;
+
   if (sweeper()->sweeping_in_progress()) {
     TRACE_GC_EPOCH(tracer(), GCTracer::Scope::MC_COMPLETE_SWEEPING,
                    ThreadKind::kMain);
