@@ -188,6 +188,9 @@ class V8_EXPORT V8InspectorSession {
   virtual void setSkipAllPauses(bool) = 0;
   virtual void resume(bool setTerminateOnResume = false) = 0;
   virtual void stepOver() = 0;
+
+  virtual v8::MaybeLocal<v8::Value> getArgumentsOfCallFrame(StringView callFrameId) = 0;
+
   virtual std::vector<std::unique_ptr<protocol::Debugger::API::SearchMatch>>
   searchInTextByLines(StringView text, StringView query, bool caseSensitive,
                       bool isRegex) = 0;
