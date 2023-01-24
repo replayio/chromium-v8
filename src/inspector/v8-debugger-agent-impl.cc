@@ -1463,6 +1463,31 @@ Response V8DebuggerAgentImpl::evaluateOnCallFrame(
       throwOnSideEffect.fromMaybe(false), result, exceptionDetails);
 }
 
+// [replay] Always offer `arguments`, even if not usually available.
+//   -> https://linear.app/replay/issue/RUN-1061#comment-fc1c3ee4
+v8::MaybeLocal<v8::Value> V8DebuggerAgentImpl::getArgumentsOfCallFrame(
+    const String16& callFrameId) {
+  InjectedScript::CallFrameScope scope(m_session, callFrameId);
+  Response response = scope.initialize();
+  if (!response.IsSuccess()) {
+    v8::MaybeLocal<v8::Value> emptyValue;
+    return emptyValue;
+  }
+
+  int frameOrdinal = static_cast<int>(scope.frameOrdinal());
+  auto it = v8::debug::StackTraceIterator::Create(m_isolate, frameOrdinal);
+  if (it->Done()) {
+    // could not find frame
+    v8::MaybeLocal<v8::Value> emptyValue;
+    return emptyValue;
+  }
+
+  {
+    V8InspectorImpl::EvaluateScope evaluateScope(scope);
+    return it->GetFrameArguments();
+  }
+}
+
 Response V8DebuggerAgentImpl::setVariableValue(
     int scopeNumber, const String16& variableName,
     std::unique_ptr<protocol::Runtime::CallArgument> newValueArgument,

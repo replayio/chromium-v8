@@ -83,6 +83,9 @@ class V8InspectorSessionImpl : public V8InspectorSession,
   void setSkipAllPauses(bool) override;
   void resume(bool terminateOnResume = false) override;
   void stepOver() override;
+
+  v8::MaybeLocal<v8::Value> getArgumentsOfCallFrame(StringView callFrameId) override;
+
   std::vector<std::unique_ptr<protocol::Debugger::API::SearchMatch>>
   searchInTextByLines(StringView text, StringView query, bool caseSensitive,
                       bool isRegex) override;

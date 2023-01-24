@@ -511,9 +511,14 @@ void V8InspectorSessionImpl::resume(bool terminateOnResume) {
 
 void V8InspectorSessionImpl::stepOver() { m_debuggerAgent->stepOver({}); }
 
-std::vector<std::unique_ptr<protocol::Debugger::API::SearchMatch>>
-V8InspectorSessionImpl::searchInTextByLines(StringView text, StringView query,
-                                            bool caseSensitive, bool isRegex) {
+v8::MaybeLocal<v8::Value> V8InspectorSessionImpl::getArgumentsOfCallFrame(StringView callFrameId) {
+  return m_debuggerAgent->getArgumentsOfCallFrame(toString16(callFrameId));
+}
+
+std::vector<std::unique_ptr<
+    protocol::Debugger::API::SearchMatch>> V8InspectorSessionImpl::
+    searchInTextByLines(StringView text, StringView query, bool caseSensitive,
+                        bool isRegex) {
   // TODO(dgozman): search may operate on StringView and avoid copying |text|.
   std::vector<std::unique_ptr<protocol::Debugger::SearchMatch>> matches =
       searchInTextByLinesImpl(this, toString16(text), toString16(query),
