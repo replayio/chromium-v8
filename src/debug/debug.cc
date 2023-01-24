@@ -3654,7 +3654,7 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
 
       base::Optional<recordreplay::AutoDisallowEvents> disallow;
       if (disallowEvents) {
-        disallow.emplace();
+        disallow.emplace("RecordReplayRegisterScript");
       }
 
       Local<v8::Value> handlerValue = handlerEternalValue->Get((v8::Isolate*)isolate);
@@ -3708,7 +3708,7 @@ static void EnsureIsolateContext(Isolate* isolate, base::Optional<SaveAndSwitchC
 
 char* CommandCallback(const char* command, const char* params) {
   CHECK(IsMainThread());
-  recordreplay::AutoDisallowEvents disallow;
+  recordreplay::AutoDisallowEvents disallow("CommandCallback");
 
   Isolate* isolate = Isolate::Current();
   base::Optional<SaveAndSwitchContext> ssc;
@@ -3761,7 +3761,7 @@ static Eternal<Value>* gClearPauseDataCallback;
 
 void ClearPauseDataCallback() {
   CHECK(IsMainThread());
-  recordreplay::AutoDisallowEvents disallow;
+  recordreplay::AutoDisallowEvents disallow("ClearPauseDataCallback");
 
   if (!gClearPauseDataCallback) {
     return;

@@ -1590,7 +1590,7 @@ Heap::DevToolsTraceEventScope::~DevToolsTraceEventScope() {
 bool Heap::CollectGarbage(AllocationSpace space,
                           GarbageCollectionReason gc_reason,
                           const v8::GCCallbackFlags gc_callback_flags) {
-  recordreplay::AutoDisallowEvents disallow;
+  recordreplay::AutoDisallowEvents disallow("Heap::CollectGarbage");
   if (V8_UNLIKELY(!deserialization_complete_)) {
     // During isolate initialization heap always grows. GC is only requested
     // if a new page allocation fails. In such a case we should crash with
@@ -2390,6 +2390,8 @@ void Heap::CompleteSweepingYoung(GarbageCollector collector) {
 }
 
 void Heap::EnsureSweepingCompletedForObject(HeapObject object) {
+  recordreplay::AutoDisallowEvents disallow("Heap::EnsureSweepingCompletedForObject");
+
   if (!sweeping_in_progress()) return;
 
   BasicMemoryChunk* basic_chunk = BasicMemoryChunk::FromHeapObject(object);
@@ -4027,7 +4029,7 @@ void Heap::CollectGarbageOnMemoryPressure() {
 
 void Heap::MemoryPressureNotification(MemoryPressureLevel level,
                                       bool is_isolate_locked) {
-  recordreplay::AutoDisallowEvents disallow;
+  recordreplay::AutoDisallowEvents disallow("Heap::MemoryPressureNotification");
 
   TRACE_EVENT1("devtools.timeline,v8", "V8.MemoryPressureNotification", "level",
                static_cast<int>(level));
@@ -5071,7 +5073,7 @@ bool Heap::ShouldOptimizeForLoadTime() {
 // - either we need to optimize for memory usage,
 // - or the incremental marking is not in progress and we cannot start it.
 bool Heap::ShouldExpandOldGenerationOnSlowAllocation(LocalHeap* local_heap) {
-  recordreplay::AutoDisallowEvents disallow;
+  recordreplay::AutoDisallowEvents disallow("Heap::ShouldExpandOldGenerationOnSlowAllocation");
 
   if (always_allocate() || OldGenerationSpaceAvailable() > 0) return true;
   // We reached the old generation allocation limit.
@@ -5663,7 +5665,7 @@ void Heap::NotifyBootstrapComplete() {
 
 void Heap::NotifyOldGenerationExpansion(AllocationSpace space,
                                         MemoryChunk* chunk) {
-  recordreplay::AutoDisallowEvents disallow;
+  recordreplay::AutoDisallowEvents disallow("Heap::NotifyOldGenerationExpansion");
 
   // Pages created during bootstrapping may contain immortal immovable objects.
   if (!deserialization_complete()) {
@@ -7305,6 +7307,8 @@ void Heap::FinishSweepingIfOutOfWork() {
 }
 
 void Heap::EnsureSweepingCompleted(SweepingForcedFinalizationMode mode) {
+  recordreplay::AutoDisallowEvents disallow("Heap::EnsureSweepingCompleted");
+
   if (sweeper()->sweeping_in_progress()) {
     TRACE_GC_EPOCH(tracer(), GCTracer::Scope::MC_COMPLETE_SWEEPING,
                    ThreadKind::kMain);
