@@ -10711,6 +10711,7 @@ static void* (*gJSONCreateObject)(size_t, const char**, void**);
 static char* (*gJSONToString)(void*);
 static void (*gJSONFree)(void*);
 static void (*gRecordReplayOnAnnotation)(const char* kind, const char* contents);
+static void (*gRecordReplayAddPossibleBreakpoint)(int line, int column, const char* function_id, int offset);
 static void (*gRecordReplayOnEvent)(const char* aEvent, bool aBefore);
 static void (*gRecordReplayOnMouseEvent)(const char* aKind, size_t aClientX,
                                          size_t aClientY);
@@ -10819,6 +10820,7 @@ void RecordReplayInstrument(const char* kind, const char* function, int offset) 
 }
 
 extern void TrackObjectsCallback(bool track_objects);
+extern void RecordReplayGetPossibleBreakpointsCallback(const char* source_id);
 
 extern char* CommandCallback(const char* command, const char* params);
 extern void ClearPauseDataCallback();
@@ -11523,6 +11525,14 @@ extern "C" void V8RecordReplayOnAnnotation(const char* kind, const char* content
   }
 }
 
+namespace internal {
+
+void RecordReplayAddPossibleBreakpoint(int line, int column, const char* function_id, int offset) {
+  gRecordReplayAddPossibleBreakpoint(line, column, function_id, offset);
+}
+
+} // namespace internal
+
 extern "C" void V8RecordReplayOnEvent(const char* aEvent, bool aBefore) {
   DCHECK(recordreplay::IsRecordingOrReplaying());
   if (!internal::gRecordReplayHasCheckpoint) {
@@ -11742,6 +11752,7 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   RecordReplayLoadSymbol(handle, "RecordReplayJSONToString", gJSONToString);
   RecordReplayLoadSymbol(handle, "RecordReplayJSONFree", gJSONFree);
   RecordReplayLoadSymbol(handle, "RecordReplayOnAnnotation", gRecordReplayOnAnnotation);
+  RecordReplayLoadSymbol(handle, "RecordReplayAddPossibleBreakpoint", gRecordReplayAddPossibleBreakpoint);
 
   RecordReplayLoadSymbol(handle, "RecordReplayOnEvent",
                          gRecordReplayOnEvent);
@@ -11789,6 +11800,10 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   void (*setTrackObjectsCallback)(void (*aCallback)(bool aTrackObjects));
   RecordReplayLoadSymbol(handle, "RecordReplaySetTrackObjectsCallback", setTrackObjectsCallback);
   setTrackObjectsCallback(internal::TrackObjectsCallback);
+
+  void (*setPossibleBreakpointsCallback)(void (*aCallback)(const char*));
+  RecordReplayLoadSymbol(handle, "RecordReplaySetPossibleBreakpointsCallback", setPossibleBreakpointsCallback);
+  setPossibleBreakpointsCallback(internal::RecordReplayGetPossibleBreakpointsCallback);
 
   internal::gRecordReplayAssertValues = !!getenv("RECORD_REPLAY_JS_ASSERTS");
   internal::gRecordReplayAssertProgress =

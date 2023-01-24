@@ -3277,7 +3277,6 @@ static void GenerateBreakpointInfo(Isolate* isolate, Handle<Script> script) {
 
 static Handle<Object> RecordReplayGetPossibleBreakpoints(Isolate* isolate,
                                                          Handle<Object> params) {
-
   std::vector<std::vector<int>> lineColumns;
   int numLines = 0;
 
@@ -3320,6 +3319,42 @@ static Handle<Object> RecordReplayGetPossibleBreakpoints(Isolate* isolate,
   Handle<JSObject> rv = NewPlainObject(isolate);
   SetProperty(isolate, rv, "lineLocations", lineLocationsArray);
   return rv;
+}
+
+extern void RecordReplayAddPossibleBreakpoint(int line, int column, const char* function_id, int offset);
+
+static void EnsureIsolateContext(Isolate* isolate, base::Optional<SaveAndSwitchContext>& ssc);
+
+void RecordReplayGetPossibleBreakpointsCallback(const char* script_id_str) {
+  Isolate* isolate = Isolate::Current();
+  base::Optional<SaveAndSwitchContext> ssc;
+  EnsureIsolateContext(isolate, ssc);
+
+  HandleScope scope(isolate);
+
+  int script_id = atoi(script_id_str);
+  MaybeHandle<Script> maybe_script = MaybeGetScript(isolate, script_id);
+
+  if (maybe_script.is_null()) {
+    return;
+  }
+
+  Handle<Script> script = maybe_script.ToHandleChecked();
+
+  ForEachInstrumentationOp(isolate, script, [&](Handle<SharedFunctionInfo> shared,
+                                                int instrumentation_index) {
+    if (strcmp(InstrumentationSiteKind(instrumentation_index), "breakpoint")) {
+      return;
+    }
+
+    int line, column;
+    GetInstrumentationSiteLocation(script, instrumentation_index, &line, &column);
+
+    int bytecode_offset = InstrumentationSiteBytecodeOffset(instrumentation_index);
+
+    std::string function_id = GetRecordReplayFunctionId(shared);
+    RecordReplayAddPossibleBreakpoint(line, column, function_id.c_str(), bytecode_offset);
+  });
 }
 
 Handle<Object> RecordReplayConvertLocationToFunctionOffset(Isolate* isolate,
