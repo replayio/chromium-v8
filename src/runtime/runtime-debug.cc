@@ -978,7 +978,7 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
     RecordReplayOnTargetProgressReached();
   }
 
-  if (!gRecordReplayAssertProgress) {
+  if (gProgressCounter > 100) {
     return ReadOnlyRoots(isolate).undefined_value();
   }
 
