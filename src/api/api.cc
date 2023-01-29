@@ -10976,6 +10976,9 @@ static const char* gRecordReplayKnownFeatures[] = {
   // Behavior changes in places when events are disallowed.
   "disallow-events",
 
+  // Use strong pointers instead of weak pointers in certain places.
+  "avoid-weak-pointers",
+
   // Behavior changes in places when events are passed through.
   "pass-through-events",
 
