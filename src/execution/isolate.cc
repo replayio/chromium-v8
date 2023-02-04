@@ -1971,6 +1971,11 @@ Object Isolate::UnwindAndFindHandler() {
   // handler handles such non-wasm exceptions.
   SetThreadInWasmFlagScope set_thread_in_wasm_flag_scope;
 #endif  // V8_ENABLE_WEBASSEMBLY
+
+  // hackfix: pending_exception disappears sometimes, but we don't want to crash.
+  // https://linear.app/replay/issue/RUN-1258/[superblocks]-had-18-recording-crashes-in-the-past-week
+  if (!has_pending_exception()) return ReadOnlyRoots(this).undefined_value();
+
   Object exception = pending_exception();
 
   auto FoundHandler = [&](Context context, Address instruction_start,
