@@ -1972,11 +1972,11 @@ Object Isolate::UnwindAndFindHandler() {
   SetThreadInWasmFlagScope set_thread_in_wasm_flag_scope;
 #endif  // V8_ENABLE_WEBASSEMBLY
 
-  // hackfix: pending_exception disappears sometimes, but we don't want to crash.
-  // https://linear.app/replay/issue/RUN-1258/[superblocks]-had-18-recording-crashes-in-the-past-week
-  if (!has_pending_exception()) return ReadOnlyRoots(this).undefined_value();
-
-  Object exception = pending_exception();
+  // hackfix: pending_exception disappears sometimes, but we don't want to
+  // crash. - https://linear.app/replay/issue/RUN-1258/
+  Object exception = has_pending_exception()
+                         ? pending_exception()
+                         : ReadOnlyRoots(this).undefined_value();
 
   auto FoundHandler = [&](Context context, Address instruction_start,
                           intptr_t handler_offset,
@@ -2004,7 +2004,7 @@ Object Isolate::UnwindAndFindHandler() {
 
   // Special handling of termination exceptions, uncatchable by JavaScript and
   // Wasm code, we unwind the handlers until the top ENTRY handler is found.
-  bool catchable_by_js = is_catchable_by_javascript(exception);
+  bool catchable_by_js = !!exception && is_catchable_by_javascript(exception);
   if (!catchable_by_js && !context().is_null()) {
     // Because the array join stack will not pop the elements when throwing the
     // uncatchable terminate exception, we need to clear the array join stack to
