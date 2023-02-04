@@ -11059,6 +11059,12 @@ static const char* gRecordReplayKnownFeatures[] = {
 
   // Use optimizing JIT compiler.
   "use-optimizing-jit",
+
+  // Send certain event information to render thread.
+  "browser-event",
+
+  // Record/replay events are turned off by default (for now) (RUN-1251)
+  "disable-collect-events"
 };
 
 static inline void RecordReplayCheckKnownFeature(const char* feature) {
