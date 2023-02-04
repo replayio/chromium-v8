@@ -2004,7 +2004,7 @@ Object Isolate::UnwindAndFindHandler() {
 
   // Special handling of termination exceptions, uncatchable by JavaScript and
   // Wasm code, we unwind the handlers until the top ENTRY handler is found.
-  bool catchable_by_js = !!exception && is_catchable_by_javascript(exception);
+  bool catchable_by_js = is_catchable_by_javascript(exception);
   if (!catchable_by_js && !context().is_null()) {
     // Because the array join stack will not pop the elements when throwing the
     // uncatchable terminate exception, we need to clear the array join stack to
