@@ -55,7 +55,9 @@ bool OSHasAVXSupport() {
   // All replaying happens on linux so skip macOS checks in that case which
   // interact with the system.
   if (recordreplay::IsReplaying()) {
-    goto fallback;
+    // Check whether OS claims to support AVX.
+    uint64_t feature_mask = xgetbv(0);  // XCR_XFEATURE_ENABLED_MASK
+    return (feature_mask & 0x6) == 0x6;
   }
 
 #if V8_OS_DARWIN
@@ -75,8 +77,6 @@ bool OSHasAVXSupport() {
   long kernel_version_major = strtol(buffer, nullptr, 10);  // NOLINT
   if (kernel_version_major <= 13) return false;
 #endif  // V8_OS_DARWIN
-
-fallback:
 
   // Check whether OS claims to support AVX.
   uint64_t feature_mask = xgetbv(0);  // XCR_XFEATURE_ENABLED_MASK
