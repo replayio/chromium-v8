@@ -10951,12 +10951,12 @@ extern void RecordReplayInitInstrumentationState();
 
 } // namespace internal
 
-static std::vector<std::string>* gRecordReplayDisabledFeatures;
+static std::set<std::string>* gRecordReplayDisabledFeatures;
 
 // Known features which can be disabled via RECORD_REPLAY_DISABLE_FEATURES.
 // Used to catch misspellings when testing if a feature is enabled or specifying
 // disabled features.
-static const char* gRecordReplayKnownFeatures[] = {
+static std::set<std::string> gRecordReplayKnownFeatures = {
   // Disable all tests for whether we are recording/replaying.
   "record-replay",
 
@@ -11067,14 +11067,17 @@ static const char* gRecordReplayKnownFeatures[] = {
   "disable-collect-events"
 };
 
+static std::set<std::string> gExperimentalFlags = {
+  "disable-collect-events"
+};
+
 static inline void RecordReplayCheckKnownFeature(const char* feature) {
-  for (const char* known : gRecordReplayKnownFeatures) {
-    if (!strcmp(known, feature)) {
-      return;
-    }
+  std::string sFeature(feature);
+  // TODO: fixme
+  if (gRecordReplayKnownFeatures.find(sFeature) == gRecordReplayKnownFeatures.end()) {
+    fprintf(stderr, "UnknownFeature %s\n", feature);
+    recordreplay::Print("UnknownFeature %s", feature);
   }
-  fprintf(stderr, "UnknownFeature %s\n", feature);
-  recordreplay::Print("UnknownFeature %s", feature);
 }
 
 bool recordreplay::FeatureEnabled(const char* feature) {
@@ -11082,10 +11085,9 @@ bool recordreplay::FeatureEnabled(const char* feature) {
     return true;
   }
 
-  for (const std::string& disabled : *gRecordReplayDisabledFeatures) {
-    if (disabled == feature) {
-      return false;
-    }
+  std::string sFeature(feature);
+  if (gRecordReplayDisabledFeatures->find(sFeature) == gRecordReplayDisabledFeatures->end()) {
+    return false;
   }
 
   RecordReplayCheckKnownFeature(feature);
@@ -11105,21 +11107,33 @@ static const char* GetDisabledFeatureSpecifier() {
   return getenv("RECORD_REPLAY_DISABLE_FEATURES");
 }
 
+static bool GetTestEnvironmentFlag() {
+  auto* sTestEnvironment = getenv("RECORD_REPLAY_TEST_ENVIRONMENT");
+  return sTestEnvironment && !strcmp(sTestEnvironment, "1");
+}
+
 static void RecordReplayInitializeDisabledFeatures() {
   const char* env = GetDisabledFeatureSpecifier();
+  auto isTestEnvironment = GetTestEnvironmentFlag();
+
+  gRecordReplayDisabledFeatures = new std::set<std::string>();
+
+  if (isTestEnvironment) {
+    // TODO: add gExperimentalFlags
+  }
+  
   if (!env) {
     return;
   }
 
-  gRecordReplayDisabledFeatures = new std::vector<std::string>();
   while (true) {
     const char* sep = strchr(env, ',');
     if (sep) {
-      gRecordReplayDisabledFeatures->emplace_back(env, sep - env);
+      gRecordReplayDisabledFeatures->emplace(env, sep - env);
       env = sep + 1;
     } else {
       if (strlen(env)) {
-        gRecordReplayDisabledFeatures->emplace_back(env);
+        gRecordReplayDisabledFeatures->emplace(env);
       }
       break;
     }
