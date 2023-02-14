@@ -10956,7 +10956,7 @@ static std::set<std::string>* gRecordReplayDisabledFeatures;
 // Known features which can be disabled via RECORD_REPLAY_DISABLE_FEATURES.
 // Used to catch misspellings when testing if a feature is enabled or specifying
 // disabled features.
-static std::set<std::string> gRecordReplayKnownFeatures = {
+static std::set<std::string>* gRecordReplayKnownFeatures = new std::set<std::string>({
   // Disable all tests for whether we are recording/replaying.
   "record-replay",
 
@@ -11065,16 +11065,18 @@ static std::set<std::string> gRecordReplayKnownFeatures = {
 
   // Record/replay events are turned off by default (for now) (RUN-1251)
   "disable-collect-events"
-};
+});
 
-static std::set<std::string> gExperimentalFlags = {
+// The set of all experimental flags pertaining to features we are currently developing.
+// Ideally, this should always be a short list.
+// NOTE: These should generally be "double-negative" flags which we need to convert to positive in the near future.
+static std::vector<std::string>* gExperimentalFlags = new std::vector<std::string>({
   "disable-collect-events"
-};
+});
 
 static inline void RecordReplayCheckKnownFeature(const char* feature) {
   std::string sFeature(feature);
-  // TODO: fixme
-  if (gRecordReplayKnownFeatures.find(sFeature) == gRecordReplayKnownFeatures.end()) {
+  if (gRecordReplayKnownFeatures->find(sFeature) == gRecordReplayKnownFeatures->end()) {
     fprintf(stderr, "UnknownFeature %s\n", feature);
     recordreplay::Print("UnknownFeature %s", feature);
   }
@@ -11119,7 +11121,9 @@ static void RecordReplayInitializeDisabledFeatures() {
   gRecordReplayDisabledFeatures = new std::set<std::string>();
 
   if (isTestEnvironment) {
-    // TODO: add gExperimentalFlags
+    for (auto& experimentalFeature : *gExperimentalFlags) {
+      gRecordReplayDisabledFeatures->insert(experimentalFeature);
+    }
   }
   
   if (!env) {
@@ -11571,7 +11575,6 @@ extern "C" void V8RecordReplayOnMouseEvent(const char* kind, size_t clientX,
   if (!internal::gRecordReplayHasCheckpoint) {
     return;
   }
-  // TODO: make sure event name (kind) is correct
   gRecordReplayOnMouseEvent(kind, clientX, clientY);
 }
 
@@ -11580,7 +11583,6 @@ extern "C" void V8RecordReplayOnKeyEvent(const char* kind, const char* key) {
   if (!internal::gRecordReplayHasCheckpoint) {
     return;
   }
-  // TODO: make sure event name (kind) is correct
   gRecordReplayOnKeyEvent(kind, key);
 }
 
@@ -11589,9 +11591,6 @@ extern "C" void V8RecordReplayOnNavigationEvent(const char* kind, const char* ur
   if (!internal::gRecordReplayHasCheckpoint) {
     return;
   }
-  // TODO: double check empty urls, about: urls, chrome: urls etc.
-  //  → compare w/
-  //  https://github.com/replayio/gecko-dev/blob/67254b1846b996c69063082ada18c54ceebfbe6d/toolkit/recordreplay/ProcessRecordReplay.cpp#L966
   gRecordReplayOnNavigationEvent(kind, url);
 }
 
