@@ -11088,7 +11088,7 @@ bool recordreplay::FeatureEnabled(const char* feature) {
   }
 
   std::string sFeature(feature);
-  if (gRecordReplayDisabledFeatures->find(sFeature) == gRecordReplayDisabledFeatures->end()) {
+  if (gRecordReplayDisabledFeatures->find(sFeature) != gRecordReplayDisabledFeatures->end()) {
     return false;
   }
 
