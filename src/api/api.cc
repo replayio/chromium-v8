@@ -11875,7 +11875,6 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   // Log disabled features.
   if (gRecordReplayDisabledFeatures) {
     for (const std::string& feature : *gRecordReplayDisabledFeatures) {
-      fprintf(stderr, "RecordReplayDisabledFeature %s\n", feature.c_str());
       RecordReplayCheckKnownFeature(feature.c_str());
     }
   }
