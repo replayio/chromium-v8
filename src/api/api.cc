@@ -11110,7 +11110,9 @@ static const char* GetDisabledFeatureSpecifier() {
 }
 
 static bool GetTestEnvironmentFlag() {
-  return !!getenv("RECORD_REPLAY_TEST_ENVIRONMENT");
+  auto* sTestEnvironment = getenv("RECORD_REPLAY_TEST_ENVIRONMENT");
+  // check is based on Util.cpp
+  return sTestEnvironment && sTestEnvironment[0] && sTestEnvironment[0] != '0';
 }
 
 static void RecordReplayInitializeDisabledFeatures() {
