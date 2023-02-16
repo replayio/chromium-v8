@@ -11111,7 +11111,7 @@ static const char* GetDisabledFeatureSpecifier() {
 
 static bool GetTestEnvironmentFlag() {
   auto* sTestEnvironment = getenv("RECORD_REPLAY_TEST_ENVIRONMENT");
-  // check is based on Util.cpp
+  // check is based on TestEnv in Utils.cpp
   return sTestEnvironment && sTestEnvironment[0] && sTestEnvironment[0] != '0';
 }
 
