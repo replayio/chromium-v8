@@ -11070,9 +11070,9 @@ static std::set<std::string>* gRecordReplayKnownFeatures = new std::set<std::str
 // The set of all experimental flags pertaining to features we are currently developing.
 // Ideally, this should always be a short list.
 // NOTE: These should generally be "double-negative" flags which we need to convert to positive in the near future.
-static std::vector<std::string>* gExperimentalFlags = new std::vector<std::string>({
+static const char* gExperimentalFlags[] = {
   "disable-collect-events"
-});
+};
 
 static inline void RecordReplayCheckKnownFeature(const char* feature) {
   std::string sFeature(feature);
@@ -11110,8 +11110,7 @@ static const char* GetDisabledFeatureSpecifier() {
 }
 
 static bool GetTestEnvironmentFlag() {
-  auto* sTestEnvironment = getenv("RECORD_REPLAY_TEST_ENVIRONMENT");
-  return sTestEnvironment && !strcmp(sTestEnvironment, "1");
+  return !!getenv("RECORD_REPLAY_TEST_ENVIRONMENT");
 }
 
 static void RecordReplayInitializeDisabledFeatures() {
@@ -11121,7 +11120,7 @@ static void RecordReplayInitializeDisabledFeatures() {
   gRecordReplayDisabledFeatures = new std::set<std::string>();
 
   if (isTestEnvironment) {
-    for (auto& experimentalFeature : *gExperimentalFlags) {
+    for (auto* experimentalFeature : gExperimentalFlags) {
       gRecordReplayDisabledFeatures->insert(experimentalFeature);
     }
   }
@@ -11875,6 +11874,7 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   // Log disabled features.
   if (gRecordReplayDisabledFeatures) {
     for (const std::string& feature : *gRecordReplayDisabledFeatures) {
+      fprintf(stderr, "RecordReplayDisabledFeature %s\n", feature.c_str());
       RecordReplayCheckKnownFeature(feature.c_str());
     }
   }
