@@ -30,13 +30,21 @@ namespace trap_handler {
 // which the dynamic loader cannot handle executables whose TLS area is only
 // 1 byte in size; see https://sourceware.org/bugzilla/show_bug.cgi?id=14898.
 
+#if V8_OS_WIN
+
 thread_local int g_thread_in_wasm_code2;
 
-int& IsThreadInWasmCode() {
-  if (!recordreplay::IsRecordingOrReplaying()) {
-    return g_thread_in_wasm_code2;
-  }
+static_assert(sizeof(g_thread_in_wasm_code2) > 1,
+              "sizeof(thread_local_var) must be > 1, see "
+              "https://sourceware.org/bugzilla/show_bug.cgi?id=14898");
 
+int& IsThreadInWasmCode() {
+  return g_thread_in_wasm_code2;
+}
+
+#else // V8_OS_WIN
+
+int& IsThreadInWasmCode() {
   static pthread_key_t key;
   if (!key) {
     int rv = pthread_key_create(&key, nullptr);
@@ -52,9 +60,7 @@ int& IsThreadInWasmCode() {
   return *v;
 }
 
-static_assert(sizeof(g_thread_in_wasm_code) > 1,
-              "sizeof(thread_local_var) must be > 1, see "
-              "https://sourceware.org/bugzilla/show_bug.cgi?id=14898");
+#endif // V8_OS_WIN
 
 size_t gNumCodeObjects = 0;
 CodeProtectionInfoListEntry* gCodeObjects = nullptr;

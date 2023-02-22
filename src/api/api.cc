@@ -11,7 +11,6 @@
 #include <string>
 #include <utility>  // For move
 #include <vector>
-#include <unistd.h>
 
 #include "include/v8-callbacks.h"
 #include "include/v8-cppgc.h"
@@ -172,7 +171,10 @@
 // Has to be the last include (doesn't have include guards):
 #include "src/api/api-macros.h"
 
+#if !V8_OS_WIN
+#include <unistd.h>
 #include <dlfcn.h>
+#endif
 
 extern const char* gCrashReason;
 
@@ -10682,7 +10684,11 @@ static void (*gRecordReplayEndDisallowEvents)();
 static size_t (*gRecordReplayCreateOrderedLock)(const char* name);
 static void (*gRecordReplayOrderedLock)(int lock);
 static void (*gRecordReplayOrderedUnlock)(int lock);
+#if !V8_OS_WIN
 static void (*gRecordReplayAddOrderedPthreadMutex)(const char* name, pthread_mutex_t* mutex);
+#else
+static void (*gRecordReplayAddOrderedSRWLock)(const char* name, void* lock);
+#endif
 static void (*gRecordReplayInvalidateRecording)(const char* format, ...);
 static void (*gRecordReplayNewCheckpoint)();
 static bool (*gRecordReplayIsReplaying)();
@@ -11375,12 +11381,24 @@ extern "C" void V8RecordReplayOrderedUnlock(int lock) {
   recordreplay::OrderedUnlock(lock);
 }
 
+#if !V8_OS_WIN
+
 extern "C" void V8RecordReplayAddOrderedPthreadMutex(const char* name,
                                                      pthread_mutex_t* mutex) {
   if (recordreplay::IsRecordingOrReplaying()) {
     gRecordReplayAddOrderedPthreadMutex(name, mutex);
   }
 }
+
+#else // V8_OS_WIN
+
+extern "C" void V8RecordReplayAddOrderedSRWLock(const char* name, void* lock) {
+  if (recordreplay::IsRecordingOrReplaying()) {
+    gRecordReplayAddOrderedSRWLock(name, lock);
+  }
+}
+
+#endif // V8_OS_WIN
 
 bool recordreplay::IsReplaying() {
   if (IsRecordingOrReplaying()) {
@@ -11590,7 +11608,11 @@ static inline void CastPointer(const Src src, Dst* dst) {
 
 template <typename T>
 static void RecordReplayLoadSymbol(void* handle, const char* name, T& function) {
+#if V8_OS_WIN
+  void* sym = (void*)(GetProcAddress((HMODULE)handle, name));
+#else
   void* sym = dlsym(handle, name);
+#endif
   if (!sym) {
     fprintf(stderr, "Could not find %s in Record Replay driver, crashing.\n", name);
     IMMEDIATE_CRASH();
@@ -11692,7 +11714,11 @@ extern "C" V8_EXPORT void V8RecordReplayFinishRecording() {
         CHECK(internal::gMainThreadIsolate);
         auto runner = internal::V8::GetCurrentPlatform()->GetForegroundTaskRunner((Isolate*)internal::gMainThreadIsolate);
         runner->PostTask(std::make_unique<FinishRecordingTask>());
+#if V8_OS_WIN
+        Sleep(UINT32_MAX);
+#else
         sleep(UINT32_MAX);
+#endif
       }
     } else {
       recordreplay::InvalidateRecording("No interesting content");
@@ -11700,13 +11726,21 @@ extern "C" V8_EXPORT void V8RecordReplayFinishRecording() {
   }
 }
 
+#if V8_OS_WIN
+static DWORD gMainThread;
+#else
 static pthread_t gMainThread;
+#endif
 
 void recordreplay::SetRecordingOrReplaying(void* handle) {
   RecordReplayInitializeDisabledFeatures();
 
   gRecordingOrReplaying = V8RecordReplayFeatureEnabled("record-replay");
+#if V8_OS_WIN
+  gMainThread = GetCurrentThreadId();
+#else
   gMainThread = pthread_self();
+#endif
 
   RecordReplayLoadSymbol(handle, "RecordReplayRememberRecording", gRecordReplayRememberRecording);
   RecordReplayLoadSymbol(handle, "RecordReplayOnNewSource", gRecordReplayOnNewSource);
@@ -11734,7 +11768,11 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   RecordReplayLoadSymbol(handle, "RecordReplayCreateOrderedLock", gRecordReplayCreateOrderedLock);
   RecordReplayLoadSymbol(handle, "RecordReplayOrderedLock", gRecordReplayOrderedLock);
   RecordReplayLoadSymbol(handle, "RecordReplayOrderedUnlock", gRecordReplayOrderedUnlock);
+#if !V8_OS_WIN
   RecordReplayLoadSymbol(handle, "RecordReplayAddOrderedPthreadMutex", gRecordReplayAddOrderedPthreadMutex);
+#else
+  RecordReplayLoadSymbol(handle, "RecordReplayAddOrderedSRWLock", gRecordReplayAddOrderedSRWLock);
+#endif
   RecordReplayLoadSymbol(handle, "RecordReplayIsReplaying", gRecordReplayIsReplaying);
   RecordReplayLoadSymbol(handle, "RecordReplayHasDivergedFromRecording", gRecordReplayHasDivergedFromRecording);
   RecordReplayLoadSymbol(handle, "RecordReplayRegisterPointerWithName", gRecordReplayRegisterPointerWithName);
@@ -11882,7 +11920,11 @@ extern "C" void V8InitializeNotRecordingOrReplaying() {
 }
 
 bool IsMainThread() {
+#if V8_OS_WIN
+  return gMainThread == GetCurrentThreadId();
+#else
   return gMainThread == pthread_self();
+#endif
 }
 
 extern "C" bool V8IsMainThread() {
