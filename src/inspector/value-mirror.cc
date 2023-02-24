@@ -1391,7 +1391,9 @@ bool ValueMirror::getProperties(v8::Local<v8::Context> context,
 
   int i = 0;
   while (!iterator->Done()) {
-    if (v8::recordreplay::HasDivergedFromRecording() && ++i > 1000) {
+    if (v8::recordreplay::HasDivergedFromRecording() &&
+        // allow for overflow (+1)
+        ++i > 1001) {
       // Quick-and-dirty fix for slow Pause object queries + getAllFrames (RUN-1315)
       v8::recordreplay::Print("[RuntimeWarning] ValueMirror::getProperties overflow break");
       break;
