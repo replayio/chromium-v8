@@ -109,11 +109,14 @@ class KeyAccumulator final {
                                      IndexedOrNamed type);
 
   Maybe<bool> CollectOwnElementIndices(Handle<JSReceiver> receiver,
-                                       Handle<JSObject> object);
+                                       Handle<JSObject> object,
+                                       const KeyIterationParams* params);
   Maybe<bool> CollectOwnPropertyNames(Handle<JSReceiver> receiver,
-                                      Handle<JSObject> object);
+                                      Handle<JSObject> object,
+                                      const KeyIterationParams* params);
   Maybe<bool> CollectOwnKeys(Handle<JSReceiver> receiver,
-                             Handle<JSObject> object);
+                             Handle<JSObject> object,
+                             const KeyIterationParams* params);
   Maybe<bool> CollectOwnJSProxyKeys(Handle<JSReceiver> receiver,
                                     Handle<JSProxy> proxy);
   Maybe<bool> CollectOwnJSProxyTargetKeys(Handle<JSProxy> proxy,

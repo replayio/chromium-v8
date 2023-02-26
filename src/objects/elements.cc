@@ -86,6 +86,8 @@ namespace internal {
 
 namespace {
 
+static KeyIterationParams kDefaultKeyIterationParams(0, 0);
+
 #define RETURN_NOTHING_IF_NOT_SUCCESSFUL(call) \
   do {                                         \
     if (!(call)) return Nothing<bool>();       \
@@ -1167,21 +1169,21 @@ class ElementsAccessorBase : public InternalElementsAccessor {
 
   V8_WARN_UNUSED_RESULT ExceptionStatus CollectElementIndices(
       Handle<JSObject> object, Handle<FixedArrayBase> backing_store,
-      KeyAccumulator* keys) final {
+      KeyAccumulator* keys, const KeyIterationParams* params) final {
     if (keys->filter() & ONLY_ALL_CAN_READ) return ExceptionStatus::kSuccess;
-    return Subclass::CollectElementIndicesImpl(object, backing_store, keys);
+    return Subclass::CollectElementIndicesImpl(object, backing_store, keys, params);
   }
 
   V8_WARN_UNUSED_RESULT static ExceptionStatus CollectElementIndicesImpl(
       Handle<JSObject> object, Handle<FixedArrayBase> backing_store,
-      KeyAccumulator* keys) {
+      KeyAccumulator* keys, const KeyIterationParams* params) {
     DCHECK_NE(DICTIONARY_ELEMENTS, kind());
     // Non-dictionary elements can't have all-can-read accessors.
     size_t length = Subclass::GetMaxIndex(*object, *backing_store);
     PropertyFilter filter = keys->filter();
     Isolate* isolate = keys->isolate();
     Factory* factory = isolate->factory();
-    for (size_t i = 0; i < length; i++) {
+    for (size_t i = params->keyFirstIndex(); i < params->keyEndIndex(length); i++) {
       if (Subclass::HasElementImpl(isolate, *object, i, *backing_store,
                                    filter)) {
         RETURN_FAILURE_IF_NOT_SUCCESSFUL(
@@ -1195,13 +1197,13 @@ class ElementsAccessorBase : public InternalElementsAccessor {
       Isolate* isolate, Handle<JSObject> object,
       Handle<FixedArrayBase> backing_store, GetKeysConversion convert,
       PropertyFilter filter, Handle<FixedArray> list, uint32_t* nof_indices,
+      const KeyIterationParams* params = &kDefaultKeyIterationParams,
       uint32_t insertion_index = 0) {
     size_t length = Subclass::GetMaxIndex(*object, *backing_store);
     uint32_t const kMaxStringTableEntries =
         isolate->heap()->MaxNumberToStringCacheSize();
     
-    // TODO: record-replay performance fix
-    for (size_t i = 0; i < length; i++) {
+    for (size_t i = params->keyFirstIndex(); i < params->keyEndIndex(length); i++) {
       if (Subclass::HasElementImpl(isolate, *object, i, *backing_store,
                                    filter)) {
         if (convert == GetKeysConversion::kConvertToString) {
@@ -1650,17 +1652,17 @@ class DictionaryElementsAccessor
 
   V8_WARN_UNUSED_RESULT static ExceptionStatus CollectElementIndicesImpl(
       Handle<JSObject> object, Handle<FixedArrayBase> backing_store,
-      KeyAccumulator* keys) {
+      KeyAccumulator* keys, const KeyIterationParams* params) {
     if (keys->filter() & SKIP_STRINGS) return ExceptionStatus::kSuccess;
     Isolate* isolate = keys->isolate();
     Handle<NumberDictionary> dictionary =
         Handle<NumberDictionary>::cast(backing_store);
     Handle<FixedArray> elements = isolate->factory()->NewFixedArray(
-        GetMaxNumberOfEntries(*object, *backing_store));
+        (int)params->pageSize(GetMaxNumberOfEntries(*object, *backing_store)));
     int insertion_index = 0;
     PropertyFilter filter = keys->filter();
     ReadOnlyRoots roots(isolate);
-    for (InternalIndex i : dictionary->IterateEntries()) {
+    for (InternalIndex i : dictionary->IterateEntries(params)) {
       AllowGarbageCollection allow_gc;
       Object raw_key = dictionary->KeyAt(isolate, i);
       if (!dictionary->IsKey(roots, raw_key)) continue;
@@ -1684,16 +1686,14 @@ class DictionaryElementsAccessor
       Isolate* isolate, Handle<JSObject> object,
       Handle<FixedArrayBase> backing_store, GetKeysConversion convert,
       PropertyFilter filter, Handle<FixedArray> list, uint32_t* nof_indices,
+      const KeyIterationParams* params = &kDefaultKeyIterationParams,
       uint32_t insertion_index = 0) {
     if (filter & SKIP_STRINGS) return list;
     if (filter & ONLY_ALL_CAN_READ) return list;
 
     Handle<NumberDictionary> dictionary =
         Handle<NumberDictionary>::cast(backing_store);
-
-
-    // TODO: record-replay performance fix
-    for (InternalIndex i : dictionary->IterateEntries()) {
+    for (InternalIndex i : dictionary->IterateEntries(params)) {
       uint32_t key = GetKeyForEntryImpl(isolate, dictionary, i, filter);
       if (key == kMaxUInt32) continue;
       Handle<Object> index = isolate->factory()->NewNumberFromUint(key);
@@ -4657,14 +4657,14 @@ class SloppyArgumentsElementsAccessor
 
   V8_WARN_UNUSED_RESULT static ExceptionStatus CollectElementIndicesImpl(
       Handle<JSObject> object, Handle<FixedArrayBase> backing_store,
-      KeyAccumulator* keys) {
+      KeyAccumulator* keys, const KeyIterationParams* params) {
     Isolate* isolate = keys->isolate();
     uint32_t nof_indices = 0;
     Handle<FixedArray> indices = isolate->factory()->NewFixedArray(
-        GetCapacityImpl(*object, *backing_store));
+        params->pageSize(GetCapacityImpl(*object, *backing_store)));
     DirectCollectElementIndicesImpl(isolate, object, backing_store,
                                     GetKeysConversion::kKeepNumbers,
-                                    ENUMERABLE_STRINGS, indices, &nof_indices);
+                                    ENUMERABLE_STRINGS, indices, &nof_indices, params);
     SortIndices(isolate, indices, nof_indices);
     for (uint32_t i = 0; i < nof_indices; i++) {
       RETURN_FAILURE_IF_NOT_SUCCESSFUL(keys->AddKey(indices->get(i)));
@@ -4675,13 +4675,14 @@ class SloppyArgumentsElementsAccessor
   static Handle<FixedArray> DirectCollectElementIndicesImpl(
       Isolate* isolate, Handle<JSObject> object,
       Handle<FixedArrayBase> backing_store, GetKeysConversion convert,
-      PropertyFilter filter, Handle<FixedArray> list, uint32_t* nof_indices,
+      PropertyFilter filter, Handle<FixedArray> list, uint32_t* nof_indices, 
+      const KeyIterationParams* params,
       uint32_t insertion_index = 0) {
     Handle<SloppyArgumentsElements> elements =
         Handle<SloppyArgumentsElements>::cast(backing_store);
-    uint32_t length = elements->length();
+    uint32_t length = (uint32_t)params->pageSize(elements->length());
 
-    for (uint32_t i = 0; i < length; ++i) {
+    for (uint32_t i = (uint32_t)params->keyFirstIndex(); i < (uint32_t)params->keyEndIndex((size_t)length); ++i) {
       if (elements->mapped_entries(i, kRelaxedLoad).IsTheHole(isolate))
         continue;
       if (convert == GetKeysConversion::kConvertToString) {
@@ -4695,7 +4696,7 @@ class SloppyArgumentsElementsAccessor
 
     Handle<FixedArray> store(elements->arguments(), isolate);
     return ArgumentsAccessor::DirectCollectElementIndicesImpl(
-        isolate, object, store, convert, filter, list, nof_indices,
+        isolate, object, store, convert, filter, list, nof_indices, params
         insertion_index);
   }
 
@@ -5132,10 +5133,10 @@ class StringWrapperElementsAccessor
 
   V8_WARN_UNUSED_RESULT static ExceptionStatus CollectElementIndicesImpl(
       Handle<JSObject> object, Handle<FixedArrayBase> backing_store,
-      KeyAccumulator* keys) {
+      KeyAccumulator* keys, const KeyIterationParams* params) {
     uint32_t length = GetString(*object).length();
     Factory* factory = keys->isolate()->factory();
-    for (uint32_t i = 0; i < length; i++) {
+    for (uint32_t i = (uint32_t)params->keyFirstIndex(); i < (uint32_t)params->keyEndIndex((size_t)length); ++i) {
       RETURN_FAILURE_IF_NOT_SUCCESSFUL(
           keys->AddKey(factory->NewNumberFromUint(i)));
     }

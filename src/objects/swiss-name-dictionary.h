@@ -163,7 +163,8 @@ class V8_EXPORT_PRIVATE SwissNameDictionary : public HeapObject {
 
   class IndexIterable {
    public:
-    inline explicit IndexIterable(Handle<SwissNameDictionary> dict);
+    inline explicit IndexIterable(Handle<SwissNameDictionary> dict,
+                                  const KeyIterationParams* params = 0);
 
     inline IndexIterator begin();
     inline IndexIterator end();
@@ -172,10 +173,15 @@ class V8_EXPORT_PRIVATE SwissNameDictionary : public HeapObject {
     // This may be an empty handle, but only if the capacity of the table is
     // 0 and pointer compression is disabled.
     Handle<SwissNameDictionary> dict_;
+
+    // Start index constraint (if given).
+    InternalIndex first_;
+    // End index constraint (if given).
+    InternalIndex last_;
   };
 
-  inline IndexIterable IterateEntriesOrdered();
-  inline IndexIterable IterateEntries();
+  inline IndexIterable IterateEntriesOrdered(const KeyIterationParams* params);
+  inline IndexIterable IterateEntries(const KeyIterationParams* params);
 
   // For the given enumeration index, returns the entry (= bucket of the Swiss
   // Table) containing the data for the mapping with that enumeration index.

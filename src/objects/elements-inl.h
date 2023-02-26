@@ -16,7 +16,8 @@ namespace internal {
 
 V8_WARN_UNUSED_RESULT inline ExceptionStatus
 ElementsAccessor::CollectElementIndices(Handle<JSObject> object,
-                                        KeyAccumulator* keys) {
+                                        KeyAccumulator* keys,
+                                        const KeyIterationParams* params) {
   return CollectElementIndices(
       object, handle(object->elements(), keys->isolate()), keys);
 }

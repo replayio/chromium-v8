@@ -233,6 +233,43 @@ enum class KeyConversionMode { kConvertToString, kKeepNumbers, kNoNumbers };
 enum class IntegrityLevel { kFrozen, kSealed };
 
 /**
+ * [RecordReplay]
+ * Used to paginate keys for performance reasons (RUN-1315).
+ * This is currently only implemented as part of the debugger's `Runtime.getProperties`
+ * command. It is also not a guarantee on pagination, but purely a performance improvement.
+ * We apply these params in many scenarios where large key sets would slow things down a lot.
+ * NOTE: In the future, this can be updated to encapsulate all key query parameters
+ * in a single object (`KeyCollectionMode`, `IndexFilter` etc.).
+ */
+class KeyIterationParams;
+class KeyIterationParams {
+  size_t pageIndex_;
+  size_t pageSize_;
+
+public:
+  KeyIterationParams(size_t pageIndex_, size_t pageSize_)
+      : pageIndex_(pageIndex_), pageSize_(pageSize_) {}
+
+  size_t pageSize(size_t numberOfElements) {
+    return (bool)*this ? 
+           std::min(pageSize_, numberOfElements) :
+           numberOfElements;
+  }
+
+  size_t keyFirstIndex() {
+    return pageIndex_ * pageSize_;
+  }
+
+  size_t keyEndIndex(size_t numberOfElements) {
+    return (bool)*this ? 
+           std::min(keyFirstIndex() + pageSize_, numberOfElements) : 
+           numberOfElements;
+  }
+
+  operator bool() const { return pageSize_ > 0; }
+};
+
+/**
  * A JavaScript object (ECMA-262, 4.3.3)
  */
 class V8_EXPORT Object : public Value {
