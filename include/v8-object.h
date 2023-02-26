@@ -241,7 +241,6 @@ enum class IntegrityLevel { kFrozen, kSealed };
  * NOTE: In the future, this can be updated to encapsulate all key query parameters
  * in a single object (`KeyCollectionMode`, `IndexFilter` etc.).
  */
-class KeyIterationParams;
 class KeyIterationParams {
   size_t pageIndex_;
   size_t pageSize_;
