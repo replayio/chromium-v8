@@ -232,7 +232,6 @@ enum class KeyConversionMode { kConvertToString, kKeepNumbers, kNoNumbers };
  */
 enum class IntegrityLevel { kFrozen, kSealed };
 
-
 using KeyIterationIndex = int;
 
 /**

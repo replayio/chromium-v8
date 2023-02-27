@@ -927,7 +927,7 @@ ExceptionStatus CollectKeysFromDictionary(Handle<Dictionary> dictionary,
   Isolate* isolate = keys->isolate();
   ReadOnlyRoots roots(isolate);
 
-  size_t numberOfElements = params->pageSize(dictionary->NumberOfElements());
+  auto numberOfElements = params->pageSize((KeyIterationIndex)dictionary->NumberOfElements());
 
   // TODO(jkummerow): Consider using a std::unique_ptr<InternalIndex[]> instead.
   Handle<FixedArray> array =
