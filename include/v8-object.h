@@ -252,14 +252,14 @@ class KeyIterationParams {
   KeyIterationParams(KeyIterationIndex pageIndex_, KeyIterationIndex pageSize_)
       : pageIndex_(pageIndex_), pageSize_(pageSize_) {}
 
-  KeyIterationIndex pageSize(KeyIterationIndex numberOfElements) {
+  KeyIterationIndex pageSize(KeyIterationIndex numberOfElements) const {
     return ((bool)*this && pageSize_ < numberOfElements) ? pageSize_
                                                          : numberOfElements;
   }
 
-  KeyIterationIndex keyFirstIndex() { return pageIndex_ * pageSize_; }
+  KeyIterationIndex keyFirstIndex() const { return pageIndex_ * pageSize_; }
 
-  KeyIterationIndex keyEndIndex(KeyIterationIndex numberOfElements) {
+  KeyIterationIndex keyEndIndex(KeyIterationIndex numberOfElements) const {
     return ((bool)*this && (keyFirstIndex() + pageSize_) < numberOfElements)
                ? keyFirstIndex() + pageSize_
                : numberOfElements;

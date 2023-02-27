@@ -19,7 +19,7 @@ ElementsAccessor::CollectElementIndices(Handle<JSObject> object,
                                         KeyAccumulator* keys,
                                         const KeyIterationParams* params) {
   return CollectElementIndices(
-      object, handle(object->elements(), keys->isolate()), keys);
+      object, handle(object->elements(), keys->isolate()), keys, params);
 }
 
 inline MaybeHandle<FixedArray> ElementsAccessor::PrependElementIndices(
