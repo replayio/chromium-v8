@@ -232,6 +232,9 @@ enum class KeyConversionMode { kConvertToString, kKeepNumbers, kNoNumbers };
  */
 enum class IntegrityLevel { kFrozen, kSealed };
 
+
+using KeyIterationIndex = int;
+
 /**
  * [RecordReplay]
  * Used to paginate keys for performance reasons (RUN-1315).
@@ -242,27 +245,24 @@ enum class IntegrityLevel { kFrozen, kSealed };
  * in a single object (`KeyCollectionMode`, `IndexFilter` etc.).
  */
 class KeyIterationParams {
-  size_t pageIndex_;
-  size_t pageSize_;
+  KeyIterationIndex pageIndex_;
+  KeyIterationIndex pageSize_;
 
-public:
-  KeyIterationParams(size_t pageIndex_, size_t pageSize_)
+ public:
+  KeyIterationParams(KeyIterationIndex pageIndex_, KeyIterationIndex pageSize_)
       : pageIndex_(pageIndex_), pageSize_(pageSize_) {}
 
-  size_t pageSize(size_t numberOfElements) {
-    return (bool)*this ? 
-           std::min(pageSize_, numberOfElements) :
-           numberOfElements;
+  KeyIterationIndex pageSize(KeyIterationIndex numberOfElements) {
+    return ((bool)*this && pageSize_ < numberOfElements) ? pageSize_
+                                                         : numberOfElements;
   }
 
-  size_t keyFirstIndex() {
-    return pageIndex_ * pageSize_;
-  }
+  KeyIterationIndex keyFirstIndex() { return pageIndex_ * pageSize_; }
 
-  size_t keyEndIndex(size_t numberOfElements) {
-    return (bool)*this ? 
-           std::min(keyFirstIndex() + pageSize_, numberOfElements) : 
-           numberOfElements;
+  KeyIterationIndex keyEndIndex(KeyIterationIndex numberOfElements) {
+    return ((bool)*this && (keyFirstIndex() + pageSize_) < numberOfElements)
+               ? keyFirstIndex() + pageSize_
+               : numberOfElements;
   }
 
   operator bool() const { return pageSize_ > 0; }

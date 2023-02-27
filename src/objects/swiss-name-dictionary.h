@@ -175,9 +175,9 @@ class V8_EXPORT_PRIVATE SwissNameDictionary : public HeapObject {
     Handle<SwissNameDictionary> dict_;
 
     // Start index constraint (if given).
-    InternalIndex first_;
+    int first_;
     // End index constraint (if given).
-    InternalIndex last_;
+    int last_;
   };
 
   inline IndexIterable IterateEntriesOrdered(const KeyIterationParams* params);
