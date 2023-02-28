@@ -59,7 +59,8 @@ class KeyAccumulator final {
       Isolate* isolate, Handle<JSReceiver> object, KeyCollectionMode mode,
       PropertyFilter filter,
       GetKeysConversion keys_conversion = GetKeysConversion::kKeepNumbers,
-      bool is_for_in = false, bool skip_indices = false);
+      bool is_for_in = false, bool skip_indices = false,
+      const KeyIterationParams* params = KeyIterationParams::Default());
 
   Handle<FixedArray> GetKeys(
       GetKeysConversion convert = GetKeysConversion::kKeepNumbers);
@@ -86,6 +87,11 @@ class KeyAccumulator final {
   // The collection mode defines whether we collect the keys from the prototype
   // chain or only look at the receiver.
   KeyCollectionMode mode() { return mode_; }
+
+  const KeyIterationParams* key_indexing_params() const {
+    return key_iteration_params_;
+  }
+
   void set_skip_indices(bool value) { skip_indices_ = value; }
   // Shadowing keys are used to filter keys. This happens when non-enumerable
   // keys appear again on the prototype chain.
@@ -109,14 +115,11 @@ class KeyAccumulator final {
                                      IndexedOrNamed type);
 
   Maybe<bool> CollectOwnElementIndices(Handle<JSReceiver> receiver,
-                                       Handle<JSObject> object,
-                                       const KeyIterationParams* params);
+                                       Handle<JSObject> object);
   Maybe<bool> CollectOwnPropertyNames(Handle<JSReceiver> receiver,
-                                      Handle<JSObject> object,
-                                      const KeyIterationParams* params);
+                                      Handle<JSObject> object);
   Maybe<bool> CollectOwnKeys(Handle<JSReceiver> receiver,
-                             Handle<JSObject> object,
-                             const KeyIterationParams* params);
+                             Handle<JSObject> object);
   Maybe<bool> CollectOwnJSProxyKeys(Handle<JSReceiver> receiver,
                                     Handle<JSProxy> proxy);
   Maybe<bool> CollectOwnJSProxyTargetKeys(Handle<JSProxy> proxy,
@@ -157,7 +160,7 @@ class KeyAccumulator final {
   }
   void set_may_have_elements(bool value) { may_have_elements_ = value; }
   void set_key_indexing_params(const KeyIterationParams* params) {
-    key_indexing_params_ = params;
+    key_iteration_params_ = params;
   }
 
   Isolate* isolate_;
@@ -175,7 +178,7 @@ class KeyAccumulator final {
   bool skip_shadow_check_ = true;
   bool may_have_elements_ = true;
   bool try_prototype_info_cache_ = false;
-  const KeyIterationParams* key_indexing_params_ = KeyIterationParams::Default()
+  const KeyIterationParams* key_iteration_params_ = KeyIterationParams::Default();
 
   friend FastKeyAccumulator;
 };
@@ -207,12 +210,13 @@ class FastKeyAccumulator {
   MaybeHandle<FixedArray> GetKeys(
       GetKeysConversion convert = GetKeysConversion::kKeepNumbers);
 
- private:
-  void Prepare();
-  MaybeHandle<FixedArray> GetKeysFast(GetKeysConversion convert);
   MaybeHandle<FixedArray> GetKeysSlow(
       GetKeysConversion convert,
       const KeyIterationParams* params = KeyIterationParams::Default());
+
+ private:
+  void Prepare();
+  MaybeHandle<FixedArray> GetKeysFast(GetKeysConversion convert);
   MaybeHandle<FixedArray> GetKeysWithPrototypeInfoCache(
       GetKeysConversion convert);
 

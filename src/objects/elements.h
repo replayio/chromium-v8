@@ -81,12 +81,10 @@ class ElementsAccessor {
   // whose PropertyAttribute match |filter|.
   V8_WARN_UNUSED_RESULT virtual ExceptionStatus CollectElementIndices(
       Handle<JSObject> object, Handle<FixedArrayBase> backing_store,
-      KeyAccumulator* keys,
-      const KeyIterationParams* params) = 0;
+      KeyAccumulator* keys) = 0;
 
   V8_WARN_UNUSED_RESULT inline ExceptionStatus CollectElementIndices(
-      Handle<JSObject> object, KeyAccumulator* keys,
-      const KeyIterationParams* params);
+      Handle<JSObject> object, KeyAccumulator* keys);
 
   virtual Maybe<bool> CollectValuesOrEntries(
       Isolate* isolate, Handle<JSObject> object,

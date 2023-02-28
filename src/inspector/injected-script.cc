@@ -433,8 +433,8 @@ Response InjectedScript::getProperties(
   if (!ValueMirror::getProperties(context, object, ownProperties,
                                   accessorPropertiesOnly,
                                   nonIndexedPropertiesOnly,
-                                  params,
-                                  &accumulator)) {
+                                  &accumulator,
+                                  params)) {
     return createExceptionDetails(tryCatch, groupName, exceptionDetails);
   }
   for (const PropertyMirror& mirror : mirrors) {

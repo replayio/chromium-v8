@@ -78,8 +78,8 @@ class ValueMirror {
                             v8::Local<v8::Object> object, bool ownProperties,
                             bool accessorPropertiesOnly,
                             bool nonIndexedPropertiesOnly,
-                            const v8::KeyIterationParams* params,
-                            PropertyAccumulator* accumulator);
+                            PropertyAccumulator* accumulator,
+                            const v8::KeyIterationParams* params = v8::KeyIterationParams::Default());
   static void getInternalProperties(
       v8::Local<v8::Context> context, v8::Local<v8::Object> object,
       std::vector<InternalPropertyMirror>* mirrors);

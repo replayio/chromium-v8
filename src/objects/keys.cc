@@ -90,11 +90,12 @@ static Handle<FixedArray> CombineKeys(Isolate* isolate,
 MaybeHandle<FixedArray> KeyAccumulator::GetKeys(
     Isolate* isolate, Handle<JSReceiver> object, KeyCollectionMode mode,
     PropertyFilter filter, GetKeysConversion keys_conversion, bool is_for_in,
-    bool skip_indices) {
+    bool skip_indices,
+    const KeyIterationParams* params) {
   FastKeyAccumulator accumulator(isolate, object, mode, filter, is_for_in,
                                  skip_indices);
-  if (*key_indexing_params_) {
-    return accumulator.GetKeysSlow(keys_conversion, key_indexing_params_);
+  if (*params) {
+    return accumulator.GetKeysSlow(keys_conversion, params);
   }
   return accumulator.GetKeys(keys_conversion);
 }
@@ -758,7 +759,7 @@ Maybe<bool> KeyAccumulator::CollectOwnElementIndices(
 
   ElementsAccessor* accessor = object->GetElementsAccessor();
   RETURN_NOTHING_IF_NOT_SUCCESSFUL(
-      accessor->CollectElementIndices(object, this, key_indexing_params_));
+      accessor->CollectElementIndices(object, this));
   return CollectInterceptorKeys(receiver, object, kIndexed);
 }
 
@@ -907,7 +908,7 @@ Handle<FixedArray> GetOwnEnumPropertyDictionaryKeys(Isolate* isolate,
                                                     KeyAccumulator* accumulator,
                                                     Handle<JSObject> object,
                                                     T raw_dictionary,
-                                                    const KeyIterationParams* params) {
+                                                    const KeyIterationParams* params = KeyIterationParams::Default()) {
   Handle<T> dictionary(raw_dictionary, isolate);
   if (dictionary->NumberOfElements() == 0) {
     return isolate->factory()->empty_fixed_array();
@@ -1002,7 +1003,7 @@ Maybe<bool> KeyAccumulator::CollectOwnPropertyNames(Handle<JSReceiver> receiver,
   if (filter_ == ENUMERABLE_STRINGS) {
     Handle<FixedArray> enum_keys;
     // NOTE: KeyIterationParams currently don't support fast paths
-    if (object->HasFastProperties() && !*key_indexing_params_) {
+    if (object->HasFastProperties() && !*key_iteration_params_) {
       enum_keys = KeyAccumulator::GetOwnEnumPropertyKeys(isolate_, object);
       // If the number of properties equals the length of enumerable properties
       // we do not have to filter out non-enumerable ones
@@ -1024,15 +1025,15 @@ Maybe<bool> KeyAccumulator::CollectOwnPropertyNames(Handle<JSReceiver> receiver,
       enum_keys = GetOwnEnumPropertyDictionaryKeys(
           isolate_, mode_, this, object,
           JSGlobalObject::cast(*object).global_dictionary(kAcquireLoad),
-          key_indexing_params_);
+          key_iteration_params_);
     } else if (V8_ENABLE_SWISS_NAME_DICTIONARY_BOOL) {
       enum_keys = GetOwnEnumPropertyDictionaryKeys(
           isolate_, mode_, this, object, object->property_dictionary_swiss(),
-          key_indexing_params_);
+          key_iteration_params_);
     } else {
       enum_keys = GetOwnEnumPropertyDictionaryKeys(
           isolate_, mode_, this, object, object->property_dictionary(),
-          key_indexing_params_);
+          key_iteration_params_);
     }
     if (object->IsJSModuleNamespace()) {
       // Simulate [[GetOwnProperty]] for establishing enumerability, which
@@ -1048,7 +1049,7 @@ Maybe<bool> KeyAccumulator::CollectOwnPropertyNames(Handle<JSReceiver> receiver,
     }
     RETURN_NOTHING_IF_NOT_SUCCESSFUL(AddKeys(enum_keys, DO_NOT_CONVERT));
   } else {
-    if (object->HasFastProperties() && !*params) {
+    if (object->HasFastProperties() && !*key_iteration_params_) {
       int limit = object->map().NumberOfOwnDescriptors();
       Handle<DescriptorArray> descs(
           object->map().instance_descriptors(isolate_), isolate_);
@@ -1066,15 +1067,15 @@ Maybe<bool> KeyAccumulator::CollectOwnPropertyNames(Handle<JSReceiver> receiver,
           handle(JSGlobalObject::cast(*object).global_dictionary(kAcquireLoad),
                  isolate_),
           this,
-          key_indexing_params_));
+          key_iteration_params_));
     } else if (V8_ENABLE_SWISS_NAME_DICTIONARY_BOOL) {
       RETURN_NOTHING_IF_NOT_SUCCESSFUL(CollectKeysFromDictionary(
           handle(object->property_dictionary_swiss(), isolate_), this,
-          key_indexing_params_));
+          key_iteration_params_));
     } else {
       RETURN_NOTHING_IF_NOT_SUCCESSFUL(CollectKeysFromDictionary(
           handle(object->property_dictionary(), isolate_), this,
-          key_indexing_params_));
+          key_iteration_params_));
     }
   }
   // Add the property keys from the interceptor.
@@ -1178,18 +1179,15 @@ Handle<FixedArray> KeyAccumulator::GetOwnEnumPropertyKeys(
   } else if (object->IsJSGlobalObject()) {
     return GetOwnEnumPropertyDictionaryKeys(
         isolate, KeyCollectionMode::kOwnOnly, nullptr, object,
-        JSGlobalObject::cast(*object).global_dictionary(kAcquireLoad),
-        keyIndexingParams_);
+        JSGlobalObject::cast(*object).global_dictionary(kAcquireLoad));
   } else if (V8_ENABLE_SWISS_NAME_DICTIONARY_BOOL) {
     return GetOwnEnumPropertyDictionaryKeys(
         isolate, KeyCollectionMode::kOwnOnly, nullptr, object,
-        object->property_dictionary_swiss(),
-        keyIndexingParams_);
+        object->property_dictionary_swiss());
   } else {
     return GetOwnEnumPropertyDictionaryKeys(
         isolate, KeyCollectionMode::kOwnOnly, nullptr, object,
-        object->property_dictionary(), 
-        keyIndexingParams_);
+        object->property_dictionary());
   }
 }
 
