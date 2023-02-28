@@ -1197,7 +1197,7 @@ class ElementsAccessorBase : public InternalElementsAccessor {
       Isolate* isolate, Handle<JSObject> object,
       Handle<FixedArrayBase> backing_store, GetKeysConversion convert,
       PropertyFilter filter, Handle<FixedArray> list, uint32_t* nof_indices,
-      const KeyIterationParams* params = &kDefaultKeyIterationParams,
+      const KeyIterationParams* params = KeyIterationParams::Default(),
       uint32_t insertion_index = 0) {
     size_t length = Subclass::GetMaxIndex(*object, *backing_store);
     uint32_t const kMaxStringTableEntries =
@@ -1686,7 +1686,7 @@ class DictionaryElementsAccessor
       Isolate* isolate, Handle<JSObject> object,
       Handle<FixedArrayBase> backing_store, GetKeysConversion convert,
       PropertyFilter filter, Handle<FixedArray> list, uint32_t* nof_indices,
-      const KeyIterationParams* params = &kDefaultKeyIterationParams,
+      const KeyIterationParams* params = KeyIterationParams::Default(),
       uint32_t insertion_index = 0) {
     if (filter & SKIP_STRINGS) return list;
     if (filter & ONLY_ALL_CAN_READ) return list;

@@ -78,7 +78,8 @@ class V8_EXPORT_PRIVATE HashTableBase : public NON_EXPORTED_BASE(FixedArray) {
   // Returns the capacity of the hash table.
   inline int Capacity() const;
 
-  inline InternalIndex::Range IterateEntries() const;
+  inline InternalIndex::Range IterateEntries(
+      const KeyIterationParams* params = KeyIterationParams::Default()) const;
 
   // ElementAdded should be called whenever an element is added to a
   // hash table.

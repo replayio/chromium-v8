@@ -156,6 +156,9 @@ class KeyAccumulator final {
     last_non_empty_prototype_ = object;
   }
   void set_may_have_elements(bool value) { may_have_elements_ = value; }
+  void set_key_indexing_params(const KeyIterationParams* params) {
+    key_indexing_params_ = params;
+  }
 
   Isolate* isolate_;
   Handle<OrderedHashSet> keys_;
@@ -172,6 +175,7 @@ class KeyAccumulator final {
   bool skip_shadow_check_ = true;
   bool may_have_elements_ = true;
   bool try_prototype_info_cache_ = false;
+  const KeyIterationParams* key_indexing_params_ = KeyIterationParams::Default()
 
   friend FastKeyAccumulator;
 };
@@ -206,7 +210,9 @@ class FastKeyAccumulator {
  private:
   void Prepare();
   MaybeHandle<FixedArray> GetKeysFast(GetKeysConversion convert);
-  MaybeHandle<FixedArray> GetKeysSlow(GetKeysConversion convert);
+  MaybeHandle<FixedArray> GetKeysSlow(
+      GetKeysConversion convert,
+      const KeyIterationParams* params = KeyIterationParams::Default());
   MaybeHandle<FixedArray> GetKeysWithPrototypeInfoCache(
       GetKeysConversion convert);
 

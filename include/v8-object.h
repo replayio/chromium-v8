@@ -265,6 +265,11 @@ class KeyIterationParams {
   }
 
   operator bool() const { return pageSize_ > 0; }
+
+  static const KeyIterationParams* Default() {
+    static KeyIterationParams params(0, 0);
+    return &params;
+  }
 };
 
 /**

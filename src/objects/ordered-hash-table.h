@@ -113,8 +113,10 @@ class OrderedHashTable : public FixedArray {
     return Smi::ToInt(get(NumberOfBucketsIndex()));
   }
 
-  InternalIndex::Range IterateEntries() {
-    return InternalIndex::Range(UsedCapacity());
+  InternalIndex::Range IterateEntries(
+      const KeyIterationParams* params = KeyIterationParams::Default()) {
+    return InternalIndex::Range(params->keyFirstIndex(),
+                                params->keyEndIndex(UsedCapacity()));
   }
 
   // use IsKey to check if this is a deleted entry.
@@ -474,8 +476,10 @@ class SmallOrderedHashTable : public HeapObject {
 
   V8_INLINE Object KeyAt(InternalIndex entry) const;
 
-  InternalIndex::Range IterateEntries() {
-    return InternalIndex::Range(UsedCapacity());
+  InternalIndex::Range IterateEntries(
+      const KeyIterationParams* params = KeyIterationParams::Default()) {
+    return InternalIndex::Range(params->keyFirstIndex(),
+                                params->keyEndIndex(UsedCapacity()));
   }
 
   DECL_VERIFIER(SmallOrderedHashTable)

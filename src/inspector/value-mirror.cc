@@ -1359,6 +1359,7 @@ bool ValueMirror::getProperties(v8::Local<v8::Context> context,
                                 v8::Local<v8::Object> object,
                                 bool ownProperties, bool accessorPropertiesOnly,
                                 bool nonIndexedPropertiesOnly,
+                                const v8::KeyIterationParams* params,
                                 PropertyAccumulator* accumulator) {
   v8::Isolate* isolate = context->GetIsolate();
   v8::TryCatch tryCatch(isolate);
@@ -1383,7 +1384,7 @@ bool ValueMirror::getProperties(v8::Local<v8::Context> context,
   }
 
   auto iterator = v8::debug::PropertyIterator::Create(context, object,
-                                                      nonIndexedPropertiesOnly);
+                                                      nonIndexedPropertiesOnly, params);
   if (!iterator) {
     CHECK(tryCatch.HasCaught());
     return false;

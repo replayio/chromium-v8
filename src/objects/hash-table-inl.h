@@ -95,9 +95,9 @@ int HashTableBase::Capacity() const {
 }
 
 InternalIndex::Range HashTableBase::IterateEntries(
-    const KeyIterationParams* params = &kDefaultKeyIterationParams) const {
-  TODO;
-  return InternalIndex::Range(Capacity());
+    const KeyIterationParams* params = KeyIterationParams::Default()) const {
+  return InternalIndex::Range(params->keyFirstIndex(),
+                              params->keyEndIndex(Capacity()));
 }
 
 void HashTableBase::ElementAdded() {

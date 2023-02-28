@@ -1401,7 +1401,8 @@ void RecordAsyncStackTaggingCreateTaskCall(v8::Isolate* v8_isolate) {
 }
 
 std::unique_ptr<PropertyIterator> PropertyIterator::Create(
-    Local<Context> context, Local<Object> object, bool skip_indices) {
+    Local<Context> context, Local<Object> object, bool skip_indices,
+    const v8::KeyIterationParams* params) {
   internal::Isolate* isolate =
       reinterpret_cast<i::Isolate*>(object->GetIsolate());
   if (isolate->is_execution_terminating()) {
@@ -1410,7 +1411,7 @@ std::unique_ptr<PropertyIterator> PropertyIterator::Create(
   CallDepthScope<false> call_depth_scope(isolate, context);
 
   auto result = i::DebugPropertyIterator::Create(
-      isolate, Utils::OpenHandle(*object), skip_indices);
+      isolate, Utils::OpenHandle(*object), skip_indices, params);
   if (!result) {
     DCHECK(isolate->has_pending_exception());
     call_depth_scope.Escape();

@@ -25,8 +25,6 @@
 namespace v8 {
 namespace internal {
 
-static KeyIterationParams kDefaultKeyIterationParams(0, 0);
-
 #define RETURN_NOTHING_IF_NOT_SUCCESSFUL(call) \
   do {                                         \
     if (!(call)) return Nothing<bool>();       \
@@ -95,6 +93,9 @@ MaybeHandle<FixedArray> KeyAccumulator::GetKeys(
     bool skip_indices) {
   FastKeyAccumulator accumulator(isolate, object, mode, filter, is_for_in,
                                  skip_indices);
+  if (*key_indexing_params_) {
+    return accumulator.GetKeysSlow(keys_conversion, key_indexing_params_);
+  }
   return accumulator.GetKeys(keys_conversion);
 }
 
@@ -232,8 +233,7 @@ Maybe<bool> KeyAccumulator::AddKeysFromJSProxy(Handle<JSProxy> proxy,
 }
 
 Maybe<bool> KeyAccumulator::CollectKeys(Handle<JSReceiver> receiver,
-                                        Handle<JSReceiver> object,
-                                        const KeyIterationParams* params) {
+                                        Handle<JSReceiver> object) {
   // Proxies have no hidden prototype and we should not trigger the
   // [[GetPrototypeOf]] trap on the last iteration when using
   // AdvanceFollowingProxies.
@@ -266,7 +266,7 @@ Maybe<bool> KeyAccumulator::CollectKeys(Handle<JSReceiver> receiver,
       }
     } else {
       DCHECK(current->IsJSObject());
-      result = CollectOwnKeys(receiver, Handle<JSObject>::cast(current), params);
+      result = CollectOwnKeys(receiver, Handle<JSObject>::cast(current));
     }
     MAYBE_RETURN(result, Nothing<bool>());
     if (!result.FromJust()) break;  // |false| means "stop iterating".
@@ -562,7 +562,7 @@ FastKeyAccumulator::GetOwnKeysWithUninitializedEnumCache() {
 }
 
 MaybeHandle<FixedArray> FastKeyAccumulator::GetKeysSlow(
-    GetKeysConversion keys_conversion) {
+    GetKeysConversion keys_conversion, const KeyIterationParams* params) {
   KeyAccumulator accumulator(isolate_, mode_, filter_);
   accumulator.set_is_for_in(is_for_in_);
   accumulator.set_skip_indices(skip_indices_);
@@ -570,6 +570,7 @@ MaybeHandle<FixedArray> FastKeyAccumulator::GetKeysSlow(
   accumulator.set_may_have_elements(may_have_elements_);
   accumulator.set_first_prototype_map(first_prototype_map_);
   accumulator.set_try_prototype_info_cache(try_prototype_info_cache_);
+  accumulator.set_key_indexing_params(params);
 
   MAYBE_RETURN(accumulator.CollectKeys(receiver_, receiver_),
                MaybeHandle<FixedArray>());
@@ -752,13 +753,12 @@ Maybe<bool> KeyAccumulator::CollectInterceptorKeys(Handle<JSReceiver> receiver,
 }
 
 Maybe<bool> KeyAccumulator::CollectOwnElementIndices(
-    Handle<JSReceiver> receiver, Handle<JSObject> object,
-    const KeyIterationParams* params) {
+    Handle<JSReceiver> receiver, Handle<JSObject> object) {
   if (filter_ & SKIP_STRINGS || skip_indices_) return Just(true);
 
   ElementsAccessor* accessor = object->GetElementsAccessor();
   RETURN_NOTHING_IF_NOT_SUCCESSFUL(
-      accessor->CollectElementIndices(object, this, params));
+      accessor->CollectElementIndices(object, this, key_indexing_params_));
   return CollectInterceptorKeys(receiver, object, kIndexed);
 }
 
@@ -912,18 +912,18 @@ Handle<FixedArray> GetOwnEnumPropertyDictionaryKeys(Isolate* isolate,
   if (dictionary->NumberOfElements() == 0) {
     return isolate->factory()->empty_fixed_array();
   }
-  int length = params.pageSize(dictionary->NumberOfEnumerableProperties());
+  int length = params->pageSize(dictionary->NumberOfEnumerableProperties());
   Handle<FixedArray> storage = isolate->factory()->NewFixedArray(length);
-  CopyEnumKeysTo(isolate, dictionary, storage, mode, accumulator);
+  CopyEnumKeysTo(isolate, dictionary, storage, mode, accumulator, params);
   return storage;
 }
 
 // Collect the keys from |dictionary| into |keys|, in ascending chronological
 // order of property creation.
 template <typename Dictionary>
-ExceptionStatus CollectKeysFromDictionary(Handle<Dictionary> dictionary,
-                                          KeyAccumulator* keys,
-                                          const KeyIterationParams* params = &kDefaultKeyIterationParams) {
+ExceptionStatus CollectKeysFromDictionary(
+    Handle<Dictionary> dictionary, KeyAccumulator* keys,
+    const KeyIterationParams* params = KeyIterationParams::Default()) {
   Isolate* isolate = keys->isolate();
   ReadOnlyRoots roots(isolate);
 
@@ -998,12 +998,11 @@ ExceptionStatus CollectKeysFromDictionary(Handle<Dictionary> dictionary,
 }  // namespace
 
 Maybe<bool> KeyAccumulator::CollectOwnPropertyNames(Handle<JSReceiver> receiver,
-                                                    Handle<JSObject> object,
-                                                    const KeyIterationParams* params) {
+                                                    Handle<JSObject> object) {
   if (filter_ == ENUMERABLE_STRINGS) {
     Handle<FixedArray> enum_keys;
     // NOTE: KeyIterationParams currently don't support fast paths
-    if (object->HasFastProperties() && !*params) {
+    if (object->HasFastProperties() && !*key_indexing_params_) {
       enum_keys = KeyAccumulator::GetOwnEnumPropertyKeys(isolate_, object);
       // If the number of properties equals the length of enumerable properties
       // we do not have to filter out non-enumerable ones
@@ -1025,15 +1024,15 @@ Maybe<bool> KeyAccumulator::CollectOwnPropertyNames(Handle<JSReceiver> receiver,
       enum_keys = GetOwnEnumPropertyDictionaryKeys(
           isolate_, mode_, this, object,
           JSGlobalObject::cast(*object).global_dictionary(kAcquireLoad),
-          params);
+          key_indexing_params_);
     } else if (V8_ENABLE_SWISS_NAME_DICTIONARY_BOOL) {
       enum_keys = GetOwnEnumPropertyDictionaryKeys(
           isolate_, mode_, this, object, object->property_dictionary_swiss(),
-          params);
+          key_indexing_params_);
     } else {
       enum_keys = GetOwnEnumPropertyDictionaryKeys(
           isolate_, mode_, this, object, object->property_dictionary(),
-          params);
+          key_indexing_params_);
     }
     if (object->IsJSModuleNamespace()) {
       // Simulate [[GetOwnProperty]] for establishing enumerability, which
@@ -1066,13 +1065,16 @@ Maybe<bool> KeyAccumulator::CollectOwnPropertyNames(Handle<JSReceiver> receiver,
       RETURN_NOTHING_IF_NOT_SUCCESSFUL(CollectKeysFromDictionary(
           handle(JSGlobalObject::cast(*object).global_dictionary(kAcquireLoad),
                  isolate_),
-          this, params));
+          this,
+          key_indexing_params_));
     } else if (V8_ENABLE_SWISS_NAME_DICTIONARY_BOOL) {
       RETURN_NOTHING_IF_NOT_SUCCESSFUL(CollectKeysFromDictionary(
-          handle(object->property_dictionary_swiss(), isolate_), this, params));
+          handle(object->property_dictionary_swiss(), isolate_), this,
+          key_indexing_params_));
     } else {
       RETURN_NOTHING_IF_NOT_SUCCESSFUL(CollectKeysFromDictionary(
-          handle(object->property_dictionary(), isolate_), this, params));
+          handle(object->property_dictionary(), isolate_), this,
+          key_indexing_params_));
     }
   }
   // Add the property keys from the interceptor.
@@ -1127,8 +1129,7 @@ Maybe<bool> KeyAccumulator::CollectAccessCheckInterceptorKeys(
 // Returns |true| on success, |false| if prototype walking should be stopped,
 // |nothing| if an exception was thrown.
 Maybe<bool> KeyAccumulator::CollectOwnKeys(Handle<JSReceiver> receiver,
-                                           Handle<JSObject> object,
-                                           const KeyIterationParams* params) {
+                                           Handle<JSObject> object) {
   // Check access rights if required.
   if (object->IsAccessCheckNeeded() &&
       !isolate_->MayAccess(handle(isolate_->context(), isolate_), object)) {
@@ -1163,33 +1164,32 @@ Maybe<bool> KeyAccumulator::CollectOwnKeys(Handle<JSReceiver> receiver,
   }
 
   if (may_have_elements_) {
-    MAYBE_RETURN(CollectOwnElementIndices(receiver, object, params), Nothing<bool>());
+    MAYBE_RETURN(CollectOwnElementIndices(receiver, object), Nothing<bool>());
   }
-  MAYBE_RETURN(CollectOwnPropertyNames(receiver, object, params), Nothing<bool>());
+  MAYBE_RETURN(CollectOwnPropertyNames(receiver, object), Nothing<bool>());
   return Just(true);
 }
 
 // static
 Handle<FixedArray> KeyAccumulator::GetOwnEnumPropertyKeys(
-    Isolate* isolate, Handle<JSObject> object,
-    const KeyIterationParams* params) {
+    Isolate* isolate, Handle<JSObject> object) {
   if (object->HasFastProperties()) {
     return GetFastEnumPropertyKeys(isolate, object);
   } else if (object->IsJSGlobalObject()) {
     return GetOwnEnumPropertyDictionaryKeys(
         isolate, KeyCollectionMode::kOwnOnly, nullptr, object,
         JSGlobalObject::cast(*object).global_dictionary(kAcquireLoad),
-        params);
+        keyIndexingParams_);
   } else if (V8_ENABLE_SWISS_NAME_DICTIONARY_BOOL) {
     return GetOwnEnumPropertyDictionaryKeys(
         isolate, KeyCollectionMode::kOwnOnly, nullptr, object,
         object->property_dictionary_swiss(),
-        params);
+        keyIndexingParams_);
   } else {
     return GetOwnEnumPropertyDictionaryKeys(
         isolate, KeyCollectionMode::kOwnOnly, nullptr, object,
         object->property_dictionary(), 
-        params);
+        keyIndexingParams_);
   }
 }
 

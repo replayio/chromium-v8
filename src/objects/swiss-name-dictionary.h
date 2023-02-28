@@ -180,8 +180,10 @@ class V8_EXPORT_PRIVATE SwissNameDictionary : public HeapObject {
     int last_;
   };
 
-  inline IndexIterable IterateEntriesOrdered(const KeyIterationParams* params);
-  inline IndexIterable IterateEntries(const KeyIterationParams* params);
+  inline IndexIterable IterateEntriesOrdered(
+      const KeyIterationParams* params = KeyIterationParams::Default());
+  inline IndexIterable IterateEntries(
+      const KeyIterationParams* params = KeyIterationParams::Default());
 
   // For the given enumeration index, returns the entry (= bucket of the Swiss
   // Table) containing the data for the mapping with that enumeration index.
