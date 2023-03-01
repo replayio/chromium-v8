@@ -457,7 +457,14 @@ Response V8RuntimeAgentImpl::getProperties(
     return Response::ServerError("Value with given id is not an object");
 
   v8::Local<v8::Object> object = scope.object().As<v8::Object>();
+
+  // DDBG hardcode this for easier testing
+  pageSize = 2;
   v8::KeyIterationParams params(pageSize.fromMaybe(0), pageIndex.fromMaybe(0));
+
+  v8::recordreplay::Print("DDBG V8RuntimeAgentImpl::getProperties %d %d %d %d",
+                          pageSize.fromMaybe(0), !!params, params.keyEndIndex(1e5), (int)1e5);
+
   response = scope.injectedScript()->getProperties(
       object, scope.objectGroupName(), ownProperties.fromMaybe(false),
       accessorPropertiesOnly.fromMaybe(false),

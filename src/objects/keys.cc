@@ -94,6 +94,8 @@ MaybeHandle<FixedArray> KeyAccumulator::GetKeys(
     const KeyIterationParams* params) {
   FastKeyAccumulator accumulator(isolate, object, mode, filter, is_for_in,
                                  skip_indices);
+  v8::recordreplay::Print("DDBG KeyAccumulator::GetKeys %d %d %d", !!*params,
+                          params->keyEndIndex(1e5), 1e5);
   if (*params) {
     return accumulator.GetKeysSlow(keys_conversion, params);
   }

@@ -1527,7 +1527,7 @@ domain Runtime
       # Allocated heap size in bytes.
       number totalSize
 
-  type KeyIterationIndex extends number
+  type KeyIterationIndex extends integer
 
   # Returns properties of a given object. Object group of the result is inherited from the target
   # object.

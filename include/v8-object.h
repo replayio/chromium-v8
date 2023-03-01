@@ -244,12 +244,12 @@ using KeyIterationIndex = int;
  * in a single object (`KeyCollectionMode`, `IndexFilter` etc.).
  */
 class KeyIterationParams {
-  KeyIterationIndex pageIndex_;
-  KeyIterationIndex pageSize_;
-
  public:
-  KeyIterationParams(KeyIterationIndex pageIndex_, KeyIterationIndex pageSize_)
-      : pageIndex_(pageIndex_), pageSize_(pageSize_) {}
+  KeyIterationIndex pageSize_;
+  KeyIterationIndex pageIndex_;
+  
+  KeyIterationParams(KeyIterationIndex pageSize, KeyIterationIndex pageIndex)
+      : pageSize_(pageSize) , pageIndex_(pageIndex) {}
 
   KeyIterationIndex pageSize(KeyIterationIndex numberOfElements) const {
     return ((bool)*this && pageSize_ < numberOfElements) ? pageSize_
