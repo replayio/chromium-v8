@@ -385,6 +385,9 @@ Handle<FixedArray> GetFastEnumPropertyKeys(Isolate* isolate,
   // Check if the {map} has a valid enum length, which implies that it
   // must have a valid enum cache as well.
   int enum_length = map->EnumLength();
+
+  v8::recordreplay::Print("DDBG GetFastEnumPropertyKeys %d", enum_length);
+
   if (enum_length != kInvalidEnumCacheSentinel) {
     DCHECK(map->OnlyHasSimpleProperties());
     DCHECK_LE(enum_length, keys->length());
@@ -1005,7 +1008,7 @@ Maybe<bool> KeyAccumulator::CollectOwnPropertyNames(Handle<JSReceiver> receiver,
   if (filter_ == ENUMERABLE_STRINGS) {
     Handle<FixedArray> enum_keys;
     // NOTE: KeyIterationParams currently don't support fast paths
-    if (object->HasFastProperties() && !*key_iteration_params_) {
+    if (object->HasFastProperties()) { // DDBG TODO:  && !*key_iteration_params_
       enum_keys = KeyAccumulator::GetOwnEnumPropertyKeys(isolate_, object);
       // If the number of properties equals the length of enumerable properties
       // we do not have to filter out non-enumerable ones
@@ -1051,7 +1054,7 @@ Maybe<bool> KeyAccumulator::CollectOwnPropertyNames(Handle<JSReceiver> receiver,
     }
     RETURN_NOTHING_IF_NOT_SUCCESSFUL(AddKeys(enum_keys, DO_NOT_CONVERT));
   } else {
-    if (object->HasFastProperties() && !*key_iteration_params_) {
+    if (object->HasFastProperties()) { // DDBG TODO:  && !*key_iteration_params_
       int limit = object->map().NumberOfOwnDescriptors();
       Handle<DescriptorArray> descs(
           object->map().instance_descriptors(isolate_), isolate_);
