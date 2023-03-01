@@ -6285,31 +6285,17 @@ template <typename Derived, typename Shape>
 int Dictionary<Derived, Shape>::NumberOfEnumerableProperties() {
   ReadOnlyRoots roots = this->GetReadOnlyRoots();
   int result = 0;
-
-  // DDBG test
-  auto range = this->IterateEntries();
-  auto* params = KeyIterationParams::Default();
-  v8::recordreplay::Print("DDBG Dictionary::NumberOfEnumerableProperties %d %d %d %d, keys: %d %d (%d) capacity=%d, keyEnd=%d",
-                          range.begin(),
-                          range.end(),
-                          params->pageIndex_,
-                          params->pageSize_,
-
-                          params->keyFirstIndex(),
-                          params->keyEndIndex(this->Capacity()),
-                          ((bool)*params),
-
-                          this->Capacity(),
-                          params->keyFirstIndex() + params->pageSize_);
-
+  v8::recordreplay::Print("DDBG Dictionary::NumberOfEnumerableProperties START");
   for (InternalIndex i : this->IterateEntries()) {
     Object k;
+    v8::recordreplay::Print("DDBG Dictionary::NumberOfEnumerableProperties %d ", i.as_int());
     if (!this->ToKey(roots, i, &k)) continue;
     if (k.FilterKey(ENUMERABLE_STRINGS)) continue;
     PropertyDetails details = this->DetailsAt(i);
     PropertyAttributes attr = details.attributes();
     if ((int{attr} & ONLY_ENUMERABLE) == 0) result++;
   }
+  v8::recordreplay::Print("DDBG Dictionary::NumberOfEnumerableProperties END");
   return result;
 }
 
