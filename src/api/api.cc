@@ -10655,6 +10655,14 @@ std::shared_ptr<WasmStreaming> WasmStreaming::Unpack(Isolate* v8_isolate,
 }
 #endif  // !V8_ENABLE_WEBASSEMBLY
 
+// On windows we need to export methods called in base/record_replay.cc
+// so that they can be looked up in chrome.dll
+#if V8_OS_WIN
+#define DLLEXPORT __declspec(dllexport)
+#else
+#define DLLEXPORT
+#endif
+
 static bool gRecordingOrReplaying;
 static void (*gRecordReplayRememberRecording)();
 static void (*gRecordReplayOnNewSource)(const char* id, const char* kind,
@@ -11098,7 +11106,7 @@ bool recordreplay::FeatureEnabled(const char* feature) {
   return true;
 }
 
-extern "C" V8_EXPORT bool V8RecordReplayFeatureEnabled(const char* feature) {
+extern "C" DLLEXPORT bool V8RecordReplayFeatureEnabled(const char* feature) {
   return recordreplay::FeatureEnabled(feature);
 }
 
@@ -11136,7 +11144,7 @@ bool recordreplay::IsRecordingOrReplaying(const char* feature) {
   return gRecordingOrReplaying && (!feature || FeatureEnabled(feature));
 }
 
-extern "C" bool V8IsRecordingOrReplaying(const char* feature) {
+extern "C" DLLEXPORT bool V8IsRecordingOrReplaying(const char* feature) {
   return recordreplay::IsRecordingOrReplaying(feature);
 }
 
@@ -11158,7 +11166,7 @@ extern "C" void V8RecordReplayPrint(const char* format, ...) {
   }
 }
 
-extern "C" void V8RecordReplayPrintVA(const char* format, va_list args) {
+extern "C" DLLEXPORT void V8RecordReplayPrintVA(const char* format, va_list args) {
   if (recordreplay::IsRecordingOrReplaying()) {
     gRecordReplayPrint(format, args);
   }
@@ -11173,7 +11181,7 @@ void recordreplay::Diagnostic(const char* format, ...) {
   }
 }
 
-extern "C" void V8RecordReplayDiagnosticVA(const char* format, va_list args) {
+extern "C" DLLEXPORT void V8RecordReplayDiagnosticVA(const char* format, va_list args) {
   if (recordreplay::IsRecordingOrReplaying()) {
     gRecordReplayDiagnostic(format, args);
   }
@@ -11197,7 +11205,7 @@ extern "C" void V8RecordReplayAssert(const char* format, ...) {
   }
 }
 
-extern "C" void V8RecordReplayAssertVA(const char* format, va_list args) {
+extern "C" DLLEXPORT void V8RecordReplayAssertVA(const char* format, va_list args) {
   if (recordreplay::IsRecordingOrReplaying()) {
     gRecordReplayAssert(format, args);
   }
@@ -11209,7 +11217,7 @@ void recordreplay::AssertBytes(const char* why, const void* buf, size_t size) {
   }
 }
 
-extern "C" void V8RecordReplayAssertBytes(const char* why, const void* buf, size_t size) {
+extern "C" DLLEXPORT void V8RecordReplayAssertBytes(const char* why, const void* buf, size_t size) {
   recordreplay::AssertBytes(why, buf, size);
 }
 
@@ -11220,7 +11228,7 @@ uintptr_t recordreplay::RecordReplayValue(const char* why, uintptr_t v) {
   return v;
 }
 
-extern "C" uintptr_t V8RecordReplayValue(const char* why, uintptr_t value) {
+extern "C" DLLEXPORT uintptr_t V8RecordReplayValue(const char* why, uintptr_t value) {
   return recordreplay::RecordReplayValue(why, value);
 }
 
@@ -11230,7 +11238,7 @@ void recordreplay::RecordReplayBytes(const char* why, void* buf, size_t size) {
   }
 }
 
-extern "C" void V8RecordReplayBytes(const char* why, void* buf, size_t size) {
+extern "C" DLLEXPORT void V8RecordReplayBytes(const char* why, void* buf, size_t size) {
   recordreplay::RecordReplayBytes(why, buf, size);
 }
 
@@ -11241,7 +11249,7 @@ bool recordreplay::AreEventsDisallowed() {
   return false;
 }
 
-extern "C" bool V8RecordReplayAreEventsDisallowed() {
+extern "C" DLLEXPORT bool V8RecordReplayAreEventsDisallowed() {
   return recordreplay::AreEventsDisallowed();
 }
 
@@ -11252,7 +11260,7 @@ bool recordreplay::AreEventsPassedThrough() {
   return false;
 }
 
-extern "C" bool V8RecordReplayAreEventsPassedThrough() {
+extern "C" DLLEXPORT bool V8RecordReplayAreEventsPassedThrough() {
   return recordreplay::AreEventsPassedThrough();
 }
 
@@ -11262,7 +11270,7 @@ void recordreplay::BeginPassThroughEvents() {
   }
 }
 
-extern "C" void V8RecordReplayBeginPassThroughEvents() {
+extern "C" DLLEXPORT void V8RecordReplayBeginPassThroughEvents() {
   recordreplay::BeginPassThroughEvents();
 }
 
@@ -11272,7 +11280,7 @@ void recordreplay::EndPassThroughEvents() {
   }
 }
 
-extern "C" void V8RecordReplayEndPassThroughEvents() {
+extern "C" DLLEXPORT void V8RecordReplayEndPassThroughEvents() {
   recordreplay::EndPassThroughEvents();
 }
 
@@ -11288,11 +11296,11 @@ void recordreplay::BeginDisallowEventsWithLabel(const char* label) {
   }
 }
 
-extern "C" void V8RecordReplayBeginDisallowEvents() {
+extern "C" DLLEXPORT void V8RecordReplayBeginDisallowEvents() {
   recordreplay::BeginDisallowEvents();
 }
 
-extern "C" void V8RecordReplayBeginDisallowEventsWithLabel(const char* label) {
+extern "C" DLLEXPORT void V8RecordReplayBeginDisallowEventsWithLabel(const char* label) {
   recordreplay::BeginDisallowEventsWithLabel(label);
 }
 
@@ -11302,7 +11310,7 @@ void recordreplay::EndDisallowEvents() {
   }
 }
 
-extern "C" void V8RecordReplayEndDisallowEvents() {
+extern "C" DLLEXPORT void V8RecordReplayEndDisallowEvents() {
   recordreplay::EndDisallowEvents();
 }
 
@@ -11321,7 +11329,7 @@ void recordreplay::NewCheckpoint() {
   }
 }
 
-extern "C" void V8RecordReplayNewCheckpoint() {
+extern "C" DLLEXPORT void V8RecordReplayNewCheckpoint() {
   recordreplay::NewCheckpoint();
 }
 
@@ -11336,7 +11344,7 @@ extern "C" void V8RecordReplayNewCheckpoint() {
 typedef void (*RecordReplayBrowserEventCallback)(const char* name, const char* payload);
 static RecordReplayBrowserEventCallback gBrowserEventCallback = nullptr;
 
-extern "C" void V8RecordReplayBrowserEvent(const char* name, const char* payload) {
+extern "C" DLLEXPORT void V8RecordReplayBrowserEvent(const char* name, const char* payload) {
   CHECK(recordreplay::IsRecordingOrReplaying());
   if (gBrowserEventCallback) {
     gBrowserEventCallback(name, payload);
@@ -11357,7 +11365,7 @@ size_t recordreplay::CreateOrderedLock(const char* name) {
   return 0;
 }
 
-extern "C" size_t V8RecordReplayCreateOrderedLock(const char* name) {
+extern "C" DLLEXPORT size_t V8RecordReplayCreateOrderedLock(const char* name) {
   return recordreplay::CreateOrderedLock(name);
 }
 
@@ -11367,7 +11375,7 @@ void recordreplay::OrderedLock(int lock) {
   }
 }
 
-extern "C" void V8RecordReplayOrderedLock(int lock) {
+extern "C" DLLEXPORT void V8RecordReplayOrderedLock(int lock) {
   recordreplay::OrderedLock(lock);
 }
 
@@ -11377,7 +11385,7 @@ void recordreplay::OrderedUnlock(int lock) {
   }
 }
 
-extern "C" void V8RecordReplayOrderedUnlock(int lock) {
+extern "C" DLLEXPORT void V8RecordReplayOrderedUnlock(int lock) {
   recordreplay::OrderedUnlock(lock);
 }
 
@@ -11392,7 +11400,7 @@ extern "C" void V8RecordReplayAddOrderedPthreadMutex(const char* name,
 
 #else // V8_OS_WIN
 
-extern "C" void V8RecordReplayAddOrderedSRWLock(const char* name, void* lock) {
+extern "C" DLLEXPORT void V8RecordReplayAddOrderedSRWLock(const char* name, void* lock) {
   if (recordreplay::IsRecordingOrReplaying()) {
     gRecordReplayAddOrderedSRWLock(name, lock);
   }
@@ -11407,7 +11415,7 @@ bool recordreplay::IsReplaying() {
   return false;
 }
 
-extern "C" bool V8IsReplaying() {
+extern "C" DLLEXPORT bool V8IsReplaying() {
   return recordreplay::IsReplaying();
 }
 
@@ -11415,7 +11423,7 @@ bool recordreplay::IsRecording() {
   return !IsReplaying();
 }
 
-extern "C" bool V8IsRecording() {
+extern "C" DLLEXPORT bool V8IsRecording() {
   return recordreplay::IsRecording();
 }
 
@@ -11426,7 +11434,7 @@ bool recordreplay::HasDivergedFromRecording() {
   return false;
 }
 
-extern "C" bool V8RecordReplayHasDivergedFromRecording() {
+extern "C" DLLEXPORT bool V8RecordReplayHasDivergedFromRecording() {
   return recordreplay::HasDivergedFromRecording();
 }
 
@@ -11436,7 +11444,7 @@ void recordreplay::RegisterPointer(const char* name, const void* ptr) {
   }
 }
 
-extern "C" void V8RecordReplayRegisterPointer(const char* name, const void* ptr) {
+extern "C" DLLEXPORT void V8RecordReplayRegisterPointer(const char* name, const void* ptr) {
   recordreplay::RegisterPointer(name, ptr);
 }
 
@@ -11446,7 +11454,7 @@ void recordreplay::UnregisterPointer(const void* ptr) {
   }
 }
 
-extern "C" void V8RecordReplayUnregisterPointer(const void* ptr) {
+extern "C" DLLEXPORT void V8RecordReplayUnregisterPointer(const void* ptr) {
   recordreplay::UnregisterPointer(ptr);
 }
 
@@ -11457,7 +11465,7 @@ int recordreplay::PointerId(const void* ptr) {
   return 0;
 }
 
-extern "C" int V8RecordReplayPointerId(const void* ptr) {
+extern "C" DLLEXPORT int V8RecordReplayPointerId(const void* ptr) {
   return recordreplay::PointerId(ptr);
 }
 
@@ -11466,46 +11474,46 @@ void* recordreplay::IdPointer(int id) {
   return gRecordReplayIdPointer(id);
 }
 
-extern "C" void* V8RecordReplayIdPointer(int id) {
+extern "C" DLLEXPORT void* V8RecordReplayIdPointer(int id) {
   return recordreplay::IdPointer(id);
 }
 
-extern "C" uint64_t V8RecordReplayNewBookmark() {
+extern "C" DLLEXPORT uint64_t V8RecordReplayNewBookmark() {
   if (internal::gRecordReplayHasCheckpoint) {
     return gRecordReplayNewBookmark();
   }
   return 0;
 }
 
-extern "C" void V8RecordReplayOnNetworkRequest(const char* id, const char* kind, uint64_t bookmark) {
+extern "C" DLLEXPORT void V8RecordReplayOnNetworkRequest(const char* id, const char* kind, uint64_t bookmark) {
   CHECK(recordreplay::IsRecordingOrReplaying());
   if (internal::gRecordReplayHasCheckpoint) {
     gRecordReplayOnNetworkRequest(id, kind, bookmark);
   }
 }
 
-extern "C" void V8RecordReplayOnNetworkRequestEvent(const char* id) {
+extern "C" DLLEXPORT void V8RecordReplayOnNetworkRequestEvent(const char* id) {
   CHECK(recordreplay::IsRecordingOrReplaying());
   if (internal::gRecordReplayHasCheckpoint) {
     gRecordReplayOnNetworkRequestEvent(id);
   }
 }
 
-extern "C" void V8RecordReplayOnNetworkStreamStart(const char* id, const char* kind, const char* parentId) {
+extern "C" DLLEXPORT void V8RecordReplayOnNetworkStreamStart(const char* id, const char* kind, const char* parentId) {
   CHECK(recordreplay::IsRecordingOrReplaying());
   if (internal::gRecordReplayHasCheckpoint) {
     gRecordReplayOnNetworkStreamStart(id, kind, parentId);
   }
 }
 
-extern "C" void V8RecordReplayOnNetworkStreamData(const char* id, size_t offset, size_t length, uint64_t bookmark) {
+extern "C" DLLEXPORT void V8RecordReplayOnNetworkStreamData(const char* id, size_t offset, size_t length, uint64_t bookmark) {
   CHECK(recordreplay::IsRecordingOrReplaying());
   if (internal::gRecordReplayHasCheckpoint) {
     gRecordReplayOnNetworkStreamData(id, offset, length, bookmark);
   }
 }
 
-extern "C" void V8RecordReplayOnNetworkStreamEnd(const char* id, size_t length) {
+extern "C" DLLEXPORT void V8RecordReplayOnNetworkStreamEnd(const char* id, size_t length) {
   CHECK(recordreplay::IsRecordingOrReplaying());
   if (internal::gRecordReplayHasCheckpoint) {
     gRecordReplayOnNetworkStreamEnd(id, length);
@@ -11545,7 +11553,7 @@ extern "C" void V8RecordReplayNotifyActivity() {
   gRecordReplayNotifyActivity();
 }
 
-extern "C" void V8RecordReplayOnAnnotation(const char* kind, const char* contents) {
+extern "C" DLLEXPORT void V8RecordReplayOnAnnotation(const char* kind, const char* contents) {
   DCHECK(recordreplay::IsRecordingOrReplaying());
   if (internal::gRecordReplayHasCheckpoint) {
     gRecordReplayOnAnnotation(kind, contents);
@@ -11560,7 +11568,7 @@ void RecordReplayAddPossibleBreakpoint(int line, int column, const char* functio
 
 } // namespace internal
 
-extern "C" void V8RecordReplayOnEvent(const char* aEvent, bool aBefore) {
+extern "C" DLLEXPORT void V8RecordReplayOnEvent(const char* aEvent, bool aBefore) {
   DCHECK(recordreplay::IsRecordingOrReplaying());
   if (!internal::gRecordReplayHasCheckpoint) {
     return;
@@ -11569,8 +11577,8 @@ extern "C" void V8RecordReplayOnEvent(const char* aEvent, bool aBefore) {
   gRecordReplayOnEvent(aEvent, aBefore);
 }
 
-extern "C" void V8RecordReplayOnMouseEvent(const char* kind, size_t clientX,
-                                           size_t clientY) {
+extern "C" DLLEXPORT void V8RecordReplayOnMouseEvent(const char* kind, size_t clientX,
+                                                     size_t clientY) {
   DCHECK(recordreplay::IsRecordingOrReplaying());
   if (!internal::gRecordReplayHasCheckpoint) {
     return;
@@ -11579,7 +11587,7 @@ extern "C" void V8RecordReplayOnMouseEvent(const char* kind, size_t clientX,
   gRecordReplayOnMouseEvent(kind, clientX, clientY);
 }
 
-extern "C" void V8RecordReplayOnKeyEvent(const char* kind, const char* key) {
+extern "C" DLLEXPORT void V8RecordReplayOnKeyEvent(const char* kind, const char* key) {
   DCHECK(recordreplay::IsRecordingOrReplaying());
   if (!internal::gRecordReplayHasCheckpoint) {
     return;
@@ -11588,7 +11596,7 @@ extern "C" void V8RecordReplayOnKeyEvent(const char* kind, const char* key) {
   gRecordReplayOnKeyEvent(kind, key);
 }
 
-extern "C" void V8RecordReplayOnNavigationEvent(const char* kind, const char* url) {
+extern "C" DLLEXPORT void V8RecordReplayOnNavigationEvent(const char* kind, const char* url) {
   DCHECK(recordreplay::IsRecordingOrReplaying());
   if (!internal::gRecordReplayHasCheckpoint) {
     return;
@@ -11657,7 +11665,7 @@ const char* recordreplay::GetRecordingId() {
   return gRecordingId;
 }
 
-extern "C" const char* V8GetRecordingId() {
+extern "C" DLLEXPORT const char* V8GetRecordingId() {
   return recordreplay::GetRecordingId();
 }
 
@@ -11684,7 +11692,7 @@ static std::atomic<void (*)(void*)> gUnblockMainThreadCallback;
 static std::atomic<void*> gUnblockMainThreadCallbackData;
 static int gFinishRecordingOrderedLockId;
 
-extern "C" void V8RecordReplayMaybeTerminate(void (*callback)(void*), void* data) {
+extern "C" DLLEXPORT void V8RecordReplayMaybeTerminate(void (*callback)(void*), void* data) {
   recordreplay::Assert("V8RecordReplayMaybeTerminate");
   if (IsMainThread()) {
     recordreplay::OrderedLock(gFinishRecordingOrderedLockId);
@@ -11927,7 +11935,7 @@ bool IsMainThread() {
 #endif
 }
 
-extern "C" bool V8IsMainThread() {
+extern "C" DLLEXPORT bool V8IsMainThread() {
   return IsMainThread();
 }
 
