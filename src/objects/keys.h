@@ -72,7 +72,8 @@ class KeyAccumulator final {
   // Does not throw for uninitialized exports in module namespace objects, so
   // this has to be checked separately.
   static Handle<FixedArray> GetOwnEnumPropertyKeys(Isolate* isolate,
-                                                   Handle<JSObject> object);
+                                                   Handle<JSObject> object,
+                                                   const KeyIterationParams* key_iteration_params_ = KeyIterationParams::Default());
 
   V8_WARN_UNUSED_RESULT ExceptionStatus
   AddKey(Object key, AddKeyConversion convert = DO_NOT_CONVERT);

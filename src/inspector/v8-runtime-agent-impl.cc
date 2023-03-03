@@ -459,22 +459,28 @@ Response V8RuntimeAgentImpl::getProperties(
   v8::Local<v8::Object> object = scope.object().As<v8::Object>();
 
   // DDBG hardcode this for easier testing
-  pageSize = 2;
+  pageSize = 7;
   v8::KeyIterationParams params(pageSize.fromMaybe(0), pageIndex.fromMaybe(0));
 
-  v8::recordreplay::Print("DDBG V8RuntimeAgentImpl::getProperties %d %d %d %d",
+  v8::recordreplay::Print("DDBG V8RuntimeAgentImpl::getProperties START %d %d %d %d",
                           pageSize.fromMaybe(0), !!params, params.keyEndIndex(1e5), (int)1e5);
 
   response = scope.injectedScript()->getProperties(
       object, scope.objectGroupName(), ownProperties.fromMaybe(false),
       accessorPropertiesOnly.fromMaybe(false),
-      nonIndexedPropertiesOnly.fromMaybe(false),
+      // nonIndexedPropertiesOnly.fromMaybe(false),
+      false,
       generatePreview.fromMaybe(false) ? WrapMode::kWithPreview
                                        : WrapMode::kNoPreview,
       &params,
       result, exceptionDetails);
+
   if (!response.IsSuccess()) return response;
   if (exceptionDetails->isJust()) return Response::Success();
+
+  v8::recordreplay::Print(
+      "DDBG V8RuntimeAgentImpl::getProperties END %zu", (*result)->size());
+
   std::unique_ptr<protocol::Array<InternalPropertyDescriptor>>
       internalPropertiesProtocolArray;
   std::unique_ptr<protocol::Array<PrivatePropertyDescriptor>>

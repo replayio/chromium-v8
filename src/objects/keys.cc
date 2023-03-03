@@ -95,7 +95,7 @@ MaybeHandle<FixedArray> KeyAccumulator::GetKeys(
   FastKeyAccumulator accumulator(isolate, object, mode, filter, is_for_in,
                                  skip_indices);
   v8::recordreplay::Print("DDBG KeyAccumulator::GetKeys %d %d %d", !!*params,
-                          params->keyEndIndex(1e5), 1e5);
+                          params->keyEndIndex(1e5), 100 * 1000);
   if (*params) {
     return accumulator.GetKeysSlow(keys_conversion, params);
   }
@@ -377,7 +377,8 @@ Handle<FixedArray> ReduceFixedArrayTo(Isolate* isolate,
 // Initializes and directly returns the enume cache. Users of this function
 // have to make sure to never directly leak the enum cache.
 Handle<FixedArray> GetFastEnumPropertyKeys(Isolate* isolate,
-                                           Handle<JSObject> object) {
+                                           Handle<JSObject> object,
+                                           const KeyIterationParams* params = KeyIterationParams::Default()) {
   Handle<Map> map(object->map(), isolate);
   Handle<FixedArray> keys(
       map->instance_descriptors(isolate).enum_cache().keys(), isolate);
@@ -415,7 +416,7 @@ Handle<FixedArray> GetFastEnumPropertyKeys(Isolate* isolate,
   int index = 0;
   bool fields_only = true;
   keys = isolate->factory()->NewFixedArray(enum_length);
-  for (InternalIndex i : map->IterateOwnDescriptors()) {
+  for (InternalIndex i : map->IterateOwnDescriptors(params)) {
     DisallowGarbageCollection no_gc;
     PropertyDetails details = descriptors->GetDetails(i);
     if (details.IsDontEnum()) continue;
@@ -432,7 +433,7 @@ Handle<FixedArray> GetFastEnumPropertyKeys(Isolate* isolate,
   if (fields_only) {
     indices = isolate->factory()->NewFixedArray(enum_length);
     index = 0;
-    for (InternalIndex i : map->IterateOwnDescriptors()) {
+    for (InternalIndex i : map->IterateOwnDescriptors(params)) {
       DisallowGarbageCollection no_gc;
       PropertyDetails details = descriptors->GetDetails(i);
       if (details.IsDontEnum()) continue;
@@ -1007,9 +1008,9 @@ Maybe<bool> KeyAccumulator::CollectOwnPropertyNames(Handle<JSReceiver> receiver,
                                                     Handle<JSObject> object) {
   if (filter_ == ENUMERABLE_STRINGS) {
     Handle<FixedArray> enum_keys;
-    // NOTE: KeyIterationParams currently don't support fast paths
-    if (object->HasFastProperties()) { // DDBG TODO:  && !*key_iteration_params_
-      enum_keys = KeyAccumulator::GetOwnEnumPropertyKeys(isolate_, object);
+    if (object->HasFastProperties()) {
+      enum_keys = KeyAccumulator::GetOwnEnumPropertyKeys(isolate_, object,
+                                                         key_iteration_params_);
       // If the number of properties equals the length of enumerable properties
       // we do not have to filter out non-enumerable ones
       Map map = object->map();
@@ -1178,7 +1179,8 @@ Maybe<bool> KeyAccumulator::CollectOwnKeys(Handle<JSReceiver> receiver,
 
 // static
 Handle<FixedArray> KeyAccumulator::GetOwnEnumPropertyKeys(
-    Isolate* isolate, Handle<JSObject> object) {
+    Isolate* isolate, Handle<JSObject> object,
+    const KeyIterationParams* params) {
   if (object->HasFastProperties()) {
     return GetFastEnumPropertyKeys(isolate, object);
   } else if (object->IsJSGlobalObject()) {

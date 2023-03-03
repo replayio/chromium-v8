@@ -96,15 +96,6 @@ int HashTableBase::Capacity() const {
 
 InternalIndex::Range HashTableBase::IterateEntries(
     const KeyIterationParams* params) const {
-  v8::recordreplay::Print("DDBG HashTableBase::IterateEntries %d %d, keys: %d %d (%d) capacity=%d",
-                          params->pageIndex_,
-                          params->pageSize_,
-
-                          params->keyFirstIndex(),
-                          params->keyEndIndex(Capacity()),
-                          ((bool)*params),
-
-                          Capacity());
   return InternalIndex::Range((size_t)params->keyFirstIndex(),
                               (size_t)params->keyEndIndex(Capacity()));
 }
