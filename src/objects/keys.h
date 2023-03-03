@@ -190,17 +190,18 @@ class KeyAccumulator final {
 // case where we do not have to walk the prototype chain.
 class FastKeyAccumulator {
  public:
-  FastKeyAccumulator(Isolate* isolate, Handle<JSReceiver> receiver,
-                     KeyCollectionMode mode, PropertyFilter filter,
-                     bool is_for_in = false, bool skip_indices = false)
+  FastKeyAccumulator(
+      Isolate* isolate, Handle<JSReceiver> receiver, KeyCollectionMode mode,
+      PropertyFilter filter, bool is_for_in = false, bool skip_indices = false,
+      const KeyIterationParams* params = KeyIterationParams::Default())
       : isolate_(isolate),
         receiver_(receiver),
         mode_(mode),
         filter_(filter),
         is_for_in_(is_for_in),
-        skip_indices_(skip_indices) {
-    Prepare();
-  }
+        skip_indices_(skip_indices),
+        key_iteration_params_(params)
+  { Prepare(); }
   FastKeyAccumulator(const FastKeyAccumulator&) = delete;
   FastKeyAccumulator& operator=(const FastKeyAccumulator&) = delete;
 
@@ -212,8 +213,7 @@ class FastKeyAccumulator {
       GetKeysConversion convert = GetKeysConversion::kKeepNumbers);
 
   MaybeHandle<FixedArray> GetKeysSlow(
-      GetKeysConversion convert,
-      const KeyIterationParams* params = KeyIterationParams::Default());
+      GetKeysConversion convert);
 
  private:
   void Prepare();
@@ -241,6 +241,8 @@ class FastKeyAccumulator {
   bool has_prototype_info_cache_ = false;
   bool try_prototype_info_cache_ = false;
   bool only_own_has_simple_elements_ = false;
+  const KeyIterationParams* key_iteration_params_ =
+      KeyIterationParams::Default();
 };
 
 }  // namespace internal

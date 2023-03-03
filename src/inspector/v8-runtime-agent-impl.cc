@@ -54,6 +54,8 @@
 
 #include "v8.h"
 
+#include "src/base/platform/elapsed-timer.h"
+
 namespace v8_inspector {
 
 namespace V8RuntimeAgentImplState {
@@ -458,18 +460,15 @@ Response V8RuntimeAgentImpl::getProperties(
 
   v8::Local<v8::Object> object = scope.object().As<v8::Object>();
 
-  // DDBG hardcode this for easier testing
-  pageSize = 7;
   v8::KeyIterationParams params(pageSize.fromMaybe(0), pageIndex.fromMaybe(0));
-
-  v8::recordreplay::Print("DDBG V8RuntimeAgentImpl::getProperties START %d %d %d %d",
-                          pageSize.fromMaybe(0), !!params, params.keyEndIndex(1e5), (int)1e5);
+  v8::base::ElapsedTimer timer;
+  timer.Start();
 
   response = scope.injectedScript()->getProperties(
       object, scope.objectGroupName(), ownProperties.fromMaybe(false),
       accessorPropertiesOnly.fromMaybe(false),
-      // nonIndexedPropertiesOnly.fromMaybe(false),
-      false,
+      nonIndexedPropertiesOnly.fromMaybe(false),
+      // false,
       generatePreview.fromMaybe(false) ? WrapMode::kWithPreview
                                        : WrapMode::kNoPreview,
       &params,
@@ -478,8 +477,10 @@ Response V8RuntimeAgentImpl::getProperties(
   if (!response.IsSuccess()) return response;
   if (exceptionDetails->isJust()) return Response::Success();
 
+  double ms = timer.Elapsed().InMillisecondsF();
   v8::recordreplay::Print(
-      "DDBG V8RuntimeAgentImpl::getProperties END %zu", (*result)->size());
+      "DDBG V8RuntimeAgentImpl::getProperties END %0.3fms %zu (%d)",
+      ms, (*result)->size(), params.pageSize_);
 
   std::unique_ptr<protocol::Array<InternalPropertyDescriptor>>
       internalPropertiesProtocolArray;

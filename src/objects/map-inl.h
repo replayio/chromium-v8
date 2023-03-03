@@ -230,10 +230,10 @@ void Map::SetNumberOfOwnDescriptors(int number) {
 
 InternalIndex::Range Map::IterateOwnDescriptors(
     const KeyIterationParams* params) const {
-  v8::recordreplay::Print("DDBG Map::IterateOwnDescriptors %d %d %d",
-                          params->keyFirstIndex(),
-                          params->keyEndIndex(NumberOfOwnDescriptors()),
-                          NumberOfOwnDescriptors());
+  // v8::recordreplay::Print("DDBG Map::IterateOwnDescriptors %d %d %d",
+  //                         params->keyFirstIndex(),
+  //                         params->keyEndIndex(NumberOfOwnDescriptors()),
+  //                         NumberOfOwnDescriptors());
 
   return InternalIndex::Range(
       (size_t)params->keyFirstIndex(),

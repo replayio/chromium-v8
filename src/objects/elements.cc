@@ -1226,15 +1226,17 @@ class ElementsAccessorBase : public InternalElementsAccessor {
   MaybeHandle<FixedArray> PrependElementIndices(
       Isolate* isolate, Handle<JSObject> object,
       Handle<FixedArrayBase> backing_store, Handle<FixedArray> keys,
-      GetKeysConversion convert, PropertyFilter filter) final {
+      GetKeysConversion convert, PropertyFilter filter,
+      const KeyIterationParams* params) final {
     return Subclass::PrependElementIndicesImpl(isolate, object, backing_store,
-                                               keys, convert, filter);
+                                               keys, convert, filter, params);
   }
 
   static MaybeHandle<FixedArray> PrependElementIndicesImpl(
       Isolate* isolate, Handle<JSObject> object,
       Handle<FixedArrayBase> backing_store, Handle<FixedArray> keys,
-      GetKeysConversion convert, PropertyFilter filter) {
+      GetKeysConversion convert, PropertyFilter filter,
+      const KeyIterationParams* params = KeyIterationParams::Default()) {
     uint32_t nof_property_keys = keys->length();
     size_t initial_list_length =
         Subclass::GetMaxNumberOfEntries(*object, *backing_store);
@@ -1245,8 +1247,14 @@ class ElementsAccessorBase : public InternalElementsAccessor {
     }
     initial_list_length += nof_property_keys;
 
-    // Collect the element indices into a new list.
-    DCHECK_LE(initial_list_length, std::numeric_limits<int>::max());
+    initial_list_length = params->pageSize((KeyIterationIndex)initial_list_length);
+    if (initial_list_length <= nof_property_keys) {
+      // No space for indices.
+      return keys;
+    }
+
+      // Collect the element indices into a new list.
+      DCHECK_LE(initial_list_length, std::numeric_limits<int>::max());
     MaybeHandle<FixedArray> raw_array = isolate->factory()->TryNewFixedArray(
         static_cast<int>(initial_list_length));
     Handle<FixedArray> combined_keys;
@@ -1263,11 +1271,22 @@ class ElementsAccessorBase : public InternalElementsAccessor {
         initial_list_length =
             Subclass::NumberOfElementsImpl(*object, *backing_store);
         initial_list_length += nof_property_keys;
+
+        initial_list_length =
+            params->pageSize((KeyIterationIndex)initial_list_length);
+        if (initial_list_length <= nof_property_keys) {
+          // No space for indices.
+          return keys;
+        }
       }
       DCHECK_LE(initial_list_length, std::numeric_limits<int>::max());
       combined_keys = isolate->factory()->NewFixedArray(
           static_cast<int>(initial_list_length));
     }
+
+    // v8::recordreplay::Print("DDBG PrependElementIndicesImpl %zu %lu",
+    //                         initial_list_length - nof_property_keys,
+    //                         nof_property_keys);
 
     uint32_t nof_indices = 0;
     bool needs_sorting = IsDictionaryElementsKind(kind()) ||
@@ -1275,7 +1294,7 @@ class ElementsAccessorBase : public InternalElementsAccessor {
     combined_keys = Subclass::DirectCollectElementIndicesImpl(
         isolate, object, backing_store,
         needs_sorting ? GetKeysConversion::kKeepNumbers : convert, filter,
-        combined_keys, &nof_indices);
+        combined_keys, &nof_indices, 0, params);
 
     if (needs_sorting) {
       SortIndices(isolate, combined_keys, nof_indices);
