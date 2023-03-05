@@ -60,8 +60,6 @@
 
 #include "v8.h"
 
-#include <dlfcn.h>
-
 namespace v8 {
 namespace base {
 

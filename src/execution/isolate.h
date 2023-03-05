@@ -2199,14 +2199,6 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   std::shared_ptr<StringTable> string_table_;
   std::shared_ptr<StringForwardingTable> string_forwarding_table_;
 
-  // I don't know what isolate ownership rules are and they seem more
-  // complicated than is initially apparent. This is used for checking
-  // that various parts of the isolate are accessed in a single threaded
-  // manner.
- public:
-  pthread_t owning_thread_;
- private:
-
   const int id_;
   EntryStackItem* entry_stack_ = nullptr;
   int stack_trace_nesting_level_ = 0;

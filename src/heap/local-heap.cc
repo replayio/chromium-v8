@@ -28,6 +28,14 @@
 namespace v8 {
 namespace internal {
 
+#if V8_OS_WIN
+
+namespace {
+thread_local LocalHeap* current_local_heap = nullptr;
+}  // namespace
+
+#else // !V8_OS_WIN
+
 template <typename T>
 class ThreadLocal {
   T default_value_;
@@ -56,6 +64,8 @@ static ThreadLocal<LocalHeap*>& CurrentLocalHeap() {
 
 // Workaround thread_local not supported on linux when recording/replaying.
 #define current_local_heap *CurrentLocalHeap()
+
+#endif // !V8_OS_WIN
 
 LocalHeap* LocalHeap::Current() { return current_local_heap; }
 
