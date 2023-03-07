@@ -7671,16 +7671,18 @@ i::Handle<i::JSArray> MapAsArray(i::Isolate* i_isolate, i::Object table_obj,
   const bool collect_values =
       kind == MapAsArrayKind::kEntries || kind == MapAsArrayKind::kValues;
   int capacity = table->UsedCapacity();
-  int max_length =
-      (capacity - offset) * ((collect_keys && collect_values) ? 2 : 1);
+
+  auto page_size = params->pageSize(capacity - offset);
+
+  int max_length = page_size * ((collect_keys && collect_values) ? 2 : 1);
+
+  v8::recordreplay::Print("DDBG MapAsArray %d %d %d %d", params->pageIndex_, capacity, page_size, max_length);
+
   i::Handle<i::FixedArray> result = factory->NewFixedArray(max_length);
   int result_index = 0;
   {
     i::DisallowGarbageCollection no_gc;
     i::Oddball the_hole = i::ReadOnlyRoots(i_isolate).the_hole_value();
-
-    auto page_size = (collect_keys + collect_values) * params->pageSize(capacity);
-
     for (int i = offset; i < capacity; ++i) {
       i::InternalIndex entry(i);
       i::Object key = table->KeyAt(entry);
@@ -7688,7 +7690,7 @@ i::Handle<i::JSArray> MapAsArray(i::Isolate* i_isolate, i::Object table_obj,
       if (collect_keys) result->set(result_index++, key);
       if (collect_values) result->set(result_index++, table->ValueAt(entry));
 
-      if (result_index == page_size) break;
+      if (result_index == max_length) break;
     }
   }
   DCHECK_GE(max_length, result_index);
@@ -7700,13 +7702,13 @@ i::Handle<i::JSArray> MapAsArray(i::Isolate* i_isolate, i::Object table_obj,
 
 }  // namespace
 
-Local<Array> Map::AsArray() const {
+Local<Array> Map::AsArray(const v8::KeyIterationParams* params) const {
   i::Handle<i::JSMap> obj = Utils::OpenHandle(this);
   i::Isolate* i_isolate = obj->GetIsolate();
   API_RCS_SCOPE(i_isolate, Map, AsArray);
   ENTER_V8_NO_SCRIPT_NO_EXCEPTION(i_isolate);
   return Utils::ToLocal(
-      MapAsArray(i_isolate, obj->table(), 0, MapAsArrayKind::kEntries));
+      MapAsArray(i_isolate, obj->table(), 0, MapAsArrayKind::kEntries, params));
 }
 
 Local<v8::Set> v8::Set::New(Isolate* v8_isolate) {
@@ -7803,11 +7805,12 @@ i::Handle<i::JSArray> SetAsArray(i::Isolate* i_isolate, i::Object table_obj,
 }
 }  // namespace
 
-Local<Array> Set::AsArray() const {
+Local<Array> Set::AsArray(const v8::KeyIterationParams*) const {
   i::Handle<i::JSSet> obj = Utils::OpenHandle(this);
   i::Isolate* i_isolate = obj->GetIsolate();
   API_RCS_SCOPE(i_isolate, Set, AsArray);
   ENTER_V8_NO_SCRIPT_NO_EXCEPTION(i_isolate);
+  // TODO
   return Utils::ToLocal(
       SetAsArray(i_isolate, obj->table(), 0, SetAsArrayKind::kValues));
 }
@@ -9895,12 +9898,14 @@ v8::MaybeLocal<v8::Array> v8::Object::PreviewEntries(
   if (i_isolate->is_execution_terminating()) return {};
   if (IsMap()) {
     *is_key_value = true;
-    return Map::Cast(this)->AsArray();
+    return Map::Cast(this)->AsArray(params);
   }
   if (IsSet()) {
     *is_key_value = false;
-    return Set::Cast(this)->AsArray();
+    return Set::Cast(this)->AsArray(params);
   }
+
+
 
   Isolate* v8_isolate = reinterpret_cast<Isolate*>(i_isolate);
   ENTER_V8_NO_SCRIPT_NO_EXCEPTION(i_isolate);
