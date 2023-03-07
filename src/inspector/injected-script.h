@@ -96,7 +96,7 @@ class InjectedScript final {
 
   Response getInternalAndPrivateProperties(
       v8::Local<v8::Value>, const String16& groupName,
-      bool accessorPropertiesOnly,
+      bool accessorPropertiesOnly, const v8::KeyIterationParams* params,
       std::unique_ptr<
           protocol::Array<protocol::Runtime::InternalPropertyDescriptor>>*
           internalProperties,

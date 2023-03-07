@@ -210,7 +210,8 @@ static Handle<ArrayList> AddIteratorInternalProperties(
 }  // namespace
 
 MaybeHandle<JSArray> Runtime::GetInternalProperties(Isolate* isolate,
-                                                    Handle<Object> object) {
+                                                    Handle<Object> object,
+                                                    const v8::KeyIterationParams* params) {
   auto result = ArrayList::New(isolate, 8 * 2);
   if (object->IsJSObject()) {
     PrototypeIterator iter(isolate, Handle<JSObject>::cast(object),

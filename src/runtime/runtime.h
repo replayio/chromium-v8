@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "include/v8-maybe.h"
+#include "include/v8-object.h"
 #include "src/base/bit-field.h"
 #include "src/common/globals.h"
 #include "src/handles/handles.h"
@@ -875,7 +876,8 @@ class Runtime : public AllStatic {
       Isolate* isolate, Handle<Object> object, Handle<Object> key);
 
   V8_EXPORT_PRIVATE V8_WARN_UNUSED_RESULT static MaybeHandle<JSArray>
-  GetInternalProperties(Isolate* isolate, Handle<Object>);
+  GetInternalProperties(Isolate* isolate, Handle<Object>,
+                        const KeyIterationParams* params = KeyIterationParams::Default());
 
   V8_WARN_UNUSED_RESULT static MaybeHandle<Object> ThrowIteratorError(
       Isolate* isolate, Handle<Object> object);

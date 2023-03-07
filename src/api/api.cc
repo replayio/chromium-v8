@@ -7661,7 +7661,8 @@ enum class SetAsArrayKind {
 };
 
 i::Handle<i::JSArray> MapAsArray(i::Isolate* i_isolate, i::Object table_obj,
-                                 int offset, MapAsArrayKind kind) {
+                                 int offset, MapAsArrayKind kind,
+                                 const KeyIterationParams* params = KeyIterationParams::Default()) {
   i::Factory* factory = i_isolate->factory();
   i::Handle<i::OrderedHashMap> table(i::OrderedHashMap::cast(table_obj),
                                      i_isolate);
@@ -7677,12 +7678,17 @@ i::Handle<i::JSArray> MapAsArray(i::Isolate* i_isolate, i::Object table_obj,
   {
     i::DisallowGarbageCollection no_gc;
     i::Oddball the_hole = i::ReadOnlyRoots(i_isolate).the_hole_value();
+
+    auto page_size = (collect_keys * collect_values) * params->pageSize(capacity);
+
     for (int i = offset; i < capacity; ++i) {
       i::InternalIndex entry(i);
       i::Object key = table->KeyAt(entry);
       if (key == the_hole) continue;
       if (collect_keys) result->set(result_index++, key);
       if (collect_values) result->set(result_index++, table->ValueAt(entry));
+
+      if (result_index == page_size) break;
     }
   }
   DCHECK_GE(max_length, result_index);
@@ -9882,7 +9888,8 @@ Local<StackTrace> Exception::GetStackTrace(Local<Value> exception) {
   return Utils::StackTraceToLocal(i_isolate->GetDetailedStackTrace(js_obj));
 }
 
-v8::MaybeLocal<v8::Array> v8::Object::PreviewEntries(bool* is_key_value) {
+v8::MaybeLocal<v8::Array> v8::Object::PreviewEntries(
+    bool* is_key_value, const v8::KeyIterationParams* params) {
   i::Handle<i::JSReceiver> object = Utils::OpenHandle(this);
   i::Isolate* i_isolate = object->GetIsolate();
   if (i_isolate->is_execution_terminating()) return {};
@@ -9909,7 +9916,7 @@ v8::MaybeLocal<v8::Array> v8::Object::PreviewEntries(bool* is_key_value) {
     *is_key_value = kind == MapAsArrayKind::kEntries;
     if (!it->HasMore()) return v8::Array::New(v8_isolate);
     return Utils::ToLocal(
-        MapAsArray(i_isolate, it->table(), i::Smi::ToInt(it->index()), kind));
+        MapAsArray(i_isolate, it->table(), i::Smi::ToInt(it->index()), kind, params));
   }
   if (object->IsJSSetIterator()) {
     i::Handle<i::JSSetIterator> it = i::Handle<i::JSSetIterator>::cast(object);

@@ -706,7 +706,8 @@ class V8_EXPORT Object : public Value {
    * For other types, this will return an empty MaybeLocal<Array> (without
    * scheduling an exception).
    */
-  MaybeLocal<Array> PreviewEntries(bool* is_key_value);
+  MaybeLocal<Array> PreviewEntries(bool* is_key_value,
+                                   const v8::KeyIterationParams* params = KeyIterationParams::Default());
 
   static Local<Object> New(Isolate* isolate);
 

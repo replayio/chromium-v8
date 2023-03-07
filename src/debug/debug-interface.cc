@@ -185,13 +185,13 @@ void ClearBreakOnNextFunctionCall(Isolate* isolate) {
   i_isolate->debug()->ClearBreakOnNextFunctionCall();
 }
 
-MaybeLocal<Array> GetInternalProperties(Isolate* v8_isolate,
-                                        Local<Value> value) {
+MaybeLocal<Array> GetInternalProperties(Isolate* v8_isolate, Local<Value> value,
+                                        const v8::KeyIterationParams* params) {
   i::Isolate* isolate = reinterpret_cast<i::Isolate*>(v8_isolate);
   ENTER_V8_NO_SCRIPT_NO_EXCEPTION(isolate);
   i::Handle<i::Object> val = Utils::OpenHandle(*value);
   i::Handle<i::JSArray> result;
-  if (!i::Runtime::GetInternalProperties(isolate, val).ToHandle(&result))
+  if (!i::Runtime::GetInternalProperties(isolate, val, params).ToHandle(&result))
     return MaybeLocal<Array>();
   return Utils::ToLocal(result);
 }
