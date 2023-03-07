@@ -7679,7 +7679,7 @@ i::Handle<i::JSArray> MapAsArray(i::Isolate* i_isolate, i::Object table_obj,
     i::DisallowGarbageCollection no_gc;
     i::Oddball the_hole = i::ReadOnlyRoots(i_isolate).the_hole_value();
 
-    auto page_size = (collect_keys * collect_values) * params->pageSize(capacity);
+    auto page_size = (collect_keys + collect_values) * params->pageSize(capacity);
 
     for (int i = offset; i < capacity; ++i) {
       i::InternalIndex entry(i);
