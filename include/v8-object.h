@@ -245,26 +245,26 @@ using KeyIterationIndex = int;
  */
 class KeyIterationParams {
  public:
-  KeyIterationIndex pageSize_;
-  KeyIterationIndex pageIndex_;
+  KeyIterationIndex page_size_;
+  KeyIterationIndex page_index_;
   
   KeyIterationParams(KeyIterationIndex pageSize, KeyIterationIndex pageIndex)
-      : pageSize_(pageSize) , pageIndex_(pageIndex) {}
+      : page_size_(pageSize) , page_index_(pageIndex) {}
 
   KeyIterationIndex pageSize(KeyIterationIndex numberOfElements) const {
-    return ((bool)*this && pageSize_ < numberOfElements) ? pageSize_
+    return ((bool)*this && page_size_ < numberOfElements) ? page_size_
                                                          : numberOfElements;
   }
 
-  KeyIterationIndex keyFirstIndex() const { return pageIndex_ * pageSize_; }
+  KeyIterationIndex keyFirstIndex() const { return page_index_ * page_size_; }
 
   KeyIterationIndex keyEndIndex(KeyIterationIndex numberOfElements) const {
-    return ((bool)*this && (keyFirstIndex() + pageSize_) < numberOfElements)
-               ? keyFirstIndex() + pageSize_
+    return ((bool)*this && (keyFirstIndex() + page_size_) < numberOfElements)
+               ? keyFirstIndex() + page_size_
                : numberOfElements;
   }
 
-  operator bool() const { return pageSize_ > 0; }
+  operator bool() const { return page_size_ > 0; }
 
   static const KeyIterationParams* Default() {
     static KeyIterationParams params(0, 0);
