@@ -10701,7 +10701,7 @@ static void (*gRecordReplayInvalidateRecording)(const char* format, ...);
 static void (*gRecordReplayNewCheckpoint)();
 static bool (*gRecordReplayIsReplaying)();
 static bool (*gRecordReplayHasDivergedFromRecording)();
-static bool (*gRecordReplayIsUnhandledDivergenceAllowed)();
+static bool (*gRecordReplayAllowSideEffects)();
 static void (*gRecordReplayRegisterPointerWithName)(const char* name, const void* ptr);
 static void (*gRecordReplayUnregisterPointer)(const void* ptr);
 static int (*gRecordReplayPointerId)(const void* ptr);
@@ -11459,15 +11459,15 @@ extern "C" DLLEXPORT bool V8RecordReplayHasDivergedFromRecording() {
   return recordreplay::HasDivergedFromRecording();
 }
 
-bool recordreplay::IsUnhandledDivergenceAllowed() {
+bool recordreplay::AllowSideEffects() {
   if (recordreplay::IsRecordingOrReplaying()) {
-    return gRecordReplayIsUnhandledDivergenceAllowed();
+    return gRecordReplayAllowSideEffects();
   }
   return true;
 }
 
-extern "C" DLLEXPORT bool V8RecordReplayIsUnhandledDivergenceAllowed() {
-  return recordreplay::IsUnhandledDivergenceAllowed();
+extern "C" DLLEXPORT bool V8RecordReplayAllowSideEffects() {
+  return recordreplay::AllowSideEffects();
 }
 
 void recordreplay::RegisterPointer(const char* name, const void* ptr) {
@@ -11810,7 +11810,7 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
 #endif
   RecordReplayLoadSymbol(handle, "RecordReplayIsReplaying", gRecordReplayIsReplaying);
   RecordReplayLoadSymbol(handle, "RecordReplayHasDivergedFromRecording", gRecordReplayHasDivergedFromRecording);
-  RecordReplayLoadSymbol(handle, "RecordReplayIsUnhandledDivergenceAllowed", gRecordReplayIsUnhandledDivergenceAllowed);
+  RecordReplayLoadSymbol(handle, "RecordReplayAllowSideEffects", gRecordReplayAllowSideEffects);
   RecordReplayLoadSymbol(handle, "RecordReplayRegisterPointerWithName", gRecordReplayRegisterPointerWithName);
   RecordReplayLoadSymbol(handle, "RecordReplayUnregisterPointer", gRecordReplayUnregisterPointer);
   RecordReplayLoadSymbol(handle, "RecordReplayPointerId", gRecordReplayPointerId);

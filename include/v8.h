@@ -121,7 +121,7 @@ static void EndDisallowEvents();
 static bool AreEventsDisallowed();
 
 static bool HasDivergedFromRecording();
-static bool IsUnhandledDivergenceAllowed();
+static bool AllowSideEffects();
 
 struct AutoPassThroughEvents {
   AutoPassThroughEvents() { BeginPassThroughEvents(); }
