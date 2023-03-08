@@ -10701,6 +10701,7 @@ static void (*gRecordReplayInvalidateRecording)(const char* format, ...);
 static void (*gRecordReplayNewCheckpoint)();
 static bool (*gRecordReplayIsReplaying)();
 static bool (*gRecordReplayHasDivergedFromRecording)();
+static bool (*gRecordReplayIsUnhandledDivergenceAllowed)();
 static void (*gRecordReplayRegisterPointerWithName)(const char* name, const void* ptr);
 static void (*gRecordReplayUnregisterPointer)(const void* ptr);
 static int (*gRecordReplayPointerId)(const void* ptr);
@@ -11458,6 +11459,17 @@ extern "C" DLLEXPORT bool V8RecordReplayHasDivergedFromRecording() {
   return recordreplay::HasDivergedFromRecording();
 }
 
+bool recordreplay::IsUnhandledDivergenceAllowed() {
+  if (recordreplay::IsRecordingOrReplaying()) {
+    return gRecordReplayIsUnhandledDivergenceAllowed();
+  }
+  return true;
+}
+
+extern "C" DLLEXPORT bool V8RecordReplayIsUnhandledDivergenceAllowed() {
+  return recordreplay::IsUnhandledDivergenceAllowed();
+}
+
 void recordreplay::RegisterPointer(const char* name, const void* ptr) {
   if (IsRecordingOrReplaying("pointer-ids")) {
     gRecordReplayRegisterPointerWithName(name, ptr);
@@ -11798,6 +11810,7 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
 #endif
   RecordReplayLoadSymbol(handle, "RecordReplayIsReplaying", gRecordReplayIsReplaying);
   RecordReplayLoadSymbol(handle, "RecordReplayHasDivergedFromRecording", gRecordReplayHasDivergedFromRecording);
+  RecordReplayLoadSymbol(handle, "RecordReplayIsUnhandledDivergenceAllowed", gRecordReplayIsUnhandledDivergenceAllowed);
   RecordReplayLoadSymbol(handle, "RecordReplayRegisterPointerWithName", gRecordReplayRegisterPointerWithName);
   RecordReplayLoadSymbol(handle, "RecordReplayUnregisterPointer", gRecordReplayUnregisterPointer);
   RecordReplayLoadSymbol(handle, "RecordReplayPointerId", gRecordReplayPointerId);
