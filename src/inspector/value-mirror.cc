@@ -25,6 +25,8 @@
 
 #include "v8.h"
 
+#include "src/inspector/string-util.h"
+
 namespace v8_inspector {
 
 using protocol::Response;
@@ -1313,41 +1315,57 @@ std::unique_ptr<ValueMirror> createNativeSetter(v8::Local<v8::Context> context,
   return ValueMirror::create(context, function);
 }
 
+static const char* allowed_getters[] = {
+  "type", "fromElement", "target", "isTrusted"
+};
+
 bool doesAttributeHaveObservableSideEffectOnGet(v8::Local<v8::Context> context,
                                                 v8::Local<v8::Object> object,
                                                 v8::Local<v8::Name> name) {
-  // TODO(dgozman): we should remove this, annotate more embedder properties as
-  // side-effect free, and call all getters which do not produce side effects.
-  if (!name->IsString()) return false;
-  v8::Isolate* isolate = context->GetIsolate();
-  if (!name.As<v8::String>()->StringEquals(toV8String(isolate, "body"))) {
-    return false;
-  }
-
-  v8::TryCatch tryCatch(isolate);
-  v8::Local<v8::Value> request;
-  if (context->Global()
-          ->GetRealNamedProperty(context, toV8String(isolate, "Request"))
-          .ToLocal(&request)) {
-    if (request->IsObject() &&
-        object->InstanceOf(context, request.As<v8::Object>())
-            .FromMaybe(false)) {
-      return true;
+  if (v8::recordreplay::HasDivergedFromRecording()) {
+    // Disallow most getters during Pause, since they cause unwanted crashes.
+    // -> https://linear.app/replay/issue/RUN-1478
+    for (auto allowed : allowed_getters) {
+      v8::String::Utf8Value nameRaw(context->GetIsolate(), name.As<v8::String>());
+      if (!strcmp(allowed, *nameRaw)) {
+        return false;
+      }
     }
   }
-  if (tryCatch.HasCaught()) tryCatch.Reset();
+  return true;
 
-  v8::Local<v8::Value> response;
-  if (context->Global()
-          ->GetRealNamedProperty(context, toV8String(isolate, "Response"))
-          .ToLocal(&response)) {
-    if (response->IsObject() &&
-        object->InstanceOf(context, response.As<v8::Object>())
-            .FromMaybe(false)) {
-      return true;
-    }
-  }
-  return false;
+  // // TODO(dgozman): we should remove this, annotate more embedder properties as
+  // // side-effect free, and call all getters which do not produce side effects.
+  // if (!name->IsString()) return false;
+  // v8::Isolate* isolate = context->GetIsolate();
+  // if (!name.As<v8::String>()->StringEquals(toV8String(isolate, "body"))) {
+  //   return false;
+  // }
+
+  // v8::TryCatch tryCatch(isolate);
+  // v8::Local<v8::Value> request;
+  // if (context->Global()
+  //         ->GetRealNamedProperty(context, toV8String(isolate, "Request"))
+  //         .ToLocal(&request)) {
+  //   if (request->IsObject() &&
+  //       object->InstanceOf(context, request.As<v8::Object>())
+  //           .FromMaybe(false)) {
+  //     return true;
+  //   }
+  // }
+  // if (tryCatch.HasCaught()) tryCatch.Reset();
+
+  // v8::Local<v8::Value> response;
+  // if (context->Global()
+  //         ->GetRealNamedProperty(context, toV8String(isolate, "Response"))
+  //         .ToLocal(&response)) {
+  //   if (response->IsObject() &&
+  //       object->InstanceOf(context, response.As<v8::Object>())
+  //           .FromMaybe(false)) {
+  //     return true;
+  //   }
+  // }
+  // return false;
 }
 
 }  // anonymous namespace
@@ -1390,15 +1408,7 @@ bool ValueMirror::getProperties(v8::Local<v8::Context> context,
     return false;
   }
 
-  int i = 0;
   while (!iterator->Done()) {
-    if (v8::recordreplay::HasDivergedFromRecording() &&
-        // allow for overflow (+1)
-        ++i > 1001) {
-      // Quick-and-dirty fix for slow Pause object queries + getAllFrames (RUN-1315)
-      v8::recordreplay::Print("[RuntimeWarning] ValueMirror::getProperties overflow break");
-      break;
-    }
     bool isOwn = iterator->is_own();
     if (!isOwn && ownProperties) break;
     v8::Local<v8::Name> v8Name = iterator->name();
@@ -1474,6 +1484,7 @@ bool ValueMirror::getProperties(v8::Local<v8::Context> context,
             setterMirror = ValueMirror::create(context, descriptor.set);
           }
           isAccessorProperty = getterMirror || setterMirror;
+
           if (name != "__proto__" && !getterFunction.IsEmpty() &&
               getterFunction->ScriptId() == v8::UnboundScript::kNoScriptId &&
               !doesAttributeHaveObservableSideEffectOnGet(context, object,
