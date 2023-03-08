@@ -477,8 +477,6 @@ Response V8RuntimeAgentImpl::getProperties(
   if (!response.IsSuccess()) return response;
   if (exceptionDetails->isJust()) return Response::Success();
 
-  double ms1 = timer.Elapsed().InMillisecondsF();
-
   std::unique_ptr<protocol::Array<InternalPropertyDescriptor>>
       internalPropertiesProtocolArray;
   std::unique_ptr<protocol::Array<PrivatePropertyDescriptor>>
