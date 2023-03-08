@@ -382,8 +382,6 @@ Handle<FixedArray> GetFastEnumPropertyKeys(Isolate* isolate,
   // must have a valid enum cache as well.
   int enum_length = map->EnumLength();
 
-  // v8::recordreplay::Print("DDBG GetFastEnumPropertyKeys %d", enum_length);
-
   // Ignore cache in case of custom params.
   if (enum_length != kInvalidEnumCacheSentinel && !*params) {
     DCHECK(map->OnlyHasSimpleProperties());
@@ -871,15 +869,6 @@ void CommonCopyEnumKeysTo(Isolate* isolate, Handle<Dictionary> dictionary,
     if (mode == KeyCollectionMode::kOwnOnly && properties == length) break;
     if (*params && properties == length) break;
   }
-
-  auto it = dictionary->IterateEntries();
-
-  v8::recordreplay::Print("[RUN-1315-1429] DDBG CommonCopyEnumKeysTo %d-%d, %d == %d? %d, %d",
-                          (*it.begin()).as_int(),
-                          (*it.end()).as_int(),
-                          properties, length,
-                          params->pageSize_,
-                          dictionary->NumberOfEnumerableProperties());
 
   CHECK_EQ(length, properties);
 }

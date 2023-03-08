@@ -1284,10 +1284,6 @@ class ElementsAccessorBase : public InternalElementsAccessor {
           static_cast<int>(initial_list_length));
     }
 
-    // v8::recordreplay::Print("DDBG PrependElementIndicesImpl %zu %lu",
-    //                         initial_list_length - nof_property_keys,
-    //                         nof_property_keys);
-
     uint32_t nof_indices = 0;
     bool needs_sorting = IsDictionaryElementsKind(kind()) ||
                          IsSloppyArgumentsElementsKind(kind());

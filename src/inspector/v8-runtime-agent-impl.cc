@@ -491,12 +491,6 @@ Response V8RuntimeAgentImpl::getProperties(
     *internalProperties = std::move(internalPropertiesProtocolArray);
   if (!privatePropertiesProtocolArray->empty())
     *privateProperties = std::move(privatePropertiesProtocolArray);
-
-  double ms2 = timer.Elapsed().InMillisecondsF();
-  v8::recordreplay::Print(
-      "DDBG V8RuntimeAgentImpl::getProperties END %0.3fms (%0.3fms) %zu (%d)",
-      ms2, ms1, (*result)->size(), params.pageSize_);
-
   return Response::Success();
 }
 

@@ -7676,8 +7676,6 @@ i::Handle<i::JSArray> MapAsArray(i::Isolate* i_isolate, i::Object table_obj,
 
   int max_length = page_size * ((collect_keys && collect_values) ? 2 : 1);
 
-  v8::recordreplay::Print("DDBG MapAsArray %d %d %d %d", params->pageIndex_, capacity, page_size, max_length);
-
   i::Handle<i::FixedArray> result = factory->NewFixedArray(max_length);
   int result_index = 0;
   {
