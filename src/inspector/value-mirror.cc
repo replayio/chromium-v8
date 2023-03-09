@@ -1331,41 +1331,41 @@ bool doesAttributeHaveObservableSideEffectOnGet(v8::Local<v8::Context> context,
         return false;
       }
     }
+    return true;
   }
-  return true;
 
-  // // TODO(dgozman): we should remove this, annotate more embedder properties as
-  // // side-effect free, and call all getters which do not produce side effects.
-  // if (!name->IsString()) return false;
-  // v8::Isolate* isolate = context->GetIsolate();
-  // if (!name.As<v8::String>()->StringEquals(toV8String(isolate, "body"))) {
-  //   return false;
-  // }
+  // TODO(dgozman): we should remove this, annotate more embedder properties as
+  // side-effect free, and call all getters which do not produce side effects.
+  if (!name->IsString()) return false;
+  v8::Isolate* isolate = context->GetIsolate();
+  if (!name.As<v8::String>()->StringEquals(toV8String(isolate, "body"))) {
+    return false;
+  }
 
-  // v8::TryCatch tryCatch(isolate);
-  // v8::Local<v8::Value> request;
-  // if (context->Global()
-  //         ->GetRealNamedProperty(context, toV8String(isolate, "Request"))
-  //         .ToLocal(&request)) {
-  //   if (request->IsObject() &&
-  //       object->InstanceOf(context, request.As<v8::Object>())
-  //           .FromMaybe(false)) {
-  //     return true;
-  //   }
-  // }
-  // if (tryCatch.HasCaught()) tryCatch.Reset();
+  v8::TryCatch tryCatch(isolate);
+  v8::Local<v8::Value> request;
+  if (context->Global()
+          ->GetRealNamedProperty(context, toV8String(isolate, "Request"))
+          .ToLocal(&request)) {
+    if (request->IsObject() &&
+        object->InstanceOf(context, request.As<v8::Object>())
+            .FromMaybe(false)) {
+      return true;
+    }
+  }
+  if (tryCatch.HasCaught()) tryCatch.Reset();
 
-  // v8::Local<v8::Value> response;
-  // if (context->Global()
-  //         ->GetRealNamedProperty(context, toV8String(isolate, "Response"))
-  //         .ToLocal(&response)) {
-  //   if (response->IsObject() &&
-  //       object->InstanceOf(context, response.As<v8::Object>())
-  //           .FromMaybe(false)) {
-  //     return true;
-  //   }
-  // }
-  // return false;
+  v8::Local<v8::Value> response;
+  if (context->Global()
+          ->GetRealNamedProperty(context, toV8String(isolate, "Response"))
+          .ToLocal(&response)) {
+    if (response->IsObject() &&
+        object->InstanceOf(context, response.As<v8::Object>())
+            .FromMaybe(false)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 }  // anonymous namespace
