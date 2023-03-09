@@ -618,11 +618,13 @@ InternalIndex SwissNameDictionary::IndexIterator::operator*() {
 }
 
 SwissNameDictionary::IndexIterable::IndexIterable(
-    Handle<SwissNameDictionary> dict)
-    : dict_{dict} {}
+    Handle<SwissNameDictionary> dict, const KeyIterationParams* params)
+    : dict_{dict},
+      first_(params->KeyFirstIndex()),
+      last_(params->KeyEndIndex(dict_->UsedCapacity())) {}
 
 SwissNameDictionary::IndexIterator SwissNameDictionary::IndexIterable::begin() {
-  return IndexIterator(dict_, 0);
+  return IndexIterator(dict_, first_);
 }
 
 SwissNameDictionary::IndexIterator SwissNameDictionary::IndexIterable::end() {
@@ -630,12 +632,12 @@ SwissNameDictionary::IndexIterator SwissNameDictionary::IndexIterable::end() {
     return IndexIterator(dict_, 0);
   } else {
     DCHECK(!dict_.is_null());
-    return IndexIterator(dict_, dict_->UsedCapacity());
+    return IndexIterator(dict_, last_);
   }
 }
 
-SwissNameDictionary::IndexIterable
-SwissNameDictionary::IterateEntriesOrdered() {
+SwissNameDictionary::IndexIterable SwissNameDictionary::IterateEntriesOrdered(
+    const KeyIterationParams* params) {
   // If we are supposed to iterate the empty dictionary (which is non-writable)
   // and pointer compression with a per-Isolate cage is disabled, we have no
   // simple way to get the isolate, which we would need to create a handle.
@@ -648,11 +650,12 @@ SwissNameDictionary::IterateEntriesOrdered() {
   Isolate* isolate;
   GetIsolateFromHeapObject(*this, &isolate);
   DCHECK_NE(isolate, nullptr);
-  return IndexIterable(handle(*this, isolate));
+  return IndexIterable(handle(*this, isolate), params);
 }
 
-SwissNameDictionary::IndexIterable SwissNameDictionary::IterateEntries() {
-  return IterateEntriesOrdered();
+SwissNameDictionary::IndexIterable SwissNameDictionary::IterateEntries(
+    const KeyIterationParams* params) {
+  return IterateEntriesOrdered(params);
 }
 
 void SwissNameDictionary::SetHash(int32_t hash) {

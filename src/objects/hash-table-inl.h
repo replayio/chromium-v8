@@ -94,8 +94,10 @@ int HashTableBase::Capacity() const {
   return Smi::cast(get(kCapacityIndex)).value();
 }
 
-InternalIndex::Range HashTableBase::IterateEntries() const {
-  return InternalIndex::Range(Capacity());
+InternalIndex::Range HashTableBase::IterateEntries(
+    const KeyIterationParams* params) const {
+  return InternalIndex::Range((size_t)params->KeyFirstIndex(),
+                              (size_t)params->KeyEndIndex(Capacity()));
 }
 
 void HashTableBase::ElementAdded() {
