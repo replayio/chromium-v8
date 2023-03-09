@@ -8,7 +8,6 @@
 #include <memory>
 
 #include "include/v8-maybe.h"
-#include "include/v8-object.h"
 #include "src/base/bit-field.h"
 #include "src/common/globals.h"
 #include "src/handles/handles.h"

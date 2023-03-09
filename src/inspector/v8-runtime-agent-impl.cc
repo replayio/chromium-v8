@@ -461,22 +461,17 @@ Response V8RuntimeAgentImpl::getProperties(
   v8::Local<v8::Object> object = scope.object().As<v8::Object>();
 
   v8::KeyIterationParams params(pageSize.fromMaybe(0), pageIndex.fromMaybe(0));
-  v8::base::ElapsedTimer timer;
-  timer.Start();
 
   response = scope.injectedScript()->getProperties(
       object, scope.objectGroupName(), ownProperties.fromMaybe(false),
       accessorPropertiesOnly.fromMaybe(false),
       nonIndexedPropertiesOnly.fromMaybe(false),
-      // false,
       generatePreview.fromMaybe(false) ? WrapMode::kWithPreview
                                        : WrapMode::kNoPreview,
       &params,
       result, exceptionDetails);
-
   if (!response.IsSuccess()) return response;
   if (exceptionDetails->isJust()) return Response::Success();
-
   std::unique_ptr<protocol::Array<InternalPropertyDescriptor>>
       internalPropertiesProtocolArray;
   std::unique_ptr<protocol::Array<PrivatePropertyDescriptor>>

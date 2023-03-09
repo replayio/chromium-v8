@@ -1253,8 +1253,8 @@ class ElementsAccessorBase : public InternalElementsAccessor {
       return keys;
     }
 
-      // Collect the element indices into a new list.
-      DCHECK_LE(initial_list_length, std::numeric_limits<int>::max());
+    // Collect the element indices into a new list.
+    DCHECK_LE(initial_list_length, std::numeric_limits<int>::max());
     MaybeHandle<FixedArray> raw_array = isolate->factory()->TryNewFixedArray(
         static_cast<int>(initial_list_length));
     Handle<FixedArray> combined_keys;
