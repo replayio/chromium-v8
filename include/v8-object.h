@@ -244,28 +244,35 @@ using KeyIterationIndex = int;
  * in a single object (`KeyCollectionMode`, `IndexFilter` etc.).
  */
 class KeyIterationParams {
- public:
   KeyIterationIndex page_size_;
   KeyIterationIndex page_index_;
+ public:
   
-  KeyIterationParams(KeyIterationIndex pageSize, KeyIterationIndex pageIndex)
-      : page_size_(pageSize) , page_index_(pageIndex) {}
+  KeyIterationParams(KeyIterationIndex page_size, KeyIterationIndex page_index)
+      : page_size_(page_size) , page_index_(page_index) {}
 
-  KeyIterationIndex pageSize(KeyIterationIndex numberOfElements) const {
-    return ((bool)*this && page_size_ < numberOfElements) ? page_size_
+  // The min of page_size_ or target size.
+  // Ignores page_size_ if no parameters are given.
+  KeyIterationIndex PageSize(KeyIterationIndex numberOfElements) const {
+    return (*this && page_size_ < numberOfElements) ? page_size_
                                                          : numberOfElements;
   }
 
-  KeyIterationIndex keyFirstIndex() const { return page_index_ * page_size_; }
+  // First index of iteration.
+  KeyIterationIndex KeyFirstIndex() const { return page_index_ * page_size_; }
 
-  KeyIterationIndex keyEndIndex(KeyIterationIndex numberOfElements) const {
-    return ((bool)*this && (keyFirstIndex() + page_size_) < numberOfElements)
-               ? keyFirstIndex() + page_size_
+  // Final index of iteration + 1, indicating end of iteration.
+  KeyIterationIndex KeyEndIndex(KeyIterationIndex numberOfElements) const {
+    return (*this && (KeyFirstIndex() + page_size_) < numberOfElements)
+               ? KeyFirstIndex() + page_size_
                : numberOfElements;
   }
 
+  // Whether parameters are given.
+  // If no parameters are given, key iteration will iterate all keys at once.
   operator bool() const { return page_size_ > 0; }
 
+  // Default (i.e. empty) key iteration params.
   static const KeyIterationParams* Default() {
     static KeyIterationParams params(0, 0);
     return &params;

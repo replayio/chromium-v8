@@ -927,7 +927,7 @@ Handle<FixedArray> GetOwnEnumPropertyDictionaryKeys(Isolate* isolate,
   if (dictionary->NumberOfElements() == 0) {
     return isolate->factory()->empty_fixed_array();
   }
-  int length = params->pageSize(dictionary->NumberOfEnumerableProperties());
+  int length = params->PageSize(dictionary->NumberOfEnumerableProperties());
   Handle<FixedArray> storage = isolate->factory()->NewFixedArray(length);
   CopyEnumKeysTo(isolate, dictionary, storage, mode, accumulator, params);
   return storage;
@@ -942,7 +942,7 @@ ExceptionStatus CollectKeysFromDictionary(
   Isolate* isolate = keys->isolate();
   ReadOnlyRoots roots(isolate);
 
-  auto numberOfElements = params->pageSize((KeyIterationIndex)dictionary->NumberOfElements());
+  auto numberOfElements = params->PageSize((KeyIterationIndex)dictionary->NumberOfElements());
 
   // TODO(jkummerow): Consider using a std::unique_ptr<InternalIndex[]> instead.
   Handle<FixedArray> array =

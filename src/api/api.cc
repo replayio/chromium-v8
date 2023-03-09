@@ -7672,7 +7672,7 @@ i::Handle<i::JSArray> MapAsArray(i::Isolate* i_isolate, i::Object table_obj,
       kind == MapAsArrayKind::kEntries || kind == MapAsArrayKind::kValues;
   int capacity = table->UsedCapacity();
 
-  auto page_size = params->pageSize(capacity - offset);
+  auto page_size = params->PageSize(capacity - offset);
 
   int max_length = page_size * ((collect_keys && collect_values) ? 2 : 1);
 
@@ -7782,7 +7782,7 @@ i::Handle<i::JSArray> SetAsArray(i::Isolate* i_isolate, i::Object table_obj,
   int capacity = table->UsedCapacity();
   const bool collect_key_values = kind == SetAsArrayKind::kEntries;
   
-  auto page_size = params->pageSize(capacity - offset);
+  auto page_size = params->PageSize(capacity - offset);
   int max_length = page_size * (collect_key_values ? 2 : 1);
 
   if (max_length == 0) return factory->NewJSArray(0);

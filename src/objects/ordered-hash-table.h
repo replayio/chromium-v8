@@ -115,8 +115,8 @@ class OrderedHashTable : public FixedArray {
 
   InternalIndex::Range IterateEntries(
       const KeyIterationParams* params = KeyIterationParams::Default()) {
-    return InternalIndex::Range(params->keyFirstIndex(),
-                                params->keyEndIndex(UsedCapacity()));
+    return InternalIndex::Range(params->KeyFirstIndex(),
+                                params->KeyEndIndex(UsedCapacity()));
   }
 
   // use IsKey to check if this is a deleted entry.
@@ -478,8 +478,8 @@ class SmallOrderedHashTable : public HeapObject {
 
   InternalIndex::Range IterateEntries(
       const KeyIterationParams* params = KeyIterationParams::Default()) {
-    return InternalIndex::Range(params->keyFirstIndex(),
-                                params->keyEndIndex(UsedCapacity()));
+    return InternalIndex::Range(params->KeyFirstIndex(),
+                                params->KeyEndIndex(UsedCapacity()));
   }
 
   DECL_VERIFIER(SmallOrderedHashTable)

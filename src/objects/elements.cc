@@ -1184,7 +1184,7 @@ class ElementsAccessorBase : public InternalElementsAccessor {
     Isolate* isolate = keys->isolate();
     Factory* factory = isolate->factory();
     auto* params = keys->key_indexing_params();
-    for (size_t i = (size_t)params->keyFirstIndex(); i < (size_t)params->keyEndIndex((KeyIterationIndex)length); i++) {
+    for (size_t i = (size_t)params->KeyFirstIndex(); i < (size_t)params->KeyEndIndex((KeyIterationIndex)length); i++) {
       if (Subclass::HasElementImpl(isolate, *object, i, *backing_store,
                                    filter)) {
         RETURN_FAILURE_IF_NOT_SUCCESSFUL(
@@ -1204,7 +1204,7 @@ class ElementsAccessorBase : public InternalElementsAccessor {
     uint32_t const kMaxStringTableEntries =
         isolate->heap()->MaxNumberToStringCacheSize();
     
-    for (size_t i = (size_t)params->keyFirstIndex(); i < (size_t)params->keyEndIndex((KeyIterationIndex)length); i++) {
+    for (size_t i = (size_t)params->KeyFirstIndex(); i < (size_t)params->KeyEndIndex((KeyIterationIndex)length); i++) {
       if (Subclass::HasElementImpl(isolate, *object, i, *backing_store,
                                    filter)) {
         if (convert == GetKeysConversion::kConvertToString) {
@@ -1247,7 +1247,7 @@ class ElementsAccessorBase : public InternalElementsAccessor {
     }
     initial_list_length += nof_property_keys;
 
-    initial_list_length = params->pageSize((KeyIterationIndex)initial_list_length);
+    initial_list_length = params->PageSize((KeyIterationIndex)initial_list_length);
     if (initial_list_length <= nof_property_keys) {
       // No space for indices.
       return keys;
@@ -1273,7 +1273,7 @@ class ElementsAccessorBase : public InternalElementsAccessor {
         initial_list_length += nof_property_keys;
 
         initial_list_length =
-            params->pageSize((KeyIterationIndex)initial_list_length);
+            params->PageSize((KeyIterationIndex)initial_list_length);
         if (initial_list_length <= nof_property_keys) {
           // No space for indices.
           return keys;
@@ -1675,7 +1675,7 @@ class DictionaryElementsAccessor
         Handle<NumberDictionary>::cast(backing_store);
     const auto* params = keys->key_indexing_params();
     Handle<FixedArray> elements = isolate->factory()->NewFixedArray(
-        (int)params->pageSize(GetMaxNumberOfEntries(*object, *backing_store)));
+        (int)params->PageSize(GetMaxNumberOfEntries(*object, *backing_store)));
     int insertion_index = 0;
     PropertyFilter filter = keys->filter();
     ReadOnlyRoots roots(isolate);
@@ -4679,7 +4679,7 @@ class SloppyArgumentsElementsAccessor
     uint32_t nof_indices = 0;
     const auto* params = keys->key_indexing_params();
     Handle<FixedArray> indices = isolate->factory()->NewFixedArray(
-        params->pageSize(GetCapacityImpl(*object, *backing_store)));
+        params->PageSize(GetCapacityImpl(*object, *backing_store)));
     DirectCollectElementIndicesImpl(isolate, object, backing_store,
                                     GetKeysConversion::kKeepNumbers,
                                     ENUMERABLE_STRINGS, indices, &nof_indices, 
@@ -4699,9 +4699,9 @@ class SloppyArgumentsElementsAccessor
       const KeyIterationParams* params = KeyIterationParams::Default()) {
     Handle<SloppyArgumentsElements> elements =
         Handle<SloppyArgumentsElements>::cast(backing_store);
-    uint32_t length = (uint32_t)params->pageSize(elements->length());
+    uint32_t length = (uint32_t)params->PageSize(elements->length());
 
-    for (uint32_t i = (uint32_t)params->keyFirstIndex(); i < (uint32_t)params->keyEndIndex((KeyIterationIndex)length); ++i) {
+    for (uint32_t i = (uint32_t)params->KeyFirstIndex(); i < (uint32_t)params->KeyEndIndex((KeyIterationIndex)length); ++i) {
       if (elements->mapped_entries(i, kRelaxedLoad).IsTheHole(isolate))
         continue;
       if (convert == GetKeysConversion::kConvertToString) {
@@ -5156,7 +5156,7 @@ class StringWrapperElementsAccessor
     uint32_t length = GetString(*object).length();
     Factory* factory = keys->isolate()->factory();
     auto* params = keys->key_indexing_params();
-    for (uint32_t i = (uint32_t)params->keyFirstIndex(); i < (uint32_t)params->keyEndIndex((KeyIterationIndex)length); i++) {
+    for (uint32_t i = (uint32_t)params->KeyFirstIndex(); i < (uint32_t)params->KeyEndIndex((KeyIterationIndex)length); i++) {
       RETURN_FAILURE_IF_NOT_SUCCESSFUL(
           keys->AddKey(factory->NewNumberFromUint(i)));
     }

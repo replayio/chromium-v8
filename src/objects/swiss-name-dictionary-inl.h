@@ -620,8 +620,8 @@ InternalIndex SwissNameDictionary::IndexIterator::operator*() {
 SwissNameDictionary::IndexIterable::IndexIterable(
     Handle<SwissNameDictionary> dict, const KeyIterationParams* params)
     : dict_{dict},
-      first_(params->keyFirstIndex()),
-      last_(params->keyEndIndex(dict_->UsedCapacity())) {}
+      first_(params->KeyFirstIndex()),
+      last_(params->KeyEndIndex(dict_->UsedCapacity())) {}
 
 SwissNameDictionary::IndexIterator SwissNameDictionary::IndexIterable::begin() {
   return IndexIterator(dict_, first_);

@@ -231,8 +231,8 @@ void Map::SetNumberOfOwnDescriptors(int number) {
 InternalIndex::Range Map::IterateOwnDescriptors(
     const KeyIterationParams* params) const {
   return InternalIndex::Range(
-      (size_t)params->keyFirstIndex(),
-      (size_t)params->keyEndIndex(NumberOfOwnDescriptors()));
+      (size_t)params->KeyFirstIndex(),
+      (size_t)params->KeyEndIndex(NumberOfOwnDescriptors()));
 }
 
 int Map::EnumLength() const {
