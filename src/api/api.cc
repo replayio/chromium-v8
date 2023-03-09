@@ -7773,14 +7773,18 @@ Maybe<bool> Set::Delete(Local<Context> context, Local<Value> key) {
 
 namespace {
 i::Handle<i::JSArray> SetAsArray(i::Isolate* i_isolate, i::Object table_obj,
-                                 int offset, SetAsArrayKind kind) {
+                                 int offset, SetAsArrayKind kind,
+                                 const KeyIterationParams* params = KeyIterationParams::Default()) {
   i::Factory* factory = i_isolate->factory();
   i::Handle<i::OrderedHashSet> table(i::OrderedHashSet::cast(table_obj),
                                      i_isolate);
   // Elements skipped by |offset| may already be deleted.
   int capacity = table->UsedCapacity();
   const bool collect_key_values = kind == SetAsArrayKind::kEntries;
-  int max_length = (capacity - offset) * (collect_key_values ? 2 : 1);
+  
+  auto page_size = params->pageSize(capacity - offset);
+  int max_length = page_size * (collect_key_values ? 2 : 1);
+
   if (max_length == 0) return factory->NewJSArray(0);
   i::Handle<i::FixedArray> result = factory->NewFixedArray(max_length);
   int result_index = 0;
@@ -7793,6 +7797,8 @@ i::Handle<i::JSArray> SetAsArray(i::Isolate* i_isolate, i::Object table_obj,
       if (key == the_hole) continue;
       result->set(result_index++, key);
       if (collect_key_values) result->set(result_index++, key);
+      
+      if (result_index == max_length) break;
     }
   }
   DCHECK_GE(max_length, result_index);
@@ -7803,14 +7809,13 @@ i::Handle<i::JSArray> SetAsArray(i::Isolate* i_isolate, i::Object table_obj,
 }
 }  // namespace
 
-Local<Array> Set::AsArray(const v8::KeyIterationParams*) const {
+Local<Array> Set::AsArray(const v8::KeyIterationParams* params) const {
   i::Handle<i::JSSet> obj = Utils::OpenHandle(this);
   i::Isolate* i_isolate = obj->GetIsolate();
   API_RCS_SCOPE(i_isolate, Set, AsArray);
   ENTER_V8_NO_SCRIPT_NO_EXCEPTION(i_isolate);
-  // TODO
   return Utils::ToLocal(
-      SetAsArray(i_isolate, obj->table(), 0, SetAsArrayKind::kValues));
+      SetAsArray(i_isolate, obj->table(), 0, SetAsArrayKind::kValues, params));
 }
 
 MaybeLocal<Promise::Resolver> Promise::Resolver::New(Local<Context> context) {
