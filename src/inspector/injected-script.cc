@@ -417,9 +417,7 @@ class PropertyAccumulator : public ValueMirror::PropertyAccumulator {
 Response InjectedScript::getProperties(
     v8::Local<v8::Object> object, const String16& groupName, bool ownProperties,
     bool accessorPropertiesOnly, bool nonIndexedPropertiesOnly,
-    WrapMode wrapMode,
-    const v8::KeyIterationParams* params,
-    std::unique_ptr<Array<PropertyDescriptor>>* properties,
+    WrapMode wrapMode, std::unique_ptr<Array<PropertyDescriptor>>* properties,
     Maybe<protocol::Runtime::ExceptionDetails>* exceptionDetails) {
   v8::HandleScope handles(m_context->isolate());
   v8::Local<v8::Context> context = m_context->context();
@@ -432,9 +430,7 @@ Response InjectedScript::getProperties(
   PropertyAccumulator accumulator(&mirrors);
   if (!ValueMirror::getProperties(context, object, ownProperties,
                                   accessorPropertiesOnly,
-                                  nonIndexedPropertiesOnly,
-                                  &accumulator,
-                                  params)) {
+                                  nonIndexedPropertiesOnly, &accumulator)) {
     return createExceptionDetails(tryCatch, groupName, exceptionDetails);
   }
   for (const PropertyMirror& mirror : mirrors) {
@@ -503,7 +499,6 @@ Response InjectedScript::getProperties(
 Response InjectedScript::getInternalAndPrivateProperties(
     v8::Local<v8::Value> value, const String16& groupName,
     bool accessorPropertiesOnly,
-    const v8::KeyIterationParams* params,
     std::unique_ptr<protocol::Array<InternalPropertyDescriptor>>*
         internalProperties,
     std::unique_ptr<protocol::Array<PrivatePropertyDescriptor>>*
@@ -521,7 +516,7 @@ Response InjectedScript::getInternalAndPrivateProperties(
   if (!accessorPropertiesOnly) {
     std::vector<InternalPropertyMirror> internalPropertiesWrappers;
     ValueMirror::getInternalProperties(m_context->context(), value_obj,
-                                       &internalPropertiesWrappers, params);
+                                       &internalPropertiesWrappers);
     for (const auto& internalProperty : internalPropertiesWrappers) {
       std::unique_ptr<RemoteObject> remoteObject;
       Response response = internalProperty.value->buildRemoteObject(

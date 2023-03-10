@@ -228,11 +228,8 @@ void Map::SetNumberOfOwnDescriptors(int number) {
       Bits3::NumberOfOwnDescriptorsBits::update(bit_field3(), number));
 }
 
-InternalIndex::Range Map::IterateOwnDescriptors(
-    const KeyIterationParams* params) const {
-  return InternalIndex::Range(
-      (size_t)params->KeyFirstIndex(),
-      (size_t)params->KeyEndIndex(NumberOfOwnDescriptors()));
+InternalIndex::Range Map::IterateOwnDescriptors() const {
+  return InternalIndex::Range(NumberOfOwnDescriptors());
 }
 
 int Map::EnumLength() const {
