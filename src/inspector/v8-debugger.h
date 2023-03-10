@@ -103,9 +103,8 @@ class V8Debugger : public v8::debug::DebugDelegate,
   std::unique_ptr<V8StackTraceImpl> createStackTrace(v8::Local<v8::StackTrace>);
   std::unique_ptr<V8StackTraceImpl> captureStackTrace(bool fullStack);
 
-  v8::MaybeLocal<v8::Array> internalProperties(
-      v8::Local<v8::Context>, v8::Local<v8::Value>,
-      const v8::KeyIterationParams* params);
+  v8::MaybeLocal<v8::Array> internalProperties(v8::Local<v8::Context>,
+                                               v8::Local<v8::Value>);
 
   v8::Local<v8::Array> queryObjects(v8::Local<v8::Context> context,
                                     v8::Local<v8::Object> prototype);
@@ -170,8 +169,7 @@ class V8Debugger : public v8::debug::DebugDelegate,
   v8::MaybeLocal<v8::Value> generatorScopes(v8::Local<v8::Context>,
                                             v8::Local<v8::Value>);
   v8::MaybeLocal<v8::Array> collectionsEntries(v8::Local<v8::Context> context,
-                                               v8::Local<v8::Value> value,
-                                               const v8::KeyIterationParams* params);
+                                               v8::Local<v8::Value> value);
 
   void asyncTaskScheduledForStack(const StringView& taskName, void* task,
                                   bool recurring, bool skipTopFrame = false);

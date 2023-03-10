@@ -69,8 +69,7 @@ class V8_EXPORT Map : public Object {
    * Returns an array of length Size() * 2, where index N is the Nth key and
    * index N + 1 is the Nth value.
    */
-  Local<Array> AsArray(const v8::KeyIterationParams* params =
-                           v8::KeyIterationParams::Default()) const;
+  Local<Array> AsArray() const;
 
   /**
    * Creates a new empty Map.
@@ -106,7 +105,7 @@ class V8_EXPORT Set : public Object {
   /**
    * Returns an array of the keys in this Set.
    */
-  Local<Array> AsArray(const v8::KeyIterationParams* params = v8::KeyIterationParams::Default()) const;
+  Local<Array> AsArray() const;
 
   /**
    * Creates a new empty Set.

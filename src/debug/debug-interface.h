@@ -626,8 +626,7 @@ class V8_EXPORT_PRIVATE PropertyIterator {
   // The returned std::unique_ptr is empty iff that happens.
   V8_WARN_UNUSED_RESULT static std::unique_ptr<PropertyIterator> Create(
       v8::Local<v8::Context> context, v8::Local<v8::Object> object,
-      bool skip_indices = false,
-      const v8::KeyIterationParams* params = v8::KeyIterationParams::Default());
+      bool skip_indices = false);
 
   virtual ~PropertyIterator() = default;
 

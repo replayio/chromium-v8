@@ -88,15 +88,14 @@ class InjectedScript final {
   Response getProperties(
       v8::Local<v8::Object>, const String16& groupName, bool ownProperties,
       bool accessorPropertiesOnly, bool nonIndexedPropertiesOnly,
-      WrapMode wrapMode, 
-      const v8::KeyIterationParams* params,
+      WrapMode wrapMode,
       std::unique_ptr<protocol::Array<protocol::Runtime::PropertyDescriptor>>*
           result,
       Maybe<protocol::Runtime::ExceptionDetails>*);
 
   Response getInternalAndPrivateProperties(
       v8::Local<v8::Value>, const String16& groupName,
-      bool accessorPropertiesOnly, const v8::KeyIterationParams* params,
+      bool accessorPropertiesOnly,
       std::unique_ptr<
           protocol::Array<protocol::Runtime::InternalPropertyDescriptor>>*
           internalProperties,

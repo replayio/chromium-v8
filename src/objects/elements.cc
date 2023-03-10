@@ -86,8 +86,6 @@ namespace internal {
 
 namespace {
 
-static KeyIterationParams kDefaultKeyIterationParams(0, 0);
-
 #define RETURN_NOTHING_IF_NOT_SUCCESSFUL(call) \
   do {                                         \
     if (!(call)) return Nothing<bool>();       \
@@ -1183,8 +1181,7 @@ class ElementsAccessorBase : public InternalElementsAccessor {
     PropertyFilter filter = keys->filter();
     Isolate* isolate = keys->isolate();
     Factory* factory = isolate->factory();
-    auto* params = keys->key_indexing_params();
-    for (size_t i = (size_t)params->KeyFirstIndex(); i < (size_t)params->KeyEndIndex((KeyIterationIndex)length); i++) {
+    for (size_t i = 0; i < length; i++) {
       if (Subclass::HasElementImpl(isolate, *object, i, *backing_store,
                                    filter)) {
         RETURN_FAILURE_IF_NOT_SUCCESSFUL(
@@ -1198,13 +1195,11 @@ class ElementsAccessorBase : public InternalElementsAccessor {
       Isolate* isolate, Handle<JSObject> object,
       Handle<FixedArrayBase> backing_store, GetKeysConversion convert,
       PropertyFilter filter, Handle<FixedArray> list, uint32_t* nof_indices,
-      uint32_t insertion_index = 0,
-      const KeyIterationParams* params = KeyIterationParams::Default()) {
+      uint32_t insertion_index = 0) {
     size_t length = Subclass::GetMaxIndex(*object, *backing_store);
     uint32_t const kMaxStringTableEntries =
         isolate->heap()->MaxNumberToStringCacheSize();
-    
-    for (size_t i = (size_t)params->KeyFirstIndex(); i < (size_t)params->KeyEndIndex((KeyIterationIndex)length); i++) {
+    for (size_t i = 0; i < length; i++) {
       if (Subclass::HasElementImpl(isolate, *object, i, *backing_store,
                                    filter)) {
         if (convert == GetKeysConversion::kConvertToString) {
@@ -1226,17 +1221,15 @@ class ElementsAccessorBase : public InternalElementsAccessor {
   MaybeHandle<FixedArray> PrependElementIndices(
       Isolate* isolate, Handle<JSObject> object,
       Handle<FixedArrayBase> backing_store, Handle<FixedArray> keys,
-      GetKeysConversion convert, PropertyFilter filter,
-      const KeyIterationParams* params) final {
+      GetKeysConversion convert, PropertyFilter filter) final {
     return Subclass::PrependElementIndicesImpl(isolate, object, backing_store,
-                                               keys, convert, filter, params);
+                                               keys, convert, filter);
   }
 
   static MaybeHandle<FixedArray> PrependElementIndicesImpl(
       Isolate* isolate, Handle<JSObject> object,
       Handle<FixedArrayBase> backing_store, Handle<FixedArray> keys,
-      GetKeysConversion convert, PropertyFilter filter,
-      const KeyIterationParams* params = KeyIterationParams::Default()) {
+      GetKeysConversion convert, PropertyFilter filter) {
     uint32_t nof_property_keys = keys->length();
     size_t initial_list_length =
         Subclass::GetMaxNumberOfEntries(*object, *backing_store);
@@ -1246,12 +1239,6 @@ class ElementsAccessorBase : public InternalElementsAccessor {
           MessageTemplate::kInvalidArrayLength));
     }
     initial_list_length += nof_property_keys;
-
-    initial_list_length = params->PageSize((KeyIterationIndex)initial_list_length);
-    if (initial_list_length <= nof_property_keys) {
-      // No space for indices.
-      return keys;
-    }
 
     // Collect the element indices into a new list.
     DCHECK_LE(initial_list_length, std::numeric_limits<int>::max());
@@ -1271,13 +1258,6 @@ class ElementsAccessorBase : public InternalElementsAccessor {
         initial_list_length =
             Subclass::NumberOfElementsImpl(*object, *backing_store);
         initial_list_length += nof_property_keys;
-
-        initial_list_length =
-            params->PageSize((KeyIterationIndex)initial_list_length);
-        if (initial_list_length <= nof_property_keys) {
-          // No space for indices.
-          return keys;
-        }
       }
       DCHECK_LE(initial_list_length, std::numeric_limits<int>::max());
       combined_keys = isolate->factory()->NewFixedArray(
@@ -1290,7 +1270,7 @@ class ElementsAccessorBase : public InternalElementsAccessor {
     combined_keys = Subclass::DirectCollectElementIndicesImpl(
         isolate, object, backing_store,
         needs_sorting ? GetKeysConversion::kKeepNumbers : convert, filter,
-        combined_keys, &nof_indices, 0, params);
+        combined_keys, &nof_indices);
 
     if (needs_sorting) {
       SortIndices(isolate, combined_keys, nof_indices);
@@ -1673,13 +1653,12 @@ class DictionaryElementsAccessor
     Isolate* isolate = keys->isolate();
     Handle<NumberDictionary> dictionary =
         Handle<NumberDictionary>::cast(backing_store);
-    const auto* params = keys->key_indexing_params();
     Handle<FixedArray> elements = isolate->factory()->NewFixedArray(
-        (int)params->PageSize(GetMaxNumberOfEntries(*object, *backing_store)));
+        GetMaxNumberOfEntries(*object, *backing_store));
     int insertion_index = 0;
     PropertyFilter filter = keys->filter();
     ReadOnlyRoots roots(isolate);
-    for (InternalIndex i : dictionary->IterateEntries(params)) {
+    for (InternalIndex i : dictionary->IterateEntries()) {
       AllowGarbageCollection allow_gc;
       Object raw_key = dictionary->KeyAt(isolate, i);
       if (!dictionary->IsKey(roots, raw_key)) continue;
@@ -1703,14 +1682,13 @@ class DictionaryElementsAccessor
       Isolate* isolate, Handle<JSObject> object,
       Handle<FixedArrayBase> backing_store, GetKeysConversion convert,
       PropertyFilter filter, Handle<FixedArray> list, uint32_t* nof_indices,
-      uint32_t insertion_index = 0,
-      const KeyIterationParams* params = KeyIterationParams::Default()) {
+      uint32_t insertion_index = 0) {
     if (filter & SKIP_STRINGS) return list;
     if (filter & ONLY_ALL_CAN_READ) return list;
 
     Handle<NumberDictionary> dictionary =
         Handle<NumberDictionary>::cast(backing_store);
-    for (InternalIndex i : dictionary->IterateEntries(params)) {
+    for (InternalIndex i : dictionary->IterateEntries()) {
       uint32_t key = GetKeyForEntryImpl(isolate, dictionary, i, filter);
       if (key == kMaxUInt32) continue;
       Handle<Object> index = isolate->factory()->NewNumberFromUint(key);
@@ -4677,13 +4655,11 @@ class SloppyArgumentsElementsAccessor
       KeyAccumulator* keys) {
     Isolate* isolate = keys->isolate();
     uint32_t nof_indices = 0;
-    const auto* params = keys->key_indexing_params();
     Handle<FixedArray> indices = isolate->factory()->NewFixedArray(
-        params->PageSize(GetCapacityImpl(*object, *backing_store)));
+        GetCapacityImpl(*object, *backing_store));
     DirectCollectElementIndicesImpl(isolate, object, backing_store,
                                     GetKeysConversion::kKeepNumbers,
-                                    ENUMERABLE_STRINGS, indices, &nof_indices, 
-                                    0, params);
+                                    ENUMERABLE_STRINGS, indices, &nof_indices);
     SortIndices(isolate, indices, nof_indices);
     for (uint32_t i = 0; i < nof_indices; i++) {
       RETURN_FAILURE_IF_NOT_SUCCESSFUL(keys->AddKey(indices->get(i)));
@@ -4694,14 +4670,13 @@ class SloppyArgumentsElementsAccessor
   static Handle<FixedArray> DirectCollectElementIndicesImpl(
       Isolate* isolate, Handle<JSObject> object,
       Handle<FixedArrayBase> backing_store, GetKeysConversion convert,
-      PropertyFilter filter, Handle<FixedArray> list, uint32_t* nof_indices, 
-      uint32_t insertion_index = 0,
-      const KeyIterationParams* params = KeyIterationParams::Default()) {
+      PropertyFilter filter, Handle<FixedArray> list, uint32_t* nof_indices,
+      uint32_t insertion_index = 0) {
     Handle<SloppyArgumentsElements> elements =
         Handle<SloppyArgumentsElements>::cast(backing_store);
-    uint32_t length = (uint32_t)params->PageSize(elements->length());
+    uint32_t length = elements->length();
 
-    for (uint32_t i = (uint32_t)params->KeyFirstIndex(); i < (uint32_t)params->KeyEndIndex((KeyIterationIndex)length); ++i) {
+    for (uint32_t i = 0; i < length; ++i) {
       if (elements->mapped_entries(i, kRelaxedLoad).IsTheHole(isolate))
         continue;
       if (convert == GetKeysConversion::kConvertToString) {
@@ -4716,7 +4691,7 @@ class SloppyArgumentsElementsAccessor
     Handle<FixedArray> store(elements->arguments(), isolate);
     return ArgumentsAccessor::DirectCollectElementIndicesImpl(
         isolate, object, store, convert, filter, list, nof_indices,
-        insertion_index, params);
+        insertion_index);
   }
 
   static Maybe<bool> IncludesValueImpl(Isolate* isolate,
@@ -5155,8 +5130,7 @@ class StringWrapperElementsAccessor
       KeyAccumulator* keys) {
     uint32_t length = GetString(*object).length();
     Factory* factory = keys->isolate()->factory();
-    auto* params = keys->key_indexing_params();
-    for (uint32_t i = (uint32_t)params->KeyFirstIndex(); i < (uint32_t)params->KeyEndIndex((KeyIterationIndex)length); i++) {
+    for (uint32_t i = 0; i < length; i++) {
       RETURN_FAILURE_IF_NOT_SUCCESSFUL(
           keys->AddKey(factory->NewNumberFromUint(i)));
     }

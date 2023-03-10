@@ -737,13 +737,12 @@ v8::MaybeLocal<v8::Value> V8Debugger::generatorScopes(
 }
 
 v8::MaybeLocal<v8::Array> V8Debugger::collectionsEntries(
-    v8::Local<v8::Context> context, v8::Local<v8::Value> collection,
-    const v8::KeyIterationParams* params) {
+    v8::Local<v8::Context> context, v8::Local<v8::Value> collection) {
   v8::Isolate* isolate = context->GetIsolate();
   v8::Local<v8::Array> entries;
   bool isKeyValue = false;
   if (!collection->IsObject() || !collection.As<v8::Object>()
-                                      ->PreviewEntries(&isKeyValue, params)
+                                      ->PreviewEntries(&isKeyValue)
                                       .ToLocal(&entries)) {
     return v8::MaybeLocal<v8::Array>();
   }
@@ -777,13 +776,12 @@ v8::MaybeLocal<v8::Array> V8Debugger::collectionsEntries(
 }
 
 v8::MaybeLocal<v8::Array> V8Debugger::internalProperties(
-    v8::Local<v8::Context> context, v8::Local<v8::Value> value,
-    const v8::KeyIterationParams* params) {
+    v8::Local<v8::Context> context, v8::Local<v8::Value> value) {
   v8::Local<v8::Array> properties;
   if (!v8::debug::GetInternalProperties(m_isolate, value).ToLocal(&properties))
     return v8::MaybeLocal<v8::Array>();
   v8::Local<v8::Array> entries;
-  if (collectionsEntries(context, value, params).ToLocal(&entries)) {
+  if (collectionsEntries(context, value).ToLocal(&entries)) {
     createDataProperty(context, properties, properties->Length(),
                        toV8StringInternalized(m_isolate, "[[Entries]]"));
     createDataProperty(context, properties, properties->Length(), entries);
