@@ -398,6 +398,22 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
       return MaybeHandle<Object>();
     }
   }
+  
+  // [Replay] Assert Invoke calls to pinpoint some JS execution divergences.
+  // Note: We want to assert after everything has been initialized.
+  if (params.target->IsJSFunction()) {
+    Handle<JSFunction> function = Handle<JSFunction>::cast(params.target);
+    v8::recordreplay::Assert(
+        "[RUN-1488-1495] Invoke A %s %d %d %d %d, %lu %d %d",
+        function->shared().DebugNameCStr().get(), function->length(),
+        function->shared().StartPosition(), function->shared().EndPosition(),
+        function->shared().SourceSize(),
+        function->shared().Hash(),
+        (int)function->shared().kind(),
+        function->shared().IsUserJavaScript());
+  } else {
+    v8::recordreplay::Assert("[RUN-1488-1495] Invoke B %d", params.IsScript());
+  }
 
   // Placeholder for return value.
   Object value;
