@@ -733,11 +733,6 @@ Maybe<bool> KeyAccumulator::CollectInterceptorKeysInternal(
 Maybe<bool> KeyAccumulator::CollectInterceptorKeys(Handle<JSReceiver> receiver,
                                                    Handle<JSObject> object,
                                                    IndexedOrNamed type) {
-  if (v8::recordreplay::HasDivergedFromRecording()) {
-    // Disallow interceptors to execute during pauses.
-    // See: https://linear.app/replay/issue/RUN-1315#comment-26f96699
-    return Just(true);
-  }
   if (type == kIndexed) {
     if (!object->HasIndexedInterceptor()) return Just(true);
   } else {
