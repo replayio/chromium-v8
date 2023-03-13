@@ -13,7 +13,7 @@
 #include "src/base/platform/time.h"
 #include "src/init/v8.h"
 
-#include "v8.h"
+#include "include/v8.h"
 
 namespace v8 {
 

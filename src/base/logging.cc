@@ -12,8 +12,6 @@
 #include "src/base/debug/stack_trace.h"
 #include "src/base/platform/platform.h"
 
-#include <dlfcn.h>
-
 namespace v8 {
 namespace base {
 

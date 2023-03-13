@@ -1315,16 +1315,17 @@ std::unique_ptr<ValueMirror> createNativeSetter(v8::Local<v8::Context> context,
   return ValueMirror::create(context, function);
 }
 
-static const char* allowed_getters[] = {
-  "type", "fromElement", "target", "isTrusted"
-};
+static const char* allowed_getters[] = {"type", "fromElement", "target",
+                                        "isTrusted"};
 
 bool doesAttributeHaveObservableSideEffectOnGet(v8::Local<v8::Context> context,
                                                 v8::Local<v8::Object> object,
                                                 v8::Local<v8::Name> name) {
   if (v8::recordreplay::HasDivergedFromRecording()) {
-    // Disallow most getters during Pause, since they cause unwanted crashes.
+    // Disallow most native getters during Pause, since they cause unwanted
+    // crashes.
     // -> https://linear.app/replay/issue/RUN-1478
+    if (!name->IsString()) return true; // disallow native symbol getters for now
     for (auto allowed : allowed_getters) {
       v8::String::Utf8Value nameRaw(context->GetIsolate(), name.As<v8::String>());
       if (!strcmp(allowed, *nameRaw)) {

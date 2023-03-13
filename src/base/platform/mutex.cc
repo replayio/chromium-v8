@@ -325,7 +325,14 @@ bool SharedMutex::TryLockExclusive() {
 
 #elif V8_OS_WIN
 
-Mutex::Mutex() : native_handle_(SRWLOCK_INIT) {
+//extern "C" void V8RecordReplayAddOrderedSRWLock(const char* name, void* lock);
+
+Mutex::Mutex(const char* ordered_name) : native_handle_(SRWLOCK_INIT) {
+  if (ordered_name) {
+    fprintf(stderr, "FIXME Mutex::Mutex Crashing...\n");
+    CHECK(0);
+    //V8RecordReplayAddOrderedSRWLock(ordered_name, &native_handle_);
+  }
 #ifdef DEBUG
   level_ = 0;
 #endif
