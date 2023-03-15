@@ -958,6 +958,10 @@ bool getPropertiesForPreview(v8::Local<v8::Context> context,
                       : -1;
   PreviewPropertyAccumulator accumulator(blocklist, skipIndex, nameLimit,
                                          indexLimit, overflow, properties);
+
+  // recordreplay::Print("DDBG getPropertiesForPreview %d",
+  //                     (int)Utils::OpenHandle(this)->Load);
+
   return ValueMirror::getProperties(context, object, false, false, false,
                                     &accumulator);
 }
