@@ -11117,8 +11117,7 @@ static std::set<std::string>* gRecordReplayKnownFeatures = new std::set<std::str
 // Ideally, this should always be a short list.
 // NOTE: These should generally be "double-negative" flags which we need to convert to positive in the near future.
 static const char* gExperimentalFlags[] = {
-  // NOTE: Events are currently in the pipeline, but causing too many crashes. Re-enable once ready.
-  // "disable-collect-events"
+  "disable-collect-events"
 };
 
 static inline void RecordReplayCheckKnownFeature(const char* feature) {
