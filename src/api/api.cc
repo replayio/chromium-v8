@@ -2163,16 +2163,18 @@ MaybeLocal<Value> Script::Run(Local<Context> context,
     }
   }
 
-  if (recordreplay::IsRecordingOrReplaying() && !recordreplay::AreEventsDisallowed()) {
+  if (recordreplay::IsRecordingOrReplaying() &&
+      !recordreplay::AreEventsDisallowed() &&
+      fun->shared().IsUserJavaScript()) {
     // TODO: IsInReplayCode
     v8::recordreplay::Assert(
-      "[RUN-1488-1495] Script::Run %s %d %d %d, %d %d",
+      "[RUN-1488-1495] Script::Run %s %d %d %d, %d",
       fun->shared().DebugNameCStr().get(),
       fun->shared().script().IsScript()
           ? i::Script::cast(fun->shared().script()).id()
           : 0,
       fun->shared().StartPosition(), fun->shared().EndPosition(),
-      (int)fun->shared().kind(), fun->shared().IsUserJavaScript());
+      (int)fun->shared().kind());
   }
 
   i::Handle<i::Object> receiver = i_isolate->global_proxy();
@@ -2457,7 +2459,8 @@ MaybeLocal<Value> Module::Evaluate(Local<Context> context) {
   Utils::ApiCheck(self->status() >= i::Module::kLinked, "Module::Evaluate",
                   "Expected instantiated module");
 
-  if (recordreplay::IsRecordingOrReplaying() && !recordreplay::AreEventsDisallowed()) {
+  if (recordreplay::IsRecordingOrReplaying() && !recordreplay::AreEventsDisallowed() &&
+     IsSourceTextModule()) {
     // TODO: IsInReplayCode
     v8::recordreplay::Assert(
       "[RUN-1488-1495] Module::Evaluate %d",
@@ -5251,12 +5254,6 @@ MaybeLocal<Value> Object::CallAsFunction(Local<Context> context,
   static_assert(sizeof(v8::Local<v8::Value>) == sizeof(i::Handle<i::Object>));
   i::Handle<i::Object>* args = reinterpret_cast<i::Handle<i::Object>*>(argv);
 
-  if (recordreplay::IsRecordingOrReplaying() && !recordreplay::AreEventsDisallowed()) {
-    // TODO: IsInReplayCode
-    v8::recordreplay::Assert(
-        "[RUN-1488-1495] Object::CallAsFunction %d", IsCodeLike(context->GetIsolate()));
-  }
-
   Local<Value> result;
   has_pending_exception = !ToLocal<Value>(
       i::Execution::Call(i_isolate, self, recv_obj, argc, args), &result);
@@ -5276,12 +5273,6 @@ MaybeLocal<Value> Object::CallAsConstructor(Local<Context> context, int argc,
   auto self = Utils::OpenHandle(this);
   static_assert(sizeof(v8::Local<v8::Value>) == sizeof(i::Handle<i::Object>));
   i::Handle<i::Object>* args = reinterpret_cast<i::Handle<i::Object>*>(argv);
-
-  if (recordreplay::IsRecordingOrReplaying() && !recordreplay::AreEventsDisallowed()) {
-    // TODO: IsInReplayCode
-    v8::recordreplay::Assert("[RUN-1488-1495] Object::CallAsConstructor %d",
-                            IsCodeLike(context->GetIsolate()));
-  }
 
   Local<Value> result;
   has_pending_exception = !ToLocal<Value>(
@@ -5339,7 +5330,9 @@ MaybeLocal<Object> Function::NewInstanceWithSideEffectType(
   }
   i::Handle<i::Object>* args = reinterpret_cast<i::Handle<i::Object>*>(argv);
 
-  if (recordreplay::IsRecordingOrReplaying() && !recordreplay::AreEventsDisallowed()) {
+  if (recordreplay::IsRecordingOrReplaying() &&
+      !recordreplay::AreEventsDisallowed() && self->IsJSFunction() &&
+      i::JSFunction::cast(*self).shared().IsUserJavaScript()) {
     // TODO: IsInReplayCode
     v8::recordreplay::Assert(
       "[RUN-1488-1495] Function::NewInstanceWithSideEffectType %d %d %d",
@@ -5386,7 +5379,8 @@ MaybeLocal<v8::Value> Function::Call(Local<Context> context,
   i::Handle<i::Object>* args = reinterpret_cast<i::Handle<i::Object>*>(argv);
 
   if (recordreplay::IsRecordingOrReplaying() &&
-      !recordreplay::AreEventsDisallowed()) {
+      !recordreplay::AreEventsDisallowed() && self->IsJSFunction() &&
+      i::JSFunction::cast(*self).shared().IsUserJavaScript()) {
     // TODO: IsInReplayCode
     v8::recordreplay::Assert("[RUN-1488-1495] Function::Call %d %d %d",
                              ScriptId(), GetScriptLineNumber(), GetScriptColumnNumber());

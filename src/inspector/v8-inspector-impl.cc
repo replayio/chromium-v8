@@ -401,11 +401,6 @@ void V8InspectorImpl::forEachContext(
 void V8InspectorImpl::forEachSession(
     int contextGroupId,
     const std::function<void(V8InspectorSessionImpl*)>& callback) {
-  if (v8::recordreplay::IsRecordingOrReplaying()) {
-    // TODO: SetIsInReplayCode
-    // Disallow events, since the debugger is (likely) created only during replay.
-    v8::recordreplay::BeginDisallowEvents();
-  }
   auto it = m_sessions.find(contextGroupId);
   if (it == m_sessions.end()) return;
   std::vector<int> ids;
@@ -418,11 +413,6 @@ void V8InspectorImpl::forEachSession(
     if (it == m_sessions.end()) continue;
     auto sessionIt = it->second.find(sessionId);
     if (sessionIt != it->second.end()) callback(sessionIt->second);
-  }
-
-  if (v8::recordreplay::IsRecordingOrReplaying()) {
-    // TODO: SetIsInReplayCode
-    v8::recordreplay::EndDisallowEvents();
   }
 }
 
