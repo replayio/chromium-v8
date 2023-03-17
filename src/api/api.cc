@@ -2166,7 +2166,7 @@ MaybeLocal<Value> Script::Run(Local<Context> context,
   if (recordreplay::IsRecordingOrReplaying() &&
       !recordreplay::AreEventsDisallowed() &&
       fun->shared().IsUserJavaScript()) {
-    // TODO: IsInReplayCode
+    // TODO: IsInReplayCode (RUN-1502)
     v8::recordreplay::Assert(
       "[RUN-1488-1495] Script::Run %s %d %d %d, %d",
       fun->shared().DebugNameCStr().get(),
@@ -2461,7 +2461,7 @@ MaybeLocal<Value> Module::Evaluate(Local<Context> context) {
 
   if (recordreplay::IsRecordingOrReplaying() && !recordreplay::AreEventsDisallowed() &&
      IsSourceTextModule()) {
-    // TODO: IsInReplayCode
+    // TODO: IsInReplayCode (RUN-1502)
     v8::recordreplay::Assert(
       "[RUN-1488-1495] Module::Evaluate %d",
       ScriptId());
@@ -5333,7 +5333,7 @@ MaybeLocal<Object> Function::NewInstanceWithSideEffectType(
   if (recordreplay::IsRecordingOrReplaying() &&
       !recordreplay::AreEventsDisallowed() && self->IsJSFunction() &&
       i::JSFunction::cast(*self).shared().IsUserJavaScript()) {
-    // TODO: IsInReplayCode
+    // TODO: IsInReplayCode (RUN-1502)
     v8::recordreplay::Assert(
       "[RUN-1488-1495] Function::NewInstanceWithSideEffectType %d %d %d",
       ScriptId(), GetScriptLineNumber(), GetScriptColumnNumber());
@@ -5381,7 +5381,7 @@ MaybeLocal<v8::Value> Function::Call(Local<Context> context,
   if (recordreplay::IsRecordingOrReplaying() &&
       !recordreplay::AreEventsDisallowed() && self->IsJSFunction() &&
       i::JSFunction::cast(*self).shared().IsUserJavaScript()) {
-    // TODO: IsInReplayCode
+    // TODO: IsInReplayCode (RUN-1502)
     v8::recordreplay::Assert("[RUN-1488-1495] Function::Call %d %d %d",
                              ScriptId(), GetScriptLineNumber(), GetScriptColumnNumber());
   }
