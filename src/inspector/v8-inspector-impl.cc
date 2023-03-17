@@ -401,6 +401,15 @@ void V8InspectorImpl::forEachContext(
 void V8InspectorImpl::forEachSession(
     int contextGroupId,
     const std::function<void(V8InspectorSessionImpl*)>& callback) {
+  if (v8::IsMainThread()) {
+    // This is the primary hub function for the V8Inspector to handle all kinds of events.
+    // Since we register a custom inspector only during replay, this is divergent.
+    // There are some more issues to be resolved: we don't want to reason about
+    // user inspectors. Also, we cannot disallow events during non-main thread event handling.
+    // See https://linear.app/replay/issue/RUN-1488#comment-4feddba0
+    v8::recordreplay::BeginDisallowEventsWithLabel("V8InspectorImpl::forEachSession");
+  }
+
   auto it = m_sessions.find(contextGroupId);
   if (it == m_sessions.end()) return;
   std::vector<int> ids;
@@ -413,6 +422,10 @@ void V8InspectorImpl::forEachSession(
     if (it == m_sessions.end()) continue;
     auto sessionIt = it->second.find(sessionId);
     if (sessionIt != it->second.end()) callback(sessionIt->second);
+  }
+
+  if (v8::IsMainThread()) {
+    v8::recordreplay::EndDisallowEvents();
   }
 }
 
