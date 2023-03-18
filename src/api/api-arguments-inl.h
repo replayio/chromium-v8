@@ -13,6 +13,8 @@
 #include "src/objects/api-callbacks.h"
 #include "src/objects/slots-inl.h"
 
+#include <sstream>
+
 namespace v8 {
 namespace internal {
 
@@ -135,6 +137,28 @@ Handle<Object> FunctionCallbackArguments::Call(CallHandlerInfo handler) {
   v8::FunctionCallback f =
       reinterpret_cast<v8::FunctionCallback>(handler.callback());
   Handle<Object> receiver_check_unsupported;
+
+  // TODO: we can get rid of this large blob once `Runtime_LoadNoFeedbackIC_Miss` can be safely wrapped in EventsDisallowed
+  Handle<Object> callback_info = handle(handler, isolate);
+  if (!callback_info.is_null() && !recordreplay::AreEventsDisallowed()) {
+    if (callback_info->IsInterceptorInfo()) {
+      InterceptorInfo info = InterceptorInfo::cast(*callback_info);
+      if (!info.has_no_side_effect()) {
+        std::stringstream stack;
+        isolate->PrintCurrentStackTrace(stack);
+        recordreplay::Assert("[RUN-1544] FunctionCallbackArguments::Call A %s", stack.str().c_str());
+      }
+    } else if (callback_info->IsCallHandlerInfo()) {
+      CallHandlerInfo info = CallHandlerInfo::cast(*callback_info);
+      if (!info.IsSideEffectFreeCallHandlerInfo()) {
+        std::stringstream stack;
+        isolate->PrintCurrentStackTrace(stack);
+        recordreplay::Assert(
+            "[RUN-1544] FunctionCallbackArguments::Call B %s", stack.str().c_str());
+      }
+    }
+  }
+
   if (isolate->debug_execution_mode() == DebugInfo::kSideEffects &&
       !isolate->debug()->PerformSideEffectCheckForCallback(
           handle(handler, isolate), receiver_check_unsupported,

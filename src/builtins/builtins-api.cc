@@ -118,7 +118,11 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> HandleApiCallHelper(
       isolate->PrintCurrentStackTrace(stack);
       // TODO: IsInReplayCode (RUN-1502)
       v8::recordreplay::Assert(
-          "[RUN-1488-1495] HandleApiCallHelper %s", stack.str().c_str());
+          "[RUN-1488-1495] HandleApiCallHelper %s %s",
+          JSReceiver::GetConstructorName(isolate, js_receiver)
+              ->ToCString()
+              .get(),
+          stack.str().c_str());
     }
 
     Handle<Object> result = custom.Call(call_data);
