@@ -2169,19 +2169,8 @@ MaybeLocal<Value> Script::Run(Local<Context> context,
       !recordreplay::AreEventsDisallowed()) {
     // TODO: IsInReplayCode (RUN-1502)
 
-    v8::HandleScope scope(args.GetIsolate());
-    IncrementalStringBuilder s(isolate);
-    if (isolate->InContext()) {
-      v8::Local<v8::StackTrace> stackTrace = v8::StackTrace::CurrentStackTrace(
-          args.GetIsolate(), 20, v8::StackTrace::kDetailed);
-      auto n = stackTrace->GetFrameCount();
-      for (int i = 0; i < n; ++i) {
-        v8::Local<v8::String> name = stackTrace->GetFrame(args.GetIsolate(), i)
-                                        ->GetScriptNameOrSourceURL();
-        s.AppendString(Utils::OpenHandle(*name));
-        AppendCString("\n  ");
-      }
-    }
+    std::stringstream stack;
+    i_isolate->PrintCurrentStackTrace(stack);
     v8::recordreplay::Assert("[RUN-1488-1495] Script::Run %s %d %d %d, %d %s",
                              fun->shared().DebugNameCStr().get(),
                              fun->shared().script().IsScript()
@@ -2189,8 +2178,7 @@ MaybeLocal<Value> Script::Run(Local<Context> context,
                                  : 0,
                              fun->shared().StartPosition(),
                              fun->shared().EndPosition(),
-                             (int)fun->shared().kind(), 
-                             *v8::String::Utf8Value(isolate, s.Finish().ToHandleChecked()));
+                             (int)fun->shared().kind(), stack.str().c_str());
   }
 
   i::Handle<i::Object> receiver = i_isolate->global_proxy();
