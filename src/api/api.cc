@@ -176,6 +176,8 @@
 #include <dlfcn.h>
 #endif
 
+#include "src/strings/string-builder-inl.h"
+
 extern const char* gCrashReason;
 
 namespace v8 {
@@ -2164,17 +2166,31 @@ MaybeLocal<Value> Script::Run(Local<Context> context,
   }
 
   if (recordreplay::IsRecordingOrReplaying() &&
-      !recordreplay::AreEventsDisallowed() &&
-      fun->shared().IsUserJavaScript()) {
+      !recordreplay::AreEventsDisallowed()) {
     // TODO: IsInReplayCode (RUN-1502)
-    v8::recordreplay::Assert(
-      "[RUN-1488-1495] Script::Run %s %d %d %d, %d",
-      fun->shared().DebugNameCStr().get(),
-      fun->shared().script().IsScript()
-          ? i::Script::cast(fun->shared().script()).id()
-          : 0,
-      fun->shared().StartPosition(), fun->shared().EndPosition(),
-      (int)fun->shared().kind());
+
+    v8::HandleScope scope(args.GetIsolate());
+    IncrementalStringBuilder s(isolate);
+    if (isolate->InContext()) {
+      v8::Local<v8::StackTrace> stackTrace = v8::StackTrace::CurrentStackTrace(
+          args.GetIsolate(), 20, v8::StackTrace::kDetailed);
+      auto n = stackTrace->GetFrameCount();
+      for (int i = 0; i < n; ++i) {
+        v8::Local<v8::String> name = stackTrace->GetFrame(args.GetIsolate(), i)
+                                        ->GetScriptNameOrSourceURL();
+        s.AppendString(Utils::OpenHandle(*name));
+        AppendCString("\n  ");
+      }
+    }
+    v8::recordreplay::Assert("[RUN-1488-1495] Script::Run %s %d %d %d, %d %s",
+                             fun->shared().DebugNameCStr().get(),
+                             fun->shared().script().IsScript()
+                                 ? i::Script::cast(fun->shared().script()).id()
+                                 : 0,
+                             fun->shared().StartPosition(),
+                             fun->shared().EndPosition(),
+                             (int)fun->shared().kind(), 
+                             *v8::String::Utf8Value(isolate, s.Finish().ToHandleChecked()));
   }
 
   i::Handle<i::Object> receiver = i_isolate->global_proxy();
@@ -2459,8 +2475,7 @@ MaybeLocal<Value> Module::Evaluate(Local<Context> context) {
   Utils::ApiCheck(self->status() >= i::Module::kLinked, "Module::Evaluate",
                   "Expected instantiated module");
 
-  if (recordreplay::IsRecordingOrReplaying() && !recordreplay::AreEventsDisallowed() &&
-     IsSourceTextModule()) {
+  if (recordreplay::IsRecordingOrReplaying() && !recordreplay::AreEventsDisallowed()) {
     // TODO: IsInReplayCode (RUN-1502)
     v8::recordreplay::Assert(
       "[RUN-1488-1495] Module::Evaluate %d",
@@ -5253,6 +5268,12 @@ MaybeLocal<Value> Object::CallAsFunction(Local<Context> context,
   auto recv_obj = Utils::OpenHandle(*recv);
   static_assert(sizeof(v8::Local<v8::Value>) == sizeof(i::Handle<i::Object>));
   i::Handle<i::Object>* args = reinterpret_cast<i::Handle<i::Object>*>(argv);
+  
+  if (recordreplay::IsRecordingOrReplaying() && !recordreplay::AreEventsDisallowed()) {
+    // TODO: IsInReplayCode
+    v8::recordreplay::Assert(
+        "[RUN-1488-1495] Object::CallAsFunction %d", IsCodeLike(context->GetIsolate()));
+  }
 
   Local<Value> result;
   has_pending_exception = !ToLocal<Value>(
@@ -5273,6 +5294,13 @@ MaybeLocal<Value> Object::CallAsConstructor(Local<Context> context, int argc,
   auto self = Utils::OpenHandle(this);
   static_assert(sizeof(v8::Local<v8::Value>) == sizeof(i::Handle<i::Object>));
   i::Handle<i::Object>* args = reinterpret_cast<i::Handle<i::Object>*>(argv);
+
+  if (recordreplay::IsRecordingOrReplaying() &&
+      !recordreplay::AreEventsDisallowed()) {
+    // TODO: IsInReplayCode
+    v8::recordreplay::Assert("[RUN-1488-1495] Object::CallAsConstructor %d",
+                             IsCodeLike(context->GetIsolate()));
+  }
 
   Local<Value> result;
   has_pending_exception = !ToLocal<Value>(
@@ -5331,8 +5359,7 @@ MaybeLocal<Object> Function::NewInstanceWithSideEffectType(
   i::Handle<i::Object>* args = reinterpret_cast<i::Handle<i::Object>*>(argv);
 
   if (recordreplay::IsRecordingOrReplaying() &&
-      !recordreplay::AreEventsDisallowed() && self->IsJSFunction() &&
-      i::JSFunction::cast(*self).shared().IsUserJavaScript()) {
+      !recordreplay::AreEventsDisallowed()) {
     // TODO: IsInReplayCode (RUN-1502)
     v8::recordreplay::Assert(
       "[RUN-1488-1495] Function::NewInstanceWithSideEffectType %d %d %d",
@@ -5379,8 +5406,7 @@ MaybeLocal<v8::Value> Function::Call(Local<Context> context,
   i::Handle<i::Object>* args = reinterpret_cast<i::Handle<i::Object>*>(argv);
 
   if (recordreplay::IsRecordingOrReplaying() &&
-      !recordreplay::AreEventsDisallowed() && self->IsJSFunction() &&
-      i::JSFunction::cast(*self).shared().IsUserJavaScript()) {
+      !recordreplay::AreEventsDisallowed()) {
     // TODO: IsInReplayCode (RUN-1502)
     v8::recordreplay::Assert("[RUN-1488-1495] Function::Call %d %d %d",
                              ScriptId(), GetScriptLineNumber(), GetScriptColumnNumber());

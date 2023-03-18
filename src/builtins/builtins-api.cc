@@ -109,6 +109,12 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> HandleApiCallHelper(
 
     FunctionCallbackArguments custom(isolate, data_obj, raw_holder, *new_target,
                                      argv, argc);
+
+    if (!v8::recordreplay::AreEventsDisallowed())
+      v8::recordreplay::Assert(
+        "[RUN-1488-1495] HandleApiCallHelper %s",
+        JSReceiver::GetConstructorName(isolate, js_receiver)->ToCString().get());
+
     Handle<Object> result = custom.Call(call_data);
 
     RETURN_EXCEPTION_IF_SCHEDULED_EXCEPTION(isolate, Object);
