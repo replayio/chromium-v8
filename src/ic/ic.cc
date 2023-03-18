@@ -38,6 +38,8 @@
 #include "src/tracing/tracing-category-observer.h"
 #include "src/utils/ostreams.h"
 
+#include <sstream>
+
 #if V8_ENABLE_WEBASSEMBLY
 #include "src/wasm/struct-types.h"
 #endif  // V8_ENABLE_WEBASSEMBLY
@@ -2654,6 +2656,15 @@ RUNTIME_FUNCTION(Runtime_LoadIC_Miss) {
 }
 
 RUNTIME_FUNCTION(Runtime_LoadNoFeedbackIC_Miss) {
+  if (recordreplay::IsRecordingOrReplaying() &&
+      !recordreplay::AreEventsDisallowed()) {
+    // TODO: IsInReplayCode (RUN-1502)
+    std::stringstream stack;
+    isolate->PrintCurrentStackTrace(stack);
+    v8::recordreplay::Assert("[RUN-1488-1495] Runtime_LoadNoFeedbackIC_Miss %s",
+                             stack.str().c_str());
+  }
+
   HandleScope scope(isolate);
   DCHECK_EQ(3, args.length());
   // Runtime functions don't follow the IC's calling convention.
