@@ -176,8 +176,6 @@
 #include <dlfcn.h>
 #endif
 
-#include "src/strings/string-builder-inl.h"
-
 extern const char* gCrashReason;
 
 namespace v8 {
@@ -2169,16 +2167,14 @@ MaybeLocal<Value> Script::Run(Local<Context> context,
       !recordreplay::AreEventsDisallowed()) {
     // TODO: IsInReplayCode (RUN-1502)
 
-    std::stringstream stack;
-    i_isolate->PrintCurrentStackTrace(stack);
-    v8::recordreplay::Assert("[RUN-1488-1495] Script::Run %s %d %d %d, %d %s",
+    v8::recordreplay::Assert("[RUN-1488-1495] Script::Run %s %d %d %d, %d",
                              fun->shared().DebugNameCStr().get(),
                              fun->shared().script().IsScript()
                                  ? i::Script::cast(fun->shared().script()).id()
                                  : 0,
                              fun->shared().StartPosition(),
                              fun->shared().EndPosition(),
-                             (int)fun->shared().kind(), stack.str().c_str());
+                             (int)fun->shared().kind());
   }
 
   i::Handle<i::Object> receiver = i_isolate->global_proxy();
