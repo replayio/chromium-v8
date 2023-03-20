@@ -112,18 +112,15 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> HandleApiCallHelper(
     FunctionCallbackArguments custom(isolate, data_obj, raw_holder, *new_target,
                                      argv, argc);
 
-    if (recordreplay::IsRecordingOrReplaying() &&
-        !recordreplay::AreEventsDisallowed()) {
-      std::stringstream stack;
-      isolate->PrintCurrentStackTrace(stack);
-      // TODO: IsInReplayCode (RUN-1502)
-      v8::recordreplay::Assert(
-          "[RUN-1488-1495] HandleApiCallHelper %s %s",
-          JSReceiver::GetConstructorName(isolate, js_receiver)
-              ->ToCString()
-              .get(),
-          stack.str().c_str());
-    }
+    // if (recordreplay::IsRecordingOrReplaying() &&
+    //     !recordreplay::AreEventsDisallowed()) {
+    //   // TODO: IsInReplayCode (RUN-1502)
+    //   v8::recordreplay::Assert(
+    //       "[RUN-1488-1495] HandleApiCallHelper %s",
+    //       JSReceiver::GetConstructorName(isolate, js_receiver)
+    //           ->ToCString()
+    //           .get());
+    // }
 
     Handle<Object> result = custom.Call(call_data);
 
