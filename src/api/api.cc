@@ -2163,8 +2163,7 @@ MaybeLocal<Value> Script::Run(Local<Context> context,
     }
   }
 
-  if (recordreplay::IsRecordingOrReplaying() &&
-      !recordreplay::AreEventsDisallowed()) {
+  if (recordreplay::IsRecordingOrReplaying() && !recordreplay::AreEventsDisallowed()) {
     // TODO: IsInReplayCode (RUN-1502)
 
     v8::recordreplay::Assert("[RUN-1488-1495] Script::Run %d",
@@ -5250,7 +5249,7 @@ MaybeLocal<Value> Object::CallAsFunction(Local<Context> context,
   i::Handle<i::Object>* args = reinterpret_cast<i::Handle<i::Object>*>(argv);
   
   if (recordreplay::IsRecordingOrReplaying() && !recordreplay::AreEventsDisallowed()) {
-    // TODO: IsInReplayCode
+    // TODO: IsInReplayCode (RUN-1502)
     v8::recordreplay::Assert(
         "[RUN-1488-1495] Object::CallAsFunction %d", IsCodeLike(context->GetIsolate()));
   }
@@ -5275,9 +5274,8 @@ MaybeLocal<Value> Object::CallAsConstructor(Local<Context> context, int argc,
   static_assert(sizeof(v8::Local<v8::Value>) == sizeof(i::Handle<i::Object>));
   i::Handle<i::Object>* args = reinterpret_cast<i::Handle<i::Object>*>(argv);
 
-  if (recordreplay::IsRecordingOrReplaying() &&
-      !recordreplay::AreEventsDisallowed()) {
-    // TODO: IsInReplayCode
+  if (recordreplay::IsRecordingOrReplaying() && !recordreplay::AreEventsDisallowed()) {
+    // TODO: IsInReplayCode (RUN-1502)
     v8::recordreplay::Assert("[RUN-1488-1495] Object::CallAsConstructor %d",
                              IsCodeLike(context->GetIsolate()));
   }
@@ -5338,8 +5336,7 @@ MaybeLocal<Object> Function::NewInstanceWithSideEffectType(
   }
   i::Handle<i::Object>* args = reinterpret_cast<i::Handle<i::Object>*>(argv);
 
-  if (recordreplay::IsRecordingOrReplaying() &&
-      !recordreplay::AreEventsDisallowed()) {
+  if (recordreplay::IsRecordingOrReplaying() && !recordreplay::AreEventsDisallowed()) {
     // TODO: IsInReplayCode (RUN-1502)
     v8::recordreplay::Assert(
       "[RUN-1488-1495] Function::NewInstanceWithSideEffectType %d %d %d",
@@ -5385,8 +5382,7 @@ MaybeLocal<v8::Value> Function::Call(Local<Context> context,
   static_assert(sizeof(v8::Local<v8::Value>) == sizeof(i::Handle<i::Object>));
   i::Handle<i::Object>* args = reinterpret_cast<i::Handle<i::Object>*>(argv);
 
-  if (recordreplay::IsRecordingOrReplaying() &&
-      !recordreplay::AreEventsDisallowed()) {
+  if (recordreplay::IsRecordingOrReplaying() && !recordreplay::AreEventsDisallowed()) {
     // TODO: IsInReplayCode (RUN-1502)
     v8::recordreplay::Assert("[RUN-1488-1495] Function::Call %d %d %d",
                              ScriptId(), GetScriptLineNumber(), GetScriptColumnNumber());

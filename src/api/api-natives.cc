@@ -403,7 +403,6 @@ MaybeHandle<JSObject> InstantiateObject(Isolate* isolate,
   }
   // Fast path.
   Handle<JSObject> result;
-
   if (should_cache && info->is_cached()) {
     if (ProbeInstantiationsCache(isolate, isolate->native_context(),
                                  info->serial_number(), CachingMode::kLimited)

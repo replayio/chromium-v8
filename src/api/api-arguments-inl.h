@@ -135,7 +135,6 @@ Handle<Object> FunctionCallbackArguments::Call(CallHandlerInfo handler) {
   v8::FunctionCallback f =
       reinterpret_cast<v8::FunctionCallback>(handler.callback());
   Handle<Object> receiver_check_unsupported;
-
   if (isolate->debug_execution_mode() == DebugInfo::kSideEffects &&
       !isolate->debug()->PerformSideEffectCheckForCallback(
           handle(handler, isolate), receiver_check_unsupported,
