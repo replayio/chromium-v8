@@ -3786,8 +3786,17 @@ char* CommandCallback(const char* command, const char* params) {
     }
   }
 
-  Handle<Object> rvStr =
-    JsonStringify(isolate, rv.ToHandleChecked(), undefined, undefined).ToHandleChecked();
+  Handle<Object> result = rv.ToHandleChecked();
+
+  if (result->IsException() || result->IsJSError()) {
+    // TODO: Just trying to naively convert the result into a json string doesn't produce useful results.
+    // Figure out how to get the message (and a stack) from it so that we can tell the controller what's
+    // going on.
+    recordreplay::Diagnostic("Error: CommandCallback %s failed with exception", command);
+    IMMEDIATE_CRASH();
+  }
+
+  Handle<Object> rvStr = JsonStringify(isolate, result, undefined, undefined).ToHandleChecked();
   std::unique_ptr<char[]> rvCStr = String::cast(*rvStr).ToCString();
   return strdup(rvCStr.get());
 }

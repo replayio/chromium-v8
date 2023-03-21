@@ -11702,6 +11702,15 @@ static void RecordReplayLoadSymbol(void* handle, const char* name, T& function) 
 #endif
   if (!sym) {
     fprintf(stderr, "Could not find %s in Record Replay driver, crashing.\n", name);
+#if V8_OS_WIN
+    // Additionally write the message to a new file. Capturing the output written to
+    // stderr by browser subprocesses on windows is surprisingly difficult.
+    FILE* f = fopen("record_replay_load_symbol_error.txt", "w");
+    if (f) {
+      fprintf(f, "Could not find %s in Record Replay driver, crashing.\n", name);
+      fclose(f);
+    }
+#endif
     IMMEDIATE_CRASH();
   }
 
