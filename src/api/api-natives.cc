@@ -404,17 +404,10 @@ MaybeHandle<JSObject> InstantiateObject(Isolate* isolate,
   // Fast path.
   Handle<JSObject> result;
 
-  // if (!recordreplay::AreEventsDisallowed()) {
-  //   recordreplay::Assert("[RUN-1488-1495] InstantiateObject A %d %d",
-  //                      should_cache, info->is_cached());
-  // }
   if (should_cache && info->is_cached()) {
     if (ProbeInstantiationsCache(isolate, isolate->native_context(),
                                  info->serial_number(), CachingMode::kLimited)
             .ToHandle(&result)) {
-    // if (!recordreplay::AreEventsDisallowed()) {
-    //   recordreplay::Assert("[RUN-1488-1495] InstantiateObject B");
-    // }
       return isolate->factory()->CopyJSObject(result);
     }
   }
@@ -432,10 +425,6 @@ MaybeHandle<JSObject> InstantiateObject(Isolate* isolate,
       ASSIGN_RETURN_ON_EXCEPTION(isolate, tmp_constructor,
                                  InstantiateFunction(isolate, cons_templ),
                                  JSObject);
-
-      // if (!recordreplay::AreEventsDisallowed()) {
-      //   recordreplay::Assert("[RUN-1488-1495] InstantiateObject C");
-      // }
       constructor = scope.CloseAndEscape(tmp_constructor);
     }
 
@@ -448,20 +437,10 @@ MaybeHandle<JSObject> InstantiateObject(Isolate* isolate,
       JSObject::New(constructor, new_target, Handle<AllocationSite>::null()),
       JSObject);
 
-  // if (!recordreplay::AreEventsDisallowed()) {
-  //   recordreplay::Assert("[RUN-1488-1495] InstantiateObject D");
-  // }
-
   if (is_prototype) JSObject::OptimizeAsPrototype(object);
 
   ASSIGN_RETURN_ON_EXCEPTION(
       isolate, result, ConfigureInstance(isolate, object, info), JSObject);
-
-  // if (!recordreplay::AreEventsDisallowed()) {
-  //   recordreplay::Assert("[RUN-1488-1495] InstantiateObject E %d",
-  //                      info->immutable_proto());
-  // }
-
   if (info->immutable_proto()) {
     JSObject::SetImmutableProto(object);
   }

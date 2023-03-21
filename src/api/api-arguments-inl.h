@@ -13,8 +13,6 @@
 #include "src/objects/api-callbacks.h"
 #include "src/objects/slots-inl.h"
 
-#include <sstream>
-
 namespace v8 {
 namespace internal {
 
@@ -137,24 +135,6 @@ Handle<Object> FunctionCallbackArguments::Call(CallHandlerInfo handler) {
   v8::FunctionCallback f =
       reinterpret_cast<v8::FunctionCallback>(handler.callback());
   Handle<Object> receiver_check_unsupported;
-
-  // Handle<Object> callback_info = handle(handler, isolate);
-  // if (!callback_info.is_null() && !recordreplay::AreEventsDisallowed()) {
-  //   if (callback_info->IsInterceptorInfo()) {
-  //     InterceptorInfo info = InterceptorInfo::cast(*callback_info);
-  //     if (!info.has_no_side_effect()) {
-  //       recordreplay::Assert("[RUN-1544] FunctionCallbackArguments::Call A");
-  //     }
-  //   } else if (callback_info->IsCallHandlerInfo()) {
-  //     CallHandlerInfo info = CallHandlerInfo::cast(*callback_info);
-  //     if (!info.IsSideEffectFreeCallHandlerInfo()) {
-  //       std::stringstream stack;
-  //       isolate->PrintCurrentStackTrace(stack);
-  //       recordreplay::Assert(
-  //           "[RUN-1544] FunctionCallbackArguments::Call B");
-  //     }
-  //   }
-  // }
 
   if (isolate->debug_execution_mode() == DebugInfo::kSideEffects &&
       !isolate->debug()->PerformSideEffectCheckForCallback(

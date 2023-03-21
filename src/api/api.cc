@@ -2167,14 +2167,10 @@ MaybeLocal<Value> Script::Run(Local<Context> context,
       !recordreplay::AreEventsDisallowed()) {
     // TODO: IsInReplayCode (RUN-1502)
 
-    v8::recordreplay::Assert("[RUN-1488-1495] Script::Run %s %d %d %d, %d",
-                             fun->shared().DebugNameCStr().get(),
+    v8::recordreplay::Assert("[RUN-1488-1495] Script::Run %d",
                              fun->shared().script().IsScript()
                                  ? i::Script::cast(fun->shared().script()).id()
-                                 : 0,
-                             fun->shared().StartPosition(),
-                             fun->shared().EndPosition(),
-                             (int)fun->shared().kind());
+                                 : 0);
   }
 
   i::Handle<i::Object> receiver = i_isolate->global_proxy();

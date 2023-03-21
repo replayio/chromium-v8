@@ -401,7 +401,6 @@ void V8InspectorImpl::forEachContext(
 void V8InspectorImpl::forEachSession(
     int contextGroupId,
     const std::function<void(V8InspectorSessionImpl*)>& callback) {
-
   auto it = m_sessions.find(contextGroupId);
   if (it == m_sessions.end()) return;
   std::vector<int> ids;

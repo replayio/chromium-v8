@@ -38,8 +38,6 @@
 #include "src/tracing/tracing-category-observer.h"
 #include "src/utils/ostreams.h"
 
-#include <sstream>
-
 #if V8_ENABLE_WEBASSEMBLY
 #include "src/wasm/struct-types.h"
 #endif  // V8_ENABLE_WEBASSEMBLY
