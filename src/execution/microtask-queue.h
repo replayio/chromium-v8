@@ -44,8 +44,6 @@ class V8_EXPORT_PRIVATE MicrotaskQueue final : public v8::MicrotaskQueue {
   void EnqueueMicrotask(v8::Isolate* isolate, v8::MicrotaskCallback callback,
                         void* data) override;
   void PerformCheckpoint(v8::Isolate* isolate) override {
-    v8::recordreplay::Assert("[RUN-1488-1495] MicrotaskQueue::PerformCheckpoint %d",
-                         ShouldPerfomCheckpoint());
     if (!ShouldPerfomCheckpoint()) return;
     PerformCheckpointInternal(isolate);
   }
