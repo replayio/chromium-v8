@@ -7712,7 +7712,6 @@ i::Handle<i::JSArray> MapAsArray(i::Isolate* i_isolate, i::Object table_obj,
   int capacity = table->UsedCapacity();
 
   auto page_size = params->PageSize(capacity - offset);
-
   int max_length = page_size * ((collect_keys && collect_values) ? 2 : 1);
 
   i::Handle<i::FixedArray> result = factory->NewFixedArray(max_length);
