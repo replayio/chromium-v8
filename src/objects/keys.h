@@ -89,7 +89,7 @@ class KeyAccumulator final {
   // chain or only look at the receiver.
   KeyCollectionMode mode() { return mode_; }
 
-  const KeyIterationParams* key_indexing_params() const {
+  const KeyIterationParams* key_iteration_params() const {
     return key_iteration_params_;
   }
 
@@ -160,7 +160,7 @@ class KeyAccumulator final {
     last_non_empty_prototype_ = object;
   }
   void set_may_have_elements(bool value) { may_have_elements_ = value; }
-  void set_key_indexing_params(const KeyIterationParams* params) {
+  void set_key_iteration_params(const KeyIterationParams* params) {
     key_iteration_params_ = params;
   }
 

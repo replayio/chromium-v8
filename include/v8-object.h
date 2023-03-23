@@ -241,12 +241,13 @@ using KeyIterationIndex = int;
  * `Runtime.getProperties` command. It is also not a guarantee on pagination,
  * but purely a performance improvement. We apply these params in many scenarios
  * where large key sets would slow things down a lot.
- * TODO: Custom page_index has not been fully tested or implemented.
+ * WARNING: |page_index_| has not been fully implemented.
  * NOTE: In the future, this can be updated to encapsulate all key query
  * parameters in a single object (`KeyCollectionMode`, `IndexFilter` etc.).
  */
 class KeyIterationParams {
   KeyIterationIndex page_size_;
+  /** WARNING: |page_index_| is not fully implemented. */
   KeyIterationIndex page_index_;
  public:
   /**

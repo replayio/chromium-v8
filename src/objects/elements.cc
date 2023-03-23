@@ -86,8 +86,6 @@ namespace internal {
 
 namespace {
 
-static KeyIterationParams kDefaultKeyIterationParams(0, 0);
-
 #define RETURN_NOTHING_IF_NOT_SUCCESSFUL(call) \
   do {                                         \
     if (!(call)) return Nothing<bool>();       \
@@ -1183,7 +1181,12 @@ class ElementsAccessorBase : public InternalElementsAccessor {
     PropertyFilter filter = keys->filter();
     Isolate* isolate = keys->isolate();
     Factory* factory = isolate->factory();
-    auto* params = keys->key_indexing_params();
+    auto* params = keys->key_iteration_params();
+    if (*params && v8::recordreplay::IsReplaying() &&
+        v8::recordreplay::AreEventsDisallowed()) {
+      v8::recordreplay::Print("DDBG CollectElementIndicesImpl1 A %zu",
+                              initial_list_length);
+    }
     for (size_t i = (size_t)params->KeyFirstIndex(); i < (size_t)params->KeyEndIndex((KeyIterationIndex)length); i++) {
       if (Subclass::HasElementImpl(isolate, *object, i, *backing_store,
                                    filter)) {
@@ -1203,8 +1206,15 @@ class ElementsAccessorBase : public InternalElementsAccessor {
     size_t length = Subclass::GetMaxIndex(*object, *backing_store);
     uint32_t const kMaxStringTableEntries =
         isolate->heap()->MaxNumberToStringCacheSize();
-    
-    for (size_t i = (size_t)params->KeyFirstIndex(); i < (size_t)params->KeyEndIndex((KeyIterationIndex)length); i++) {
+
+    size_t pageSize = (size_t)params->PageIndex((KeyIterationIndex)length);
+
+    if (*params && v8::recordreplay::IsReplaying() &&
+        v8::recordreplay::AreEventsDisallowed()) {
+      v8::recordreplay::Print("DDBG DirectCollectElementIndicesImpl1 A %zu %zu",
+                              length, pageSize);
+    }
+    for (size_t i = 0; i < length; i++) {
       if (Subclass::HasElementImpl(isolate, *object, i, *backing_store,
                                    filter)) {
         if (convert == GetKeysConversion::kConvertToString) {
@@ -1217,6 +1227,8 @@ class ElementsAccessorBase : public InternalElementsAccessor {
           list->set(insertion_index, *number);
         }
         insertion_index++;
+
+        if (insertion_index == pageSize) break;
       }
     }
     *nof_indices = insertion_index;
@@ -1247,9 +1259,18 @@ class ElementsAccessorBase : public InternalElementsAccessor {
     }
     initial_list_length += nof_property_keys;
 
-    initial_list_length = params->PageSize((KeyIterationIndex)initial_list_length);
+    initial_list_length = (size_t)params->PageSize((KeyIterationIndex)initial_list_length);
+    if (*params && v8::recordreplay::IsReplaying() &&
+        v8::recordreplay::AreEventsDisallowed()) {
+      v8::recordreplay::Print("DDBG PrependElementIndicesImpl A %lu %zu %zu",
+                              nof_property_keys,
+                              Subclass::GetMaxNumberOfEntries(*object, *backing_store),
+                              initial_list_length);
+    }
+
     if (initial_list_length <= nof_property_keys) {
       // No space for indices.
+      // NOTE: We can return |keys| here because it was a temp allocated object when it was passed in.
       return keys;
     }
 
@@ -1273,7 +1294,7 @@ class ElementsAccessorBase : public InternalElementsAccessor {
         initial_list_length += nof_property_keys;
 
         initial_list_length =
-            params->PageSize((KeyIterationIndex)initial_list_length);
+            (size_t)params->PageSize((KeyIterationIndex)initial_list_length);
         if (initial_list_length <= nof_property_keys) {
           // No space for indices.
           return keys;
@@ -1673,13 +1694,23 @@ class DictionaryElementsAccessor
     Isolate* isolate = keys->isolate();
     Handle<NumberDictionary> dictionary =
         Handle<NumberDictionary>::cast(backing_store);
-    const auto* params = keys->key_indexing_params();
-    Handle<FixedArray> elements = isolate->factory()->NewFixedArray(
-        (int)params->PageSize(GetMaxNumberOfEntries(*object, *backing_store)));
+    const auto* params = keys->key_iteration_params();
+    auto pageSize =
+        (int)params->PageSize(GetMaxNumberOfEntries(*object, *backing_store));
+    Handle<FixedArray> elements = isolate->factory()->NewFixedArray(pageSize);
     int insertion_index = 0;
     PropertyFilter filter = keys->filter();
+
+    if (*params && v8::recordreplay::IsReplaying() &&
+        v8::recordreplay::AreEventsDisallowed()) {
+      v8::recordreplay::Print(
+          "DDBG CollectElementIndicesImpl2 A %d %lu",
+          pageSize,
+          GetMaxNumberOfEntries(*object, *backing_store));
+    }
+
     ReadOnlyRoots roots(isolate);
-    for (InternalIndex i : dictionary->IterateEntries(params)) {
+    for (InternalIndex i : dictionary->IterateEntries()) {
       AllowGarbageCollection allow_gc;
       Object raw_key = dictionary->KeyAt(isolate, i);
       if (!dictionary->IsKey(roots, raw_key)) continue;
@@ -1691,6 +1722,8 @@ class DictionaryElementsAccessor
       }
       elements->set(insertion_index, raw_key);
       insertion_index++;
+
+      if (insertion_index == pageSize) break;
     }
     SortIndices(isolate, elements, insertion_index);
     for (int i = 0; i < insertion_index; i++) {
@@ -1707,15 +1740,28 @@ class DictionaryElementsAccessor
       const KeyIterationParams* params = KeyIterationParams::Default()) {
     if (filter & SKIP_STRINGS) return list;
     if (filter & ONLY_ALL_CAN_READ) return list;
-
     Handle<NumberDictionary> dictionary =
         Handle<NumberDictionary>::cast(backing_store);
-    for (InternalIndex i : dictionary->IterateEntries(params)) {
+    
+    auto pageSize = (uint32_t)params->PageSize(dictionary->Capacity());
+    if (*params && v8::recordreplay::IsReplaying() &&
+        v8::recordreplay::AreEventsDisallowed())
+      recordreplay::Print("DDBG DirectCollectElementIndicesImpl2 %lu %d %lu",
+                          pageSize, dictionary->Capacity(), insertion_index);
+
+    if (pageSize <= insertion_index) {
+      // No space left on first page.
+      return list;
+    }
+
+    for (InternalIndex i : dictionary->IterateEntries()) {
       uint32_t key = GetKeyForEntryImpl(isolate, dictionary, i, filter);
       if (key == kMaxUInt32) continue;
       Handle<Object> index = isolate->factory()->NewNumberFromUint(key);
       list->set(insertion_index, *index);
       insertion_index++;
+
+      if (insertion_index == pageSize) break;
     }
     *nof_indices = insertion_index;
     return list;
@@ -4677,7 +4723,7 @@ class SloppyArgumentsElementsAccessor
       KeyAccumulator* keys) {
     Isolate* isolate = keys->isolate();
     uint32_t nof_indices = 0;
-    const auto* params = keys->key_indexing_params();
+    const auto* params = keys->key_iteration_params();
     Handle<FixedArray> indices = isolate->factory()->NewFixedArray(
         params->PageSize(GetCapacityImpl(*object, *backing_store)));
     DirectCollectElementIndicesImpl(isolate, object, backing_store,
@@ -4699,9 +4745,17 @@ class SloppyArgumentsElementsAccessor
       const KeyIterationParams* params = KeyIterationParams::Default()) {
     Handle<SloppyArgumentsElements> elements =
         Handle<SloppyArgumentsElements>::cast(backing_store);
-    uint32_t length = (uint32_t)params->PageSize(elements->length());
+    uint32_t length = elements->length();
 
-    for (uint32_t i = (uint32_t)params->KeyFirstIndex(); i < (uint32_t)params->KeyEndIndex((KeyIterationIndex)length); ++i) {
+    uint32_t pageSize =
+        (uint32_t)params->PageSize((KeyIterationIndex)elements->length());
+    if (*params && v8::recordreplay::IsReplaying() &&
+        v8::recordreplay::AreEventsDisallowed())
+      recordreplay::Print("DDBG DirectCollectElementIndicesImpl3 %lu %lu",
+                          length, pageSize);
+
+
+    for (uint32_t i = 0; i < length; ++i) {
       if (elements->mapped_entries(i, kRelaxedLoad).IsTheHole(isolate))
         continue;
       if (convert == GetKeysConversion::kConvertToString) {
@@ -4711,6 +4765,8 @@ class SloppyArgumentsElementsAccessor
         list->set(insertion_index, Smi::FromInt(i));
       }
       insertion_index++;
+
+      if (insertion_index == pageSize) break;
     }
 
     Handle<FixedArray> store(elements->arguments(), isolate);
@@ -5155,7 +5211,13 @@ class StringWrapperElementsAccessor
       KeyAccumulator* keys) {
     uint32_t length = GetString(*object).length();
     Factory* factory = keys->isolate()->factory();
-    auto* params = keys->key_indexing_params();
+    auto* params = keys->key_iteration_params();
+
+    if (*params && v8::recordreplay::IsReplaying() &&
+        v8::recordreplay::AreEventsDisallowed())
+      recordreplay::Print("DDBG CollectElementIndicesImpl3 %lu %lu", length,
+                          params->KeyEndIndex((KeyIterationIndex)length));
+
     for (uint32_t i = (uint32_t)params->KeyFirstIndex(); i < (uint32_t)params->KeyEndIndex((KeyIterationIndex)length); i++) {
       RETURN_FAILURE_IF_NOT_SUCCESSFUL(
           keys->AddKey(factory->NewNumberFromUint(i)));

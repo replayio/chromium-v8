@@ -1409,10 +1409,25 @@ bool ValueMirror::getProperties(v8::Local<v8::Context> context,
     return false;
   }
 
+  int i = 0;
   while (!iterator->Done()) {
     bool isOwn = iterator->is_own();
     if (!isOwn && ownProperties) break;
     v8::Local<v8::Name> v8Name = iterator->name();
+
+    if (v8::recordreplay::IsReplaying() &&
+        v8::recordreplay::AreEventsDisallowed()) {
+      String16 n;
+      if (v8Name->IsString()) {
+        n = toProtocolString(isolate, v8Name.As<v8::String>());
+      } else {
+        v8::Local<v8::Symbol> symbol = v8Name.As<v8::Symbol>();
+        n = descriptionForSymbol(context, symbol);
+      }
+      v8::recordreplay::Print("DDBG VM::GP %d %d %s", i++, v8Name->IsString(),
+                              n.characters16());
+    }
+
     v8::Maybe<bool> result = set->Has(context, v8Name);
     if (result.IsNothing()) return false;
     if (result.FromJust()) {
@@ -1485,7 +1500,6 @@ bool ValueMirror::getProperties(v8::Local<v8::Context> context,
             setterMirror = ValueMirror::create(context, descriptor.set);
           }
           isAccessorProperty = getterMirror || setterMirror;
-
           if (name != "__proto__" && !getterFunction.IsEmpty() &&
               getterFunction->ScriptId() == v8::UnboundScript::kNoScriptId &&
               !doesAttributeHaveObservableSideEffectOnGet(context, object,

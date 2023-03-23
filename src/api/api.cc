@@ -7713,6 +7713,8 @@ i::Handle<i::JSArray> MapAsArray(i::Isolate* i_isolate, i::Object table_obj,
 
   auto page_size = params->PageSize(capacity - offset);
   int max_length = page_size * ((collect_keys && collect_values) ? 2 : 1);
+  if (v8::recordreplay::IsReplaying() && v8::recordreplay::AreEventsDisallowed())
+    recordreplay::Print("DDBG MapAsArray A k=%d o=%d c=%d p=%d m=%d", (int)kind, offset, capacity, page_size, max_length);
 
   i::Handle<i::FixedArray> result = factory->NewFixedArray(max_length);
   int result_index = 0;
@@ -7730,6 +7732,9 @@ i::Handle<i::JSArray> MapAsArray(i::Isolate* i_isolate, i::Object table_obj,
     }
   }
   DCHECK_GE(max_length, result_index);
+  if (v8::recordreplay::IsReplaying() && v8::recordreplay::AreEventsDisallowed())
+    recordreplay::Print("DDBG MapAsArray B k=%d m=%d r=%d", (int)kind,
+                        max_length, result_index);
   if (result_index == 0) return factory->NewJSArray(0);
   result->Shrink(i_isolate, result_index);
   return factory->NewJSArrayWithElements(result, i::PACKED_ELEMENTS,

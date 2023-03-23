@@ -54,8 +54,6 @@
 
 #include "v8.h"
 
-#include "src/base/platform/elapsed-timer.h"
-
 namespace v8_inspector {
 
 namespace V8RuntimeAgentImplState {

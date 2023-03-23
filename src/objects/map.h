@@ -637,8 +637,7 @@ class Map : public TorqueGeneratedMap<Map, HeapObject> {
 
   inline int NumberOfOwnDescriptors() const;
   inline void SetNumberOfOwnDescriptors(int number);
-  inline InternalIndex::Range IterateOwnDescriptors(
-      const KeyIterationParams* params = KeyIterationParams::Default()) const;
+  inline InternalIndex::Range IterateOwnDescriptors() const;
 
   inline Cell RetrieveDescriptorsPointer();
 

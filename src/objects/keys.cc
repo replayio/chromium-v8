@@ -382,6 +382,14 @@ Handle<FixedArray> GetFastEnumPropertyKeys(Isolate* isolate,
   // must have a valid enum cache as well.
   int enum_length = map->EnumLength();
 
+  auto pageSize = params->PageSize(enum_length);
+
+  if (*params && v8::recordreplay::IsReplaying() &&
+      v8::recordreplay::AreEventsDisallowed()) {
+    v8::recordreplay::Print("DDBG GetFastEnumPropertyKeys A %d %d %d",
+                            pageSize, enum_length, (int)keys->length());
+  }
+
   // Ignore cache in case of custom params.
   if (enum_length != kInvalidEnumCacheSentinel && !*params) {
     DCHECK(map->OnlyHasSimpleProperties());
@@ -405,17 +413,14 @@ Handle<FixedArray> GetFastEnumPropertyKeys(Isolate* isolate,
 
   Handle<DescriptorArray> descriptors =
       Handle<DescriptorArray>(map->instance_descriptors(isolate), isolate);
-      
-  // Ignore cache in case of custom params.
-  if (!*params) {
-    isolate->counters()->enum_cache_misses()->Increment();
-  }
+
+  isolate->counters()->enum_cache_misses()->Increment();
 
   // Create the keys array.
   int index = 0;
   bool fields_only = true;
-  keys = isolate->factory()->NewFixedArray(enum_length);
-  for (InternalIndex i : map->IterateOwnDescriptors(params)) {
+  keys = isolate->factory()->NewFixedArray(pageSize);
+  for (InternalIndex i : map->IterateOwnDescriptors()) {
     DisallowGarbageCollection no_gc;
     PropertyDetails details = descriptors->GetDetails(i);
     if (details.IsDontEnum()) continue;
@@ -424,15 +429,17 @@ Handle<FixedArray> GetFastEnumPropertyKeys(Isolate* isolate,
     keys->set(index, key);
     if (details.location() != PropertyLocation::kField) fields_only = false;
     index++;
+    
+    if (index == pageSize) break;
   }
   DCHECK_EQ(index, keys->length());
 
   // Optionally also create the indices array.
   Handle<FixedArray> indices = isolate->factory()->empty_fixed_array();
   if (fields_only) {
-    indices = isolate->factory()->NewFixedArray(enum_length);
+    indices = isolate->factory()->NewFixedArray(pageSize);
     index = 0;
-    for (InternalIndex i : map->IterateOwnDescriptors(params)) {
+    for (InternalIndex i : map->IterateOwnDescriptors()) {
       DisallowGarbageCollection no_gc;
       PropertyDetails details = descriptors->GetDetails(i);
       if (details.IsDontEnum()) continue;
@@ -443,6 +450,8 @@ Handle<FixedArray> GetFastEnumPropertyKeys(Isolate* isolate,
       FieldIndex field_index = FieldIndex::ForDescriptor(*map, i);
       indices->set(index, Smi::FromInt(field_index.GetLoadByFieldIndex()));
       index++;
+      
+    if (index == pageSize) break;
     }
     DCHECK_EQ(index, indices->length());
   }
@@ -451,8 +460,8 @@ Handle<FixedArray> GetFastEnumPropertyKeys(Isolate* isolate,
   if (!*params) {
     DescriptorArray::InitializeOrChangeEnumCache(descriptors, isolate, keys,
                                                  indices);
+    if (map->OnlyHasSimpleProperties()) map->SetEnumLength(enum_length);
   }
-  if (map->OnlyHasSimpleProperties()) map->SetEnumLength(enum_length);
 
   return keys;
 }
@@ -583,7 +592,7 @@ MaybeHandle<FixedArray> FastKeyAccumulator::GetKeysSlow(
   accumulator.set_may_have_elements(may_have_elements_);
   accumulator.set_first_prototype_map(first_prototype_map_);
   accumulator.set_try_prototype_info_cache(try_prototype_info_cache_);
-  accumulator.set_key_indexing_params(key_iteration_params_);
+  accumulator.set_key_iteration_params(key_iteration_params_);
 
   MAYBE_RETURN(accumulator.CollectKeys(receiver_, receiver_),
                MaybeHandle<FixedArray>());
@@ -625,7 +634,7 @@ MaybeHandle<FixedArray> FastKeyAccumulator::GetKeysWithPrototypeInfoCache(
     accumulator.set_receiver(receiver_);
     accumulator.set_first_prototype_map(first_prototype_map_);
     accumulator.set_try_prototype_info_cache(try_prototype_info_cache_);
-    accumulator.set_key_indexing_params(key_iteration_params_);
+    accumulator.set_key_iteration_params(key_iteration_params_);
     MAYBE_RETURN(accumulator.CollectKeys(first_prototype_, first_prototype_),
                  MaybeHandle<FixedArray>());
     prototype_chain_keys = accumulator.GetKeys(keys_conversion);
@@ -836,6 +845,12 @@ void CommonCopyEnumKeysTo(Isolate* isolate, Handle<Dictionary> dictionary,
   int properties = 0;
   ReadOnlyRoots roots(isolate);
 
+  if (*params && v8::recordreplay::IsReplaying() &&
+      v8::recordreplay::AreEventsDisallowed()) {
+    v8::recordreplay::Print("DDBG CommonCopyEnumKeysTo A %d %zu",
+                            numberOfElements, dictionary->NumberOfElements());
+  }
+
   AllowGarbageCollection allow_gc;
   for (InternalIndex i : dictionary->IterateEntries()) {
     Object key;
@@ -944,6 +959,12 @@ ExceptionStatus CollectKeysFromDictionary(
 
   auto numberOfElements = params->PageSize((KeyIterationIndex)dictionary->NumberOfElements());
 
+  if (*params && v8::recordreplay::IsReplaying() &&
+      v8::recordreplay::AreEventsDisallowed()) {
+    v8::recordreplay::Print("DDBG CollectKeysFromDictionary A %d %zu",
+                            numberOfElements, dictionary->NumberOfElements());
+  }
+
   // TODO(jkummerow): Consider using a std::unique_ptr<InternalIndex[]> instead.
   Handle<FixedArray> array =
       isolate->factory()->NewFixedArray(numberOfElements);
@@ -953,7 +974,7 @@ ExceptionStatus CollectKeysFromDictionary(
   DCHECK_NE(keys->filter(), ENUMERABLE_STRINGS);
   {
     DisallowGarbageCollection no_gc;
-    for (InternalIndex i : dictionary->IterateEntries(params)) {
+    for (InternalIndex i : dictionary->IterateEntries()) {
       Object key;
       Dictionary raw_dictionary = *dictionary;
       if (!raw_dictionary.ToKey(roots, i, &key)) continue;
@@ -1190,7 +1211,7 @@ Handle<FixedArray> KeyAccumulator::GetOwnEnumPropertyKeys(
     Isolate* isolate, Handle<JSObject> object,
     const KeyIterationParams* params) {
   if (object->HasFastProperties()) {
-    return GetFastEnumPropertyKeys(isolate, object);
+    return GetFastEnumPropertyKeys(isolate, object, params);
   } else if (object->IsJSGlobalObject()) {
     return GetOwnEnumPropertyDictionaryKeys(
         isolate, KeyCollectionMode::kOwnOnly, nullptr, object,
