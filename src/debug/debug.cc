@@ -3794,6 +3794,12 @@ char* CommandCallback(const char* command, const char* params) {
   MaybeHandle<Object> is_error_value = Object::GetProperty(isolate, result, is_error_string);
   if (!is_error_value.is_null()) {
     if (is_error_value.ToHandleChecked()->BooleanValue(isolate)) {
+      // If we get back an object from the call with a "is_error" property on it, set to true,
+      // then our command experienced an error.  Report it to the log (in such a way as it
+      // can be recovered by our error reporting), and then crash.
+
+      // TODO: Replace this with an API call to `RecordReplaySetCrashReasonCallback`
+      // See RUN-1562: https://linear.app/replay/issue/RUN-1562
       recordreplay::Print("ErrorFatal %s:%d %s", "js", 0, rvCStr.get());
       IMMEDIATE_CRASH();
     }
