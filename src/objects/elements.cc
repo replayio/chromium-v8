@@ -1182,7 +1182,7 @@ class ElementsAccessorBase : public InternalElementsAccessor {
     Isolate* isolate = keys->isolate();
     Factory* factory = isolate->factory();
     auto* params = keys->key_iteration_params();
-    auto pageSize = (size_t)params->PageSize(length);
+    auto pageSize = (size_t)params->PageSize((KeyIterationIndex)length);
     if (*params && v8::recordreplay::IsReplaying() &&
         v8::recordreplay::AreEventsDisallowed()) {
       v8::recordreplay::Print("DDBG CollectElementIndicesImpl1 A %zu %zu", pageSize,
