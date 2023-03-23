@@ -847,8 +847,7 @@ void CommonCopyEnumKeysTo(Isolate* isolate, Handle<Dictionary> dictionary,
 
   if (*params && v8::recordreplay::IsReplaying() &&
       v8::recordreplay::AreEventsDisallowed()) {
-    v8::recordreplay::Print("DDBG CommonCopyEnumKeysTo A %d %zu",
-                            numberOfElements, dictionary->NumberOfElements());
+    v8::recordreplay::Print("DDBG CommonCopyEnumKeysTo A %d", length);
   }
 
   AllowGarbageCollection allow_gc;
@@ -882,7 +881,9 @@ void CommonCopyEnumKeysTo(Isolate* isolate, Handle<Dictionary> dictionary,
     }
     properties++;
     if (mode == KeyCollectionMode::kOwnOnly && properties == length) break;
-    if (*params && properties == length) break;
+
+    // NOTE: length has been capped by pageSize up the stack.
+    if (properties == length) break;
   }
 
   CHECK_EQ(length, properties);
@@ -995,6 +996,8 @@ ExceptionStatus CollectKeysFromDictionary(
       // TODO(emrich): consider storing keys instead of indices into the array
       // in case of ordered dictionary type.
       array->set(array_size++, Smi::FromInt(i.as_int()));
+
+      if (array_size == numberOfElements) break;
     }
     if (!Dictionary::kIsOrderedDictionaryType) {
       // Sorting only needed if it's an unordered dictionary,
