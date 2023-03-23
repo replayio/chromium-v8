@@ -1209,7 +1209,7 @@ class ElementsAccessorBase : public InternalElementsAccessor {
     uint32_t const kMaxStringTableEntries =
         isolate->heap()->MaxNumberToStringCacheSize();
 
-    size_t pageSize = (size_t)params->PageIndex((KeyIterationIndex)length);
+    size_t pageSize = (size_t)params->PageSize((KeyIterationIndex)length);
 
     if (*params && v8::recordreplay::IsReplaying() &&
         v8::recordreplay::AreEventsDisallowed()) {
