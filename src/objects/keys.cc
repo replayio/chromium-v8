@@ -389,6 +389,14 @@ Handle<FixedArray> GetFastEnumPropertyKeys(Isolate* isolate,
   // must have a valid enum cache as well.
   int enum_length = map->EnumLength();
 
+  if (v8::recordreplay::IsReplaying() &&
+      v8::recordreplay::AreEventsDisallowed()) {
+    v8::recordreplay::Print(
+        "DDBG GetFastEnumPropertyKeys A %d %d %d %d %d",
+        !!*params, params->PageSize(map->NumberOfEnumerableProperties()),
+        map->NumberOfEnumerableProperties(), enum_length, (int)keys->length());
+  }
+
   // Ignore cache in case of custom params.
   if (enum_length != kInvalidEnumCacheSentinel && !*params) {
     DCHECK(map->OnlyHasSimpleProperties());
@@ -402,10 +410,6 @@ Handle<FixedArray> GetFastEnumPropertyKeys(Isolate* isolate,
   enum_length = map->NumberOfEnumerableProperties();
 
   auto pageSize = params->PageSize(enum_length);
-  if (*params) {
-    v8::recordreplay::Print("DDBG GetFastEnumPropertyKeys A %d %d %d", pageSize,
-                            enum_length, (int)keys->length());
-  }
 
   // Check if there's already a shared enum cache on the {map}s
   // DescriptorArray with sufficient number of entries.
@@ -532,8 +536,15 @@ MaybeHandle<FixedArray> FastKeyAccumulator::GetKeysFast(
     return MaybeHandle<FixedArray>();
   }
 
+  if (v8::recordreplay::IsReplaying() &&
+      v8::recordreplay::AreEventsDisallowed()) {
+    v8::recordreplay::Print("DDBG FastKeyAccumulator::GetKeysFast A %d %d %d",
+                            !!*key_iteration_params_, map.is_dictionary_map(),
+                            receiver_->map().EnumLength());
+  }
+
   // From this point on we are certain to only collect own keys.
-  DCHECK(receiver_->IsJSObject());
+  CHECK(receiver_->IsJSObject());
   Handle<JSObject> object = Handle<JSObject>::cast(receiver_);
 
   // Do not try to use the enum-cache for dict-mode objects.
@@ -862,7 +873,8 @@ void CommonCopyEnumKeysTo(Isolate* isolate, Handle<Dictionary> dictionary,
   int properties = 0;
   ReadOnlyRoots roots(isolate);
 
-  if (*params) {
+  if (v8::recordreplay::IsReplaying() &&
+        v8::recordreplay::AreEventsDisallowed()) {
     v8::recordreplay::Print("DDBG CommonCopyEnumKeysTo A %d", length);
   }
 
@@ -976,7 +988,8 @@ ExceptionStatus CollectKeysFromDictionary(
 
   auto numberOfElements = params->PageSize((KeyIterationIndex)dictionary->NumberOfElements());
 
-  if (*params) {
+  if (v8::recordreplay::IsReplaying() &&
+        v8::recordreplay::AreEventsDisallowed()) {
     v8::recordreplay::Print("DDBG CollectKeysFromDictionary A %d %zu",
                             numberOfElements, dictionary->NumberOfElements());
   }
@@ -1229,6 +1242,13 @@ Maybe<bool> KeyAccumulator::CollectOwnKeys(Handle<JSReceiver> receiver,
 Handle<FixedArray> KeyAccumulator::GetOwnEnumPropertyKeys(
     Isolate* isolate, Handle<JSObject> object,
     const KeyIterationParams* params) {
+  if (v8::recordreplay::IsReplaying() &&
+      v8::recordreplay::AreEventsDisallowed()) {
+    v8::recordreplay::Print(
+        "DDBG KeyAccumulator::GetOwnEnumPropertyKeys A %d f=%d, g=%d, s=%d",
+        !!*params, object->HasFastProperties(), object->IsJSGlobalObject(),
+        V8_ENABLE_SWISS_NAME_DICTIONARY_BOOL);
+  }
   if (object->HasFastProperties()) {
     return GetFastEnumPropertyKeys(isolate, object, params);
   } else if (object->IsJSGlobalObject()) {

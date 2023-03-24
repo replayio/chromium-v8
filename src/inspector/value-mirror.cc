@@ -362,7 +362,17 @@ String16 descriptionForEntry(v8::Local<v8::Context> context,
     if (wrapper) {
       std::unique_ptr<ObjectPreview> preview;
       int limit = 5;
+
+      if (v8::recordreplay::IsReplaying() &&
+          v8::recordreplay::AreEventsDisallowed()) {
+        v8::recordreplay::Print("DDBG descriptionForEntry key A");
+      }
       wrapper->buildEntryPreview(context, &limit, &limit, &preview);
+
+      if (v8::recordreplay::IsReplaying() &&
+          v8::recordreplay::AreEventsDisallowed()) {
+        v8::recordreplay::Print("DDBG descriptionForEntry key B");
+      }
       if (preview) {
         key = preview->getDescription(String16());
         if (preview->getType() == RemoteObject::TypeEnum::String) {
@@ -379,7 +389,16 @@ String16 descriptionForEntry(v8::Local<v8::Context> context,
     if (wrapper) {
       std::unique_ptr<ObjectPreview> preview;
       int limit = 5;
+      if (v8::recordreplay::IsReplaying() &&
+          v8::recordreplay::AreEventsDisallowed()) {
+        v8::recordreplay::Print("DDBG descriptionForEntry value A");
+      }
       wrapper->buildEntryPreview(context, &limit, &limit, &preview);
+
+      if (v8::recordreplay::IsReplaying() &&
+          v8::recordreplay::AreEventsDisallowed()) {
+        v8::recordreplay::Print("DDBG descriptionForEntry value B");
+      }
       if (preview) {
         value = preview->getDescription(String16());
         if (preview->getType() == RemoteObject::TypeEnum::String) {
@@ -1404,6 +1423,14 @@ bool ValueMirror::getProperties(v8::Local<v8::Context> context,
 
   auto iterator = v8::debug::PropertyIterator::Create(context, object,
                                                       nonIndexedPropertiesOnly, params);
+
+  if (v8::recordreplay::IsReplaying() &&
+      v8::recordreplay::AreEventsDisallowed()) {
+    v8::recordreplay::Print("DDBG ValueMirror::getProperties %d %d %d %d", !!*params,
+                            ownProperties, accessorPropertiesOnly,
+                            nonIndexedPropertiesOnly);
+  }
+
   if (!iterator) {
     CHECK(tryCatch.HasCaught());
     return false;
@@ -1425,7 +1452,7 @@ bool ValueMirror::getProperties(v8::Local<v8::Context> context,
         n = descriptionForSymbol(context, symbol);
       }
       v8::recordreplay::Print("DDBG VM::GP %d %d %s", i++, v8Name->IsString(),
-                              n.characters16());
+                              n.utf8().c_str());
     }
 
     v8::Maybe<bool> result = set->Has(context, v8Name);

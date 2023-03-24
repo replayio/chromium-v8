@@ -204,6 +204,10 @@ bool DebugPropertyIterator::FillKeysForCurrentPrototypeAndStage() {
                               key_iteration_params_)
           .ToHandle(&current_keys_)) {
     current_keys_length_ = current_keys_->length();
+
+    v8::recordreplay::Print(
+        "DDBG FillKeysForCurrentPrototypeAndStage %d %d %zu",
+        !!*key_iteration_params_, (int)stage_, current_keys_length_);
     return true;
   }
   return false;

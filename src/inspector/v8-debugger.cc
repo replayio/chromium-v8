@@ -19,6 +19,8 @@
 #include "src/inspector/v8-stack-trace-impl.h"
 #include "src/inspector/v8-value-utils.h"
 
+#include "include/v8.h" // ddbg print
+
 namespace v8_inspector {
 
 namespace {
@@ -748,8 +750,14 @@ v8::MaybeLocal<v8::Array> V8Debugger::collectionsEntries(
     return v8::MaybeLocal<v8::Array>();
   }
 
+  if (v8::recordreplay::IsReplaying() &&
+      v8::recordreplay::AreEventsDisallowed()) {
+    v8::recordreplay::Print("DDBG V8Debugger::collectionsEntries A %d",
+                            entries->Length());
+  }
+
   v8::Local<v8::Array> wrappedEntries = v8::Array::New(isolate);
-  CHECK(!isKeyValue || wrappedEntries->Length() % 2 == 0);
+  CHECK(!isKeyValue || entries->Length() % 2 == 0); // replay: discovered v8 bug
   if (!wrappedEntries->SetPrototype(context, v8::Null(isolate))
            .FromMaybe(false))
     return v8::MaybeLocal<v8::Array>();
@@ -772,6 +780,18 @@ v8::MaybeLocal<v8::Array> V8Debugger::collectionsEntries(
       continue;
     createDataProperty(context, wrappedEntries, wrappedEntries->Length(),
                        wrapper);
+
+    if (v8::recordreplay::IsReplaying() &&
+        v8::recordreplay::AreEventsDisallowed()) {
+      String16 n;
+      if (item->IsString()) {
+        n = toProtocolString(isolate, item.As<v8::String>());
+      }
+      v8::recordreplay::Print("DDBG V8Debugger::collectionsEntries B %lu %lu %s",
+                              i,
+                              wrappedEntries->Length(),
+                              n.utf8().c_str());
+    }
   }
   return wrappedEntries;
 }

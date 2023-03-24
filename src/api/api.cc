@@ -7728,10 +7728,10 @@ i::Handle<i::JSArray> MapAsArray(i::Isolate* i_isolate, i::Object table_obj,
       if (collect_keys) result->set(result_index++, key);
       if (collect_values) result->set(result_index++, table->ValueAt(entry));
 
-      if (result_index == max_length) break;
+      if (*params && result_index == max_length) break;
     }
   }
-  DCHECK_GE(max_length, result_index);
+  CHECK_GE(max_length, result_index);
   if (v8::recordreplay::IsReplaying() && v8::recordreplay::AreEventsDisallowed())
     recordreplay::Print("DDBG MapAsArray B k=%d m=%d r=%d", (int)kind,
                         max_length, result_index);
