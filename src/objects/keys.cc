@@ -101,6 +101,13 @@ Handle<FixedArray> KeyAccumulator::GetKeys(GetKeysConversion convert) {
   if (keys_.is_null()) {
     return isolate_->factory()->empty_fixed_array();
   }
+
+  if (*key_iteration_params_)
+    v8::recordreplay::Print(
+        "DDBG KeyAccumulator::GetKeys A %d %d",
+        key_iteration_params_->PageSize(keys()->NumberOfElements()),
+        keys()->NumberOfElements());
+
   USE(ContainsOnlyValidKeys);
   Handle<FixedArray> result =
       OrderedHashSet::ConvertToKeysArray(isolate(), keys(), convert);
@@ -382,14 +389,6 @@ Handle<FixedArray> GetFastEnumPropertyKeys(Isolate* isolate,
   // must have a valid enum cache as well.
   int enum_length = map->EnumLength();
 
-  auto pageSize = params->PageSize(enum_length);
-
-  if (*params && v8::recordreplay::IsReplaying() &&
-      v8::recordreplay::AreEventsDisallowed()) {
-    v8::recordreplay::Print("DDBG GetFastEnumPropertyKeys A %d %d %d",
-                            pageSize, enum_length, (int)keys->length());
-  }
-
   // Ignore cache in case of custom params.
   if (enum_length != kInvalidEnumCacheSentinel && !*params) {
     DCHECK(map->OnlyHasSimpleProperties());
@@ -401,6 +400,12 @@ Handle<FixedArray> GetFastEnumPropertyKeys(Isolate* isolate,
 
   // Determine the actual number of enumerable properties of the {map}.
   enum_length = map->NumberOfEnumerableProperties();
+
+  auto pageSize = params->PageSize(enum_length);
+  if (*params) {
+    v8::recordreplay::Print("DDBG GetFastEnumPropertyKeys A %d %d %d", pageSize,
+                            enum_length, (int)keys->length());
+  }
 
   // Check if there's already a shared enum cache on the {map}s
   // DescriptorArray with sufficient number of entries.
@@ -432,7 +437,7 @@ Handle<FixedArray> GetFastEnumPropertyKeys(Isolate* isolate,
     
     if (index == pageSize) break;
   }
-  DCHECK_EQ(index, keys->length());
+  CHECK_EQ(index, keys->length());
 
   // Optionally also create the indices array.
   Handle<FixedArray> indices = isolate->factory()->empty_fixed_array();
@@ -451,17 +456,17 @@ Handle<FixedArray> GetFastEnumPropertyKeys(Isolate* isolate,
       indices->set(index, Smi::FromInt(field_index.GetLoadByFieldIndex()));
       index++;
       
-    if (index == pageSize) break;
+      if (index == pageSize) break;
     }
-    DCHECK_EQ(index, indices->length());
+    CHECK_EQ(index, indices->length());
   }
 
   // Ignore cache in case of custom params.
   if (!*params) {
     DescriptorArray::InitializeOrChangeEnumCache(descriptors, isolate, keys,
                                                  indices);
-    if (map->OnlyHasSimpleProperties()) map->SetEnumLength(enum_length);
   }
+  if (map->OnlyHasSimpleProperties()) map->SetEnumLength(enum_length);
 
   return keys;
 }
@@ -728,9 +733,14 @@ Maybe<bool> KeyAccumulator::CollectInterceptorKeysInternal(
     Handle<InterceptorInfo> interceptor, IndexedOrNamed type) {
   PropertyCallbackArguments enum_args(isolate_, interceptor->data(), *receiver,
                                       *object, Just(kDontThrow));
-
   Handle<JSObject> result;
   if (!interceptor->enumerator().IsUndefined(isolate_)) {
+    if (v8::recordreplay::IsReplaying() &&
+        v8::recordreplay::AreEventsDisallowed()) {
+      v8::recordreplay::Print("DDBG CollectInterceptorKeysInternal A %d %d",
+                              (int)type,
+                              keys_.is_null() ? 0 : (int) keys_->NumberOfElements());
+    }
     if (type == kIndexed) {
       result = enum_args.CallIndexedEnumerator(interceptor);
     } else {
@@ -753,6 +763,13 @@ Maybe<bool> KeyAccumulator::CollectInterceptorKeysInternal(
   } else {
     RETURN_NOTHING_IF_NOT_SUCCESSFUL(AddKeys(
         result, type == kIndexed ? CONVERT_TO_ARRAY_INDEX : DO_NOT_CONVERT));
+  }
+
+  if (v8::recordreplay::IsReplaying() &&
+      v8::recordreplay::AreEventsDisallowed()) {
+    v8::recordreplay::Print(
+        "DDBG CollectInterceptorKeysInternal B %d",
+        keys_.is_null() ? 0 : (int)keys()->NumberOfElements());
   }
   return Just(true);
 }
@@ -845,8 +862,7 @@ void CommonCopyEnumKeysTo(Isolate* isolate, Handle<Dictionary> dictionary,
   int properties = 0;
   ReadOnlyRoots roots(isolate);
 
-  if (*params && v8::recordreplay::IsReplaying() &&
-      v8::recordreplay::AreEventsDisallowed()) {
+  if (*params) {
     v8::recordreplay::Print("DDBG CommonCopyEnumKeysTo A %d", length);
   }
 
@@ -960,8 +976,7 @@ ExceptionStatus CollectKeysFromDictionary(
 
   auto numberOfElements = params->PageSize((KeyIterationIndex)dictionary->NumberOfElements());
 
-  if (*params && v8::recordreplay::IsReplaying() &&
-      v8::recordreplay::AreEventsDisallowed()) {
+  if (*params) {
     v8::recordreplay::Print("DDBG CollectKeysFromDictionary A %d %zu",
                             numberOfElements, dictionary->NumberOfElements());
   }
@@ -999,6 +1014,7 @@ ExceptionStatus CollectKeysFromDictionary(
 
       if (array_size == numberOfElements) break;
     }
+    CHECK(!*params || (array_size == numberOfElements));
     if (!Dictionary::kIsOrderedDictionaryType) {
       // Sorting only needed if it's an unordered dictionary,
       // otherwise we traversed elements in insertion order

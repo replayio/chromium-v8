@@ -231,6 +231,9 @@ Handle<FixedArray> OrderedHashSet::ConvertToKeysArray(
         bool use_cache = i < kMaxStringTableEntries;
         key = *isolate->factory()->Uint32ToString(index_value, use_cache);
       } else {
+        if (!key.IsName() && v8::recordreplay::IsReplaying()) {
+          v8::recordreplay::Print("DDBG OrderedHashSet::ConvertToKeysArray CRASH %d/%d, %d", i, length, index);
+        }
         CHECK(key.IsName());
       }
     } else if (convert == GetKeysConversion::kNoNumbers) {
