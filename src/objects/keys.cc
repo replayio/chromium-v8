@@ -399,9 +399,9 @@ Handle<FixedArray> GetFastEnumPropertyKeys(Isolate* isolate,
 
   // Ignore cache in case of custom params.
   if (enum_length != kInvalidEnumCacheSentinel && !*params) {
-    DCHECK(map->OnlyHasSimpleProperties());
-    DCHECK_LE(enum_length, keys->length());
-    DCHECK_EQ(enum_length, map->NumberOfEnumerableProperties());
+    CHECK(map->OnlyHasSimpleProperties());
+    CHECK_LE(enum_length, keys->length());
+    CHECK_EQ(enum_length, map->NumberOfEnumerableProperties());
     isolate->counters()->enum_cache_hits()->Increment();
     return ReduceFixedArrayTo(isolate, keys, enum_length);
   }
@@ -439,7 +439,7 @@ Handle<FixedArray> GetFastEnumPropertyKeys(Isolate* isolate,
     if (details.location() != PropertyLocation::kField) fields_only = false;
     index++;
     
-    if (index == pageSize) break;
+    if (*params && index == pageSize) break;
   }
   CHECK_EQ(index, keys->length());
 
@@ -454,13 +454,13 @@ Handle<FixedArray> GetFastEnumPropertyKeys(Isolate* isolate,
       if (details.IsDontEnum()) continue;
       Object key = descriptors->GetKey(i);
       if (key.IsSymbol()) continue;
-      DCHECK_EQ(PropertyKind::kData, details.kind());
-      DCHECK_EQ(PropertyLocation::kField, details.location());
+      CHECK_EQ(PropertyKind::kData, details.kind());
+      CHECK_EQ(PropertyLocation::kField, details.location());
       FieldIndex field_index = FieldIndex::ForDescriptor(*map, i);
       indices->set(index, Smi::FromInt(field_index.GetLoadByFieldIndex()));
       index++;
-      
-      if (index == pageSize) break;
+
+      if (*params && index == pageSize) break;
     }
     CHECK_EQ(index, indices->length());
   }
@@ -469,8 +469,8 @@ Handle<FixedArray> GetFastEnumPropertyKeys(Isolate* isolate,
   if (!*params) {
     DescriptorArray::InitializeOrChangeEnumCache(descriptors, isolate, keys,
                                                  indices);
+    if (map->OnlyHasSimpleProperties()) map->SetEnumLength(enum_length);
   }
-  if (map->OnlyHasSimpleProperties()) map->SetEnumLength(enum_length);
 
   return keys;
 }
