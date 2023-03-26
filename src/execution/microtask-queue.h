@@ -14,6 +14,8 @@
 #include "include/v8-microtask-queue.h"
 #include "src/base/macros.h"
 
+#include "include/v8.h"  // For replay.
+
 namespace v8 {
 namespace internal {
 
