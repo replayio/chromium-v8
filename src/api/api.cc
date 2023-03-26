@@ -5335,16 +5335,7 @@ MaybeLocal<Object> Function::NewInstanceWithSideEffectType(
     }
   }
   i::Handle<i::Object>* args = reinterpret_cast<i::Handle<i::Object>*>(argv);
-<<<<<<< HEAD
 
-||||||| 5cf314403ee
-
-  v8::recordreplay::Assert(
-      "[RUN-1488-1495] Function::NewInstanceWithSideEffectType %d %d %d",
-      ScriptId(), GetScriptLineNumber(), GetScriptColumnNumber());
-
-=======
->>>>>>> origin/master
   Local<Object> result;
   has_pending_exception = !ToLocal<Object>(
       i::Execution::New(i_isolate, self, self, argc, args), &result);
