@@ -806,32 +806,16 @@ Object SetHashAndUpdateProperties(HeapObject properties, int hash) {
 }
 
 int GetIdentityHashHelper(JSReceiver object) {
-  // if (v8::recordreplay::IsReplaying() &&
-  //     v8::recordreplay::AreEventsDisallowed())
-  //   v8::recordreplay::Print("DDBG GetIdentityHashHelper A");
   {
   DisallowGarbageCollection no_gc;
 
-  // if (v8::recordreplay::IsReplaying() &&
-  //     v8::recordreplay::AreEventsDisallowed())
-  //     v8::recordreplay::Print("DDBG GetIdentityHashHelper B");
 
   Object properties = object.raw_properties_or_hash();
 
-  // if (v8::recordreplay::IsReplaying() &&
-  //     v8::recordreplay::AreEventsDisallowed())
-  //     v8::recordreplay::Print("DDBG GetIdentityHashHelper C");
 
   if (properties.IsSmi()) {
-      // if (v8::recordreplay::IsReplaying() &&
-      //     v8::recordreplay::AreEventsDisallowed())
-      //   v8::recordreplay::Print("DDBG GetIdentityHashHelper D");
     return Smi::ToInt(properties);
   }
-  // if (v8::recordreplay::IsReplaying() &&
-  //     v8::recordreplay::AreEventsDisallowed())
-  //   v8::recordreplay::Print("DDBG GetIdentityHashHelper E");
-
   if (properties.IsPropertyArray()) {
     return PropertyArray::cast(properties).Hash();
   }
@@ -856,9 +840,6 @@ int GetIdentityHashHelper(JSReceiver object) {
          properties == roots.empty_swiss_property_dictionary());
 #endif
 
-  // if (v8::recordreplay::IsReplaying() &&
-  //     v8::recordreplay::AreEventsDisallowed())
-  //   v8::recordreplay::Print("DDBG GetIdentityHashHelper F");
 
   return PropertyArray::kNoHashSentinel;
   }

@@ -1191,11 +1191,6 @@ class ElementsAccessorBase : public InternalElementsAccessor {
         if (i == pageSize) break;
       }
     }
-    if (v8::recordreplay::IsReplaying() &&
-        v8::recordreplay::AreEventsDisallowed()) {
-      v8::recordreplay::Print("DDBG CollectElementIndicesImpl1 A %zu %zu",
-                              pageSize, length);
-    }
     return ExceptionStatus::kSuccess;
   }
 
@@ -1210,12 +1205,6 @@ class ElementsAccessorBase : public InternalElementsAccessor {
         isolate->heap()->MaxNumberToStringCacheSize();
 
     size_t pageSize = (size_t)params->PageSize((KeyIterationIndex)length);
-
-    if (v8::recordreplay::IsReplaying() &&
-        v8::recordreplay::AreEventsDisallowed()) {
-      v8::recordreplay::Print("DDBG DirectCollectElementIndicesImpl1 A %zu %zu",
-                              pageSize, length);
-    }
     for (size_t i = 0; i < length; i++) {
       if (Subclass::HasElementImpl(isolate, *object, i, *backing_store,
                                    filter)) {
@@ -1262,14 +1251,6 @@ class ElementsAccessorBase : public InternalElementsAccessor {
     initial_list_length += nof_property_keys;
 
     initial_list_length = (size_t)params->PageSize((KeyIterationIndex)initial_list_length);
-    if (v8::recordreplay::IsReplaying() &&
-        v8::recordreplay::AreEventsDisallowed()) {
-      v8::recordreplay::Print(
-          "DDBG PrependElementIndicesImpl A %zu %zu %lu", initial_list_length,
-          Subclass::GetMaxNumberOfEntries(*object, *backing_store),
-          nof_property_keys);
-    }
-
     if (*params && initial_list_length <= nof_property_keys) {
       // No space for indices.
       // NOTE: We can return |keys| here because it was a temp allocated object when it was passed in.
@@ -1701,15 +1682,6 @@ class DictionaryElementsAccessor
     Handle<FixedArray> elements = isolate->factory()->NewFixedArray(pageSize);
     int insertion_index = 0;
     PropertyFilter filter = keys->filter();
-
-    if (v8::recordreplay::IsReplaying() &&
-        v8::recordreplay::AreEventsDisallowed()) {
-      v8::recordreplay::Print(
-          "DDBG CollectElementIndicesImpl2 A %d %lu",
-          pageSize,
-          GetMaxNumberOfEntries(*object, *backing_store));
-    }
-
     ReadOnlyRoots roots(isolate);
     for (InternalIndex i : dictionary->IterateEntries()) {
       AllowGarbageCollection allow_gc;
@@ -1745,11 +1717,6 @@ class DictionaryElementsAccessor
         Handle<NumberDictionary>::cast(backing_store);
     
     auto pageSize = (uint32_t)params->PageSize((KeyIterationIndex)dictionary->Capacity());
-    if (v8::recordreplay::IsReplaying() &&
-        v8::recordreplay::AreEventsDisallowed())
-      recordreplay::Print("DDBG DirectCollectElementIndicesImpl2 %lu %d %lu",
-                          pageSize, (int)dictionary->Capacity(), insertion_index);
-
     if (pageSize <= insertion_index) {
       // No space left on first page.
       return list;
@@ -4750,11 +4717,6 @@ class SloppyArgumentsElementsAccessor
 
     uint32_t pageSize =
         (uint32_t)params->PageSize((KeyIterationIndex)elements->length());
-    if (v8::recordreplay::IsReplaying() &&
-        v8::recordreplay::AreEventsDisallowed())
-      recordreplay::Print("DDBG DirectCollectElementIndicesImpl3 %lu %lu",
-                          pageSize, length);
-
     for (uint32_t i = 0; i < length; ++i) {
       if (elements->mapped_entries(i, kRelaxedLoad).IsTheHole(isolate))
         continue;
@@ -5214,10 +5176,6 @@ class StringWrapperElementsAccessor
 
     auto* params = keys->key_iteration_params();
     auto pageSize = (uint32_t)params->PageSize((KeyIterationIndex)length);
-    if (v8::recordreplay::IsReplaying() &&
-        v8::recordreplay::AreEventsDisallowed())
-      recordreplay::Print("DDBG CollectElementIndicesImpl3 %lu %lu", pageSize, length);
-
     for (uint32_t i = 0; i < length; i++) {
       RETURN_FAILURE_IF_NOT_SUCCESSFUL(
           keys->AddKey(factory->NewNumberFromUint(i)));

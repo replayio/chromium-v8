@@ -101,13 +101,6 @@ Handle<FixedArray> KeyAccumulator::GetKeys(GetKeysConversion convert) {
   if (keys_.is_null()) {
     return isolate_->factory()->empty_fixed_array();
   }
-
-  if (*key_iteration_params_)
-    v8::recordreplay::Print(
-        "DDBG KeyAccumulator::GetKeys A %d %d",
-        key_iteration_params_->PageSize(keys()->NumberOfElements()),
-        keys()->NumberOfElements());
-
   USE(ContainsOnlyValidKeys);
   Handle<FixedArray> result =
       OrderedHashSet::ConvertToKeysArray(isolate(), keys(), convert);
@@ -388,15 +381,6 @@ Handle<FixedArray> GetFastEnumPropertyKeys(Isolate* isolate,
   // Check if the {map} has a valid enum length, which implies that it
   // must have a valid enum cache as well.
   int enum_length = map->EnumLength();
-
-  if (v8::recordreplay::IsReplaying() &&
-      v8::recordreplay::AreEventsDisallowed()) {
-    v8::recordreplay::Print(
-        "DDBG GetFastEnumPropertyKeys A %d %d %d %d %d",
-        !!*params, params->PageSize(map->NumberOfEnumerableProperties()),
-        map->NumberOfEnumerableProperties(), enum_length, (int)keys->length());
-  }
-
   // Ignore cache in case of custom params.
   if (enum_length != kInvalidEnumCacheSentinel && !*params) {
     CHECK(map->OnlyHasSimpleProperties());
@@ -535,14 +519,6 @@ MaybeHandle<FixedArray> FastKeyAccumulator::GetKeysFast(
   if (!own_only || map.IsCustomElementsReceiverMap()) {
     return MaybeHandle<FixedArray>();
   }
-
-  if (v8::recordreplay::IsReplaying() &&
-      v8::recordreplay::AreEventsDisallowed()) {
-    v8::recordreplay::Print("DDBG FastKeyAccumulator::GetKeysFast A %d %d %d",
-                            !!*key_iteration_params_, map.is_dictionary_map(),
-                            receiver_->map().EnumLength());
-  }
-
   // From this point on we are certain to only collect own keys.
   CHECK(receiver_->IsJSObject());
   Handle<JSObject> object = Handle<JSObject>::cast(receiver_);
@@ -746,12 +722,6 @@ Maybe<bool> KeyAccumulator::CollectInterceptorKeysInternal(
                                       *object, Just(kDontThrow));
   Handle<JSObject> result;
   if (!interceptor->enumerator().IsUndefined(isolate_)) {
-    if (v8::recordreplay::IsReplaying() &&
-        v8::recordreplay::AreEventsDisallowed()) {
-      v8::recordreplay::Print("DDBG CollectInterceptorKeysInternal A %d %d",
-                              (int)type,
-                              keys_.is_null() ? 0 : (int) keys_->NumberOfElements());
-    }
     if (type == kIndexed) {
       result = enum_args.CallIndexedEnumerator(interceptor);
     } else {
@@ -774,13 +744,6 @@ Maybe<bool> KeyAccumulator::CollectInterceptorKeysInternal(
   } else {
     RETURN_NOTHING_IF_NOT_SUCCESSFUL(AddKeys(
         result, type == kIndexed ? CONVERT_TO_ARRAY_INDEX : DO_NOT_CONVERT));
-  }
-
-  if (v8::recordreplay::IsReplaying() &&
-      v8::recordreplay::AreEventsDisallowed()) {
-    v8::recordreplay::Print(
-        "DDBG CollectInterceptorKeysInternal B %d",
-        keys_.is_null() ? 0 : (int)keys()->NumberOfElements());
   }
   return Just(true);
 }
@@ -872,12 +835,6 @@ void CommonCopyEnumKeysTo(Isolate* isolate, Handle<Dictionary> dictionary,
   int length = storage->length();
   int properties = 0;
   ReadOnlyRoots roots(isolate);
-
-  if (v8::recordreplay::IsReplaying() &&
-        v8::recordreplay::AreEventsDisallowed()) {
-    v8::recordreplay::Print("DDBG CommonCopyEnumKeysTo A %d", length);
-  }
-
   AllowGarbageCollection allow_gc;
   for (InternalIndex i : dictionary->IterateEntries()) {
     Object key;
@@ -987,13 +944,6 @@ ExceptionStatus CollectKeysFromDictionary(
   ReadOnlyRoots roots(isolate);
 
   auto numberOfElements = params->PageSize((KeyIterationIndex)dictionary->NumberOfElements());
-
-  if (v8::recordreplay::IsReplaying() &&
-        v8::recordreplay::AreEventsDisallowed()) {
-    v8::recordreplay::Print("DDBG CollectKeysFromDictionary A %d %zu",
-                            numberOfElements, dictionary->NumberOfElements());
-  }
-
   // TODO(jkummerow): Consider using a std::unique_ptr<InternalIndex[]> instead.
   Handle<FixedArray> array =
       isolate->factory()->NewFixedArray(numberOfElements);
@@ -1241,13 +1191,6 @@ Maybe<bool> KeyAccumulator::CollectOwnKeys(Handle<JSReceiver> receiver,
 Handle<FixedArray> KeyAccumulator::GetOwnEnumPropertyKeys(
     Isolate* isolate, Handle<JSObject> object,
     const KeyIterationParams* params) {
-  if (v8::recordreplay::IsReplaying() &&
-      v8::recordreplay::AreEventsDisallowed()) {
-    v8::recordreplay::Print(
-        "DDBG KeyAccumulator::GetOwnEnumPropertyKeys A %d f=%d, g=%d, s=%d",
-        !!*params, object->HasFastProperties(), object->IsJSGlobalObject(),
-        V8_ENABLE_SWISS_NAME_DICTIONARY_BOOL);
-  }
   if (object->HasFastProperties()) {
     return GetFastEnumPropertyKeys(isolate, object, params);
   } else if (object->IsJSGlobalObject()) {
