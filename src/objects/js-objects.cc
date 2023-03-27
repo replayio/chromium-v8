@@ -806,13 +806,8 @@ Object SetHashAndUpdateProperties(HeapObject properties, int hash) {
 }
 
 int GetIdentityHashHelper(JSReceiver object) {
-  {
   DisallowGarbageCollection no_gc;
-
-
   Object properties = object.raw_properties_or_hash();
-
-
   if (properties.IsSmi()) {
     return Smi::ToInt(properties);
   }
@@ -840,9 +835,7 @@ int GetIdentityHashHelper(JSReceiver object) {
          properties == roots.empty_swiss_property_dictionary());
 #endif
 
-
   return PropertyArray::kNoHashSentinel;
-  }
 }
 }  // namespace
 

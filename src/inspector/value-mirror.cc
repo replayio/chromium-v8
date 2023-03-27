@@ -1410,8 +1410,6 @@ bool ValueMirror::getProperties(v8::Local<v8::Context> context,
     CHECK(tryCatch.HasCaught());
     return false;
   }
-
-  int i = 0;
   while (!iterator->Done()) {
     bool isOwn = iterator->is_own();
     if (!isOwn && ownProperties) break;

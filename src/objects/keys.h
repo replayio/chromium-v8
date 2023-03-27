@@ -212,8 +212,7 @@ class FastKeyAccumulator {
   MaybeHandle<FixedArray> GetKeys(
       GetKeysConversion convert = GetKeysConversion::kKeepNumbers);
 
-  MaybeHandle<FixedArray> GetKeysSlow(
-      GetKeysConversion convert);
+  MaybeHandle<FixedArray> GetKeysSlow(GetKeysConversion convert);
 
  private:
   void Prepare();
