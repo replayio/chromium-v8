@@ -1340,13 +1340,18 @@ static const char* allowed_getters[] = {"type", "fromElement", "target",
 bool doesAttributeHaveObservableSideEffectOnGet(v8::Local<v8::Context> context,
                                                 v8::Local<v8::Object> object,
                                                 v8::Local<v8::Name> name) {
-  if (v8::recordreplay::HasDivergedFromRecording()) {
-    // Disallow most native getters during Pause, since they cause unwanted
-    // crashes.
+  // TODO(dgozman): we should remove this, annotate more embedder properties as
+  // side-effect free, and call all getters which do not produce side effects.
+  if (!name->IsString()) return false;
+
+  if (v8::recordreplay::IsRecordingOrReplaying() &&
+      v8::recordreplay::AreEventsDisallowed()) {
+    // Disallow most native getters while in Replay code, since they cause
+    // unwanted crashes.
     // -> https://linear.app/replay/issue/RUN-1478
-    if (!name->IsString()) return true; // disallow native symbol getters for now
     for (auto allowed : allowed_getters) {
-      v8::String::Utf8Value nameRaw(context->GetIsolate(), name.As<v8::String>());
+      v8::String::Utf8Value nameRaw(context->GetIsolate(),
+                                    name.As<v8::String>());
       if (!strcmp(allowed, *nameRaw)) {
         return false;
       }
@@ -1354,9 +1359,6 @@ bool doesAttributeHaveObservableSideEffectOnGet(v8::Local<v8::Context> context,
     return true;
   }
 
-  // TODO(dgozman): we should remove this, annotate more embedder properties as
-  // side-effect free, and call all getters which do not produce side effects.
-  if (!name->IsString()) return false;
   v8::Isolate* isolate = context->GetIsolate();
   if (!name.As<v8::String>()->StringEquals(toV8String(isolate, "body"))) {
     return false;
@@ -1426,9 +1428,9 @@ bool ValueMirror::getProperties(v8::Local<v8::Context> context,
 
   if (v8::recordreplay::IsReplaying() &&
       v8::recordreplay::AreEventsDisallowed()) {
-    v8::recordreplay::Print("DDBG ValueMirror::getProperties %d %d %d %d", !!*params,
-                            ownProperties, accessorPropertiesOnly,
-                            nonIndexedPropertiesOnly);
+    v8::recordreplay::Print("DDBG ValueMirror::getProperties %d %d",
+                            v8::recordreplay::IsRecordingOrReplaying(),
+                            v8::recordreplay::AreEventsDisallowed());
   }
 
   if (!iterator) {
