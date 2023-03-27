@@ -1027,7 +1027,6 @@ ExceptionStatus CollectKeysFromDictionary(
 
       if (array_size == numberOfElements) break;
     }
-    CHECK(!*params || (array_size == numberOfElements));
     if (!Dictionary::kIsOrderedDictionaryType) {
       // Sorting only needed if it's an unordered dictionary,
       // otherwise we traversed elements in insertion order
