@@ -45,7 +45,7 @@ class V8_EXPORT_PRIVATE MicrotaskQueue final : public v8::MicrotaskQueue {
                         void* data) override;
   void PerformCheckpoint(v8::Isolate* isolate) override {
 
-    if (v8::recordreplay::IsRecordingOrReplaying() && v8::recordreplay::AreEventsDisallowed())
+    if (v8::recordreplay::IsRecordingOrReplaying() && !v8::recordreplay::AreEventsDisallowed())
       v8::recordreplay::Assert(
           "[RUN-1593] MicrotaskQueue::PerformCheckpoint %d",
           ShouldPerfomCheckpoint());
