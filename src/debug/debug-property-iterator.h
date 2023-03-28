@@ -24,7 +24,8 @@ class JSReceiver;
 class DebugPropertyIterator final : public debug::PropertyIterator {
  public:
   V8_WARN_UNUSED_RESULT static std::unique_ptr<DebugPropertyIterator> Create(
-      Isolate* isolate, Handle<JSReceiver> receiver, bool skip_indices);
+      Isolate* isolate, Handle<JSReceiver> receiver, bool skip_indices,
+      const v8::KeyIterationParams* params = v8::KeyIterationParams::Default());
   ~DebugPropertyIterator() override = default;
   DebugPropertyIterator(const DebugPropertyIterator&) = delete;
   DebugPropertyIterator& operator=(const DebugPropertyIterator&) = delete;
@@ -44,7 +45,8 @@ class DebugPropertyIterator final : public debug::PropertyIterator {
 
  private:
   DebugPropertyIterator(Isolate* isolate, Handle<JSReceiver> receiver,
-                        bool skip_indices);
+                        bool skip_indices,
+                        const v8::KeyIterationParams* params = v8::KeyIterationParams::Default());
 
   V8_WARN_UNUSED_RESULT bool FillKeysForCurrentPrototypeAndStage();
   bool should_move_to_next_stage() const;
@@ -61,6 +63,7 @@ class DebugPropertyIterator final : public debug::PropertyIterator {
     kAllProperties = 2
   } stage_ = kExoticIndices;
   bool skip_indices_;
+  const v8::KeyIterationParams* key_iteration_params_;
 
   size_t current_key_index_;
   Handle<FixedArray> current_keys_;

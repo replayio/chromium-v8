@@ -25,6 +25,8 @@
 
 #include "v8.h"
 
+#include "src/inspector/string-util.h"
+
 namespace v8_inspector {
 
 using protocol::Response;
@@ -1319,13 +1321,18 @@ static const char* allowed_getters[] = {"type", "fromElement", "target",
 bool doesAttributeHaveObservableSideEffectOnGet(v8::Local<v8::Context> context,
                                                 v8::Local<v8::Object> object,
                                                 v8::Local<v8::Name> name) {
-  if (v8::recordreplay::HasDivergedFromRecording()) {
-    // Disallow most native getters during Pause, since they cause unwanted
-    // crashes.
+  // TODO(dgozman): we should remove this, annotate more embedder properties as
+  // side-effect free, and call all getters which do not produce side effects.
+  if (!name->IsString()) return false;
+
+  if (v8::recordreplay::IsRecordingOrReplaying() &&
+      v8::recordreplay::AreEventsDisallowed()) {
+    // Disallow most native getters while in Replay code, since they cause
+    // unwanted crashes.
     // -> https://linear.app/replay/issue/RUN-1478
-    if (!name->IsString()) return true; // disallow native symbol getters for now
     for (auto allowed : allowed_getters) {
-      v8::String::Utf8Value nameRaw(context->GetIsolate(), name.As<v8::String>());
+      v8::String::Utf8Value nameRaw(context->GetIsolate(),
+                                    name.As<v8::String>());
       if (!strcmp(allowed, *nameRaw)) {
         return false;
       }
@@ -1333,9 +1340,6 @@ bool doesAttributeHaveObservableSideEffectOnGet(v8::Local<v8::Context> context,
     return true;
   }
 
-  // TODO(dgozman): we should remove this, annotate more embedder properties as
-  // side-effect free, and call all getters which do not produce side effects.
-  if (!name->IsString()) return false;
   v8::Isolate* isolate = context->GetIsolate();
   if (!name.As<v8::String>()->StringEquals(toV8String(isolate, "body"))) {
     return false;
@@ -1376,7 +1380,8 @@ bool ValueMirror::getProperties(v8::Local<v8::Context> context,
                                 v8::Local<v8::Object> object,
                                 bool ownProperties, bool accessorPropertiesOnly,
                                 bool nonIndexedPropertiesOnly,
-                                PropertyAccumulator* accumulator) {
+                                PropertyAccumulator* accumulator,
+                                const v8::KeyIterationParams* params) {
   v8::Isolate* isolate = context->GetIsolate();
   v8::TryCatch tryCatch(isolate);
   v8::Local<v8::Set> set = v8::Set::New(isolate);
@@ -1400,19 +1405,12 @@ bool ValueMirror::getProperties(v8::Local<v8::Context> context,
   }
 
   auto iterator = v8::debug::PropertyIterator::Create(context, object,
-                                                      nonIndexedPropertiesOnly);
+                                                      nonIndexedPropertiesOnly, params);
   if (!iterator) {
     CHECK(tryCatch.HasCaught());
     return false;
   }
-
-  int i = 0;
   while (!iterator->Done()) {
-    if (v8::recordreplay::HasDivergedFromRecording() && ++i > 1000) {
-      // Quick-and-dirty fix for slow Pause object queries + getAllFrames (RUN-1315)
-      v8::recordreplay::Print("[RuntimeWarning] ValueMirror::getProperties overflow break");
-      break;
-    }
     bool isOwn = iterator->is_own();
     if (!isOwn && ownProperties) break;
     v8::Local<v8::Name> v8Name = iterator->name();
@@ -1534,7 +1532,8 @@ bool ValueMirror::getProperties(v8::Local<v8::Context> context,
 // static
 void ValueMirror::getInternalProperties(
     v8::Local<v8::Context> context, v8::Local<v8::Object> object,
-    std::vector<InternalPropertyMirror>* mirrors) {
+    std::vector<InternalPropertyMirror>* mirrors,
+    const v8::KeyIterationParams* params) {
   v8::Isolate* isolate = context->GetIsolate();
   v8::MicrotasksScope microtasksScope(isolate,
                                       v8::MicrotasksScope::kDoNotRunMicrotasks);
@@ -1563,7 +1562,7 @@ void ValueMirror::getInternalProperties(
       static_cast<V8InspectorImpl*>(v8::debug::GetInspector(isolate))
           ->debugger();
   v8::Local<v8::Array> properties;
-  if (debugger->internalProperties(context, object).ToLocal(&properties)) {
+  if (debugger->internalProperties(context, object, params).ToLocal(&properties)) {
     for (uint32_t i = 0; i < properties->Length(); i += 2) {
       v8::Local<v8::Value> name;
       if (!properties->Get(context, i).ToLocal(&name) || !name->IsString()) {

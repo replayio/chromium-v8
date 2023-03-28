@@ -434,6 +434,8 @@ Response V8RuntimeAgentImpl::getProperties(
     const String16& objectId, Maybe<bool> ownProperties,
     Maybe<bool> accessorPropertiesOnly, Maybe<bool> generatePreview,
     Maybe<bool> nonIndexedPropertiesOnly,
+    Maybe<protocol::Runtime::KeyIterationIndex> pageSize,
+    Maybe<protocol::Runtime::KeyIterationIndex> pageIndex,
     std::unique_ptr<protocol::Array<protocol::Runtime::PropertyDescriptor>>*
         result,
     Maybe<protocol::Array<protocol::Runtime::InternalPropertyDescriptor>>*
@@ -455,12 +457,16 @@ Response V8RuntimeAgentImpl::getProperties(
     return Response::ServerError("Value with given id is not an object");
 
   v8::Local<v8::Object> object = scope.object().As<v8::Object>();
+
+  v8::KeyIterationParams params(pageSize.fromMaybe(0), pageIndex.fromMaybe(0));
+
   response = scope.injectedScript()->getProperties(
       object, scope.objectGroupName(), ownProperties.fromMaybe(false),
       accessorPropertiesOnly.fromMaybe(false),
       nonIndexedPropertiesOnly.fromMaybe(false),
       generatePreview.fromMaybe(false) ? WrapMode::kWithPreview
                                        : WrapMode::kNoPreview,
+      &params,
       result, exceptionDetails);
   if (!response.IsSuccess()) return response;
   if (exceptionDetails->isJust()) return Response::Success();
@@ -469,7 +475,7 @@ Response V8RuntimeAgentImpl::getProperties(
   std::unique_ptr<protocol::Array<PrivatePropertyDescriptor>>
       privatePropertiesProtocolArray;
   response = scope.injectedScript()->getInternalAndPrivateProperties(
-      object, scope.objectGroupName(), accessorPropertiesOnly.fromMaybe(false),
+      object, scope.objectGroupName(), accessorPropertiesOnly.fromMaybe(false), &params,
       &internalPropertiesProtocolArray, &privatePropertiesProtocolArray);
   if (!response.IsSuccess()) return response;
   if (!internalPropertiesProtocolArray->empty())
