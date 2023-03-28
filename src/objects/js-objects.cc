@@ -811,7 +811,6 @@ int GetIdentityHashHelper(JSReceiver object) {
   if (properties.IsSmi()) {
     return Smi::ToInt(properties);
   }
-
   if (properties.IsPropertyArray()) {
     return PropertyArray::cast(properties).Hash();
   }
