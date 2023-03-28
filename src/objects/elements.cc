@@ -199,11 +199,11 @@ void CopyObjectToObjectElements(Isolate* isolate, FixedArrayBase from_base,
                                 FixedArrayBase to_base, ElementsKind to_kind,
                                 uint32_t to_start, int raw_copy_size) {
   ReadOnlyRoots roots(isolate);
-  CHECK(to_base.map() != roots.fixed_cow_array_map());
+  DCHECK(to_base.map() != roots.fixed_cow_array_map());
   DisallowGarbageCollection no_gc;
   int copy_size = raw_copy_size;
   if (raw_copy_size < 0) {
-    CHECK_EQ(kCopyToEndAndInitializeToHole, raw_copy_size);
+    DCHECK_EQ(kCopyToEndAndInitializeToHole, raw_copy_size);
     copy_size =
         std::min(from_base.length() - from_start, to_base.length() - to_start);
     int start = to_start + copy_size;
@@ -213,13 +213,13 @@ void CopyObjectToObjectElements(Isolate* isolate, FixedArrayBase from_base,
                    roots.the_hole_value(), length);
     }
   }
-  CHECK((copy_size + static_cast<int>(to_start)) <= to_base.length() &&
+  DCHECK((copy_size + static_cast<int>(to_start)) <= to_base.length() &&
          (copy_size + static_cast<int>(from_start)) <= from_base.length());
   if (copy_size == 0) return;
   FixedArray from = FixedArray::cast(from_base);
   FixedArray to = FixedArray::cast(to_base);
-  CHECK(IsSmiOrObjectElementsKind(from_kind));
-  CHECK(IsSmiOrObjectElementsKind(to_kind));
+  DCHECK(IsSmiOrObjectElementsKind(from_kind));
+  DCHECK(IsSmiOrObjectElementsKind(to_kind));
 
   WriteBarrierMode write_barrier_mode =
       (IsObjectElementsKind(from_kind) && IsObjectElementsKind(to_kind))

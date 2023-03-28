@@ -383,9 +383,9 @@ Handle<FixedArray> GetFastEnumPropertyKeys(Isolate* isolate,
   int enum_length = map->EnumLength();
   // Ignore cache in case of custom params.
   if (enum_length != kInvalidEnumCacheSentinel && !*params) {
-    CHECK(map->OnlyHasSimpleProperties());
-    CHECK_LE(enum_length, keys->length());
-    CHECK_EQ(enum_length, map->NumberOfEnumerableProperties());
+    DCHECK(map->OnlyHasSimpleProperties());
+    DCHECK_LE(enum_length, keys->length());
+    DCHECK_EQ(enum_length, map->NumberOfEnumerableProperties());
     isolate->counters()->enum_cache_hits()->Increment();
     return ReduceFixedArrayTo(isolate, keys, enum_length);
   }
@@ -425,7 +425,7 @@ Handle<FixedArray> GetFastEnumPropertyKeys(Isolate* isolate,
     
     if (*params && index == pageSize) break;
   }
-  CHECK_EQ(index, keys->length());
+  DCHECK_EQ(index, keys->length());
 
   // Optionally also create the indices array.
   Handle<FixedArray> indices = isolate->factory()->empty_fixed_array();
@@ -438,15 +438,15 @@ Handle<FixedArray> GetFastEnumPropertyKeys(Isolate* isolate,
       if (details.IsDontEnum()) continue;
       Object key = descriptors->GetKey(i);
       if (key.IsSymbol()) continue;
-      CHECK_EQ(PropertyKind::kData, details.kind());
-      CHECK_EQ(PropertyLocation::kField, details.location());
+      DCHECK_EQ(PropertyKind::kData, details.kind());
+      DCHECK_EQ(PropertyLocation::kField, details.location());
       FieldIndex field_index = FieldIndex::ForDescriptor(*map, i);
       indices->set(index, Smi::FromInt(field_index.GetLoadByFieldIndex()));
       index++;
 
       if (*params && index == pageSize) break;
     }
-    CHECK_EQ(index, indices->length());
+    DCHECK_EQ(index, indices->length());
   }
 
   // Ignore cache in case of custom params.
@@ -520,7 +520,7 @@ MaybeHandle<FixedArray> FastKeyAccumulator::GetKeysFast(
     return MaybeHandle<FixedArray>();
   }
   // From this point on we are certain to only collect own keys.
-  CHECK(receiver_->IsJSObject());
+  DCHECK(receiver_->IsJSObject());
   Handle<JSObject> object = Handle<JSObject>::cast(receiver_);
 
   // Do not try to use the enum-cache for dict-mode objects.
