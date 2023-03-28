@@ -11129,7 +11129,7 @@ static std::set<std::string>* gRecordReplayKnownFeatures = new std::set<std::str
   // Send certain event information to render thread.
   "browser-event",
 
-  // Whether to collect generic event data (RUN-1609)
+  // Collect generic event data (RUN-1609)
   "collect-events"
 });
 
