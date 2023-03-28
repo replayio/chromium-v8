@@ -11129,15 +11129,14 @@ static std::set<std::string>* gRecordReplayKnownFeatures = new std::set<std::str
   // Send certain event information to render thread.
   "browser-event",
 
-  // Record/replay events are turned off by default (for now) (RUN-1251)
-  "disable-collect-events"
+  // Collect generic event data (RUN-1609)
+  "collect-events"
 });
 
 // The set of all experimental flags pertaining to features we are currently developing.
 // Ideally, this should always be a short list.
 // NOTE: These should generally be "double-negative" flags which we need to convert to positive in the near future.
 static const char* gExperimentalFlags[] = {
-  "disable-collect-events"
 };
 
 static inline void RecordReplayCheckKnownFeature(const char* feature) {
