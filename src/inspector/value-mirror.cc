@@ -1316,7 +1316,7 @@ std::unique_ptr<ValueMirror> createNativeSetter(v8::Local<v8::Context> context,
 }
 
 static const char* allowed_getters[] = {"type", "fromElement", "target",
-                                        "isTrusted"};
+                                        "isTrusted", "key", "clientX", "clientY"};
 
 bool doesAttributeHaveObservableSideEffectOnGet(v8::Local<v8::Context> context,
                                                 v8::Local<v8::Object> object,
