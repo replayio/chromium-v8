@@ -998,7 +998,7 @@ void V8RuntimeAgentImpl::messageAdded(V8ConsoleMessage* message) {
 bool V8RuntimeAgentImpl::reportMessage(V8ConsoleMessage* message,
                                        bool generatePreview) {
   // Don't interact with the recording if we are replaying only.
-  base::Optional<v8::recordreplay::AutoDisallowEvents> disallow;
+  v8::base::Optional<v8::recordreplay::AutoDisallowEvents> disallow;
   if (m_replayOnly)
     disallow.emplace("V8RuntimeAgentImpl::reportMessage");
 
