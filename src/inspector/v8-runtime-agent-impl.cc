@@ -248,7 +248,8 @@ V8RuntimeAgentImpl::V8RuntimeAgentImpl(
       m_state(state),
       m_frontend(FrontendChannel),
       m_inspector(session->inspector()),
-      m_enabled(false) {}
+      m_enabled(false),
+      m_replayOnly(v8::recordreplay::IsReplaying() && v8::recordreplay::AreEventsDisallowed()) {}
 
 V8RuntimeAgentImpl::~V8RuntimeAgentImpl() = default;
 
@@ -996,6 +997,11 @@ void V8RuntimeAgentImpl::messageAdded(V8ConsoleMessage* message) {
 
 bool V8RuntimeAgentImpl::reportMessage(V8ConsoleMessage* message,
                                        bool generatePreview) {
+  // Don't interact with the recording if we are replaying only.
+  base::Optional<v8::recordreplay::AutoDisallowEvents> disallow;
+  if (m_replayOnly)
+    disallow.emplace("V8RuntimeAgentImpl::reportMessage");
+
   message->reportToFrontend(&m_frontend, m_session, generatePreview);
   m_frontend.flush();
 
