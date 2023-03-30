@@ -10977,7 +10977,7 @@ void RecordReplayAddHTMLParse(const char* url) {
 
   void* str = gJSONCreateString(url);
 
-  const char* property = "uri";
+  const char* property = "url";
   void* object = gJSONCreateObject(1, &property, &str);
 
   char* objectStr = gJSONToString(object);
