@@ -1211,6 +1211,16 @@ Maybe<bool> ValueSerializer::ThrowDataCloneError(MessageTemplate index,
   return Nothing<bool>();
 }
 
+// FIXME surely there is a utility somewhere we can use instead?
+inline int HashBytes(const void* aPtr, size_t aSize) {
+  int hash = 0;
+  uint8_t* ptr = (uint8_t*)aPtr;
+  for (size_t i = 0; i < aSize; i++) {
+    hash = (((hash << 5) - hash) + ptr[i]) | 0;
+  }
+  return hash;
+}
+
 ValueDeserializer::ValueDeserializer(Isolate* isolate,
                                      base::Vector<const uint8_t> data,
                                      v8::ValueDeserializer::Delegate* delegate)
@@ -1219,7 +1229,10 @@ ValueDeserializer::ValueDeserializer(Isolate* isolate,
       position_(data.begin()),
       end_(data.end()),
       id_map_(isolate->global_handles()->Create(
-          ReadOnlyRoots(isolate_).empty_fixed_array())) {}
+          ReadOnlyRoots(isolate_).empty_fixed_array())) {
+  recordreplay::Assert("[RUN-1618] ValueDeserializer::ValueDeserializer #1 %u %d",
+                       data.size(), HashBytes(&data[0], data.size()));
+}
 
 ValueDeserializer::ValueDeserializer(Isolate* isolate, const uint8_t* data,
                                      size_t size)
@@ -1228,7 +1241,10 @@ ValueDeserializer::ValueDeserializer(Isolate* isolate, const uint8_t* data,
       position_(data),
       end_(data + size),
       id_map_(isolate->global_handles()->Create(
-          ReadOnlyRoots(isolate_).empty_fixed_array())) {}
+          ReadOnlyRoots(isolate_).empty_fixed_array())) {
+  recordreplay::Assert("[RUN-1618] ValueDeserializer::ValueDeserializer #2 %u %d",
+                       size, HashBytes(data, size));
+}
 
 ValueDeserializer::~ValueDeserializer() {
   DCHECK_LE(position_, end_);
@@ -2552,8 +2568,7 @@ static Maybe<bool> SetPropertiesFromKeyValuePairs(Isolate* isolate,
 
 MaybeHandle<Object>
 ValueDeserializer::ReadObjectUsingEntireBufferForLegacyFormat() {
-  // https://linear.app/replay/issue/RUN-885
-  recordreplay::Assert("ValueDeserializer::ReadObjectUsingEntireBufferForLegacyFormat");
+  recordreplay::Assert("[RUN-1618] ValueDeserializer::ReadObjectUsingEntireBufferForLegacyFormat");
 
   DCHECK_EQ(version_, 0u);
   HandleScope scope(isolate_);
@@ -2572,8 +2587,6 @@ ValueDeserializer::ReadObjectUsingEntireBufferForLegacyFormat() {
         uint32_t num_properties;
         if (!ReadVarint<uint32_t>().To(&num_properties) ||
             stack.size() / 2 < num_properties) {
-          // https://linear.app/replay/issue/RUN-885
-          recordreplay::Assert("ValueDeserializer::ReadObjectUsingEntireBufferForLegacyFormat #1");
           isolate_->Throw(*isolate_->factory()->NewError(
               MessageTemplate::kDataCloneDeserializationError));
           return MaybeHandle<Object>();
@@ -2587,8 +2600,6 @@ ValueDeserializer::ReadObjectUsingEntireBufferForLegacyFormat() {
             !SetPropertiesFromKeyValuePairs(
                  isolate_, js_object, &stack[begin_properties], num_properties)
                  .FromMaybe(false)) {
-          // https://linear.app/replay/issue/RUN-885
-          recordreplay::Assert("ValueDeserializer::ReadObjectUsingEntireBufferForLegacyFormat #2");
           ThrowDeserializationExceptionIfNonePending(isolate_);
           return MaybeHandle<Object>();
         }
@@ -2606,8 +2617,6 @@ ValueDeserializer::ReadObjectUsingEntireBufferForLegacyFormat() {
         if (!ReadVarint<uint32_t>().To(&num_properties) ||
             !ReadVarint<uint32_t>().To(&length) ||
             stack.size() / 2 < num_properties) {
-          // https://linear.app/replay/issue/RUN-885
-          recordreplay::Assert("ValueDeserializer::ReadObjectUsingEntireBufferForLegacyFormat #3");
           isolate_->Throw(*isolate_->factory()->NewError(
               MessageTemplate::kDataCloneDeserializationError));
           return MaybeHandle<Object>();
@@ -2622,8 +2631,6 @@ ValueDeserializer::ReadObjectUsingEntireBufferForLegacyFormat() {
             !SetPropertiesFromKeyValuePairs(
                  isolate_, js_array, &stack[begin_properties], num_properties)
                  .FromMaybe(false)) {
-          // https://linear.app/replay/issue/RUN-885
-          recordreplay::Assert("ValueDeserializer::ReadObjectUsingEntireBufferForLegacyFormat #4");
           ThrowDeserializationExceptionIfNonePending(isolate_);
           return MaybeHandle<Object>();
         }
@@ -2633,9 +2640,6 @@ ValueDeserializer::ReadObjectUsingEntireBufferForLegacyFormat() {
         break;
       }
       case SerializationTag::kEndDenseJSArray: {
-        // https://linear.app/replay/issue/RUN-885
-        recordreplay::Assert("ValueDeserializer::ReadObjectUsingEntireBufferForLegacyFormat #5");
-
         // This was already broken in Chromium, and apparently wasn't missed.
         isolate_->Throw(*isolate_->factory()->NewError(
             MessageTemplate::kDataCloneDeserializationError));
@@ -2657,8 +2661,6 @@ ValueDeserializer::ReadObjectUsingEntireBufferForLegacyFormat() {
   position_ = end_;
 
   if (stack.size() != 1) {
-    // https://linear.app/replay/issue/RUN-885
-    recordreplay::Assert("ValueDeserializer::ReadObjectUsingEntireBufferForLegacyFormat #6");
     isolate_->Throw(*isolate_->factory()->NewError(
         MessageTemplate::kDataCloneDeserializationError));
     return MaybeHandle<Object>();
