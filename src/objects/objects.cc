@@ -1470,6 +1470,25 @@ MaybeHandle<Object> Object::GetPropertyWithAccessor(LookupIterator* it) {
         nullptr, isolate->factory()->undefined_value());
   } else if (getter->IsCallable()) {
     // TODO(rossberg): nicer would be to cast to some JSCallable here...
+
+    // TODO: IsInReplayCode [RUN-1502]
+    if (getter->IsJSFunction() && recordreplay::IsReplaying() && recordreplay::AreEventsDisallowed() &&
+        !recordreplay::HasDivergedFromRecording()) {
+      // [RUN-1621] Plenty of user-space JS gets executed from here while handling commands.
+      // It generally should not do that, when we are not paused.
+      auto fun = Handle<JSFunction>::cast(getter);
+      if (fun->shared().IsUserJavaScript())
+        recordreplay::Print(
+            "DDBG [RUN-1621] Object::GetPropertyWithAccessor %d %d %d %d %s",
+            fun->shared().IsUserJavaScript(), (int)fun->shared().kind(),
+            fun->shared().HasSourceCode(), fun->shared().SourceSize(),
+            fun->shared().DebugNameCStr().get());
+        FATAL("DDBG FATAL [RUN-1621] Object::GetPropertyWithAccessor");
+      // if (fun->shared().IsUserJavaScript()) {
+      //   return isolate->factory()->undefined_value();
+      // }
+    }
+
     return Object::GetPropertyWithDefinedGetter(
         receiver, Handle<JSReceiver>::cast(getter));
   }
