@@ -368,9 +368,10 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
       !recordreplay::HasDivergedFromRecording()) {
     auto fun = Handle<JSFunction>::cast(params.target);
     if (fun->shared().IsUserJavaScript() && fun->shared().HasSourceCode()) {
-      // [RUN-1621] Plenty of user-space JS gets executed from here while
+      // [RUN-1621] Sometimes, user-space JS gets executed while
       // handling commands. It generally should not do that, when we are not
-      // paused.
+      // paused. This will help us avoid such invocations and also trace
+      // down all culprits.
 
       const char* scriptName = (char*)nullptr;
       // Get script name. Based on perf-jit.cc.
