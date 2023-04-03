@@ -974,6 +974,8 @@ extern bool gRecordReplayHasCheckpoint;
 
 extern void RecordReplayOnTargetProgressReached();
 
+static int hasReportedStack = 0;
+
 RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
   if (++*gProgressCounter == gTargetProgress) {
     RecordReplayOnTargetProgressReached();
@@ -1014,8 +1016,19 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
     CHECK(gRecordReplayHasCheckpoint);
   }
 
-  recordreplay::Assert("ExecutionProgress %zu %s:%d:%d",
-                       *gProgressCounter, name.c_str(), info.line + 1, info.column);
+  recordreplay::Assert("ExecutionProgress %zu %s:%d:%d", *gProgressCounter,
+                       name.c_str(), info.line + 1, info.column);
+
+  if (hasReportedStack < 3 && recordreplay::AreEventsDisallowed()) {
+    // TODO: use `AddRecordingWarning` instead.
+    // TODO: try to move to OnInstrument instead.
+    ++hasReportedStack;
+    std::stringstream stack;
+    isolate->PrintCurrentStackTrace(stack);
+    recordreplay::Print("DDBG ExecutionProgress %zu %s:%d:%d, %s",
+                        *gProgressCounter, name.c_str(), info.line + 1,
+                        info.column, stack.str().c_str());
+  }
 
   return ReadOnlyRoots(isolate).undefined_value();
 }

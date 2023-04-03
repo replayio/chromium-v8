@@ -375,29 +375,30 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
 
       const char* scriptName = (char*)nullptr;
       // Get script name. Based on perf-jit.cc.
-      // if (fun->shared().script().IsObject()) {
-      DisallowGarbageCollection no_gc;
-      Object name_or_url =
-          Script::cast(fun->shared().script()).GetNameOrSourceURL();
-      if (name_or_url.IsSeqOneByteString()) {
-        SeqOneByteString str = SeqOneByteString::cast(name_or_url);
-        scriptName = reinterpret_cast<char*>(str.GetChars(no_gc));
-      } else if (name_or_url.IsString()) {
-        int length;
-        auto storage =
-            String::cast(name_or_url)
-                .ToCString(DISALLOW_NULLS, FAST_STRING_TRAVERSAL, &length);
-        scriptName = storage.get();
+      if (fun->shared().script().IsScript()) {
+        DisallowGarbageCollection no_gc;
+        Object name_or_url =
+            Script::cast(fun->shared().script()).GetNameOrSourceURL();
+        if (name_or_url.IsSeqOneByteString()) {
+          SeqOneByteString str = SeqOneByteString::cast(name_or_url);
+          scriptName = reinterpret_cast<char*>(str.GetChars(no_gc));
+        } else if (name_or_url.IsString()) {
+          int length;
+          auto storage =
+              String::cast(name_or_url)
+                  .ToCString(DISALLOW_NULLS, FAST_STRING_TRAVERSAL, &length);
+          scriptName = storage.get();
+        }
       }
-      // }
       if (!scriptName) {
         scriptName = "";
       }
 
       if (strcmp(scriptName,
                  "record-replay-internal")) {  // ignore our own scripts
+        // TODO: use `AddRecordingWarning` instead
         recordreplay::Assert(
-            "DDBG [RUN-1621] Invoke %d %d %d %d %d %s %s",
+            "DDBG [RUN-1621] Invoke %d %d %d %d %d script=\"%s\" fun=\"%s\"",
             fun->shared().IsUserJavaScript(), (int)fun->shared().kind(),
             fun->shared().HasSourceCode(), fun->shared().SourceSize(),
             fun->shared().is_script(), scriptName,
