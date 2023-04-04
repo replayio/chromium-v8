@@ -363,50 +363,6 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
     }
   }
 
-  if (params.target->IsJSFunction() && recordreplay::IsReplaying() &&
-      recordreplay::AreEventsDisallowed() &&
-      !recordreplay::HasDivergedFromRecording()) {
-    auto fun = Handle<JSFunction>::cast(params.target);
-    if (fun->shared().IsUserJavaScript()) {
-      // [RUN-1621] Plenty of user-space JS gets executed from here while
-      // handling commands. It generally should not do that, when we are not
-      // paused.
-
-      char* scriptName = (char*)nullptr;
-      // Get script name. Based on perf-jit.cc.
-      if (fun->shared().is_script()) {
-        DisallowGarbageCollection no_gc;
-        Object name_or_url =
-            Script::cast(fun->shared().script()).GetNameOrSourceURL();
-        if (name_or_url.IsSeqOneByteString()) {
-          SeqOneByteString str = SeqOneByteString::cast(name_or_url);
-          scriptName = reinterpret_cast<char*>(str.GetChars(no_gc));
-        } else if (name_or_url.IsString()) {
-          int length;
-          auto storage =
-              String::cast(name_or_url)
-                  .ToCString(DISALLOW_NULLS, FAST_STRING_TRAVERSAL, &length);
-          scriptName = storage.get();
-        }
-      }
-
-      if (strcmp(scriptName,
-                 "record-replay-internal")) {  // ignore our own scripts
-        recordreplay::Print(
-            "DDBG [RUN-1621] Invoke %d %d %d %d %d %s",
-            fun->shared().IsUserJavaScript(), (int)fun->shared().kind(),
-            fun->shared().HasSourceCode(), fun->shared().SourceSize(),
-            fun->shared().is_script(),
-            fun->shared().is_script() ? scriptName
-                                      : fun->shared().DebugNameCStr().get());
-        FATAL("DDBG FATAL [RUN-1621] Invoke");
-      }
-    }
-    // if (fun->shared().IsUserJavaScript()) {
-    //   return isolate->factory()->undefined_value();
-    // }
-  }
-
   // Entering JavaScript.
   VMState<JS> state(isolate);
   CHECK(AllowJavascriptExecution::IsAllowed(isolate));
