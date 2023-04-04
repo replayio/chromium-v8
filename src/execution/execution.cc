@@ -346,9 +346,10 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
 
     if (recordreplay::IsReplaying() && recordreplay::AreEventsDisallowed() &&
         !recordreplay::HasDivergedFromRecording() &&
-        function->shared().IsUserJavaScript() && function->shared().HasSourceCode()) {
-      // [RUN-1621] Sometimes, user-space JS gets executed while handling
-      // commands. This should generally not happen, if not paused.
+        function->shared().IsUserJavaScript() &&
+        function->shared().HasSourceCode()) {
+      // [RUN-1621] User JS should not get executed non-deterministically,
+      // unless we have paused.
 
       const char* scriptName = (char*)nullptr;
       // Get script name. Based on perf-jit.cc.
@@ -375,11 +376,10 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
       if (strcmp(scriptName, "record-replay-internal")) {
         // Warn and prevent execution.
         recordreplay::Warning(
-            "DDBG [RUN-1621] Invoke %d %d %d %d script=\"%s\" fun=\"%s\"",
-            (int)function->shared().kind(),
-            function->shared().HasSourceCode(),
-            function->shared().SourceSize(), function->shared().is_script(),
-            scriptName, function->shared().DebugNameCStr().get());
+            "[RUN-1621] Invoke: Non-deterministic UserJS %d %d %d script=\"%s\" fun=\"%s\"",
+            (int)function->shared().kind(), function->shared().SourceSize(),
+            function->shared().is_script(), scriptName,
+            function->shared().DebugNameCStr().get());
         return isolate->factory()->undefined_value();
       }
     }

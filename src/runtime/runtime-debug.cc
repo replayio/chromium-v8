@@ -1275,17 +1275,23 @@ static inline void OnInstrumentation(Isolate* isolate,
   Handle<Script> script(Script::cast(function->shared().script()), isolate);
   CHECK(RecordReplayHasRegisteredScript(*script));
 
-  if (!hasWarnedUserJs &&
-      recordreplay::IsReplaying() && recordreplay::AreEventsDisallowed() &&
+  if (!hasWarnedUserJs && recordreplay::IsReplaying() &&
+      recordreplay::AreEventsDisallowed() &&
       !recordreplay::HasDivergedFromRecording() &&
       function->shared().IsUserJavaScript() &&
       function->shared().HasSourceCode()) {
+    // [RUN-1621] User JS should not get executed non-deterministically, unless
+    // we have paused.
     hasWarnedUserJs = true;
 
     std::stringstream stack;
-    isolate->PrintCurrentStackTrace(stack);
-    recordreplay::Warning("[RUN-1621] OnInstrumentation %zu %s", *gProgressCounter,
-             stack.str().c_str());
+    if (GetTestEnvironmentFlag()) {
+      stack << " stack=";
+      isolate->PrintCurrentStackTrace(stack);
+    }
+    recordreplay::Warning(
+        "[RUN-1621] OnInstrumentation: Non-deterministic UserJS pc=%llu%s",
+        *gProgressCounter, stack.str().c_str());
     return;
   }
 
