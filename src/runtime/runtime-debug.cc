@@ -974,8 +974,6 @@ extern bool gRecordReplayHasCheckpoint;
 
 extern void RecordReplayOnTargetProgressReached();
 
-static int hasReportedStack = 0;
-
 RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
   if (++*gProgressCounter == gTargetProgress) {
     RecordReplayOnTargetProgressReached();
@@ -1018,17 +1016,6 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
 
   recordreplay::Assert("ExecutionProgress %zu %s:%d:%d", *gProgressCounter,
                        name.c_str(), info.line + 1, info.column);
-
-  if (hasReportedStack < 3 && recordreplay::AreEventsDisallowed()) {
-    // TODO: use `AddRecordingWarning` instead.
-    // TODO: try to move to OnInstrument instead.
-    ++hasReportedStack;
-    std::stringstream stack;
-    isolate->PrintCurrentStackTrace(stack);
-    recordreplay::Print("DDBG ExecutionProgress %zu %s:%d:%d, %s",
-                        *gProgressCounter, name.c_str(), info.line + 1,
-                        info.column, stack.str().c_str());
-  }
 
   return ReadOnlyRoots(isolate).undefined_value();
 }
@@ -1278,6 +1265,9 @@ void ParseRecordReplayFunctionId(const std::string& function_id,
   *source_position = atoi(strchr(raw, ':') + 1);
 }
 
+// [RUN-1621]
+static bool hasWarnedUserJs = false;
+
 static inline void OnInstrumentation(Isolate* isolate,
                                      Handle<JSFunction> function, int32_t index) {
   CHECK(RecordReplayBytecodeAllowed());
@@ -1285,8 +1275,21 @@ static inline void OnInstrumentation(Isolate* isolate,
   Handle<Script> script(Script::cast(function->shared().script()), isolate);
   CHECK(RecordReplayHasRegisteredScript(*script));
 
-  InstrumentationSite& site = GetInstrumentationSite("Callback", index);
+  if (!hasWarnedUserJs &&
+      recordreplay::IsReplaying() && recordreplay::AreEventsDisallowed() &&
+      !recordreplay::HasDivergedFromRecording() &&
+      function->shared().IsUserJavaScript() &&
+      function->shared().HasSourceCode()) {
+    hasWarnedUserJs = true;
 
+    std::stringstream stack;
+    isolate->PrintCurrentStackTrace(stack);
+    recordreplay::Warning("[RUN-1621] OnInstrumentation %zu %s", *gProgressCounter,
+             stack.str().c_str());
+    return;
+  }
+
+  InstrumentationSite& site = GetInstrumentationSite("Callback", index);
   if (!site.function_id_.length()) {
     Handle<SharedFunctionInfo> shared(function->shared(), isolate);
     site.function_id_ = GetRecordReplayFunctionId(shared);

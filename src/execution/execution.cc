@@ -343,6 +343,47 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
       DCHECK(!params.IsScript());
     }
 #endif
+
+    if (recordreplay::IsReplaying() && recordreplay::AreEventsDisallowed() &&
+        !recordreplay::HasDivergedFromRecording() &&
+        function->shared().IsUserJavaScript() && function->shared().HasSourceCode()) {
+      // [RUN-1621] Sometimes, user-space JS gets executed while handling
+      // commands. This should generally not happen, if not paused.
+
+      const char* scriptName = (char*)nullptr;
+      // Get script name. Based on perf-jit.cc.
+      if (function->shared().script().IsScript()) {
+        DisallowGarbageCollection no_gc;
+        Object name_or_url =
+            Script::cast(function->shared().script()).GetNameOrSourceURL();
+        if (name_or_url.IsSeqOneByteString()) {
+          SeqOneByteString str = SeqOneByteString::cast(name_or_url);
+          scriptName = reinterpret_cast<char*>(str.GetChars(no_gc));
+        } else if (name_or_url.IsString()) {
+          int length;
+          auto storage =
+              String::cast(name_or_url)
+                  .ToCString(DISALLOW_NULLS, FAST_STRING_TRAVERSAL, &length);
+          scriptName = storage.get();
+        }
+      }
+      if (!scriptName) {
+        scriptName = "";
+      }
+
+      // Always allow Replay-internal scripts.
+      if (strcmp(scriptName, "record-replay-internal")) {
+        // Warn and prevent execution.
+        recordreplay::Warning(
+            "DDBG [RUN-1621] Invoke %d %d %d %d script=\"%s\" fun=\"%s\"",
+            (int)function->shared().kind(),
+            function->shared().HasSourceCode(),
+            function->shared().SourceSize(), function->shared().is_script(),
+            scriptName, function->shared().DebugNameCStr().get());
+        return isolate->factory()->undefined_value();
+      }
+    }
+
     // Set up a ScriptContext when running scripts that need it.
     if (function->shared().needs_script_context()) {
       Handle<Context> context;
@@ -360,51 +401,6 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
       // guaranteed to only happen once in a native context since scripts will
       // always produce name clashes with themselves.
       function->set_context(*context);
-    }
-  }
-
-  if (params.target->IsJSFunction() && recordreplay::IsReplaying() &&
-      recordreplay::AreEventsDisallowed() &&
-      !recordreplay::HasDivergedFromRecording()) {
-    auto fun = Handle<JSFunction>::cast(params.target);
-    if (fun->shared().IsUserJavaScript() && fun->shared().HasSourceCode()) {
-      // [RUN-1621] Sometimes, user-space JS gets executed while
-      // handling commands. It generally should not do that, when we are not
-      // paused. This will help us avoid such invocations and also trace
-      // down all culprits.
-
-      const char* scriptName = (char*)nullptr;
-      // Get script name. Based on perf-jit.cc.
-      if (fun->shared().script().IsScript()) {
-        DisallowGarbageCollection no_gc;
-        Object name_or_url =
-            Script::cast(fun->shared().script()).GetNameOrSourceURL();
-        if (name_or_url.IsSeqOneByteString()) {
-          SeqOneByteString str = SeqOneByteString::cast(name_or_url);
-          scriptName = reinterpret_cast<char*>(str.GetChars(no_gc));
-        } else if (name_or_url.IsString()) {
-          int length;
-          auto storage =
-              String::cast(name_or_url)
-                  .ToCString(DISALLOW_NULLS, FAST_STRING_TRAVERSAL, &length);
-          scriptName = storage.get();
-        }
-      }
-      if (!scriptName) {
-        scriptName = "";
-      }
-
-      if (strcmp(scriptName,
-                 "record-replay-internal")) {  // ignore our own scripts
-        // TODO: use `AddRecordingWarning` instead
-        recordreplay::Assert(
-            "DDBG [RUN-1621] Invoke %d %d %d %d %d script=\"%s\" fun=\"%s\"",
-            fun->shared().IsUserJavaScript(), (int)fun->shared().kind(),
-            fun->shared().HasSourceCode(), fun->shared().SourceSize(),
-            fun->shared().is_script(), scriptName,
-            fun->shared().DebugNameCStr().get());
-        return isolate->factory()->undefined_value();
-      }
     }
   }
 
