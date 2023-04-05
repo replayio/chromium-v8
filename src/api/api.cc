@@ -11175,7 +11175,7 @@ static const char* GetDisabledFeatureSpecifier() {
   return getenv("RECORD_REPLAY_DISABLE_FEATURES");
 }
 
-static bool GetTestEnvironmentFlag() {
+bool GetTestEnvironmentFlag() {
   auto* sTestEnvironment = getenv("RECORD_REPLAY_TEST_ENVIRONMENT");
   // check is based on TestEnv in Utils.cpp
   return sTestEnvironment && sTestEnvironment[0] && sTestEnvironment[0] != '0';

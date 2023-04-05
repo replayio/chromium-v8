@@ -1285,7 +1285,7 @@ static inline void OnInstrumentation(Isolate* isolate,
     hasWarnedUserJs = true;
 
     std::stringstream stack;
-    if (GetTestEnvironmentFlag()) {
+    if (recordreplay::GetTestEnvironmentFlag()) {
       stack << " stack=";
       isolate->PrintCurrentStackTrace(stack);
     }

@@ -96,6 +96,8 @@ static const char* GetRecordingId();
 
 static bool FeatureEnabled(const char* feature);
 
+static bool GetTestEnvironmentFlag();
+
 static void Print(const char* format, ...);
 static void Diagnostic(const char* format, ...);
 static void Warning(const char* format, ...);
