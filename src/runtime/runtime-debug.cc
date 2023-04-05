@@ -982,7 +982,7 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
   Handle<JSFunction> function = args.at<JSFunction>(0);
   Handle<SharedFunctionInfo> shared(function->shared(), isolate);
 
-  if (recordreplay::IsReplaying() && recordreplay::AreEventsDisallowed() &&
+  if (recordreplay::AreEventsDisallowed() &&
       !recordreplay::HasDivergedFromRecording() &&
       function->shared().IsUserJavaScript() &&
       function->shared().HasSourceCode()) {

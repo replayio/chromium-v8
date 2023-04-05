@@ -344,7 +344,7 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
     }
 #endif
 
-    if (recordreplay::IsReplaying() && recordreplay::AreEventsDisallowed() &&
+    if (recordreplay::AreEventsDisallowed() &&
         !recordreplay::HasDivergedFromRecording() &&
         function->shared().IsUserJavaScript() &&
         function->shared().HasSourceCode()) {
