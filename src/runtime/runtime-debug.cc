@@ -972,9 +972,36 @@ static inline bool RecordReplayBytecodeAllowed() {
 
 extern bool gRecordReplayHasCheckpoint;
 
+// [RUN-1621] We use this to avoid warn spam.
+static bool hasWarnedUserJs = false;
+
 extern void RecordReplayOnTargetProgressReached();
 
 RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
+  CHECK_EQ(1, args.length());
+  Handle<JSFunction> function = args.at<JSFunction>(0);
+  Handle<SharedFunctionInfo> shared(function->shared(), isolate);
+
+  if (recordreplay::IsReplaying() && recordreplay::AreEventsDisallowed() &&
+      !recordreplay::HasDivergedFromRecording() &&
+      function->shared().IsUserJavaScript() &&
+      function->shared().HasSourceCode()) {
+    // [RUN-1621] User JS should not get executed non-deterministically, unless
+    // we have paused.
+    if (!hasWarnedUserJs) {  // Prevent flood of warnings.
+      hasWarnedUserJs = true;
+      std::stringstream stack;
+      if (recordreplay::GetTestEnvironmentFlag()) {
+        stack << " stack=";
+        isolate->PrintCurrentStackTrace(stack);
+      }
+      recordreplay::Warning(
+          "[RUN-1621] OnExecutionProgress: Non-deterministic UserJS pc=%llu%s",
+          *gProgressCounter, stack.str().c_str());
+    }
+    return ReadOnlyRoots(isolate).undefined_value();
+  }
+
   if (++*gProgressCounter == gTargetProgress) {
     RecordReplayOnTargetProgressReached();
   }
@@ -984,10 +1011,6 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
   }
 
   HandleScope scope(isolate);
-  DCHECK_EQ(1, args.length());
-  Handle<JSFunction> function = args.at<JSFunction>(0);
-
-  Handle<SharedFunctionInfo> shared(function->shared(), isolate);
   Handle<Script> script(Script::cast(shared->script()), isolate);
   CHECK(RecordReplayHasRegisteredScript(*script));
 
@@ -1265,36 +1288,12 @@ void ParseRecordReplayFunctionId(const std::string& function_id,
   *source_position = atoi(strchr(raw, ':') + 1);
 }
 
-// [RUN-1621]
-static bool hasWarnedUserJs = false;
-
 static inline void OnInstrumentation(Isolate* isolate,
                                      Handle<JSFunction> function, int32_t index) {
   CHECK(RecordReplayBytecodeAllowed());
 
   Handle<Script> script(Script::cast(function->shared().script()), isolate);
   CHECK(RecordReplayHasRegisteredScript(*script));
-
-  if (!hasWarnedUserJs && recordreplay::IsReplaying() &&
-      recordreplay::AreEventsDisallowed() &&
-      !recordreplay::HasDivergedFromRecording() &&
-      function->shared().IsUserJavaScript() &&
-      function->shared().HasSourceCode()) {
-    // [RUN-1621] User JS should not get executed non-deterministically, unless
-    // we have paused.
-    hasWarnedUserJs = true;
-
-    std::stringstream stack;
-    if (recordreplay::GetTestEnvironmentFlag()) {
-      stack << " stack=";
-      isolate->PrintCurrentStackTrace(stack);
-    }
-    recordreplay::Warning(
-        "[RUN-1621] OnInstrumentation: Non-deterministic UserJS pc=%llu%s",
-        *gProgressCounter, stack.str().c_str());
-    return;
-  }
-
   InstrumentationSite& site = GetInstrumentationSite("Callback", index);
   if (!site.function_id_.length()) {
     Handle<SharedFunctionInfo> shared(function->shared(), isolate);

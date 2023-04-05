@@ -11175,7 +11175,7 @@ static const char* GetDisabledFeatureSpecifier() {
   return getenv("RECORD_REPLAY_DISABLE_FEATURES");
 }
 
-bool GetTestEnvironmentFlag() {
+bool recordreplay::GetTestEnvironmentFlag() {
   auto* sTestEnvironment = getenv("RECORD_REPLAY_TEST_ENVIRONMENT");
   // check is based on TestEnv in Utils.cpp
   return sTestEnvironment && sTestEnvironment[0] && sTestEnvironment[0] != '0';
@@ -11183,7 +11183,7 @@ bool GetTestEnvironmentFlag() {
 
 static void RecordReplayInitializeDisabledFeatures() {
   const char* env = GetDisabledFeatureSpecifier();
-  auto isTestEnvironment = GetTestEnvironmentFlag();
+  auto isTestEnvironment = recordreplay::GetTestEnvironmentFlag();
 
   gRecordReplayDisabledFeatures = new std::set<std::string>();
 
