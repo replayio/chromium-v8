@@ -23,9 +23,9 @@
 #include "src/inspector/v8-value-utils.h"
 #include "src/inspector/v8-webdriver-serializer.h"
 
-#include "v8.h"
-
+// Replay edit includes
 #include "src/inspector/string-util.h"
+#include "v8.h"
 
 namespace v8_inspector {
 
@@ -254,6 +254,23 @@ String16 descriptionForRegExp(v8::Isolate* isolate,
 
 enum class ErrorType { kNative, kClient };
 
+// [RUN-1621] Only read these props if they don't call into user JS.
+static bool ReplayCanAccessProp(v8::Isolate* isolate, v8::Local<v8::Object> object,
+                                const char* name) {
+  if (!v8::recordreplay::IsRecordingOrReplaying()) {
+    return true;
+  }
+  v8::Local<v8::String> v8Name = toV8String(isolate, name);
+  v8::internal::Object o = v8::internal::ObjectLookupAccessor(
+      isolate, object, v8Name, ACCESSOR_GETTER);
+  v8::Local<v8::Value> getterObj = v8::Utils::ToLocal(o);
+  if (getterObj.IsFunction()) {
+    v8::Local<v8::Function> getterFunction = getterObj.As<v8::Function>();
+    return getterFunction->ScriptId() == v8::UnboundScript::kNoScriptId;
+  }
+  return true;
+}
+
 // Build a description from an exception using the following rules:
 //   * Usually return the stack trace found in the {stack} property.
 //   * If the stack trace does not start with the class name of the passed
@@ -270,7 +287,9 @@ String16 descriptionForError(v8::Local<v8::Context> context,
   v8::base::Optional<String16> stack;
   {
     v8::Local<v8::Value> stackValue;
-    if (object->Get(context, toV8String(isolate, "stack"))
+
+    if (ReplayCanAccessProp(isolate, object, "stack") &&
+        object->Get(context, toV8String(isolate, "stack"))
             .ToLocal(&stackValue) &&
         stackValue->IsString()) {
       stack = toProtocolString(isolate, stackValue.As<v8::String>());
@@ -286,7 +305,8 @@ String16 descriptionForError(v8::Local<v8::Context> context,
   v8::base::Optional<String16> message;
   {
     v8::Local<v8::Value> messageValue;
-    if (object->Get(context, toV8String(isolate, "message"))
+    if (ReplayCanAccessProp(isolate, object, "message") &&
+        object->Get(context, toV8String(isolate, "message"))
             .ToLocal(&messageValue) &&
         messageValue->IsString()) {
       String16 msg = toProtocolStringWithTypeCheck(isolate, messageValue);
