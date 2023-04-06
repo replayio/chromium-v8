@@ -353,7 +353,7 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
 
       // Get script name.
       int script_id = -1;
-      std::string scriptName = "(unknown script)";
+      std::string scriptName = "";
       if (function->shared().script().IsScript()) {
         Script script = Script::cast(function->shared().script());
         Object name_or_url = script.GetNameOrSourceURL();

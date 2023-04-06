@@ -1037,8 +1037,8 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
     CHECK(gRecordReplayHasCheckpoint);
   }
 
-  recordreplay::Assert("ExecutionProgress %zu %s:%d:%d", *gProgressCounter,
-                       name.c_str(), info.line + 1, info.column);
+  recordreplay::Assert("ExecutionProgress %zu %s:%d:%d",
+                       *gProgressCounter, name.c_str(), info.line + 1, info.column);
 
   return ReadOnlyRoots(isolate).undefined_value();
 }
@@ -1294,7 +1294,9 @@ static inline void OnInstrumentation(Isolate* isolate,
 
   Handle<Script> script(Script::cast(function->shared().script()), isolate);
   CHECK(RecordReplayHasRegisteredScript(*script));
+
   InstrumentationSite& site = GetInstrumentationSite("Callback", index);
+
   if (!site.function_id_.length()) {
     Handle<SharedFunctionInfo> shared(function->shared(), isolate);
     site.function_id_ = GetRecordReplayFunctionId(shared);
