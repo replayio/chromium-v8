@@ -1139,14 +1139,6 @@ MaybeHandle<Object> Object::GetLengthFromArrayLike(Isolate* isolate,
 MaybeHandle<Object> Object::GetProperty(LookupIterator* it,
                                         bool is_global_reference) {
   for (; it->IsFound(); it->Next()) {
-
-    // [RUN-1621] Prevent calling into user JS when in non-deterministic code paths and not paused.
-    if (recordreplay::AreEventsDisallowed() &&
-        !recordreplay::HasDivergedFromRecording() &&
-        it->state() != LookupIterator::DATA) {
-      return it->isolate()->factory()->undefined_value();
-    }
-
     switch (it->state()) {
       case LookupIterator::NOT_FOUND:
       case LookupIterator::TRANSITION:
