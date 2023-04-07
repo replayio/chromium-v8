@@ -273,6 +273,25 @@ MaybeHandle<Context> NewScriptContext(Isolate* isolate,
   return result;
 }
 
+static bool IsDivergentUserJSInvokeWithoutPause(const SharedFunctionInfo& shared) {
+  return recordreplay::AreEventsDisallowed() &&
+         !recordreplay::HasDivergedFromRecording() &&
+         shared.IsUserJavaScript() && shared.HasSourceCode();
+}
+
+static std::string GetScriptName(const SharedFunctionInfo& shared) {
+  std::string scriptName = "";
+  if (shared.script().IsScript()) {
+    Script script = Script::cast(shared.script());
+    Object name_or_url = script.GetNameOrSourceURL();
+    if (name_or_url.IsString()) {
+      std::unique_ptr<char[]> name_raw = String::cast(name_or_url).ToCString();
+      scriptName = name_raw.get();
+    }
+  }
+  return scriptName;
+}
+
 V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
                                                  const InvokeParams& params) {
   RCS_SCOPE(isolate, RuntimeCallCounterId::kInvoke);
@@ -344,35 +363,22 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
     }
 #endif
 
-    if (recordreplay::AreEventsDisallowed() &&
-        !recordreplay::HasDivergedFromRecording() &&
-        function->shared().IsUserJavaScript() &&
-        function->shared().HasSourceCode()) {
-      // [RUN-1621] User JS should not get executed non-deterministically,
+    if (IsDivergentUserJSInvokeWithoutPause(function->shared())) {
+      // [RUN-1621] User JS should not get executed in divergent code paths,
       // unless we have paused.
-
-      // Get script name.
-      int script_id = -1;
-      std::string scriptName = "";
-      if (function->shared().script().IsScript()) {
-        Script script = Script::cast(function->shared().script());
-        Object name_or_url = script.GetNameOrSourceURL();
-        script_id = script.id();
-        if (name_or_url.IsString()) {
-          std::unique_ptr<char[]> name_raw =
-              String::cast(name_or_url).ToCString();
-          scriptName = name_raw.get();
-        }
-      }
+      int script_id = function->shared().script().IsScript()
+                          ? Script::cast(function->shared().script()).id()
+                          : -1;
+      std::string script_name = GetScriptName(function->shared());
 
       // Always allow Replay-internal scripts.
-      if (scriptName != "record-replay-internal") {
+      if (script_name != "record-replay-internal") {
         // Print log and prevent execution.
-        recordreplay::Print(
-            "[RUN-1621][RuntimeWarning] Invoke: Non-deterministic UserJS %d %d %d %d "
+        recordreplay::Warning(
+            "[RUN-1621] Invoke: Non-deterministic UserJS %d %d %d %d "
             "script=\"%s\" fun=\"%s\"",
             (int)function->shared().kind(), function->shared().SourceSize(),
-            script_id, function->shared().StartPosition(), scriptName.c_str(),
+            script_id, function->shared().StartPosition(), script_name.c_str(),
             function->shared().DebugNameCStr().get());
         return isolate->factory()->undefined_value();
       }
