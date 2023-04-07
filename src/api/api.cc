@@ -11131,7 +11131,10 @@ static std::set<std::string>* gRecordReplayKnownFeatures = new std::set<std::str
   "browser-event",
 
   // Collect generic event data (RUN-1609)
-  "collect-events"
+  "collect-events",
+
+  // Clear idle callbacks on |Document::Shutdown| (RUN-1335)
+  "clear-idle-callbacks",
 });
 
 // The set of all experimental flags pertaining to features we are currently developing.
