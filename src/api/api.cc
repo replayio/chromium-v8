@@ -10726,6 +10726,7 @@ static void (*gRecordReplaySetCommandCallback)(const char* method, CommandCallba
 
 static void (*gRecordReplayPrint)(const char* format, va_list args);
 static void (*gRecordReplayDiagnostic)(const char* format, va_list args);
+static void (*gRecordReplayWarning)(const char* format, va_list args);
 static void (*gRecordReplayOnInstrument)(const char* kind, const char* function, int offset);
 static void (*gRecordReplayAssert)(const char*, va_list);
 static void (*gRecordReplayAssertBytes)(const char* why, const void* ptr, size_t nbytes);
@@ -11177,7 +11178,7 @@ static const char* GetDisabledFeatureSpecifier() {
   return getenv("RECORD_REPLAY_DISABLE_FEATURES");
 }
 
-static bool GetTestEnvironmentFlag() {
+bool recordreplay::GetTestEnvironmentFlag() {
   auto* sTestEnvironment = getenv("RECORD_REPLAY_TEST_ENVIRONMENT");
   // check is based on TestEnv in Utils.cpp
   return sTestEnvironment && sTestEnvironment[0] && sTestEnvironment[0] != '0';
@@ -11185,7 +11186,7 @@ static bool GetTestEnvironmentFlag() {
 
 static void RecordReplayInitializeDisabledFeatures() {
   const char* env = GetDisabledFeatureSpecifier();
-  auto isTestEnvironment = GetTestEnvironmentFlag();
+  auto isTestEnvironment = recordreplay::GetTestEnvironmentFlag();
 
   gRecordReplayDisabledFeatures = new std::set<std::string>();
 
@@ -11257,6 +11258,22 @@ void recordreplay::Diagnostic(const char* format, ...) {
 extern "C" DLLEXPORT void V8RecordReplayDiagnosticVA(const char* format, va_list args) {
   if (recordreplay::IsRecordingOrReplaying()) {
     gRecordReplayDiagnostic(format, args);
+  }
+}
+
+void recordreplay::Warning(const char* format, ...) {
+  if (IsRecordingOrReplaying()) {
+    va_list args;
+    va_start(args, format);
+    gRecordReplayWarning(format, args);
+    va_end(args);
+  }
+}
+
+extern "C" DLLEXPORT void V8RecordReplayWarning(const char* format,
+                                                     va_list args) {
+  if (recordreplay::IsRecordingOrReplaying()) {
+    gRecordReplayWarning(format, args);
   }
 }
 
@@ -11845,6 +11862,7 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   RecordReplayLoadSymbol(handle, "RecordReplaySetCommandCallback", gRecordReplaySetCommandCallback);
   RecordReplayLoadSymbol(handle, "RecordReplayPrint", gRecordReplayPrint);
   RecordReplayLoadSymbol(handle, "RecordReplayDiagnostic", gRecordReplayDiagnostic);
+  RecordReplayLoadSymbol(handle, "RecordReplayWarning", gRecordReplayWarning);
   RecordReplayLoadSymbol(handle, "RecordReplayAssert", gRecordReplayAssert);
   RecordReplayLoadSymbol(handle, "RecordReplayAssertBytes", gRecordReplayAssertBytes);
   RecordReplayLoadSymbol(handle, "RecordReplayBytes", gRecordReplayBytes);

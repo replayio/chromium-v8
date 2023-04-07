@@ -96,8 +96,11 @@ static const char* GetRecordingId();
 
 static bool FeatureEnabled(const char* feature);
 
+static bool GetTestEnvironmentFlag();
+
 static void Print(const char* format, ...);
 static void Diagnostic(const char* format, ...);
+static void Warning(const char* format, ...);
 static void Assert(const char* format, ...);
 static void AssertBytes(const char* why, const void* buf, size_t size);
 
