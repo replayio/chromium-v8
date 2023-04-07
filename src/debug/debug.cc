@@ -3663,8 +3663,10 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
     return;
   }
 
-  if (!RecordReplayIsInternalScriptURL(url.c_str())) {
-    RecordReplayAddInterestingSource(url.c_str());
+  if (recordreplay::FeatureEnabled("interesting-scripts")) {
+    if (!RecordReplayIsInternalScriptURL(url.c_str())) {
+      RecordReplayAddInterestingSource(url.c_str());
+    }
   }
 
   // It's not clear how we can distinguish inline scripts from HTML files vs.
@@ -3682,7 +3684,7 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
   }
   gRegisteredScripts->insert(script->id());
 
-  if (gNewScriptHandlers) {
+  if (gNewScriptHandlers && recordreplay::FeatureEnabled("new-script-handlers")) {
     for (auto entry : *gNewScriptHandlers) {
       auto handlerEternalValue = entry.first;
       auto disallowEvents = entry.second;

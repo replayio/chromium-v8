@@ -11040,6 +11040,9 @@ static std::set<std::string>* gRecordReplayKnownFeatures = new std::set<std::str
   // Emit special record/replay opcodes in registered scripts.
   "emit-opcodes",
 
+  "interesting-scripts",
+  "new-script-handlers",
+
   // Behavior changes in places when events are disallowed.
   "disallow-events",
 
