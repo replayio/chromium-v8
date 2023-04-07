@@ -273,7 +273,7 @@ MaybeHandle<Context> NewScriptContext(Isolate* isolate,
   return result;
 }
 
-static bool IsDivergentUserJSInvokeWithoutPause(const SharedFunctionInfo& shared) {
+static bool IsDivergentUserJSWithoutPause(const SharedFunctionInfo& shared) {
   return recordreplay::AreEventsDisallowed() &&
          !recordreplay::HasDivergedFromRecording() &&
          shared.IsUserJavaScript() && shared.HasSourceCode();
@@ -363,7 +363,7 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
     }
 #endif
 
-    if (IsDivergentUserJSInvokeWithoutPause(function->shared())) {
+    if (IsDivergentUserJSWithoutPause(function->shared())) {
       // [RUN-1621] User JS should not get executed in divergent code paths,
       // unless we have paused.
       int script_id = function->shared().script().IsScript()
