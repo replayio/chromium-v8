@@ -11703,6 +11703,23 @@ extern "C" DLLEXPORT void V8RecordReplayOnNavigationEvent(const char* kind, cons
   gRecordReplayOnNavigationEvent(kind, url);
 }
 
+#define MaxJsStackTraceSize (4096)
+static char gLastJsStackTrace[MaxJsStackTraceSize];
+
+extern "C" DLLEXPORT const char* V8RecordReplayGetCurrentJSStackTmp() {
+  CHECK(IsMainThread());
+  CHECK(recordreplay::IsRecordingOrReplaying());
+  std::stringstream stack;
+
+  i::Isolate* isolate = internal::Isolate::TryGetCurrent();
+  i::HandleScope scope(isolate);
+  if (isolate) {
+    isolate->PrintCurrentStackTrace(stack);
+  }
+  strncpy(gLastJsStackTrace, stack.str().c_str(), MaxJsStackTraceSize);
+  return gLastJsStackTrace;
+}
+
 template <typename Src, typename Dst>
 static inline void CastPointer(const Src src, Dst* dst) {
   static_assert(sizeof(Src) == sizeof(uintptr_t), "bad size");

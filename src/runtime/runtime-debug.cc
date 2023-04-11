@@ -974,6 +974,8 @@ extern bool gRecordReplayHasCheckpoint;
 
 extern void RecordReplayOnTargetProgressReached();
 
+static bool hasWarnedBadPC = false;
+
 RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
   if (++*gProgressCounter == gTargetProgress) {
     RecordReplayOnTargetProgressReached();
@@ -992,15 +994,11 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
   CHECK(RecordReplayHasRegisteredScript(*script));
 
   Script::PositionInfo info;
-  Script::GetPositionInfo(script, shared->StartPosition(), &info, Script::WITH_OFFSET);
-
-  std::string name;
-  if (script->name().IsUndefined()) {
-    name = "<none>";
-  } else {
-    std::unique_ptr<char[]> name_raw = String::cast(script->name()).ToCString();
-    name = name_raw.get();
-  }
+  Script::GetPositionInfo(script, shared->StartPosition(), &info,
+                          Script::WITH_OFFSET);
+  std::string name = script->name().IsString()
+                         ? String::cast(script->name()).ToCString().get()
+                         : "(script without name)";
 
   if (!RecordReplayBytecodeAllowed()) {
     recordreplay::Diagnostic("RecordReplayAssertExecutionProgress not allowed %s:%d:%d",
@@ -1013,9 +1011,41 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
                              name.c_str(), info.line + 1, info.column);
     CHECK(gRecordReplayHasCheckpoint);
   }
+  
+  if (recordreplay::AreEventsDisallowed() &&
+      !recordreplay::HasDivergedFromRecording() &&
+      function->shared().IsUserJavaScript() &&
+      function->shared().HasSourceCode()) {
+    // [RUN-1621] User JS should not get executed non-deterministically, unless
+    // we have paused.
+    if (!hasWarnedBadPC) {  // Prevent flood of warnings.
+      hasWarnedBadPC = true;
+      std::stringstream stack;
+      stack << " stack=";
+      isolate->PrintCurrentStackTrace(stack);
 
-  recordreplay::Assert("ExecutionProgress %zu %s:%d:%d",
-                       *gProgressCounter, name.c_str(), info.line + 1, info.column);
+      recordreplay::Warning(
+          "[RUN-1692] JS OnExecutionProgress: Non-deterministic UserJS pc=%llu%s",
+          *gProgressCounter, stack.str().c_str());
+    }
+  }
+
+  // if ((info.line + 1) == 10 && info.column > 38579 && info.column < 38700) {
+  //   std::stringstream stack;
+  //   stack << " stack=";
+  //   isolate->PrintCurrentStackTrace(stack);
+
+  //   recordreplay::Print(
+  //       "DDBG [RUN-1692] OnExecutionProgress: Non-deterministic UserJS pc=%llu%s",
+  //       *gProgressCounter, stack.str().c_str());
+  // }
+
+  recordreplay::Assert("JS ExecutionProgress %zu %s:%d:%d (%d %d %d %d)",
+                        *gProgressCounter, name.c_str(), info.line + 1,
+                        info.column, recordreplay::AreEventsDisallowed(),
+                        !recordreplay::HasDivergedFromRecording(),
+                        function->shared().IsUserJavaScript(),
+                        function->shared().HasSourceCode());
 
   return ReadOnlyRoots(isolate).undefined_value();
 }
@@ -1142,7 +1172,7 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertValue) {
 
   std::string contents = RecordReplayBasicValueContents(value);
 
-  recordreplay::Assert("%s %s Value %s", site.location_.c_str(),
+  recordreplay::Assert("JS %s %s Value %s", site.location_.c_str(),
                        site.desc_.c_str(),contents.c_str());
   return *value;
 }
@@ -1309,12 +1339,48 @@ int RecordReplayCurrentGeneratorIdRaw() {
   return gCurrentGeneratorId;
 }
 
+static bool hasWarnedBadInst = false;
+
 RUNTIME_FUNCTION(Runtime_RecordReplayInstrumentationGenerator) {
   HandleScope scope(isolate);
   DCHECK_EQ(3, args.length());
   Handle<JSFunction> function = args.at<JSFunction>(0);
   int32_t index = NumberToInt32(args[1]);
   Handle<Object> generator_object = args.at(2);
+
+  Handle<Script> script(Script::cast(function->shared().script()), isolate);
+  Script::PositionInfo info;
+  Script::GetPositionInfo(script, function->shared().StartPosition(), &info,
+                          Script::WITH_OFFSET);
+  std::string name = script->name().IsString()
+                         ? String::cast(script->name()).ToCString().get()
+                         : "(script without name)";
+
+  if (recordreplay::AreEventsDisallowed() &&
+      !recordreplay::HasDivergedFromRecording() &&
+      function->shared().IsUserJavaScript() &&
+      function->shared().HasSourceCode()) {
+    // [RUN-1621] User JS should not get executed non-deterministically, unless
+    // we have paused.
+    if (!hasWarnedBadInst) {  // Prevent flood of warnings.
+      hasWarnedBadInst = true;
+      std::stringstream stack;
+      stack << " stack=";
+      isolate->PrintCurrentStackTrace(stack);
+
+      recordreplay::Warning(
+          "[RUN-1692] JS RecordReplayInstrumentationGenerator: Non-deterministic UserJS pc=%llu%s",
+          *gProgressCounter, stack.str().c_str());
+    }
+  }
+
+  recordreplay::Assert(
+      "JS RecordReplayInstrumentationGenerator %zu %s:%d:%d (%d %d %d %d)",
+      *gProgressCounter, name.c_str(), info.line + 1, info.column,
+      recordreplay::AreEventsDisallowed(),
+      !recordreplay::HasDivergedFromRecording(),
+      function->shared().IsUserJavaScript(),
+      function->shared().HasSourceCode());
 
   // Note: RecordReplayObjectId calls have to occur in the same places when
   // replaying (regardless of whether instrumentation is enabled) so that objects
