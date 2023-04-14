@@ -11133,8 +11133,10 @@ static std::set<std::string>* gRecordReplayKnownFeatures = new std::set<std::str
   // Collect generic event data (RUN-1609)
   "collect-events",
 
-  // Clear idle callbacks on |Document::Shutdown| (RUN-1335)
-  "clear-idle-callbacks",
+  // Prevent asynchronous tasks from being scheduled past
+  // their owner's lifetime.
+  // (e.g. RUN-1335, RUN-1537)
+  "task-lifetime",
 });
 
 // The set of all experimental flags pertaining to features we are currently developing.
