@@ -11082,6 +11082,9 @@ static std::set<std::string>* gRecordReplayKnownFeatures = new std::set<std::str
   // Don't report V8 feature usage to the browser process.
   "no-count-usage",
 
+  // Don't sample stacks for profiling.
+  "no-stack-sampling",
+
   // Using the GPU is disabled.
   "no-gpu",
 
