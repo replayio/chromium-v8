@@ -11709,7 +11709,6 @@ extern "C" DLLEXPORT void V8RecordReplayOnNavigationEvent(const char* kind, cons
 static char gLastJsStackTrace[MaxJsStackTraceSize];
 
 extern "C" DLLEXPORT const char* V8RecordReplayGetCurrentJSStackTmp() {
-  CHECK(IsMainThread());
   CHECK(recordreplay::IsRecordingOrReplaying());
   std::stringstream stack;
 

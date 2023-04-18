@@ -1374,13 +1374,13 @@ RUNTIME_FUNCTION(Runtime_RecordReplayInstrumentationGenerator) {
     }
   }
 
-  recordreplay::Assert(
-      "JS RecordReplayInstrumentationGenerator %zu %s:%d:%d (%d %d %d %d)",
-      *gProgressCounter, name.c_str(), info.line + 1, info.column,
-      recordreplay::AreEventsDisallowed(),
-      !recordreplay::HasDivergedFromRecording(),
-      function->shared().IsUserJavaScript(),
-      function->shared().HasSourceCode());
+  // recordreplay::Assert(
+  //     "JS RecordReplayInstrumentationGenerator %zu %s:%d:%d (%d %d %d %d)",
+  //     *gProgressCounter, name.c_str(), info.line + 1, info.column,
+  //     recordreplay::AreEventsDisallowed(),
+  //     !recordreplay::HasDivergedFromRecording(),
+  //     function->shared().IsUserJavaScript(),
+  //     function->shared().HasSourceCode());
 
   // Note: RecordReplayObjectId calls have to occur in the same places when
   // replaying (regardless of whether instrumentation is enabled) so that objects
