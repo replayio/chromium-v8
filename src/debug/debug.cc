@@ -3890,47 +3890,30 @@ int RecordReplayObjectId(v8::Isolate* v8_isolate, v8::Local<v8::Context> cx,
   Isolate* isolate = (Isolate*)v8_isolate;
   Handle<Object> object = Utils::OpenHandle(*v8_object);
 
-  Local<v8::Value> object_ids_val = GetObjectIdMapForContext(v8_isolate, cx);
-  Handle<JSWeakMap> object_ids = Handle<JSWeakMap>::cast(Utils::OpenHandle(*object_ids_val));
+  // Look through all weak maps we've created, the object might not be associated
+  // with the current context.
+  for (const auto& entry : *gRecordReplayObjectIds) {
+    Local<v8::Value> object_ids_val = entry.object_ids_.Get(v8_isolate);
+    Handle<JSWeakMap> object_ids = Handle<JSWeakMap>::cast(Utils::OpenHandle(*object_ids_val));
 
-  Handle<Object> existing(EphemeronHashTable::cast(object_ids->table()).Lookup(object), isolate);
-  if (!existing->IsTheHole(isolate)) {
-    v8::Local<v8::Value> id_value = v8::Utils::ToLocal(existing);
-    if (id_value->IsInt32()) {
+    Handle<Object> existing(EphemeronHashTable::cast(object_ids->table()).Lookup(object), isolate);
+    if (!existing->IsTheHole(isolate)) {
+      v8::Local<v8::Value> id_value = v8::Utils::ToLocal(existing);
+      CHECK(id_value->IsInt32());
       int id = id_value.As<v8::Int32>()->Value();
-      if (gRecordReplayAssertTrackedObjects) {
-        recordreplay::Assert("ReuseObjectId %d", id);
-      }
+      recordreplay::Print("RecordReplayObjectId FOUND %d", id);
       return id;
     }
   }
 
   if (!allow_create) {
     recordreplay::Print("RecordReplayObjectId MISSING");
-
-    for (const auto& entry : *gRecordReplayObjectIds) {
-      Local<v8::Value> object_ids_val = entry.object_ids_.Get(v8_isolate);
-      Handle<JSWeakMap> object_ids = Handle<JSWeakMap>::cast(Utils::OpenHandle(*object_ids_val));
-
-      Handle<Object> existing(EphemeronHashTable::cast(object_ids->table()).Lookup(object), isolate);
-      if (!existing->IsTheHole(isolate)) {
-        v8::Local<v8::Value> id_value = v8::Utils::ToLocal(existing);
-        if (id_value->IsInt32()) {
-          int id = id_value.As<v8::Int32>()->Value();
-          recordreplay::Print("RecordReplayObjectId FOUND %d", id);
-        } else {
-          recordreplay::Print("RecordReplayObjectId NOT_INTEGER");
-        }
-      } else {
-        recordreplay::Print("RecordReplayObjectId NO_ENTRY");
-      }
-    }
-
-    recordreplay::Print("RecordReplayObjectId MISSING DONE");
     return 0;
   }
 
   int id = gNextObjectId++;
+
+  recordreplay::Print("RecordReplayObjectId NEW_ID %d", id);
 
   if (gRecordReplayAssertTrackedObjects) {
     recordreplay::Assert("NewObjectId %d", id);
@@ -3939,6 +3922,9 @@ int RecordReplayObjectId(v8::Isolate* v8_isolate, v8::Local<v8::Context> cx,
   Local<Value> id_value = v8::Integer::New(v8_isolate, id);
 
   int32_t hash = object->GetOrCreateHash(isolate).value();
+
+  Local<v8::Value> object_ids_val = GetObjectIdMapForContext(v8_isolate, cx);
+  Handle<JSWeakMap> object_ids = Handle<JSWeakMap>::cast(Utils::OpenHandle(*object_ids_val));
   JSWeakCollection::Set(object_ids, object, Utils::OpenHandle(*id_value), hash);
 
   return id;
