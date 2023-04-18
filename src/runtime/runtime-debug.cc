@@ -1338,6 +1338,8 @@ RUNTIME_FUNCTION(Runtime_RecordReplayTrackObjectId) {
   DCHECK_EQ(1, args.length());
   Handle<Object> value = args.at(0);
 
+  recordreplay::Print("Runtime_RecordReplayTrackObjectId");
+
   v8::Isolate* v8_isolate = (v8::Isolate*) isolate;
   RecordReplayObjectId(v8_isolate, v8_isolate->GetCurrentContext(),
                        v8::Utils::ToLocal(value),
