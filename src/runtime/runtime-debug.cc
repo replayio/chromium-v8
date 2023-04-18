@@ -1348,14 +1348,6 @@ RUNTIME_FUNCTION(Runtime_RecordReplayInstrumentationGenerator) {
   int32_t index = NumberToInt32(args[1]);
   Handle<Object> generator_object = args.at(2);
 
-  Handle<Script> script(Script::cast(function->shared().script()), isolate);
-  Script::PositionInfo info;
-  Script::GetPositionInfo(script, function->shared().StartPosition(), &info,
-                          Script::WITH_OFFSET);
-  std::string name = script->name().IsString()
-                         ? String::cast(script->name()).ToCString().get()
-                         : "(script without name)";
-
   if (recordreplay::AreEventsDisallowed() &&
       !recordreplay::HasDivergedFromRecording() &&
       function->shared().IsUserJavaScript() &&
@@ -1365,15 +1357,21 @@ RUNTIME_FUNCTION(Runtime_RecordReplayInstrumentationGenerator) {
     if (!hasWarnedBadInst) {  // Prevent flood of warnings.
       hasWarnedBadInst = true;
       std::stringstream stack;
-      stack << " stack=";
       isolate->PrintCurrentStackTrace(stack);
 
       recordreplay::Warning(
-          "[RUN-1692] JS RecordReplayInstrumentationGenerator: Non-deterministic UserJS pc=%llu%s",
+          "[RUN-1692] JS RecordReplayInstrumentationGenerator: Non-deterministic UserJS pc=%llu stack=%s",
           *gProgressCounter, stack.str().c_str());
     }
   }
 
+  // Handle<Script> script(Script::cast(function->shared().script()), isolate);
+  // Script::PositionInfo info;
+  // Script::GetPositionInfo(script, function->shared().StartPosition(), &info,
+  //                         Script::WITH_OFFSET);
+  // std::string name = script->name().IsString()
+  //                        ? String::cast(script->name()).ToCString().get()
+  //                        : "(script without name)";
   // recordreplay::Assert(
   //     "JS RecordReplayInstrumentationGenerator %zu %s:%d:%d (%d %d %d %d)",
   //     *gProgressCounter, name.c_str(), info.line + 1, info.column,
