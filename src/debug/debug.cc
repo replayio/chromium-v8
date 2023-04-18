@@ -3900,22 +3900,22 @@ int RecordReplayObjectId(v8::Isolate* v8_isolate, v8::Local<v8::Context> cx,
       Handle<Object> existing(EphemeronHashTable::cast(object_ids->table()).Lookup(object), isolate);
       if (!existing->IsTheHole(isolate)) {
         v8::Local<v8::Value> id_value = v8::Utils::ToLocal(existing);
-        CHECK(id_value->IsInt32());
-        int id = id_value.As<v8::Int32>()->Value();
-        recordreplay::Print("RecordReplayObjectId FOUND %d", id);
-        return id;
+        if (id_value->IsInt32()) {
+          int id = id_value.As<v8::Int32>()->Value();
+          if (gRecordReplayAssertTrackedObjects) {
+            recordreplay::Assert("ReuseObjectId %d", id);
+          }
+          return id;
+        }
       }
     }
   }
 
   if (!allow_create) {
-    recordreplay::Print("RecordReplayObjectId MISSING");
     return 0;
   }
 
   int id = gNextObjectId++;
-
-  recordreplay::Print("RecordReplayObjectId NEW_ID %d", id);
 
   if (gRecordReplayAssertTrackedObjects) {
     recordreplay::Assert("NewObjectId %d", id);
