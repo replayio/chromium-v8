@@ -1631,8 +1631,9 @@ Response V8DebuggerAgentImpl::setBlackboxedRanges(
 }
 
 Response V8DebuggerAgentImpl::getCallFrames(
+    Maybe<int> maxFrames, Maybe<bool> noContents,
     std::unique_ptr<protocol::Array<protocol::Debugger::CallFrame>>* out_callFrames) {
-  return currentCallFrames(out_callFrames);
+  return currentCallFrames(std::move(maxFrames), std::move(noContents), out_callFrames);
 }
 
 Response V8DebuggerAgentImpl::getTopFrameLocation(Maybe<protocol::Debugger::Location>* out_location) {
@@ -1677,6 +1678,7 @@ Response V8DebuggerAgentImpl::getPendingException(
 }
 
 Response V8DebuggerAgentImpl::currentCallFrames(
+    Maybe<int> maxFrames, Maybe<bool> noContentsRaw,
     std::unique_ptr<Array<CallFrame>>* result) {
   if (!isPaused()) {
     *result = std::make_unique<Array<CallFrame>>();
@@ -1686,7 +1688,10 @@ Response V8DebuggerAgentImpl::currentCallFrames(
   *result = std::make_unique<Array<CallFrame>>();
   auto iterator = v8::debug::StackTraceIterator::Create(m_isolate);
   int frameOrdinal = 0;
+  bool noContents = noContentsRaw.isJust() && noContentsRaw.fromJust();
   for (; !iterator->Done(); iterator->Advance(), frameOrdinal++) {
+    if (maxFrames.isJust() && frameOrdinal >= maxFrames.fromJust())
+      break;
     int contextId = iterator->GetContextId();
     InjectedScript* injectedScript = nullptr;
     if (contextId) m_session->findInjectedScript(contextId, injectedScript);
@@ -1695,14 +1700,19 @@ Response V8DebuggerAgentImpl::currentCallFrames(
 
     v8::debug::Location loc = iterator->GetSourceLocation();
 
+    Response res = Response::Success();
+
     std::unique_ptr<Array<Scope>> scopes;
-    auto scopeIterator = iterator->GetScopeIterator();
-    Response res =
-        buildScopes(m_isolate, scopeIterator.get(), injectedScript, &scopes);
-    if (!res.IsSuccess()) return res;
+    if (noContents) {
+      scopes = std::make_unique<Array<Scope>>();
+    } else {
+      auto scopeIterator = iterator->GetScopeIterator();
+      res = buildScopes(m_isolate, scopeIterator.get(), injectedScript, &scopes);
+      if (!res.IsSuccess()) return res;
+    }
 
     std::unique_ptr<RemoteObject> protocolReceiver;
-    if (injectedScript) {
+    if (injectedScript && !noContents) {
       v8::Local<v8::Value> receiver;
       if (iterator->GetReceiver().ToLocal(&receiver)) {
         res =
@@ -1999,7 +2009,7 @@ void V8DebuggerAgentImpl::didPauseOnInstrumentation(
   std::unique_ptr<protocol::DictionaryValue> breakAuxData;
 
   std::unique_ptr<Array<CallFrame>> protocolCallFrames;
-  Response response = currentCallFrames(&protocolCallFrames);
+  Response response = currentCallFrames(Maybe<int>(), Maybe<bool>(), &protocolCallFrames);
   if (!response.IsSuccess())
     protocolCallFrames = std::make_unique<Array<CallFrame>>();
 
@@ -2129,7 +2139,7 @@ void V8DebuggerAgentImpl::didPause(
   }
 
   std::unique_ptr<Array<CallFrame>> protocolCallFrames;
-  Response response = currentCallFrames(&protocolCallFrames);
+  Response response = currentCallFrames(Maybe<int>(), Maybe<bool>(), &protocolCallFrames);
   if (!response.IsSuccess())
     protocolCallFrames = std::make_unique<Array<CallFrame>>();
 

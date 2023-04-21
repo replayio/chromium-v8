@@ -148,6 +148,7 @@ class V8DebuggerAgentImpl : public protocol::Debugger::Backend {
       std::unique_ptr<protocol::Array<protocol::Debugger::ScriptPosition>>
           positions) override;
   Response getCallFrames(
+      Maybe<int> maxFrames, Maybe<bool> noContents,
       std::unique_ptr<protocol::Array<protocol::Debugger::CallFrame>>* out_callFrames) override;
   Response getTopFrameLocation(Maybe<protocol::Debugger::Location>* out_location) override;
   Response getPendingException(
@@ -191,6 +192,7 @@ class V8DebuggerAgentImpl : public protocol::Debugger::Backend {
   v8::Isolate* isolate() { return m_isolate; }
 
   Response currentCallFrames(
+      Maybe<int> maxFrames, Maybe<bool> noContents,
       std::unique_ptr<protocol::Array<protocol::Debugger::CallFrame>>*);
   std::unique_ptr<protocol::Runtime::RemoteObject> wrapObject(int contextId,
                                                               v8::Local<v8::Value> val);
