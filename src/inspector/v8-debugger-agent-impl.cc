@@ -1633,7 +1633,7 @@ Response V8DebuggerAgentImpl::setBlackboxedRanges(
 Response V8DebuggerAgentImpl::getCallFrames(
     Maybe<int> maxFrames, Maybe<bool> noContents,
     std::unique_ptr<protocol::Array<protocol::Debugger::CallFrame>>* out_callFrames) {
-  return currentCallFrames(maxFrames, noContents, out_callFrames);
+  return currentCallFrames(std::move(maxFrames), std::move(noContents), out_callFrames);
 }
 
 Response V8DebuggerAgentImpl::getTopFrameLocation(Maybe<protocol::Debugger::Location>* out_location) {
@@ -1688,9 +1688,9 @@ Response V8DebuggerAgentImpl::currentCallFrames(
   *result = std::make_unique<Array<CallFrame>>();
   auto iterator = v8::debug::StackTraceIterator::Create(m_isolate);
   int frameOrdinal = 0;
-  bool noContents = noContentsRaw.IsJust() && noContentsRaw.FromJust()) {
+  bool noContents = noContentsRaw.isJust() && noContentsRaw.fromJust();
   for (; !iterator->Done(); iterator->Advance(), frameOrdinal++) {
-    if (maxFrames.IsJust() && frameOrdinal >= maxFrames.FromJust())
+    if (maxFrames.isJust() && frameOrdinal >= maxFrames.fromJust())
       break;
     int contextId = iterator->GetContextId();
     InjectedScript* injectedScript = nullptr;
