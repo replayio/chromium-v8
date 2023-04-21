@@ -560,6 +560,11 @@ domain Debugger
       Location location
 
   command getCallFrames
+    parameters
+      # Maximum number of frames to return.
+      optional integer maxFrames
+      # Don't generate scopes or "this" object for returned frames.
+      optional boolean noContents
     returns
       array of CallFrame callFrames
 
