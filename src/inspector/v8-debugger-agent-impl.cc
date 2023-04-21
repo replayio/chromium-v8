@@ -1700,13 +1700,14 @@ Response V8DebuggerAgentImpl::currentCallFrames(
 
     v8::debug::Location loc = iterator->GetSourceLocation();
 
+    Response res;
+
     std::unique_ptr<Array<Scope>> scopes;
     if (noContents) {
       scopes = std::make_unique<Array<Scope>>();
     } else {
       auto scopeIterator = iterator->GetScopeIterator();
-      Response res =
-          buildScopes(m_isolate, scopeIterator.get(), injectedScript, &scopes);
+      res = buildScopes(m_isolate, scopeIterator.get(), injectedScript, &scopes);
       if (!res.IsSuccess()) return res;
     }
 
@@ -2008,7 +2009,7 @@ void V8DebuggerAgentImpl::didPauseOnInstrumentation(
   std::unique_ptr<protocol::DictionaryValue> breakAuxData;
 
   std::unique_ptr<Array<CallFrame>> protocolCallFrames;
-  Response response = currentCallFrames(Nothing<int>(), Nothing<bool>(), &protocolCallFrames);
+  Response response = currentCallFrames(Maybe<int>(), Maybe<bool>(), &protocolCallFrames);
   if (!response.IsSuccess())
     protocolCallFrames = std::make_unique<Array<CallFrame>>();
 
@@ -2138,7 +2139,7 @@ void V8DebuggerAgentImpl::didPause(
   }
 
   std::unique_ptr<Array<CallFrame>> protocolCallFrames;
-  Response response = currentCallFrames(Nothing<int>(), Nothing<bool>(), &protocolCallFrames);
+  Response response = currentCallFrames(Maybe<int>(), Maybe<bool>(), &protocolCallFrames);
   if (!response.IsSuccess())
     protocolCallFrames = std::make_unique<Array<CallFrame>>();
 
