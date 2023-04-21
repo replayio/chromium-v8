@@ -1700,7 +1700,7 @@ Response V8DebuggerAgentImpl::currentCallFrames(
 
     v8::debug::Location loc = iterator->GetSourceLocation();
 
-    Response res;
+    Response res = Response::Success();
 
     std::unique_ptr<Array<Scope>> scopes;
     if (noContents) {
