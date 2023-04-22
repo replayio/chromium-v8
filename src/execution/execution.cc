@@ -356,7 +356,7 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
       // [RUN-1621] User JS should not get executed in divergent code paths,
       // unless we have paused.
       if (function->shared().script().IsScript() &&
-          RecordReplayHasRegisteredScript(Script::cast(function->shared().script()).id())) {
+          RecordReplayHasRegisteredScript(Script::cast(function->shared().script()))) {
         // Print log and prevent execution.
         recordreplay::Warning(
             "[RUN-1621] Invoke: Non-deterministic UserJS %d %d %d fun=\"%s\"",
