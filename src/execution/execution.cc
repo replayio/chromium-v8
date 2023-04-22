@@ -20,6 +20,8 @@
 namespace v8 {
 namespace internal {
 
+extern bool RecordReplayHasRegisteredScript(Script script);
+
 namespace {
 
 Handle<Object> NormalizeReceiver(Isolate* isolate, Handle<Object> receiver) {
@@ -278,8 +280,6 @@ static bool IsDivergentUserJSWithoutPause(const SharedFunctionInfo& shared) {
          !recordreplay::HasDivergedFromRecording() &&
          shared.IsUserJavaScript() && shared.HasSourceCode();
 }
-
-extern bool RecordReplayHasRegisteredScript(Script script);
 
 V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
                                                  const InvokeParams& params) {
