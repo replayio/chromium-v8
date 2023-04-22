@@ -73,8 +73,6 @@
 namespace v8 {
 namespace internal {
 
-extern bool RecordReplayIgnoreScriptByURL(const char* url);
-
 namespace {
 
 constexpr bool IsOSR(BytecodeOffset osr_offset) { return !osr_offset.IsNone(); }
@@ -3301,23 +3299,14 @@ Handle<Script> NewScript(
   return script;
 }
 
-static void SetRecordReplayIgnoreByURL(UnoptimizedCompileFlags& flags,
-                                       const ScriptDetails& script_details) {
+static void SetRecordReplayIgnore(UnoptimizedCompileFlags& flags) {
   if (!recordreplay::IsRecordingOrReplaying()) {
     return;
   }
 
-  if (!IsMainThread()) {
+  if (!IsMainThread() || recordreplay::AreEventsDisallowed()) {
     flags.set_record_replay_ignore(true);
     return;
-  }
-
-  Handle<Object> script_name;
-  if (script_details.name_obj.ToHandle(&script_name)) {
-    std::unique_ptr<char[]> name_cstr = String::cast(*script_name).ToCString();
-    if (RecordReplayIgnoreScriptByURL(name_cstr.get())) {
-      flags.set_record_replay_ignore(true);
-    }
   }
 }
 
@@ -3326,7 +3315,7 @@ MaybeHandle<SharedFunctionInfo> CompileScriptOnMainThread(
     const ScriptDetails& script_details, NativesFlag natives,
     v8::Extension* extension, Isolate* isolate,
     MaybeHandle<Script> maybe_script, IsCompiledScope* is_compiled_scope) {
-  SetRecordReplayIgnoreByURL(flags, script_details);
+  SetRecordReplayIgnore(flags);
 
   UnoptimizedCompileState compile_state;
   ReusableUnoptimizedCompileState reusable_state(isolate);
@@ -3749,7 +3738,7 @@ MaybeHandle<JSFunction> Compiler::GetWrappedFunction(
     flags.set_collect_source_positions(true);
     // flags.set_eager(compile_options == ScriptCompiler::kEagerCompile);
 
-    SetRecordReplayIgnoreByURL(flags, script_details);
+    SetRecordReplayIgnore(flags);
 
     UnoptimizedCompileState compile_state;
     ReusableUnoptimizedCompileState reusable_state(isolate);
