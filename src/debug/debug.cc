@@ -3598,16 +3598,11 @@ static Handle<Object> RecordReplayCurrentGeneratorId(Isolate* isolate, Handle<Ob
 
 extern void RecordReplayAddInterestingSource(const char* url);
 
-bool RecordReplayIgnoreScriptByURL(const char* url) {
-  // Watch out for the special script used by chromium for injecting record/replay
-  // specific logic.
-  return !strcmp(url, "record-replay-internal");
-}
-
 // Return whether a script is an uninteresting internal URL, but which still needs
 // to be registered with the recorder so that breakpoints can be created.
 bool RecordReplayIsInternalScriptURL(const char* url) {
   return !strcmp(url, "record-replay-react-devtools") ||
+         !strcmp(url, "record-replay-internal") ||
          !strncmp(url, "extensions::", 12);
 }
 
@@ -3653,14 +3648,14 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
     return;
   }
 
+  if (recordreplay::AreEventsDisallowed()) {
+    return;
+  }
+
   std::string url;
   if (!script->name().IsUndefined()) {
     std::unique_ptr<char[]> name = String::cast(script->name()).ToCString();
     url = name.get();
-  }
-
-  if (RecordReplayIgnoreScriptByURL(url.c_str())) {
-    return;
   }
 
   if (!RecordReplayIsInternalScriptURL(url.c_str())) {

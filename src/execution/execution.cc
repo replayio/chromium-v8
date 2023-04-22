@@ -20,6 +20,8 @@
 namespace v8 {
 namespace internal {
 
+extern bool RecordReplayHasRegisteredScript(Script script);
+
 namespace {
 
 Handle<Object> NormalizeReceiver(Isolate* isolate, Handle<Object> receiver) {
@@ -279,19 +281,6 @@ static bool IsDivergentUserJSWithoutPause(const SharedFunctionInfo& shared) {
          shared.IsUserJavaScript() && shared.HasSourceCode();
 }
 
-static std::string GetScriptName(const SharedFunctionInfo& shared) {
-  std::string scriptName = "";
-  if (shared.script().IsScript()) {
-    Script script = Script::cast(shared.script());
-    Object name_or_url = script.GetNameOrSourceURL();
-    if (name_or_url.IsString()) {
-      std::unique_ptr<char[]> name_raw = String::cast(name_or_url).ToCString();
-      scriptName = name_raw.get();
-    }
-  }
-  return scriptName;
-}
-
 V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
                                                  const InvokeParams& params) {
   RCS_SCOPE(isolate, RuntimeCallCounterId::kInvoke);
@@ -366,19 +355,13 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
     if (IsDivergentUserJSWithoutPause(function->shared())) {
       // [RUN-1621] User JS should not get executed in divergent code paths,
       // unless we have paused.
-      int script_id = function->shared().script().IsScript()
-                          ? Script::cast(function->shared().script()).id()
-                          : -1;
-      std::string script_name = GetScriptName(function->shared());
-
-      // Always allow Replay-internal scripts.
-      if (script_name != "record-replay-internal") {
+      if (function->shared().script().IsScript() &&
+          RecordReplayHasRegisteredScript(Script::cast(function->shared().script()))) {
         // Print log and prevent execution.
         recordreplay::Warning(
-            "[RUN-1621] Invoke: Non-deterministic UserJS %d %d %d %d "
-            "script=\"%s\" fun=\"%s\"",
+            "[RUN-1621] Invoke: Non-deterministic UserJS %d %d %d fun=\"%s\"",
             (int)function->shared().kind(), function->shared().SourceSize(),
-            script_id, function->shared().StartPosition(), script_name.c_str(),
+            function->shared().StartPosition(),
             function->shared().DebugNameCStr().get());
         return isolate->factory()->undefined_value();
       }
