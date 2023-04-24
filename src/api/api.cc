@@ -10728,6 +10728,7 @@ static void (*gRecordReplayPrint)(const char* format, va_list args);
 static void (*gRecordReplayDiagnostic)(const char* format, va_list args);
 static void (*gRecordReplayWarning)(const char* format, va_list args);
 static void (*gRecordReplayOnInstrument)(const char* kind, const char* function, int offset);
+static bool (*gRecordReplayHadMismatch)();
 static void (*gRecordReplayAssert)(const char*, va_list);
 static void (*gRecordReplayAssertBytes)(const char* why, const void* ptr, size_t nbytes);
 static void (*gRecordReplayBytes)(const char* why, void* buf, size_t size);
@@ -11280,6 +11281,24 @@ extern "C" DLLEXPORT void V8RecordReplayWarning(const char* format,
   if (recordreplay::IsRecordingOrReplaying()) {
     gRecordReplayWarning(format, args);
   }
+}
+
+bool recordreplay::HadMismatch() {
+  if (IsRecordingOrReplaying()) {
+    // It is an error to call this during record time.
+    CHECK(!recordreplay::IsRecording());
+    return gRecordReplayHadMismatch();
+  }
+  return false;
+}
+
+extern "C" bool V8RecordReplayHadMismatch() {
+  if (recordreplay::IsRecordingOrReplaying()) {
+    // It is an error to call this during record time.
+    CHECK(!recordreplay::IsRecording());
+    return gRecordReplayHadMismatch();
+  }
+  return false;
 }
 
 void recordreplay::Assert(const char* format, ...) {
@@ -11868,6 +11887,7 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   RecordReplayLoadSymbol(handle, "RecordReplayPrint", gRecordReplayPrint);
   RecordReplayLoadSymbol(handle, "RecordReplayDiagnostic", gRecordReplayDiagnostic);
   RecordReplayLoadSymbol(handle, "RecordReplayWarning", gRecordReplayWarning);
+  RecordReplayLoadSymbol(handle, "RecordReplayHadMismatch", gRecordReplayHadMismatch);
   RecordReplayLoadSymbol(handle, "RecordReplayAssert", gRecordReplayAssert);
   RecordReplayLoadSymbol(handle, "RecordReplayAssertBytes", gRecordReplayAssertBytes);
   RecordReplayLoadSymbol(handle, "RecordReplayBytes", gRecordReplayBytes);
