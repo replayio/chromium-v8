@@ -76,7 +76,7 @@ class V8_TRIVIAL_ABI MemberBase {
 // The basic class from which all Member classes are 'generated'.
 template <typename T, typename WeaknessTag, typename WriteBarrierPolicy,
           typename CheckingPolicy>
-class V8_TRIVIAL_ABI BasicMember final : private MemberBase,
+class V8_TRIVIAL_ABI BasicMember : private MemberBase,
                                          private CheckingPolicy {
  public:
   using PointeeType = T;
@@ -561,6 +561,9 @@ template <typename T>
 using UntracedMember = internal::BasicMember<T, internal::UntracedMemberTag,
                                              internal::NoWriteBarrierPolicy>;
 
+
 }  // namespace cppgc
+
+#include "cppgc/member_replay.h"
 
 #endif  // INCLUDE_CPPGC_MEMBER_H_
