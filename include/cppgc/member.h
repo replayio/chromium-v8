@@ -283,7 +283,7 @@ class V8_TRIVIAL_ABI BasicMember : private MemberBase,
     return MemberBase::GetRawStorage();
   }
 
- private:
+ public:
   V8_INLINE explicit BasicMember(RawStorage raw) : MemberBase(raw) {
     InitializingWriteBarrier(Get());
     this->CheckPointer(Get());

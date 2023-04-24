@@ -100,13 +100,35 @@ class ReplayWeakMember : public GarbageCollectedMixin {
                                                    PersistentCheckingPolicy>& p)
       : ReplayWeakMember(p.Get()) {}
 
-  void Trace(cppgc::Visitor* visitor) const override {
-    weak_member_.Trace(visitor);
-    strong_member_.Trace(visitor);
+  // TODO: operator=
+  // TODO: Swap
+  
+  V8_INLINE explicit operator bool() const { return !!weak_member_; }
+  V8_INLINE operator T*() const { return weak_member_.Get(); }
+  V8_INLINE T* operator->() const { return weak_member_.operator->(); }
+  V8_INLINE T& operator*() const { return weak_member_.operator*(); }
+
+  // CFI cast exemption to allow passing SentinelPointer through T* and support
+  // heterogeneous assignments between different Member and Persistent handles
+  // based on their actual types.
+  V8_INLINE V8_CLANG_NO_SANITIZE("cfi-unrelated-cast") T* Get() const { return weak_member_.Get(); }
+
+  V8_INLINE void Clear() {
+    // TODO
   }
 
-  // TODO: operator=
-  // TODO: Swap + more
+  V8_INLINE T* Release() {
+    // TODO
+  }
+
+  V8_INLINE RawStorage GetRawStorage() const {
+    return weak_member_.GetRawStorage();
+  }
+
+  void Trace(cppgc::Visitor* visitor) const override {
+    // weak_member_.Trace(visitor);
+    strong_member_.Trace(visitor);
+  }
 
  private:
 #if defined(CPPGC_POINTER_COMPRESSION)
@@ -115,9 +137,10 @@ class ReplayWeakMember : public GarbageCollectedMixin {
   using RawStorage = RawPointer;
 #endif  // !defined(CPPGC_POINTER_COMPRESSION)
 
-  V8_INLINE explicit ReplayWeakMember(RawStorage raw) {
-    InitializingWriteBarrier(Get());
-    this->CheckPointer(Get());
+  V8_INLINE explicit ReplayWeakMember(RawStorage raw) : weak_member_(raw) {
+    if (ReplayLeakWeak) {
+      strong_member_(raw);
+    }
   }
 
   Member<T> strong_member_;
