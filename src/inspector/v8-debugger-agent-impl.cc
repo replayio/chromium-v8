@@ -1742,6 +1742,7 @@ Response V8DebuggerAgentImpl::currentCallFrames(
                          m_isolate, iterator->GetFunctionDebugName()))
                      .setLocation(std::move(location))
                      .setUrl(String16())
+                     .setContextId(contextId)
                      .setScopeChain(std::move(scopes))
                      .setThis(std::move(protocolReceiver))
                      .setCanBeRestarted(iterator->CanBeRestarted())
