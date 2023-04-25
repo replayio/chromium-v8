@@ -2,35 +2,23 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef THIRD_PARTY_BLINK_RENDERER_PLATFORM_HEAP_MEMBER_REPLAY_H_
-#define THIRD_PARTY_BLINK_RENDERER_PLATFORM_HEAP_MEMBER_REPLAY_H_
-
-#include "base/check_op.h"
-#include "base/record_replay.h"
-#include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
-#include "third_party/blink/renderer/platform/heap/thread_state_storage.h"
-#include "third_party/blink/renderer/platform/heap/write_barrier.h"
-#include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
-#include "third_party/blink/renderer/platform/wtf/construct_traits.h"
-#include "third_party/blink/renderer/platform/wtf/hash_functions.h"
-#include "third_party/blink/renderer/platform/wtf/hash_traits.h"
-#include "third_party/blink/renderer/platform/wtf/type_traits.h"
-#include "v8/include/cppgc/member.h"
+#ifndef INCLUDE_CPPGC_MEMBER_REPLAY_H_
+#define INCLUDE_CPPGC_MEMBER_REPLAY_H_
 
 namespace cppgc {
 namespace internal {
-template <typename T>
-
 #define ReplayLeakWeak recordreplay::IsRecordingOrReplaying("avoid-weak-pointers")
 
 /**
- *
+ * This is a copy of the |BaseMember| interface.
+ * It acts as a wrapper around a |WeakMember| plus an optional strong 
+ * |Member| reference.
+ * https://linear.app/replay/issue/RUN-1457/deterministic-weakmember
  */
+template<typename T>
 class ReplayWeakMember : public GarbageCollectedMixin {
  public:
-  template <typename T>
   using Member = cppgc::Member<T>;
-  template <typename T>
   using WeakMember = cppgc::WeakMember<T>;
   using PointeeType = T;
 
@@ -38,7 +26,7 @@ class ReplayWeakMember : public GarbageCollectedMixin {
   constexpr ReplayWeakMember(std::nullptr_t) {}           // NOLINT
   V8_INLINE ReplayWeakMember(T* raw) : weak_member_(raw) {
     if (ReplayLeakWeak) {
-      strong_member_(raw);
+      strong_member_ = raw;
     }
   }
   V8_INLINE ReplayWeakMember(T& raw)  // NOLINT
@@ -100,9 +88,108 @@ class ReplayWeakMember : public GarbageCollectedMixin {
                                                    PersistentCheckingPolicy>& p)
       : ReplayWeakMember(p.Get()) {}
 
-  // TODO: operator=
-  // TODO: Swap
-  
+  // Copy assignment.
+  V8_INLINE BasicMember& operator=(const BasicMember& other) {
+    return operator=(other.GetRawStorage());
+  }
+
+  // Heterogeneous copy assignment. When the source pointer have a different
+  // type, perform a compress-decompress round, because the source pointer may
+  // need to be adjusted.
+  template <typename U, typename OtherWeaknessTag, typename OtherBarrierPolicy,
+            typename OtherCheckingPolicy>
+  V8_INLINE BasicMember& operator=(
+      const BasicMember<U, OtherWeaknessTag, OtherBarrierPolicy,
+                        OtherCheckingPolicy>& other) {
+    // TODO: the set must be atomic or ensured to be main-thread only
+    if (ReplayLeakWeak) {
+      strong_member_.operator=(other);
+    }
+    return weak_member_.operator=(other);
+  }
+
+  // Move assignment.
+  V8_INLINE BasicMember& operator=(BasicMember&& other) noexcept {
+    // TODO: the set must be atomic or ensured to be main-thread only
+    if (ReplayLeakWeak) {
+      strong_member_.operator=(other);
+    }
+    return weak_member_.operator=(other);
+  }
+
+  // Heterogeneous move assignment. When the source pointer have a different
+  // type, perform a compress-decompress round, because the source pointer may
+  // need to be adjusted.
+  template <typename U, typename OtherWeaknessTag, typename OtherBarrierPolicy,
+            typename OtherCheckingPolicy>
+  V8_INLINE BasicMember& operator=(
+      BasicMember<U, OtherWeaknessTag, OtherBarrierPolicy,
+                  OtherCheckingPolicy>&& other) noexcept {
+    // TODO: the set must be atomic or ensured to be main-thread only
+    if (ReplayLeakWeak) {
+      strong_member_.operator=(other);
+    }
+    return weak_member_.operator=(other);
+  }
+
+  // Assignment from Persistent.
+  template <typename U, typename PersistentWeaknessPolicy,
+            typename PersistentLocationPolicy,
+            typename PersistentCheckingPolicy,
+            typename = std::enable_if_t<std::is_base_of<T, U>::value>>
+  V8_INLINE BasicMember& operator=(
+      const BasicPersistent<U, PersistentWeaknessPolicy,
+                            PersistentLocationPolicy, PersistentCheckingPolicy>&
+          other) {
+    // TODO: the set must be atomic or ensured to be main-thread only
+    if (ReplayLeakWeak) {
+      strong_member_.operator=(other);
+    }
+    return weak_member_.operator=(other);
+  }
+
+  V8_INLINE BasicMember& operator=(T* other) {
+    // TODO: the set must be atomic or ensured to be main-thread only
+    if (ReplayLeakWeak) {
+      strong_member_.operator=(other);
+    }
+    return weak_member_.operator=(other);
+  }
+
+  V8_INLINE BasicMember& operator=(std::nullptr_t) {
+    // TODO: the set must be atomic or ensured to be main-thread only
+    if (ReplayLeakWeak) {
+      strong_member_.operator=(std::nullptr);
+    }
+    return weak_member_.operator=(std::nullptr);
+  }
+  V8_INLINE BasicMember& operator=(SentinelPointer s) {
+    // TODO: the set must be atomic or ensured to be main-thread only
+    if (ReplayLeakWeak) {
+      strong_member_.operator=(s);
+    }
+    return weak_member_.operator=(s);
+  }
+
+  V8_INLINE void Swap(ReplayWeakMember& other) {
+    // NOTE: For some reason, this does not need to be atomic -
+    // but |operator=| overloads do? 🤷‍♀️
+    weak_member_.Swap(other.weak_member_);
+    if (ReplayLeakWeak) {
+      strong_member_.Swap(other.strong_member_);
+    }
+  }
+
+  template <typename OtherWeaknessTag, typename OtherBarrierPolicy,
+            typename OtherCheckingPolicy>
+  V8_INLINE void Swap(BasicMember<T, OtherWeaknessTag, OtherBarrierPolicy,
+                                  OtherCheckingPolicy>& other) {
+    weak_member_.Swap(other);
+    if (ReplayLeakWeak) {
+      strong_member_ = weak_member_;
+    }
+  }
+
   V8_INLINE explicit operator bool() const { return !!weak_member_; }
   V8_INLINE operator T*() const { return weak_member_.Get(); }
   V8_INLINE T* operator->() const { return weak_member_.operator->(); }
@@ -111,14 +198,31 @@ class ReplayWeakMember : public GarbageCollectedMixin {
   // CFI cast exemption to allow passing SentinelPointer through T* and support
   // heterogeneous assignments between different Member and Persistent handles
   // based on their actual types.
-  V8_INLINE V8_CLANG_NO_SANITIZE("cfi-unrelated-cast") T* Get() const { return weak_member_.Get(); }
+  V8_INLINE V8_CLANG_NO_SANITIZE("cfi-unrelated-cast") T* Get() const { 
+    return weak_member_.Get();
+  }
 
   V8_INLINE void Clear() {
-    // TODO
+    // TODO: Clear must be atomic or ensured to be main-thread only
+    if (ReplayLeakWeak) {
+      // Same logic as |Release|
+      strong_member_.Clear();
+    }
+    weak_member_.Clear();
   }
 
   V8_INLINE T* Release() {
-    // TODO
+    if (ReplayLeakWeak) {
+      // 1. Not sure why one would ever want to call |Release| on a |WeakMember|,
+      // since it does not hold ownership of anything.
+      // 2. Also, in theory, we don't want to release the |strong_member_| here,
+      // if a |WeakMember| is released deterministically. Since we don't want it
+      // keep leaking. However, often times |Release| is used (on |Member|) in 
+      // conjunction with an eager resource clean-up (e.g. in `dom_timer.cc`),
+      // or right before transferring ownership. So we don't want to keep it.
+      strong_member_.Release();
+    }
+    return weak_member_.Release();
   }
 
   V8_INLINE RawStorage GetRawStorage() const {
@@ -126,7 +230,7 @@ class ReplayWeakMember : public GarbageCollectedMixin {
   }
 
   void Trace(cppgc::Visitor* visitor) const override {
-    // weak_member_.Trace(visitor);
+    weak_member_.Trace(visitor);
     strong_member_.Trace(visitor);
   }
 
@@ -139,22 +243,18 @@ class ReplayWeakMember : public GarbageCollectedMixin {
 
   V8_INLINE explicit ReplayWeakMember(RawStorage raw) : weak_member_(raw) {
     if (ReplayLeakWeak) {
-      strong_member_(raw);
+      strong_member_ = raw;
     }
   }
 
   Member<T> strong_member_;
-  WeakMember_<T> weak_member_;
+  WeakMember<T> weak_member_;
 };
 }  // namespace internal
 
-/**
- * ReplayWeakMembers are wrappers around WeakMember.
- * If 
- */
 template <typename T>
 using ReplayWeakMember = internal::ReplayWeakMember<T>;
 
 }  // namespace cppgc
 
-#endif  // THIRD_PARTY_BLINK_RENDERER_PLATFORM_HEAP_MEMBER_REPLAY_H_
+#endif  // INCLUDE_CPPGC_MEMBER_REPLAY_H_

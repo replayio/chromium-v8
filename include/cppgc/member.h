@@ -28,7 +28,7 @@ namespace internal {
 
 // MemberBase always refers to the object as const object and defers to
 // BasicMember on casting to the right type as needed.
-class V8_TRIVIAL_ABI MemberBase {
+class V8_TRIVIAL_ABI MemberBase final {
  public:
 #if defined(CPPGC_POINTER_COMPRESSION)
   using RawStorage = CompressedPointer;
@@ -283,7 +283,7 @@ class V8_TRIVIAL_ABI BasicMember : private MemberBase,
     return MemberBase::GetRawStorage();
   }
 
- public:
+ private:
   V8_INLINE explicit BasicMember(RawStorage raw) : MemberBase(raw) {
     InitializingWriteBarrier(Get());
     this->CheckPointer(Get());
