@@ -89,19 +89,20 @@ class ReplayWeakMember : public GarbageCollectedMixin {
       : ReplayWeakMember(p.Get()) {}
 
   // Copy assignment.
-  V8_INLINE BasicMember& operator=(const BasicMember& other) {
+  V8_INLINE ReplayWeakMember& operator=(const ReplayWeakMember& other) {
     return operator=(other.GetRawStorage());
   }
+
+  // TODO: override all |operator=| to also assign to/from |ReplayWeakMember|
 
   // Heterogeneous copy assignment. When the source pointer have a different
   // type, perform a compress-decompress round, because the source pointer may
   // need to be adjusted.
   template <typename U, typename OtherWeaknessTag, typename OtherBarrierPolicy,
             typename OtherCheckingPolicy>
-  V8_INLINE BasicMember& operator=(
+  V8_INLINE WeakMember& operator=(
       const BasicMember<U, OtherWeaknessTag, OtherBarrierPolicy,
                         OtherCheckingPolicy>& other) {
-    // TODO: the set must be atomic or ensured to be main-thread only
     if (ReplayLeakWeak) {
       strong_member_.operator=(other);
     }
@@ -109,12 +110,13 @@ class ReplayWeakMember : public GarbageCollectedMixin {
   }
 
   // Move assignment.
-  V8_INLINE BasicMember& operator=(BasicMember&& other) noexcept {
-    // TODO: the set must be atomic or ensured to be main-thread only
+  V8_INLINE ReplayWeakMember& operator=(ReplayWeakMember&& other) noexcept {
     if (ReplayLeakWeak) {
-      strong_member_.operator=(other);
+      strong_member_.operator=(other.strong_member_);
     }
-    return weak_member_.operator=(other);
+    weak_member_.operator=(other.weak_member_);
+    other.Clear();
+    return *this;
   }
 
   // Heterogeneous move assignment. When the source pointer have a different
@@ -122,10 +124,9 @@ class ReplayWeakMember : public GarbageCollectedMixin {
   // need to be adjusted.
   template <typename U, typename OtherWeaknessTag, typename OtherBarrierPolicy,
             typename OtherCheckingPolicy>
-  V8_INLINE BasicMember& operator=(
+  V8_INLINE WeakMember& operator=(
       BasicMember<U, OtherWeaknessTag, OtherBarrierPolicy,
                   OtherCheckingPolicy>&& other) noexcept {
-    // TODO: the set must be atomic or ensured to be main-thread only
     if (ReplayLeakWeak) {
       strong_member_.operator=(other);
     }
@@ -137,34 +138,30 @@ class ReplayWeakMember : public GarbageCollectedMixin {
             typename PersistentLocationPolicy,
             typename PersistentCheckingPolicy,
             typename = std::enable_if_t<std::is_base_of<T, U>::value>>
-  V8_INLINE BasicMember& operator=(
+  V8_INLINE WeakMember& operator=(
       const BasicPersistent<U, PersistentWeaknessPolicy,
                             PersistentLocationPolicy, PersistentCheckingPolicy>&
           other) {
-    // TODO: the set must be atomic or ensured to be main-thread only
     if (ReplayLeakWeak) {
       strong_member_.operator=(other);
     }
     return weak_member_.operator=(other);
   }
 
-  V8_INLINE BasicMember& operator=(T* other) {
-    // TODO: the set must be atomic or ensured to be main-thread only
+  V8_INLINE WeakMember& operator=(T* other) {
     if (ReplayLeakWeak) {
       strong_member_.operator=(other);
     }
     return weak_member_.operator=(other);
   }
 
-  V8_INLINE BasicMember& operator=(std::nullptr_t) {
-    // TODO: the set must be atomic or ensured to be main-thread only
+  V8_INLINE WeakMember& operator=(std::nullptr_t) {
     if (ReplayLeakWeak) {
       strong_member_.operator=(std::nullptr);
     }
     return weak_member_.operator=(std::nullptr);
   }
-  V8_INLINE BasicMember& operator=(SentinelPointer s) {
-    // TODO: the set must be atomic or ensured to be main-thread only
+  V8_INLINE WeakMember& operator=(SentinelPointer s) {
     if (ReplayLeakWeak) {
       strong_member_.operator=(s);
     }
@@ -254,6 +251,8 @@ class ReplayWeakMember : public GarbageCollectedMixin {
 
 template <typename T>
 using ReplayWeakMember = internal::ReplayWeakMember<T>;
+
+// TODO: comparison operators
 
 }  // namespace cppgc
 
