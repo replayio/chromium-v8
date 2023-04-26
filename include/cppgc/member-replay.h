@@ -272,8 +272,8 @@ class ReplayWeakMember : public GarbageCollectedMixin {
   }
 
   void Trace(cppgc::Visitor* visitor) const override {
-    weak_member_.Trace(visitor);
-    strong_member_.Trace(visitor);
+    visitor->Trace(weak_member_);
+    visitor->Trace(strong_member_);
   }
 
  private:
