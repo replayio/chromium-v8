@@ -7,12 +7,17 @@
 
 namespace cppgc {
 namespace internal {
+
 #define ReplayLeakWeak recordreplay::IsRecordingOrReplaying("avoid-weak-pointers")
 
 /**
- * This is a copy of the |BaseMember| interface.
- * It acts as a wrapper around a |WeakMember| plus an optional strong 
- * |Member| reference.
+ * This is designed to have the same interface as |BaseMember| but
+ * acts as a wrapper around a |WeakMember| and a |Member|.
+ * Depending on |ReplayLeakWeak|, it will choose one over the other.
+ * Choosing |Member| instead of |WeakMember| has the effect of eliminating
+ * |WeakMember| which is depending on GC behavior, making it inherently
+ * non-deterministic.
+ *
  * https://linear.app/replay/issue/RUN-1457/deterministic-weakmember
  */
 template<typename T>
@@ -22,14 +27,23 @@ class ReplayWeakMember : public GarbageCollectedMixin {
   using WeakMember = cppgc::WeakMember<T>;
   using PointeeType = T;
 
-  constexpr ReplayWeakMember() = default;
-  constexpr ReplayWeakMember(std::nullptr_t) {}           // NOLINT
-  V8_INLINE ReplayWeakMember(T* raw) : weak_member_(raw) {
+  V8_INLINE constexpr ReplayWeakMember() = default;           // NOLINT
+  V8_INLINE constexpr ReplayWeakMember(std::nullptr_t) {}     // NOLINT
+  V8_INLINE ReplayWeakMember(SentinelPointer s) {             // NOLINT
     if (ReplayLeakWeak) {
-      strong_member_ = raw;
+      strong_member_ = s;
+    } else {
+      weak_member_ = s;
     }
   }
-  V8_INLINE ReplayWeakMember(T& raw)  // NOLINT
+  V8_INLINE ReplayWeakMember(T* raw) { // NOLINT
+    if (ReplayLeakWeak) {
+      strong_member_ = raw;
+    } else {
+      weak_member_ = raw;
+    }
+  }
+  V8_INLINE ReplayWeakMember(T& raw) // NOLINT
       : ReplayWeakMember(&raw) {}
 
 #define REPLAY_WEAK_CTOR(ArgTypePre, ArgTypePost, Body)                        \
@@ -93,44 +107,40 @@ class ReplayWeakMember : public GarbageCollectedMixin {
     return operator=(other.GetRawStorage());
   }
 
-  // TODO: override all |operator=| to also assign to/from |ReplayWeakMember|
-
-  // Heterogeneous copy assignment. When the source pointer have a different
-  // type, perform a compress-decompress round, because the source pointer may
-  // need to be adjusted.
+  // Heterogeneous copy assignment.
   template <typename U, typename OtherWeaknessTag, typename OtherBarrierPolicy,
             typename OtherCheckingPolicy>
-  V8_INLINE WeakMember& operator=(
+  V8_INLINE ReplayWeakMember& operator=(
       const BasicMember<U, OtherWeaknessTag, OtherBarrierPolicy,
                         OtherCheckingPolicy>& other) {
     if (ReplayLeakWeak) {
-      strong_member_.operator=(other);
+      return strong_member_.operator=(other);
+    } else {
+      return weak_member_.operator=(other);
     }
-    return weak_member_.operator=(other);
   }
 
   // Move assignment.
   V8_INLINE ReplayWeakMember& operator=(ReplayWeakMember&& other) noexcept {
     if (ReplayLeakWeak) {
-      strong_member_.operator=(other.strong_member_);
+      strong_member_.operator=(std::move(other.strong_member_));
+    } else {
+      weak_member_.operator=(std::move(other.weak_member_));
     }
-    weak_member_.operator=(other.weak_member_);
-    other.Clear();
     return *this;
   }
 
-  // Heterogeneous move assignment. When the source pointer have a different
-  // type, perform a compress-decompress round, because the source pointer may
-  // need to be adjusted.
+  // Heterogeneous move assignment.
   template <typename U, typename OtherWeaknessTag, typename OtherBarrierPolicy,
             typename OtherCheckingPolicy>
-  V8_INLINE WeakMember& operator=(
+  V8_INLINE ReplayWeakMember& operator=(
       BasicMember<U, OtherWeaknessTag, OtherBarrierPolicy,
                   OtherCheckingPolicy>&& other) noexcept {
     if (ReplayLeakWeak) {
-      strong_member_.operator=(other);
+      return strong_member_.operator=(std::move(other));
+    } else {
+      return weak_member_.operator=(std::move(other));
     }
-    return weak_member_.operator=(other);
   }
 
   // Assignment from Persistent.
@@ -138,42 +148,48 @@ class ReplayWeakMember : public GarbageCollectedMixin {
             typename PersistentLocationPolicy,
             typename PersistentCheckingPolicy,
             typename = std::enable_if_t<std::is_base_of<T, U>::value>>
-  V8_INLINE WeakMember& operator=(
+  V8_INLINE ReplayWeakMember& operator=(
       const BasicPersistent<U, PersistentWeaknessPolicy,
                             PersistentLocationPolicy, PersistentCheckingPolicy>&
           other) {
     if (ReplayLeakWeak) {
       strong_member_.operator=(other);
+    } else {
+      weak_member_.operator=(other);
     }
-    return weak_member_.operator=(other);
+    return *this;
   }
 
-  V8_INLINE WeakMember& operator=(T* other) {
+  V8_INLINE ReplayWeakMember& operator=(T* other) {
     if (ReplayLeakWeak) {
       strong_member_.operator=(other);
+    } else {
+      weak_member_.operator=(other);
     }
-    return weak_member_.operator=(other);
+    return *this;
   }
-
-  V8_INLINE WeakMember& operator=(std::nullptr_t) {
+  V8_INLINE ReplayWeakMember& operator=(std::nullptr_t) {
     if (ReplayLeakWeak) {
-      strong_member_.operator=(std::nullptr);
+      strong_member_.operator=(nullptr);
+    } else {
+      weak_member_.operator=(nullptr);
     }
-    return weak_member_.operator=(std::nullptr);
+    return *this;
   }
-  V8_INLINE WeakMember& operator=(SentinelPointer s) {
+  V8_INLINE ReplayWeakMember& operator=(SentinelPointer s) {
     if (ReplayLeakWeak) {
       strong_member_.operator=(s);
+    } else {
+      weak_member_.operator=(s);
     }
-    return weak_member_.operator=(s);
+    return *this;
   }
 
   V8_INLINE void Swap(ReplayWeakMember& other) {
-    // NOTE: For some reason, this does not need to be atomic -
-    // but |operator=| overloads do? 🤷‍♀️
-    weak_member_.Swap(other.weak_member_);
     if (ReplayLeakWeak) {
       strong_member_.Swap(other.strong_member_);
+    } else {
+      weak_member_.Swap(other.weak_member_);
     }
   }
 
@@ -181,49 +197,75 @@ class ReplayWeakMember : public GarbageCollectedMixin {
             typename OtherCheckingPolicy>
   V8_INLINE void Swap(BasicMember<T, OtherWeaknessTag, OtherBarrierPolicy,
                                   OtherCheckingPolicy>& other) {
-    weak_member_.Swap(other);
     if (ReplayLeakWeak) {
-      strong_member_ = weak_member_;
+      strong_member_.Swap(other);
+    } else {
+      weak_member_.Swap(other);
     }
   }
 
-  V8_INLINE explicit operator bool() const { return !!weak_member_; }
-  V8_INLINE operator T*() const { return weak_member_.Get(); }
-  V8_INLINE T* operator->() const { return weak_member_.operator->(); }
-  V8_INLINE T& operator*() const { return weak_member_.operator*(); }
+  V8_INLINE explicit operator bool() const {
+    if (ReplayLeakWeak) {
+      return !!strong_member_;
+    } else {
+      return !!weak_member_;
+    }
+  }
+  V8_INLINE operator T*() const {
+    if (ReplayLeakWeak) {
+      return (T*)strong_member_;
+    } else {
+      return (T*)weak_member_;
+    }
+  }
+  V8_INLINE T* operator->() const {
+    if (ReplayLeakWeak) {
+      return strong_member_.operator->();
+    } else {
+      return weak_member_.operator->();
+    }
+  }
+  V8_INLINE T& operator*() const {
+    if (ReplayLeakWeak) {
+      return strong_member_.operator*();
+    } else {
+      return weak_member_.operator*();
+    }
+  }
 
   // CFI cast exemption to allow passing SentinelPointer through T* and support
   // heterogeneous assignments between different Member and Persistent handles
   // based on their actual types.
-  V8_INLINE V8_CLANG_NO_SANITIZE("cfi-unrelated-cast") T* Get() const { 
-    return weak_member_.Get();
+  V8_INLINE V8_CLANG_NO_SANITIZE("cfi-unrelated-cast") T* Get() const {
+    if (ReplayLeakWeak) {
+      return strong_member_.Get();
+    } else {
+      return weak_member_.Get();
+    }
   }
 
   V8_INLINE void Clear() {
-    // TODO: Clear must be atomic or ensured to be main-thread only
     if (ReplayLeakWeak) {
-      // Same logic as |Release|
       strong_member_.Clear();
+    } else {
+      weak_member_.Clear();
     }
-    weak_member_.Clear();
   }
 
   V8_INLINE T* Release() {
     if (ReplayLeakWeak) {
-      // 1. Not sure why one would ever want to call |Release| on a |WeakMember|,
-      // since it does not hold ownership of anything.
-      // 2. Also, in theory, we don't want to release the |strong_member_| here,
-      // if a |WeakMember| is released deterministically. Since we don't want it
-      // keep leaking. However, often times |Release| is used (on |Member|) in 
-      // conjunction with an eager resource clean-up (e.g. in `dom_timer.cc`),
-      // or right before transferring ownership. So we don't want to keep it.
-      strong_member_.Release();
+      return strong_member_.Release();
+    } else {
+      return weak_member_.Release();
     }
-    return weak_member_.Release();
   }
 
-  V8_INLINE RawStorage GetRawStorage() const {
-    return weak_member_.GetRawStorage();
+  V8_INLINE MemberBase::RawStorage GetRawStorage() const {
+    if (ReplayLeakWeak) {
+      return strong_member_.GetRawStorage();
+    } else {
+      return weak_member_.GetRawStorage();
+    }
   }
 
   void Trace(cppgc::Visitor* visitor) const override {
@@ -232,15 +274,11 @@ class ReplayWeakMember : public GarbageCollectedMixin {
   }
 
  private:
-#if defined(CPPGC_POINTER_COMPRESSION)
-  using RawStorage = CompressedPointer;
-#else   // !defined(CPPGC_POINTER_COMPRESSION)
-  using RawStorage = RawPointer;
-#endif  // !defined(CPPGC_POINTER_COMPRESSION)
-
-  V8_INLINE explicit ReplayWeakMember(RawStorage raw) : weak_member_(raw) {
+  V8_INLINE explicit ReplayWeakMember(MemberBase::RawStorage raw) {
     if (ReplayLeakWeak) {
       strong_member_ = raw;
+    } else {
+      weak_member_ = raw;
     }
   }
 

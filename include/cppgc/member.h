@@ -23,6 +23,7 @@ class HeapConsistency;
 }  // namespace subtle
 
 class Visitor;
+class ReplayWeakMember;
 
 namespace internal {
 
@@ -321,6 +322,9 @@ class V8_TRIVIAL_ABI BasicMember final : private MemberBase,
   template <typename T1, typename WeaknessTag1, typename WriteBarrierPolicy1,
             typename CheckingPolicy1>
   friend class BasicMember;
+
+  template <typename T2>
+  friend class ReplayWeakMember;
 };
 
 // Member equality operators.
@@ -564,6 +568,7 @@ using UntracedMember = internal::BasicMember<T, internal::UntracedMemberTag,
 
 }  // namespace cppgc
 
-#include "cppgc/member_replay.h"
+// TODO
+// #include "cppgc/member-replay.h"
 
 #endif  // INCLUDE_CPPGC_MEMBER_H_
