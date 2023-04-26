@@ -18,12 +18,14 @@
 
 namespace cppgc {
 
+template<typename T>
+class ReplayWeakMember;
+
 namespace subtle {
 class HeapConsistency;
 }  // namespace subtle
 
 class Visitor;
-class ReplayWeakMember;
 
 namespace internal {
 
@@ -564,7 +566,6 @@ using WeakMember = internal::BasicMember<T, internal::WeakMemberTag,
 template <typename T>
 using UntracedMember = internal::BasicMember<T, internal::UntracedMemberTag,
                                              internal::NoWriteBarrierPolicy>;
-
 
 }  // namespace cppgc
 

@@ -5,8 +5,9 @@
 #ifndef INCLUDE_CPPGC_MEMBER_REPLAY_H_
 #define INCLUDE_CPPGC_MEMBER_REPLAY_H_
 
+#include "cppgc/member.h"
+
 namespace cppgc {
-namespace internal {
 
 #define ReplayLeakWeak recordreplay::IsRecordingOrReplaying("avoid-weak-pointers")
 
@@ -29,7 +30,7 @@ class ReplayWeakMember : public GarbageCollectedMixin {
 
   V8_INLINE constexpr ReplayWeakMember() = default;           // NOLINT
   V8_INLINE constexpr ReplayWeakMember(std::nullptr_t) {}     // NOLINT
-  V8_INLINE ReplayWeakMember(SentinelPointer s) {             // NOLINT
+  V8_INLINE ReplayWeakMember(internal::SentinelPointer s) {             // NOLINT
     if (ReplayLeakWeak) {
       strong_member_ = s;
     } else {
@@ -46,49 +47,51 @@ class ReplayWeakMember : public GarbageCollectedMixin {
   V8_INLINE ReplayWeakMember(T& raw) // NOLINT
       : ReplayWeakMember(&raw) {}
 
-#define REPLAY_WEAK_CTOR(ArgTypePre, ArgTypePost, Body)                        \
-  V8_INLINE ReplayWeakMember(ArgTypePre ReplayWeakMember ArgTypePost other)    \
-      : ReplayWeakMember(other.Get()) {                                        \
-    Body                                                                       \
-  }                                                                            \
-  template <typename U,                                                        \
-            std::enable_if_t<internal::IsDecayedSameV<T, U>>* = nullptr>       \
-  V8_INLINE ReplayWeakMember(ArgTypePre ReplayWeakMember<U> ArgTypePost other) \
-      : ReplayWeakMember(other.GetRawStorage()) {                              \
-    Body                                                                       \
-  }                                                                            \
-  template <typename U,                                                        \
-            std::enable_if_t<internal::IsStrictlyBaseOfV<T, U>>* = nullptr>    \
-  V8_INLINE ReplayWeakMember(ArgTypePre ReplayWeakMember<U> ArgTypePost other) \
-      : ReplayWeakMember(other.Get()) {                                        \
-    Body                                                                       \
-  }                                                                            \
-  template <typename U, typename OtherBarrierPolicy,                           \
-            typename OtherWeaknessTag, typename OtherCheckingPolicy,           \
-            std::enable_if_t<internal::IsDecayedSameV<T, U>>* = nullptr>       \
-  V8_INLINE ReplayWeakMember(                                                  \
-      ArgTypePre BasicMember<U, OtherWeaknessTag, OtherBarrierPolicy,          \
-                             OtherCheckingPolicy>                              \
-          ArgTypePost other)                                                   \
-      : ReplayWeakMember(other.GetRawStorage()) {                              \
-    Body                                                                       \
-  }                                                                            \
-  template <typename U, typename OtherBarrierPolicy,                           \
-            typename OtherWeaknessTag, typename OtherCheckingPolicy,           \
-            std::enable_if_t<internal::IsStrictlyBaseOfV<T, U>>* = nullptr>    \
-  V8_INLINE ReplayWeakMember(                                                  \
-      ArgTypePre BasicMember<U, OtherWeaknessTag, OtherBarrierPolicy,          \
-                        OtherCheckingPolicy>                                   \
-          ArgTypePost other)                                                   \
-      : ReplayWeakMember(other.Get()) {                                        \
-    Body                                                                       \
+#define REPLAY_WEAK_CTOR(ArgTypePre, ArgTypePost, Body)                      \
+  V8_INLINE ReplayWeakMember(ArgTypePre ReplayWeakMember ArgTypePost other) \
+      : ReplayWeakMember(other.Get()) {                                      \
+    Body                                                                     \
+  }                                                                          \
+  template <typename U,                                                      \
+            std::enable_if_t<internal::IsDecayedSameV<T, U>>* = nullptr>     \
+  V8_INLINE ReplayWeakMember(                                                \
+      ArgTypePre ReplayWeakMember<U>ArgTypePost other)                       \
+      : ReplayWeakMember(other.GetRawStorage()) {                            \
+    Body                                                                     \
+  }                                                                          \
+  template <typename U,                                                      \
+            std::enable_if_t<internal::IsStrictlyBaseOfV<T, U>>* = nullptr>  \
+  V8_INLINE ReplayWeakMember(                                                \
+      ArgTypePre ReplayWeakMember<U>ArgTypePost other)                       \
+      : ReplayWeakMember(other.Get()) {                                      \
+    Body                                                                     \
+  }                                                                          \
+  template <typename U, typename OtherBarrierPolicy,                         \
+            typename OtherWeaknessTag, typename OtherCheckingPolicy,         \
+            std::enable_if_t<internal::IsDecayedSameV<T, U>>* = nullptr>     \
+  V8_INLINE ReplayWeakMember(                                                \
+      ArgTypePre internal::BasicMember<U, OtherWeaknessTag, OtherBarrierPolicy,        \
+                             OtherCheckingPolicy>ArgTypePost other)          \
+      : ReplayWeakMember(other.GetRawStorage()) {                            \
+    Body                                                                     \
+  }                                                                          \
+  template <typename U, typename OtherBarrierPolicy,                         \
+            typename OtherWeaknessTag, typename OtherCheckingPolicy,         \
+            std::enable_if_t<internal::IsStrictlyBaseOfV<T, U>>* = nullptr>  \
+  V8_INLINE ReplayWeakMember(                                                \
+      ArgTypePre internal::BasicMember<U, OtherWeaknessTag, OtherBarrierPolicy,        \
+                             OtherCheckingPolicy>ArgTypePost other)          \
+      : ReplayWeakMember(other.Get()) {                                      \
+    Body                                                                     \
   }
 
   // Copy ctors.
   REPLAY_WEAK_CTOR(const, &,)
 
   // Move ctors.
-  REPLAY_WEAK_CTOR(, &&, other.Clear())
+  #define PARENTHESES () /* hackfix: https://stackoverflow.com/a/40054009 */
+  REPLAY_WEAK_CTOR(, &&, other.Clear();)
+  #undef PARENTHESES
 
 #undef REPLAY_WEAK_CTOR
 
@@ -97,7 +100,7 @@ class ReplayWeakMember : public GarbageCollectedMixin {
             typename PersistentLocationPolicy,
             typename PersistentCheckingPolicy,
             typename = std::enable_if_t<std::is_base_of<T, U>::value>>
-  V8_INLINE ReplayWeakMember(const BasicPersistent<U, PersistentWeaknessPolicy,
+  V8_INLINE ReplayWeakMember(const internal::BasicPersistent<U, PersistentWeaknessPolicy,
                                                    PersistentLocationPolicy,
                                                    PersistentCheckingPolicy>& p)
       : ReplayWeakMember(p.Get()) {}
@@ -111,7 +114,7 @@ class ReplayWeakMember : public GarbageCollectedMixin {
   template <typename U, typename OtherWeaknessTag, typename OtherBarrierPolicy,
             typename OtherCheckingPolicy>
   V8_INLINE ReplayWeakMember& operator=(
-      const BasicMember<U, OtherWeaknessTag, OtherBarrierPolicy,
+      const internal::BasicMember<U, OtherWeaknessTag, OtherBarrierPolicy,
                         OtherCheckingPolicy>& other) {
     if (ReplayLeakWeak) {
       return strong_member_.operator=(other);
@@ -134,7 +137,7 @@ class ReplayWeakMember : public GarbageCollectedMixin {
   template <typename U, typename OtherWeaknessTag, typename OtherBarrierPolicy,
             typename OtherCheckingPolicy>
   V8_INLINE ReplayWeakMember& operator=(
-      BasicMember<U, OtherWeaknessTag, OtherBarrierPolicy,
+      internal::BasicMember<U, OtherWeaknessTag, OtherBarrierPolicy,
                   OtherCheckingPolicy>&& other) noexcept {
     if (ReplayLeakWeak) {
       return strong_member_.operator=(std::move(other));
@@ -149,7 +152,7 @@ class ReplayWeakMember : public GarbageCollectedMixin {
             typename PersistentCheckingPolicy,
             typename = std::enable_if_t<std::is_base_of<T, U>::value>>
   V8_INLINE ReplayWeakMember& operator=(
-      const BasicPersistent<U, PersistentWeaknessPolicy,
+      const internal::BasicPersistent<U, PersistentWeaknessPolicy,
                             PersistentLocationPolicy, PersistentCheckingPolicy>&
           other) {
     if (ReplayLeakWeak) {
@@ -176,7 +179,7 @@ class ReplayWeakMember : public GarbageCollectedMixin {
     }
     return *this;
   }
-  V8_INLINE ReplayWeakMember& operator=(SentinelPointer s) {
+  V8_INLINE ReplayWeakMember& operator=(internal::SentinelPointer s) {
     if (ReplayLeakWeak) {
       strong_member_.operator=(s);
     } else {
@@ -195,7 +198,7 @@ class ReplayWeakMember : public GarbageCollectedMixin {
 
   template <typename OtherWeaknessTag, typename OtherBarrierPolicy,
             typename OtherCheckingPolicy>
-  V8_INLINE void Swap(BasicMember<T, OtherWeaknessTag, OtherBarrierPolicy,
+  V8_INLINE void Swap(internal::BasicMember<T, OtherWeaknessTag, OtherBarrierPolicy,
                                   OtherCheckingPolicy>& other) {
     if (ReplayLeakWeak) {
       strong_member_.Swap(other);
@@ -260,7 +263,7 @@ class ReplayWeakMember : public GarbageCollectedMixin {
     }
   }
 
-  V8_INLINE MemberBase::RawStorage GetRawStorage() const {
+  V8_INLINE internal::MemberBase::RawStorage GetRawStorage() const {
     if (ReplayLeakWeak) {
       return strong_member_.GetRawStorage();
     } else {
@@ -274,7 +277,7 @@ class ReplayWeakMember : public GarbageCollectedMixin {
   }
 
  private:
-  V8_INLINE explicit ReplayWeakMember(MemberBase::RawStorage raw) {
+  V8_INLINE explicit ReplayWeakMember(internal::MemberBase::RawStorage raw) {
     if (ReplayLeakWeak) {
       strong_member_ = raw;
     } else {
@@ -282,13 +285,9 @@ class ReplayWeakMember : public GarbageCollectedMixin {
     }
   }
 
-  Member<T> strong_member_;
-  WeakMember<T> weak_member_;
+  Member strong_member_;
+  WeakMember weak_member_;
 };
-}  // namespace internal
-
-template <typename T>
-using ReplayWeakMember = internal::ReplayWeakMember<T>;
 
 // TODO: comparison operators
 
