@@ -209,9 +209,9 @@ class ReplayWeakMember : public GarbageCollectedMixin {
 
   V8_INLINE explicit operator bool() const {
     if (ReplayLeakWeak) {
-      return !!strong_member_;
+      return static_cast<bool>(strong_member_);
     } else {
-      return !!weak_member_;
+      return static_cast<bool>(weak_member_);
     }
   }
   V8_INLINE operator T*() const {
@@ -287,9 +287,135 @@ class ReplayWeakMember : public GarbageCollectedMixin {
 
   Member strong_member_;
   WeakMember weak_member_;
+
+  
 };
 
-// TODO: comparison operators
+// Member equality operators.
+template <typename T1, typename T2>
+V8_INLINE bool operator==(const ReplayWeakMember<T1>& member1,
+                          const ReplayWeakMember<T2>& member2) {
+  if (ReplayLeakWeak) {
+    return member1.strong_member_ == member2.strong_member_;
+  } else {
+    return member1.weak_member_ == member2.weak_member_;
+  }
+}
+
+template <typename T1, typename T2>
+V8_INLINE bool operator!=(const ReplayWeakMember<T1>& member1,
+                          const ReplayWeakMember<T2>& member2) {
+  return !(member1 == member2);
+}
+
+// Equality with raw pointers.
+template <typename T, typename U>
+V8_INLINE bool operator==(const ReplayWeakMember<T>& member, U* raw) {
+  if (ReplayLeakWeak) {
+    return member1.strong_member_ == member2.strong_member_;
+  } else {
+    return member1.weak_member_ == member2.weak_member_;
+  }
+}
+
+template <typename T, typename U>
+V8_INLINE bool operator!=(const ReplayWeakMember<T>& member, U* raw) {
+  return !(member == raw);
+}
+
+template <typename T, typename U>
+V8_INLINE bool operator==(T* raw, const ReplayWeakMember<U>& member) {
+  return member == raw;
+}
+
+template <typename T, typename U>
+V8_INLINE bool operator!=(T* raw, const ReplayWeakMember<U>& member) {
+  return !(raw == member);
+}
+
+// Equality with sentinel.
+template <typename T>
+V8_INLINE bool operator==(const ReplayWeakMember<T>& member,
+                          internal::SentinelPointer) {
+  return member.GetRawStorage().IsSentinel();
+}
+
+template <typename T>
+V8_INLINE bool operator!=(const ReplayWeakMember<T>& member,
+                          internal::SentinelPointer s) {
+  return !(member == s);
+}
+
+template <typename T>
+V8_INLINE bool operator==(internal::SentinelPointer s,
+                          const ReplayWeakMember<T>& member) {
+  return member == s;
+}
+
+template <typename T>
+V8_INLINE bool operator!=(internal::SentinelPointer s,
+                          const ReplayWeakMember<T>& member) {
+  return !(s == member);
+}
+
+// Equality with nullptr.
+template <typename T>
+V8_INLINE bool operator==(const ReplayWeakMember<T>& member, std::nullptr_t) {
+  return !static_cast<bool>(member);
+}
+
+template <typename T>
+V8_INLINE bool operator!=(const ReplayWeakMember<T>& member, std::nullptr_t n) {
+  return !(member == n);
+}
+
+template <typename T>
+V8_INLINE bool operator==(std::nullptr_t n, const ReplayWeakMember<T>& member) {
+  return member == n;
+}
+
+template <typename T>
+V8_INLINE bool operator!=(std::nullptr_t n, const ReplayWeakMember<T>& member) {
+  return !(n == member);
+}
+
+// Equality with BasicMember
+template <typename T, typename U, typename WeaknessTag,
+          typename WriteBarrierPolicy, typename CheckingPolicy>
+V8_INLINE bool operator==(
+    const ReplayWeakMember<T>& member1,
+    const internal::BasicMember<U, WeaknessTag, WriteBarrierPolicy,
+                                CheckingPolicy>& member2) {
+  if (ReplayLeakWeak) {
+    return member1.strong_member_ == member2;
+  } else {
+    return member1.weak_member_ == member2;
+  }
+}
+template <typename T, typename U, typename WeaknessTag,
+          typename WriteBarrierPolicy, typename CheckingPolicy>
+V8_INLINE bool operator!=(
+    const ReplayWeakMember<T>& member1,
+    const internal::BasicMember<U, WeaknessTag, WriteBarrierPolicy,
+                                CheckingPolicy>& member2) {
+  return !(member1 == member2);
+}
+template <typename T, typename WeaknessTag, typename WriteBarrierPolicy,
+          typename CheckingPolicy, typename U>
+V8_INLINE bool operator==(
+    const internal::BasicMember<T, WeaknessTag, WriteBarrierPolicy,
+                                CheckingPolicy>& member1,
+    const ReplayWeakMember<U>& member2) {
+  return member2 == member1;
+}
+template <typename T, typename WeaknessTag, typename WriteBarrierPolicy,
+          typename CheckingPolicy, typename U>
+V8_INLINE bool operator!=(
+    const internal::BasicMember<T, WeaknessTag, WriteBarrierPolicy,
+                                CheckingPolicy>& member1,
+    const ReplayWeakMember<U>& member2) {
+  return !(member1 == member2);
+}
 
 }  // namespace cppgc
 
