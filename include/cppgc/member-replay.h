@@ -5,16 +5,19 @@
 #ifndef INCLUDE_CPPGC_MEMBER_REPLAY_H_
 #define INCLUDE_CPPGC_MEMBER_REPLAY_H_
 
+#include "cppgc/type-traits.h"
 #include "cppgc/member.h"
 
-namespace cppgc {
+#ifndef REPLAY_LEAK_WEAK
+#error "REPLAY_LEAK_WEAK must be defined prior to including this file."
+#endif
 
-#define ReplayLeakWeak recordreplay::IsRecordingOrReplaying("avoid-weak-pointers")
+namespace cppgc {
 
 /**
  * This is designed to have the same interface as |BaseMember| but
  * acts as a wrapper around a |WeakMember| and a |Member|.
- * Depending on |ReplayLeakWeak|, it will choose one over the other.
+ * Depending on |REPLAY_LEAK_WEAK|, it will choose one over the other.
  * Choosing |Member| instead of |WeakMember| has the effect of eliminating
  * |WeakMember| which is depending on GC behavior, making it inherently
  * non-deterministic.
@@ -31,14 +34,14 @@ class ReplayWeakMember : public GarbageCollectedMixin {
   V8_INLINE constexpr ReplayWeakMember() = default;           // NOLINT
   V8_INLINE constexpr ReplayWeakMember(std::nullptr_t) {}     // NOLINT
   V8_INLINE ReplayWeakMember(internal::SentinelPointer s) {             // NOLINT
-    if (ReplayLeakWeak) {
+    if (REPLAY_LEAK_WEAK) {
       strong_member_ = s;
     } else {
       weak_member_ = s;
     }
   }
   V8_INLINE ReplayWeakMember(T* raw) { // NOLINT
-    if (ReplayLeakWeak) {
+    if (REPLAY_LEAK_WEAK) {
       strong_member_ = raw;
     } else {
       weak_member_ = raw;
@@ -116,7 +119,7 @@ class ReplayWeakMember : public GarbageCollectedMixin {
   V8_INLINE ReplayWeakMember& operator=(
       const internal::BasicMember<U, OtherWeaknessTag, OtherBarrierPolicy,
                         OtherCheckingPolicy>& other) {
-    if (ReplayLeakWeak) {
+    if (REPLAY_LEAK_WEAK) {
       return strong_member_.operator=(other);
     } else {
       return weak_member_.operator=(other);
@@ -125,7 +128,7 @@ class ReplayWeakMember : public GarbageCollectedMixin {
 
   // Move assignment.
   V8_INLINE ReplayWeakMember& operator=(ReplayWeakMember&& other) noexcept {
-    if (ReplayLeakWeak) {
+    if (REPLAY_LEAK_WEAK) {
       strong_member_.operator=(std::move(other.strong_member_));
     } else {
       weak_member_.operator=(std::move(other.weak_member_));
@@ -139,7 +142,7 @@ class ReplayWeakMember : public GarbageCollectedMixin {
   V8_INLINE ReplayWeakMember& operator=(
       internal::BasicMember<U, OtherWeaknessTag, OtherBarrierPolicy,
                   OtherCheckingPolicy>&& other) noexcept {
-    if (ReplayLeakWeak) {
+    if (REPLAY_LEAK_WEAK) {
       return strong_member_.operator=(std::move(other));
     } else {
       return weak_member_.operator=(std::move(other));
@@ -155,7 +158,7 @@ class ReplayWeakMember : public GarbageCollectedMixin {
       const internal::BasicPersistent<U, PersistentWeaknessPolicy,
                             PersistentLocationPolicy, PersistentCheckingPolicy>&
           other) {
-    if (ReplayLeakWeak) {
+    if (REPLAY_LEAK_WEAK) {
       strong_member_.operator=(other);
     } else {
       weak_member_.operator=(other);
@@ -164,7 +167,7 @@ class ReplayWeakMember : public GarbageCollectedMixin {
   }
 
   V8_INLINE ReplayWeakMember& operator=(T* other) {
-    if (ReplayLeakWeak) {
+    if (REPLAY_LEAK_WEAK) {
       strong_member_.operator=(other);
     } else {
       weak_member_.operator=(other);
@@ -172,7 +175,7 @@ class ReplayWeakMember : public GarbageCollectedMixin {
     return *this;
   }
   V8_INLINE ReplayWeakMember& operator=(std::nullptr_t) {
-    if (ReplayLeakWeak) {
+    if (REPLAY_LEAK_WEAK) {
       strong_member_.operator=(nullptr);
     } else {
       weak_member_.operator=(nullptr);
@@ -180,7 +183,7 @@ class ReplayWeakMember : public GarbageCollectedMixin {
     return *this;
   }
   V8_INLINE ReplayWeakMember& operator=(internal::SentinelPointer s) {
-    if (ReplayLeakWeak) {
+    if (REPLAY_LEAK_WEAK) {
       strong_member_.operator=(s);
     } else {
       weak_member_.operator=(s);
@@ -189,7 +192,7 @@ class ReplayWeakMember : public GarbageCollectedMixin {
   }
 
   V8_INLINE void Swap(ReplayWeakMember& other) {
-    if (ReplayLeakWeak) {
+    if (REPLAY_LEAK_WEAK) {
       strong_member_.Swap(other.strong_member_);
     } else {
       weak_member_.Swap(other.weak_member_);
@@ -200,7 +203,7 @@ class ReplayWeakMember : public GarbageCollectedMixin {
             typename OtherCheckingPolicy>
   V8_INLINE void Swap(internal::BasicMember<T, OtherWeaknessTag, OtherBarrierPolicy,
                                   OtherCheckingPolicy>& other) {
-    if (ReplayLeakWeak) {
+    if (REPLAY_LEAK_WEAK) {
       strong_member_.Swap(other);
     } else {
       weak_member_.Swap(other);
@@ -208,28 +211,28 @@ class ReplayWeakMember : public GarbageCollectedMixin {
   }
 
   V8_INLINE explicit operator bool() const {
-    if (ReplayLeakWeak) {
+    if (REPLAY_LEAK_WEAK) {
       return static_cast<bool>(strong_member_);
     } else {
       return static_cast<bool>(weak_member_);
     }
   }
   V8_INLINE operator T*() const {
-    if (ReplayLeakWeak) {
+    if (REPLAY_LEAK_WEAK) {
       return (T*)strong_member_;
     } else {
       return (T*)weak_member_;
     }
   }
   V8_INLINE T* operator->() const {
-    if (ReplayLeakWeak) {
+    if (REPLAY_LEAK_WEAK) {
       return strong_member_.operator->();
     } else {
       return weak_member_.operator->();
     }
   }
   V8_INLINE T& operator*() const {
-    if (ReplayLeakWeak) {
+    if (REPLAY_LEAK_WEAK) {
       return strong_member_.operator*();
     } else {
       return weak_member_.operator*();
@@ -240,7 +243,7 @@ class ReplayWeakMember : public GarbageCollectedMixin {
   // heterogeneous assignments between different Member and Persistent handles
   // based on their actual types.
   V8_INLINE V8_CLANG_NO_SANITIZE("cfi-unrelated-cast") T* Get() const {
-    if (ReplayLeakWeak) {
+    if (REPLAY_LEAK_WEAK) {
       return strong_member_.Get();
     } else {
       return weak_member_.Get();
@@ -248,7 +251,7 @@ class ReplayWeakMember : public GarbageCollectedMixin {
   }
 
   V8_INLINE void Clear() {
-    if (ReplayLeakWeak) {
+    if (REPLAY_LEAK_WEAK) {
       strong_member_.Clear();
     } else {
       weak_member_.Clear();
@@ -256,7 +259,7 @@ class ReplayWeakMember : public GarbageCollectedMixin {
   }
 
   V8_INLINE T* Release() {
-    if (ReplayLeakWeak) {
+    if (REPLAY_LEAK_WEAK) {
       return strong_member_.Release();
     } else {
       return weak_member_.Release();
@@ -264,7 +267,7 @@ class ReplayWeakMember : public GarbageCollectedMixin {
   }
 
   V8_INLINE internal::MemberBase::RawStorage GetRawStorage() const {
-    if (ReplayLeakWeak) {
+    if (REPLAY_LEAK_WEAK) {
       return strong_member_.GetRawStorage();
     } else {
       return weak_member_.GetRawStorage();
@@ -278,7 +281,7 @@ class ReplayWeakMember : public GarbageCollectedMixin {
 
  private:
   V8_INLINE explicit ReplayWeakMember(internal::MemberBase::RawStorage raw) {
-    if (ReplayLeakWeak) {
+    if (REPLAY_LEAK_WEAK) {
       strong_member_ = raw;
     } else {
       weak_member_ = raw;
@@ -288,14 +291,24 @@ class ReplayWeakMember : public GarbageCollectedMixin {
   Member strong_member_;
   WeakMember weak_member_;
 
-  
+  template <typename T1, typename T2>
+  friend bool operator==(const ReplayWeakMember<T1>& member1,
+                         const ReplayWeakMember<T2>& member2);
+  template <typename T1, typename U>
+  friend bool operator==(const ReplayWeakMember<T1>& member, U* raw);
+  template <typename T1, typename U, typename WeaknessTag,
+            typename WriteBarrierPolicy, typename CheckingPolicy>
+  friend bool operator==(
+      const ReplayWeakMember<T1>& member1,
+      const internal::BasicMember<U, WeaknessTag, WriteBarrierPolicy,
+                                  CheckingPolicy>& member2);
 };
 
-// Member equality operators.
+// ReplayWeakMember equality operators.
 template <typename T1, typename T2>
 V8_INLINE bool operator==(const ReplayWeakMember<T1>& member1,
                           const ReplayWeakMember<T2>& member2) {
-  if (ReplayLeakWeak) {
+  if (REPLAY_LEAK_WEAK) {
     return member1.strong_member_ == member2.strong_member_;
   } else {
     return member1.weak_member_ == member2.weak_member_;
@@ -311,10 +324,10 @@ V8_INLINE bool operator!=(const ReplayWeakMember<T1>& member1,
 // Equality with raw pointers.
 template <typename T, typename U>
 V8_INLINE bool operator==(const ReplayWeakMember<T>& member, U* raw) {
-  if (ReplayLeakWeak) {
-    return member1.strong_member_ == member2.strong_member_;
+  if (REPLAY_LEAK_WEAK) {
+    return member.strong_member_ == raw;
   } else {
-    return member1.weak_member_ == member2.weak_member_;
+    return member.weak_member_ == raw;
   }
 }
 
@@ -386,7 +399,7 @@ V8_INLINE bool operator==(
     const ReplayWeakMember<T>& member1,
     const internal::BasicMember<U, WeaknessTag, WriteBarrierPolicy,
                                 CheckingPolicy>& member2) {
-  if (ReplayLeakWeak) {
+  if (REPLAY_LEAK_WEAK) {
     return member1.strong_member_ == member2;
   } else {
     return member1.weak_member_ == member2;
@@ -416,6 +429,11 @@ V8_INLINE bool operator!=(
     const ReplayWeakMember<U>& member2) {
   return !(member1 == member2);
 }
+
+namespace internal {
+template <typename T>
+struct IsWeak<ReplayWeakMember<T>> : std::true_type {};
+}  // namespace internal
 
 }  // namespace cppgc
 

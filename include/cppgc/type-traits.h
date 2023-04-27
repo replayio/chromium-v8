@@ -14,6 +14,9 @@ namespace cppgc {
 
 class Visitor;
 
+template <typename T>
+class ReplayWeakMember;
+
 namespace internal {
 template <typename T, typename WeaknessTag, typename WriteBarrierPolicy,
           typename CheckingPolicy>
@@ -136,6 +139,12 @@ struct IsSubclassOfBasicMemberTemplate {
       decltype(SubclassCheck(std::declval<BasicMemberCandidate*>()))::value;
 };
 
+template <typename T>
+struct IsReplayWeakMember : std::false_type {};
+
+template <typename T>
+struct IsReplayWeakMember<ReplayWeakMember<T>> : std::true_type {};
+
 template <typename T,
           bool = IsSubclassOfBasicMemberTemplate<
               T, StrongMemberTag, DijkstraWriteBarrierPolicy>::value>
@@ -144,8 +153,10 @@ struct IsMemberType : std::false_type {};
 template <typename T>
 struct IsMemberType<T, true> : std::true_type {};
 
-template <typename T, bool = IsSubclassOfBasicMemberTemplate<
-                          T, WeakMemberTag, DijkstraWriteBarrierPolicy>::value>
+template <typename T,
+          bool = IsSubclassOfBasicMemberTemplate<
+                     T, WeakMemberTag, DijkstraWriteBarrierPolicy>::value ||
+                 IsReplayWeakMember<T>::value>
 struct IsWeakMemberType : std::false_type {};
 
 template <typename T>

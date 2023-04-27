@@ -569,7 +569,4 @@ using UntracedMember = internal::BasicMember<T, internal::UntracedMemberTag,
 
 }  // namespace cppgc
 
-// TODO
-// #include "cppgc/member-replay.h"
-
 #endif  // INCLUDE_CPPGC_MEMBER_H_
