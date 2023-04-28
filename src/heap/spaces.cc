@@ -134,6 +134,7 @@ size_t Page::ShrinkToHighWaterMark() {
   HeapObject filler = HeapObject::FromAddress(HighWaterMark());
   if (filler.address() == area_end()) return 0;
   PtrComprCageBase cage_base(heap()->isolate());
+  recordreplay::Diagnostic("Page::ShrinkToHighWaterMark #1 %d", filler.IsFreeSpaceOrFiller(cage_base));
   CHECK(filler.IsFreeSpaceOrFiller(cage_base));
   // Ensure that no objects were allocated in [filler, area_end) region.
   DCHECK_EQ(area_end(), SkipFillers(cage_base, filler, area_end()));
@@ -161,7 +162,10 @@ size_t Page::ShrinkToHighWaterMark() {
     heap()->memory_allocator()->PartialFreeMemory(
         this, address() + size() - unused, unused, area_end() - unused);
     if (filler.address() != area_end()) {
+      recordreplay::Diagnostic("Page::ShrinkToHighWaterMark #2 %d", filler.IsFreeSpaceOrFiller(cage_base));
       CHECK(filler.IsFreeSpaceOrFiller(cage_base));
+      recordreplay::Diagnostic("Page::ShrinkToHighWaterMark #3 %p %zu %p",
+                               filler.address(), filler.Size(cage_base), area_end());
       CHECK_EQ(filler.address() + filler.Size(cage_base), area_end());
     }
   }
