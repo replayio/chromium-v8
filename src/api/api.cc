@@ -10749,6 +10749,7 @@ static void (*gRecordReplayOrderedUnlock)(int lock);
 static void (*gRecordReplayAddOrderedPthreadMutex)(const char* name, pthread_mutex_t* mutex);
 #else
 static void (*gRecordReplayAddOrderedSRWLock)(const char* name, void* lock);
+static void (*gRecordReplayRemoveOrderedSRWLock)(void* lock);
 #endif
 static void (*gRecordReplayInvalidateRecording)(const char* format, ...);
 static void (*gRecordReplayNewCheckpoint)();
@@ -11520,6 +11521,12 @@ extern "C" DLLEXPORT void V8RecordReplayAddOrderedSRWLock(const char* name, void
   }
 }
 
+extern "C" DLLEXPORT void V8RecordReplayRemoveOrderedSRWLock(void* lock) {
+  if (recordreplay::IsRecordingOrReplaying()) {
+    gRecordReplayRemoveOrderedSRWLock(lock);
+  }
+}
+
 #endif // V8_OS_WIN
 
 bool recordreplay::IsReplaying() {
@@ -11911,6 +11918,7 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   RecordReplayLoadSymbol(handle, "RecordReplayAddOrderedPthreadMutex", gRecordReplayAddOrderedPthreadMutex);
 #else
   RecordReplayLoadSymbol(handle, "RecordReplayAddOrderedSRWLock", gRecordReplayAddOrderedSRWLock);
+  RecordReplayLoadSymbol(handle, "RecordReplayRemoveOrderedSRWLock", gRecordReplayRemoveOrderedSRWLock);
 #endif
   RecordReplayLoadSymbol(handle, "RecordReplayIsReplaying", gRecordReplayIsReplaying);
   RecordReplayLoadSymbol(handle, "RecordReplayHasDivergedFromRecording", gRecordReplayHasDivergedFromRecording);
