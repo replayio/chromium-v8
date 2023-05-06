@@ -11524,7 +11524,7 @@ extern "C" DLLEXPORT bool V8IsRecording() {
 }
 
 extern "C" DLLEXPORT bool V8RecordReplayIsARM() {
-  return IsRecordingOrReplaying() && gARMRecording;
+  return recordreplay::IsRecordingOrReplaying() && gARMRecording;
 }
 
 bool recordreplay::HasDivergedFromRecording() {
