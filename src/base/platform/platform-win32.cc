@@ -1022,7 +1022,10 @@ void OS::SetDataReadOnly(void* address, size_t size) {
 
   unsigned long old_protection;
   CHECK(VirtualProtect(address, size, PAGE_READONLY, &old_protection));
-  CHECK_EQ(PAGE_READWRITE, old_protection);
+
+  // When replaying VirtualProtect doesn't indicate the old protection,
+  // so disable the check.
+  //CHECK_EQ(PAGE_READWRITE, old_protection);
 }
 
 // static

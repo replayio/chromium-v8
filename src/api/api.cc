@@ -10715,6 +10715,7 @@ std::shared_ptr<WasmStreaming> WasmStreaming::Unpack(Isolate* v8_isolate,
 #endif
 
 static bool gRecordingOrReplaying;
+static bool gARMRecording;
 static void (*gRecordReplayRememberRecording)();
 static void (*gRecordReplayOnNewSource)(const char* id, const char* kind,
                                         const char* url);
@@ -10728,6 +10729,7 @@ static void (*gRecordReplayPrint)(const char* format, va_list args);
 static void (*gRecordReplayDiagnostic)(const char* format, va_list args);
 static void (*gRecordReplayWarning)(const char* format, va_list args);
 static void (*gRecordReplayOnInstrument)(const char* kind, const char* function, int offset);
+static bool (*gRecordReplayHadMismatch)();
 static void (*gRecordReplayAssert)(const char*, va_list);
 static void (*gRecordReplayAssertBytes)(const char* why, const void* ptr, size_t nbytes);
 static void (*gRecordReplayBytes)(const char* why, void* buf, size_t size);
@@ -10748,6 +10750,7 @@ static void (*gRecordReplayOrderedUnlock)(int lock);
 static void (*gRecordReplayAddOrderedPthreadMutex)(const char* name, pthread_mutex_t* mutex);
 #else
 static void (*gRecordReplayAddOrderedSRWLock)(const char* name, void* lock);
+static void (*gRecordReplayRemoveOrderedSRWLock)(void* lock);
 #endif
 static void (*gRecordReplayInvalidateRecording)(const char* format, ...);
 static void (*gRecordReplayNewCheckpoint)();
@@ -11282,6 +11285,24 @@ extern "C" DLLEXPORT void V8RecordReplayWarning(const char* format,
   }
 }
 
+bool recordreplay::HadMismatch() {
+  if (IsRecordingOrReplaying()) {
+    // It is an error to call this during record time.
+    CHECK(!recordreplay::IsRecording());
+    return gRecordReplayHadMismatch();
+  }
+  return false;
+}
+
+extern "C" DLLEXPORT bool V8RecordReplayHadMismatch() {
+  if (recordreplay::IsRecordingOrReplaying()) {
+    // It is an error to call this during record time.
+    CHECK(!recordreplay::IsRecording());
+    return gRecordReplayHadMismatch();
+  }
+  return false;
+}
+
 void recordreplay::Assert(const char* format, ...) {
   if (IsRecordingOrReplaying()) {
     va_list ap;
@@ -11501,6 +11522,12 @@ extern "C" DLLEXPORT void V8RecordReplayAddOrderedSRWLock(const char* name, void
   }
 }
 
+extern "C" DLLEXPORT void V8RecordReplayRemoveOrderedSRWLock(void* lock) {
+  if (recordreplay::IsRecordingOrReplaying()) {
+    gRecordReplayRemoveOrderedSRWLock(lock);
+  }
+}
+
 #endif // V8_OS_WIN
 
 bool recordreplay::IsReplaying() {
@@ -11520,6 +11547,14 @@ bool recordreplay::IsRecording() {
 
 extern "C" DLLEXPORT bool V8IsRecording() {
   return recordreplay::IsRecording();
+}
+
+bool recordreplay::IsARMRecording() {
+  return IsRecordingOrReplaying() && gARMRecording;
+}
+
+extern "C" DLLEXPORT bool V8RecordReplayIsARM() {
+  return recordreplay::IsARMRecording();
 }
 
 bool recordreplay::HasDivergedFromRecording() {
@@ -11884,6 +11919,7 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   RecordReplayLoadSymbol(handle, "RecordReplayPrint", gRecordReplayPrint);
   RecordReplayLoadSymbol(handle, "RecordReplayDiagnostic", gRecordReplayDiagnostic);
   RecordReplayLoadSymbol(handle, "RecordReplayWarning", gRecordReplayWarning);
+  RecordReplayLoadSymbol(handle, "RecordReplayHadMismatch", gRecordReplayHadMismatch);
   RecordReplayLoadSymbol(handle, "RecordReplayAssert", gRecordReplayAssert);
   RecordReplayLoadSymbol(handle, "RecordReplayAssertBytes", gRecordReplayAssertBytes);
   RecordReplayLoadSymbol(handle, "RecordReplayBytes", gRecordReplayBytes);
@@ -11907,6 +11943,7 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   RecordReplayLoadSymbol(handle, "RecordReplayAddOrderedPthreadMutex", gRecordReplayAddOrderedPthreadMutex);
 #else
   RecordReplayLoadSymbol(handle, "RecordReplayAddOrderedSRWLock", gRecordReplayAddOrderedSRWLock);
+  RecordReplayLoadSymbol(handle, "RecordReplayRemoveOrderedSRWLock", gRecordReplayRemoveOrderedSRWLock);
 #endif
   RecordReplayLoadSymbol(handle, "RecordReplayIsReplaying", gRecordReplayIsReplaying);
   RecordReplayLoadSymbol(handle, "RecordReplayHasDivergedFromRecording", gRecordReplayHasDivergedFromRecording);
@@ -11987,6 +12024,12 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   void (*setPossibleBreakpointsCallback)(void (*aCallback)(const char*));
   RecordReplayLoadSymbol(handle, "RecordReplaySetPossibleBreakpointsCallback", setPossibleBreakpointsCallback);
   setPossibleBreakpointsCallback(internal::RecordReplayGetPossibleBreakpointsCallback);
+
+  // Remember whether this recording was made on ARM.
+#if V8_TARGET_ARCH_ARM64
+  gARMRecording = true;
+#endif
+  gARMRecording = RecordReplayValue("ARMRecording", gARMRecording);
 
   internal::gRecordReplayAssertValues = !!getenv("RECORD_REPLAY_JS_ASSERTS");
   internal::gRecordReplayAssertProgress =

@@ -107,6 +107,8 @@ domain Debugger
       # Deprecated in favor of using the `location.scriptId` to resolve the URL via a previously
       # sent `Debugger.scriptParsed` event.
       deprecated string url
+      # Execution context associated with this frame.
+      Runtime.ExecutionContextId contextId
       # Scope chain for this call frame.
       array of Scope scopeChain
       # `this` object for this call frame.
@@ -560,6 +562,11 @@ domain Debugger
       Location location
 
   command getCallFrames
+    parameters
+      # Maximum number of frames to return.
+      optional integer maxFrames
+      # Don't generate scopes or "this" object for returned frames.
+      optional boolean noContents
     returns
       array of CallFrame callFrames
 

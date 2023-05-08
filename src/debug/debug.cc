@@ -3598,16 +3598,11 @@ static Handle<Object> RecordReplayCurrentGeneratorId(Isolate* isolate, Handle<Ob
 
 extern void RecordReplayAddInterestingSource(const char* url);
 
-bool RecordReplayIgnoreScriptByURL(const char* url) {
-  // Watch out for the special script used by chromium for injecting record/replay
-  // specific logic.
-  return !strcmp(url, "record-replay-internal");
-}
-
 // Return whether a script is an uninteresting internal URL, but which still needs
 // to be registered with the recorder so that breakpoints can be created.
 bool RecordReplayIsInternalScriptURL(const char* url) {
   return !strcmp(url, "record-replay-react-devtools") ||
+         !strcmp(url, "record-replay-internal") ||
          !strncmp(url, "extensions::", 12);
 }
 
@@ -3653,14 +3648,14 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
     return;
   }
 
+  if (recordreplay::AreEventsDisallowed()) {
+    return;
+  }
+
   std::string url;
   if (!script->name().IsUndefined()) {
     std::unique_ptr<char[]> name = String::cast(script->name()).ToCString();
     url = name.get();
-  }
-
-  if (RecordReplayIgnoreScriptByURL(url.c_str())) {
-    return;
   }
 
   if (!RecordReplayIsInternalScriptURL(url.c_str())) {
@@ -3890,18 +3885,24 @@ int RecordReplayObjectId(v8::Isolate* v8_isolate, v8::Local<v8::Context> cx,
   Isolate* isolate = (Isolate*)v8_isolate;
   Handle<Object> object = Utils::OpenHandle(*v8_object);
 
-  Local<v8::Value> object_ids_val = GetObjectIdMapForContext(v8_isolate, cx);
-  Handle<JSWeakMap> object_ids = Handle<JSWeakMap>::cast(Utils::OpenHandle(*object_ids_val));
+  // Look through all weak maps we've created, the object might not be associated
+  // with the current context.
+  if (gRecordReplayObjectIds) {
+    for (const auto& entry : *gRecordReplayObjectIds) {
+      Local<v8::Value> object_ids_val = entry.object_ids_.Get(v8_isolate);
+      Handle<JSWeakMap> object_ids = Handle<JSWeakMap>::cast(Utils::OpenHandle(*object_ids_val));
 
-  Handle<Object> existing(EphemeronHashTable::cast(object_ids->table()).Lookup(object), isolate);
-  if (!existing->IsTheHole(isolate)) {
-    v8::Local<v8::Value> id_value = v8::Utils::ToLocal(existing);
-    if (id_value->IsInt32()) {
-      int id = id_value.As<v8::Int32>()->Value();
-      if (gRecordReplayAssertTrackedObjects) {
-        recordreplay::Assert("JS ReuseObjectId %d", id);
+      Handle<Object> existing(EphemeronHashTable::cast(object_ids->table()).Lookup(object), isolate);
+      if (!existing->IsTheHole(isolate)) {
+        v8::Local<v8::Value> id_value = v8::Utils::ToLocal(existing);
+        if (id_value->IsInt32()) {
+          int id = id_value.As<v8::Int32>()->Value();
+          if (gRecordReplayAssertTrackedObjects) {
+            recordreplay::Assert("JS ReuseObjectId %d", id);
+          }
+          return id;
+        }
       }
-      return id;
     }
   }
 
@@ -3918,6 +3919,9 @@ int RecordReplayObjectId(v8::Isolate* v8_isolate, v8::Local<v8::Context> cx,
   Local<Value> id_value = v8::Integer::New(v8_isolate, id);
 
   int32_t hash = object->GetOrCreateHash(isolate).value();
+
+  Local<v8::Value> object_ids_val = GetObjectIdMapForContext(v8_isolate, cx);
+  Handle<JSWeakMap> object_ids = Handle<JSWeakMap>::cast(Utils::OpenHandle(*object_ids_val));
   JSWeakCollection::Set(object_ids, object, Utils::OpenHandle(*id_value), hash);
 
   return id;
