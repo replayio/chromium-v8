@@ -974,7 +974,7 @@ extern bool gRecordReplayHasCheckpoint;
 
 extern void RecordReplayOnTargetProgressReached();
 
-static bool hasWarnedBadPC = false;
+static bool hasPrintedStack = false;
 
 RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
   if (++*gProgressCounter == gTargetProgress) {
@@ -1011,23 +1011,28 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
                              name.c_str(), info.line + 1, info.column);
     CHECK(gRecordReplayHasCheckpoint);
   }
-  
+
   if (recordreplay::AreEventsDisallowed() &&
       !recordreplay::HasDivergedFromRecording() &&
       function->shared().IsUserJavaScript() &&
       function->shared().HasSourceCode()) {
     // [RUN-1621] User JS should not get executed non-deterministically, unless
     // we have paused.
-    if (!hasWarnedBadPC) {  // Prevent flood of warnings.
-      hasWarnedBadPC = true;
+    if (!hasPrintedStack) {  // Prevent flood of warnings.
+      hasPrintedStack = true;
       std::stringstream stack;
       stack << " stack=";
       isolate->PrintCurrentStackTrace(stack);
 
       recordreplay::Warning(
-          "JS OnExecutionProgress: Non-deterministic UserJS pc=%llu%s",
-          *gProgressCounter, stack.str().c_str());
+          "JS ExecutionProgress PC=%zu scriptId=%d @%s:%d:%d (%d %d %d %d)%s",
+          *gProgressCounter, script->id(), name.c_str(), info.line + 1,
+          info.column, recordreplay::AreEventsDisallowed(),
+          !recordreplay::HasDivergedFromRecording(),
+          function->shared().IsUserJavaScript(),
+          function->shared().HasSourceCode(), stack.str().c_str());
     }
+    return ReadOnlyRoots(isolate).undefined_value();
   }
 
   // if ((info.line + 1) == 10 && info.column > 38579 && info.column < 38700) {
@@ -1047,6 +1052,22 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
                        !recordreplay::HasDivergedFromRecording(),
                        function->shared().IsUserJavaScript(),
                        function->shared().HasSourceCode());
+
+  if (recordreplay::HadMismatch() &&
+      !hasPrintedStack) {  // Prevent flood of warnings.
+    hasPrintedStack = true;
+    std::stringstream stack;
+    stack << " stack=";
+    isolate->PrintCurrentStackTrace(stack);
+
+    recordreplay::Print(
+        "JS-Stack ExecutionProgress PC=%zu scriptId=%d @%s:%d:%d (%d %d %d %d)%s",
+        *gProgressCounter, script->id(), name.c_str(), info.line + 1,
+        info.column, recordreplay::AreEventsDisallowed(),
+        !recordreplay::HasDivergedFromRecording(),
+        function->shared().IsUserJavaScript(),
+        function->shared().HasSourceCode(), stack.str().c_str());
+  }
 
   return ReadOnlyRoots(isolate).undefined_value();
 }
@@ -1170,16 +1191,56 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertValue) {
 
     site.location_ = buf;
   }
+  
+  if (recordreplay::AreEventsDisallowed() &&
+      !recordreplay::HasDivergedFromRecording() &&
+      function->shared().IsUserJavaScript() &&
+      function->shared().HasSourceCode()) {
+    // [RUN-1621] User JS should not get executed non-deterministically, unless
+    // we have paused.
+    if (!hasPrintedStack) {  // Prevent flood of warnings.
+      hasPrintedStack = true;
+      std::stringstream stack;
+      stack << " stack=";
+      isolate->PrintCurrentStackTrace(stack);
+
+      recordreplay::Warning(
+          "JS %s PC=%zu scriptId=%d @%s (%d %d %d %d)%s",
+          site.desc_.c_str(), *gProgressCounter, script->id(),
+          site.location_.c_str(), recordreplay::AreEventsDisallowed(),
+          !recordreplay::HasDivergedFromRecording(),
+          function->shared().IsUserJavaScript(),
+          function->shared().HasSourceCode(),
+          stack.str().c_str());
+    }
+  }
 
   std::string contents = RecordReplayBasicValueContents(value);
 
-  recordreplay::Assert("JS %s Value=%s PC=%zu scriptId=%d @%s (%d %d %d %d)",
-                       site.desc_.c_str(), contents.c_str(),
-                       site.location_.c_str(), *gProgressCounter, script->id(),
-                       recordreplay::AreEventsDisallowed(),
-                       !recordreplay::HasDivergedFromRecording(),
-                       function->shared().IsUserJavaScript(),
-                       function->shared().HasSourceCode());
+  recordreplay::Assert(
+      "JS %s Value=%s PC=%zu scriptId=%d @%s (%d %d %d %d)", site.desc_.c_str(),
+      contents.c_str(), *gProgressCounter, script->id(),
+      site.location_.c_str(), recordreplay::AreEventsDisallowed(),
+      !recordreplay::HasDivergedFromRecording(),
+      function->shared().IsUserJavaScript(),
+      function->shared().HasSourceCode());
+
+  if (recordreplay::HadMismatch() && !hasPrintedStack) {  // Prevent flood of warnings.
+    hasPrintedStack = true;
+    std::stringstream stack;
+    stack << " stack=";
+    isolate->PrintCurrentStackTrace(stack);
+
+    recordreplay::Print(
+          "JS-Stack %s PC=%zu scriptId=%d @%s (%d %d %d %d)%s",
+          site.desc_.c_str(), *gProgressCounter, script->id(),
+          site.location_.c_str(), recordreplay::AreEventsDisallowed(),
+          !recordreplay::HasDivergedFromRecording(),
+          function->shared().IsUserJavaScript(),
+          function->shared().HasSourceCode(),
+          stack.str().c_str());
+  }
+
   return *value;
 }
 
