@@ -11294,7 +11294,7 @@ bool recordreplay::HadMismatch() {
   return false;
 }
 
-extern "C" bool V8RecordReplayHadMismatch() {
+extern "C" DLLEXPORT bool V8RecordReplayHadMismatch() {
   if (recordreplay::IsRecordingOrReplaying()) {
     // It is an error to call this during record time.
     CHECK(!recordreplay::IsRecording());
