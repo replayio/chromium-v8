@@ -2165,8 +2165,7 @@ MaybeLocal<Value> Script::Run(Local<Context> context,
 
   if (recordreplay::IsRecordingOrReplaying() && !recordreplay::AreEventsDisallowed()) {
     // TODO: IsInReplayCode (RUN-1502)
-
-    v8::recordreplay::Assert("[RUN-1488-1495] Script::Run %d",
+    v8::recordreplay::Assert("JS Script::Run %d",
                              fun->shared().script().IsScript()
                                  ? i::Script::cast(fun->shared().script()).id()
                                  : 0);
@@ -2456,9 +2455,7 @@ MaybeLocal<Value> Module::Evaluate(Local<Context> context) {
 
   if (recordreplay::IsRecordingOrReplaying() && !recordreplay::AreEventsDisallowed()) {
     // TODO: IsInReplayCode (RUN-1502)
-    v8::recordreplay::Assert(
-      "[RUN-1488-1495] Module::Evaluate %d",
-      ScriptId());
+    v8::recordreplay::Assert("JS Module::Evaluate %d", ScriptId());
   }
 
   Local<Value> result;
@@ -5251,7 +5248,7 @@ MaybeLocal<Value> Object::CallAsFunction(Local<Context> context,
   if (recordreplay::IsRecordingOrReplaying() && !recordreplay::AreEventsDisallowed()) {
     // TODO: IsInReplayCode (RUN-1502)
     v8::recordreplay::Assert(
-        "[RUN-1488-1495] Object::CallAsFunction %d", IsCodeLike(context->GetIsolate()));
+        "JS Object::CallAsFunction %d", IsCodeLike(context->GetIsolate()));
   }
 
   Local<Value> result;
@@ -5276,7 +5273,7 @@ MaybeLocal<Value> Object::CallAsConstructor(Local<Context> context, int argc,
 
   if (recordreplay::IsRecordingOrReplaying() && !recordreplay::AreEventsDisallowed()) {
     // TODO: IsInReplayCode (RUN-1502)
-    v8::recordreplay::Assert("[RUN-1488-1495] Object::CallAsConstructor %d",
+    v8::recordreplay::Assert("JS Object::CallAsConstructor %d",
                              IsCodeLike(context->GetIsolate()));
   }
 
@@ -5376,7 +5373,7 @@ MaybeLocal<v8::Value> Function::Call(Local<Context> context,
 
   if (recordreplay::IsRecordingOrReplaying() && !recordreplay::AreEventsDisallowed()) {
     // TODO: IsInReplayCode (RUN-1502)
-    v8::recordreplay::Assert("[RUN-1488-1495] Function::Call %d %d %d",
+    v8::recordreplay::Assert("JS Function::Call %d %d %d",
                              ScriptId(), GetScriptLineNumber(), GetScriptColumnNumber());
   }
 

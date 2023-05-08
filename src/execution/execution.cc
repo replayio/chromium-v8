@@ -359,7 +359,7 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
           RecordReplayHasRegisteredScript(Script::cast(function->shared().script()))) {
         // Print log and prevent execution.
         recordreplay::Warning(
-            "[RUN-1621] Invoke: Non-deterministic UserJS %d %d %d fun=\"%s\"",
+            "JS Invoke: Non-deterministic UserJS %d %d %d fun=\"%s\"",
             (int)function->shared().kind(), function->shared().SourceSize(),
             function->shared().StartPosition(),
             function->shared().DebugNameCStr().get());

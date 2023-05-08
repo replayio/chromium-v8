@@ -1025,7 +1025,7 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
       isolate->PrintCurrentStackTrace(stack);
 
       recordreplay::Warning(
-          "[RUN-1692] JS OnExecutionProgress: Non-deterministic UserJS pc=%llu%s",
+          "JS OnExecutionProgress: Non-deterministic UserJS pc=%llu%s",
           *gProgressCounter, stack.str().c_str());
     }
   }
@@ -1040,12 +1040,13 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
   //       *gProgressCounter, stack.str().c_str());
   // }
 
-  recordreplay::Assert("JS ExecutionProgress %zu %s:%d:%d (%d %d %d %d)",
-                        *gProgressCounter, name.c_str(), info.line + 1,
-                        info.column, recordreplay::AreEventsDisallowed(),
-                        !recordreplay::HasDivergedFromRecording(),
-                        function->shared().IsUserJavaScript(),
-                        function->shared().HasSourceCode());
+  recordreplay::Assert("JS ExecutionProgress PC=%zu scriptId=%d @%s:%d:%d (%d %d %d %d)",
+                       *gProgressCounter, script->id(), name.c_str(),
+                       info.line + 1, info.column,
+                       recordreplay::AreEventsDisallowed(),
+                       !recordreplay::HasDivergedFromRecording(),
+                       function->shared().IsUserJavaScript(),
+                       function->shared().HasSourceCode());
 
   return ReadOnlyRoots(isolate).undefined_value();
 }
@@ -1172,8 +1173,13 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertValue) {
 
   std::string contents = RecordReplayBasicValueContents(value);
 
-  recordreplay::Assert("JS %s %s Value %s", site.location_.c_str(),
-                       site.desc_.c_str(),contents.c_str());
+  recordreplay::Assert("JS %s Value=%s PC=%zu scriptId=%d @%s (%d %d %d %d)",
+                       site.desc_.c_str(), contents.c_str(),
+                       site.location_.c_str(), *gProgressCounter, script->id(),
+                       recordreplay::AreEventsDisallowed(),
+                       !recordreplay::HasDivergedFromRecording(),
+                       function->shared().IsUserJavaScript(),
+                       function->shared().HasSourceCode());
   return *value;
 }
 
