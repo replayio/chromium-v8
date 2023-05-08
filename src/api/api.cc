@@ -10715,6 +10715,7 @@ std::shared_ptr<WasmStreaming> WasmStreaming::Unpack(Isolate* v8_isolate,
 #endif
 
 static bool gRecordingOrReplaying;
+static bool gARMRecording;
 static void (*gRecordReplayRememberRecording)();
 static void (*gRecordReplayOnNewSource)(const char* id, const char* kind,
                                         const char* url);
@@ -11548,6 +11549,14 @@ extern "C" DLLEXPORT bool V8IsRecording() {
   return recordreplay::IsRecording();
 }
 
+bool recordreplay::IsARMRecording() {
+  return IsRecordingOrReplaying() && gARMRecording;
+}
+
+extern "C" DLLEXPORT bool V8RecordReplayIsARM() {
+  return recordreplay::IsARMRecording();
+}
+
 bool recordreplay::HasDivergedFromRecording() {
   if (recordreplay::IsRecordingOrReplaying()) {
     return gRecordReplayHasDivergedFromRecording();
@@ -11999,6 +12008,12 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   void (*setPossibleBreakpointsCallback)(void (*aCallback)(const char*));
   RecordReplayLoadSymbol(handle, "RecordReplaySetPossibleBreakpointsCallback", setPossibleBreakpointsCallback);
   setPossibleBreakpointsCallback(internal::RecordReplayGetPossibleBreakpointsCallback);
+
+  // Remember whether this recording was made on ARM.
+#if V8_TARGET_ARCH_ARM64
+  gARMRecording = true;
+#endif
+  gARMRecording = RecordReplayValue("ARMRecording", gARMRecording);
 
   internal::gRecordReplayAssertValues = !!getenv("RECORD_REPLAY_JS_ASSERTS");
   internal::gRecordReplayAssertProgress =

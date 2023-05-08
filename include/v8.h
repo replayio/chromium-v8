@@ -94,6 +94,8 @@ static bool IsRecording();
 static bool IsReplaying();
 static const char* GetRecordingId();
 
+static bool IsARMRecording();
+
 static bool FeatureEnabled(const char* feature);
 
 static bool GetTestEnvironmentFlag();
