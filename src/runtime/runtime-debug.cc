@@ -1025,7 +1025,8 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
       isolate->PrintCurrentStackTrace(stack);
 
       recordreplay::Warning(
-          "JS ExecutionProgress PC=%zu scriptId=%d @%s:%d:%d (%d %d %d %d)%s",
+          "JS-Stack ExecutionProgress PC=%zu scriptId=%d @%s:%d:%d (%d %d %d "
+          "%d)%s",
           *gProgressCounter, script->id(), name.c_str(), info.line + 1,
           info.column, recordreplay::AreEventsDisallowed(),
           !recordreplay::HasDivergedFromRecording(),
@@ -1045,6 +1046,8 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
   //       *gProgressCounter, stack.str().c_str());
   // }
 
+
+
   recordreplay::Assert("JS ExecutionProgress PC=%zu scriptId=%d @%s:%d:%d (%d %d %d %d)",
                        *gProgressCounter, script->id(), name.c_str(),
                        info.line + 1, info.column,
@@ -1053,7 +1056,7 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
                        function->shared().IsUserJavaScript(),
                        function->shared().HasSourceCode());
 
-  if (recordreplay::HadMismatch() &&
+  if (recordreplay::IsReplaying() && recordreplay::HadMismatch() &&
       !hasPrintedStack) {  // Prevent flood of warnings.
     hasPrintedStack = true;
     std::stringstream stack;
@@ -1205,7 +1208,7 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertValue) {
       isolate->PrintCurrentStackTrace(stack);
 
       recordreplay::Warning(
-          "JS %s PC=%zu scriptId=%d @%s (%d %d %d %d)%s",
+          "JS-Stack %s PC=%zu scriptId=%d @%s (%d %d %d %d)%s",
           site.desc_.c_str(), *gProgressCounter, script->id(),
           site.location_.c_str(), recordreplay::AreEventsDisallowed(),
           !recordreplay::HasDivergedFromRecording(),
@@ -1225,7 +1228,8 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertValue) {
       function->shared().IsUserJavaScript(),
       function->shared().HasSourceCode());
 
-  if (recordreplay::HadMismatch() && !hasPrintedStack) {  // Prevent flood of warnings.
+  if (recordreplay::IsReplaying() && recordreplay::HadMismatch() &&
+      !hasPrintedStack) {  // Prevent flooding.
     hasPrintedStack = true;
     std::stringstream stack;
     stack << " stack=";
