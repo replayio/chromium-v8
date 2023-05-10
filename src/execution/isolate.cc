@@ -5566,7 +5566,7 @@ void Isolate::CountUsage(v8::Isolate::UseCounterFeature feature, int count) {
 
 // Start disallowed script IDs at a value that won't conflict with regular IDs,
 // which start at one and increment from there.
-static int gNextDisallowedScriptId = 1 << 30;
+static int gNextDisallowedScriptId = 1 << 29;
 
 int Isolate::GetNextScriptId() {
   // Use a separate pool of IDs when events are disallowed, as these scripts

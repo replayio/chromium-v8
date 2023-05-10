@@ -1599,6 +1599,19 @@ BackgroundCompileTask::BackgroundCompileTask(
 
 extern bool RecordReplayHasDefaultContext();
 
+static void SetRecordReplayIgnore(UnoptimizedCompileFlags& flags) {
+  if (!recordreplay::IsRecordingOrReplaying()) {
+    return;
+  }
+
+  if (!IsMainThread() ||
+      !RecordReplayHasDefaultContext() ||
+      recordreplay::AreEventsDisallowed()) {
+    flags.set_record_replay_ignore(true);
+    return;
+  }
+}
+
 BackgroundCompileTask::BackgroundCompileTask(
     Isolate* isolate, Handle<SharedFunctionInfo> shared_info,
     std::unique_ptr<Utf16CharacterStream> character_stream,
@@ -1619,10 +1632,7 @@ BackgroundCompileTask::BackgroundCompileTask(
       function_literal_id_(shared_info->function_literal_id()) {
   DCHECK(!shared_info->is_toplevel());
 
-  if (recordreplay::IsRecordingOrReplaying() &&
-      (!IsMainThread() || !RecordReplayHasDefaultContext())) {
-    flags_.set_record_replay_ignore(true);
-  }
+  SetRecordReplayIgnore(flags_);
 
   character_stream_->Seek(start_position_);
 
@@ -2833,9 +2843,7 @@ MaybeHandle<JSFunction> Compiler::GetFunctionFromEval(
     DCHECK(!flags.is_module());
     flags.set_parse_restriction(restriction);
 
-    if (!IsMainThread()) {
-      flags.set_record_replay_ignore(true);
-    }
+    SetRecordReplayIgnore(flags);
 
     UnoptimizedCompileState compile_state;
     ReusableUnoptimizedCompileState reusable_state(isolate);
@@ -3297,17 +3305,6 @@ Handle<Script> NewScript(
   SetScriptFieldsFromDetails(isolate, *script, script_details, &no_gc);
   LOG(isolate, ScriptDetails(*script));
   return script;
-}
-
-static void SetRecordReplayIgnore(UnoptimizedCompileFlags& flags) {
-  if (!recordreplay::IsRecordingOrReplaying()) {
-    return;
-  }
-
-  if (!IsMainThread() || recordreplay::AreEventsDisallowed()) {
-    flags.set_record_replay_ignore(true);
-    return;
-  }
 }
 
 MaybeHandle<SharedFunctionInfo> CompileScriptOnMainThread(
