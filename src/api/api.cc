@@ -12016,8 +12016,8 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   gARMRecording = RecordReplayValue("ARMRecording", gARMRecording);
 
   internal::gRecordReplayAssertValues = !!getenv("RECORD_REPLAY_JS_ASSERTS");
-  internal::gRecordReplayAssertProgress = true;
-      // FIXME internal::gRecordReplayAssertValues || !!getenv("RECORD_REPLAY_JS_PROGRESS_ASSERTS");
+  internal::gRecordReplayAssertProgress =
+      internal::gRecordReplayAssertValues || !!getenv("RECORD_REPLAY_JS_PROGRESS_ASSERTS");
   internal::gRecordReplayAssertTrackedObjects =
       internal::gRecordReplayAssertValues || !!getenv("RECORD_REPLAY_JS_OBJECT_ASSERTS");
 

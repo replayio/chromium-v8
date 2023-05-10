@@ -3672,8 +3672,6 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
 
   recordreplay::Diagnostic("OnNewSource %s %s", id.get(), kind);
 
-  recordreplay::Print("OnNewSource ID %s KIND %s URL %s", id.get(), kind, url.c_str());
-
   if (!gRegisteredScripts) {
     gRegisteredScripts = new ScriptIdSet;
   }
