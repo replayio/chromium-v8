@@ -1014,6 +1014,10 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
     CHECK(gRecordReplayHasCheckpoint);
   }
 
+  if (recordreplay::AreEventsDisallowed()) {
+    recordreplay::Print("ExecutionProgressEventsDisallowed ID %d", script->id());
+  }
+
   recordreplay::Assert("ExecutionProgress %zu %s:%d:%d",
                        *gProgressCounter, name.c_str(), info.line + 1, info.column);
 
