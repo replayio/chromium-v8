@@ -976,7 +976,7 @@ extern void RecordReplayOnTargetProgressReached();
 extern bool RecordReplayIsDivergentUserJSWithoutPause(
     const SharedFunctionInfo& shared);
 
-static bool hasPrintedStack = false;
+static bool gHasPrintedStack = false;
 
 RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
   if (++*gProgressCounter == gTargetProgress) {
@@ -1026,8 +1026,8 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
       (recordreplay::IsReplaying() && recordreplay::HadMismatch())) {
     // Print JS stack if user JS was executed non-deterministically
     // and we were not paused, or if we had a mismatch.
-    if (!hasPrintedStack) {  // Prevent flood.
-      hasPrintedStack = true;
+    if (!gHasPrintedStack) {  // Prevent flood.
+      gHasPrintedStack = true;
       std::stringstream stack;
       isolate->PrintCurrentStackTrace(stack);
 
@@ -1179,8 +1179,8 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertValue) {
       (recordreplay::IsReplaying() && recordreplay::HadMismatch())) {
     // Print JS stack if user JS was executed non-deterministically
     // and we were not paused, or if we had a mismatch.
-    if (!hasPrintedStack) {  // Prevent flood.
-      hasPrintedStack = true;
+    if (!gHasPrintedStack) {  // Prevent flood.
+      gHasPrintedStack = true;
       std::stringstream stack;
       isolate->PrintCurrentStackTrace(stack);
 
