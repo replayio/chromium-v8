@@ -348,7 +348,7 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
     }
 #endif
 
-    if (IsDivergentUserJSWithoutPause(function->shared())) {
+    if (RecordReplayIsDivergentUserJSWithoutPause(function->shared())) {
       // [RUN-1621] User JS should not get executed in divergent code paths,
       // unless we have paused.
       if (function->shared().script().IsScript() &&
