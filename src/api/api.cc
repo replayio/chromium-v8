@@ -11620,9 +11620,9 @@ extern "C" DLLEXPORT void* V8RecordReplayIdPointer(int id) {
 }
 
 extern "C" DLLEXPORT uint64_t V8RecordReplayNewBookmark() {
-  Isolate* isolate = Isolate::Current();
+  internal::Isolate* isolate = internal::Isolate::Current();
   if (internal::gRecordReplayHasCheckpoint &&
-      isolate && AllowJavascriptExecution::IsAllowed(isolate)) {
+      isolate && internal::AllowJavascriptExecution::IsAllowed(isolate)) {
     // Our bookmark code invokes JS. Make sure that that is possible and allowed.
     // https://linear.app/replay/issue/RUN-1908/fix-devtools-crashes
     return gRecordReplayNewBookmark();
