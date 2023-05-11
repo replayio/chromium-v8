@@ -1014,15 +1014,15 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
     CHECK(gRecordReplayHasCheckpoint);
   }
 
-  recordreplay::Assert("JS ExecutionProgress PC=%zu scriptId=%d @%s:%d:%d (%d %d %d %d)",
-                       *gProgressCounter, script->id(), name.c_str(),
-                       info.line + 1, info.column,
-                       recordreplay::AreEventsDisallowed(),
-                       !recordreplay::HasDivergedFromRecording(),
-                       function->shared().IsUserJavaScript(),
-                       function->shared().HasSourceCode());
+  recordreplay::Assert(
+      "JS ExecutionProgress PC=%zu scriptId=%d @%s:%d:%d (%d %d %d %d)",
+      *gProgressCounter, script->id(), name.c_str(), info.line + 1, info.column,
+      recordreplay::AreEventsDisallowed(),
+      !recordreplay::HasDivergedFromRecording(),
+      function->shared().IsUserJavaScript(),
+      function->shared().HasSourceCode());
 
-  if ((RecordReplayIsDivergentUserJSWithoutPause()) ||
+  if ((RecordReplayIsDivergentUserJSWithoutPause(function->shared())) ||
       (recordreplay::IsReplaying() && recordreplay::HadMismatch())) {
     // Print JS stack if user JS was executed non-deterministically
     // and we were not paused, or if we had a mismatch.
@@ -1032,7 +1032,8 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
       isolate->PrintCurrentStackTrace(stack);
 
       recordreplay::Warning(
-          "JS-Stack ExecutionProgress PC=%zu scriptId=%d @%s:%d:%d (%d %d %d %d) stack=%s",
+          "JS-Stack ExecutionProgress PC=%zu scriptId=%d @%s:%d:%d (%d %d %d "
+          "%d) stack=%s",
           *gProgressCounter, script->id(), name.c_str(), info.line + 1,
           info.column, recordreplay::AreEventsDisallowed(),
           !recordreplay::HasDivergedFromRecording(),
@@ -1174,7 +1175,7 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertValue) {
       function->shared().IsUserJavaScript(),
       function->shared().HasSourceCode());
 
-  if ((RecordReplayIsDivergentUserJSWithoutPause()) ||
+  if ((RecordReplayIsDivergentUserJSWithoutPause(function->shared())) ||
       (recordreplay::IsReplaying() && recordreplay::HadMismatch())) {
     // Print JS stack if user JS was executed non-deterministically
     // and we were not paused, or if we had a mismatch.
