@@ -219,6 +219,12 @@ void DebugStackTraceIterator::UpdateInlineFrameIndexAndResumableFnOnStack() {
   iterator_.frame()->Summarize(&frames);
   inlined_frame_index_ = static_cast<int>(frames.size());
 
+  if (recordreplay::IsRecordingOrReplaying() && !frames.size()) {
+    // Replay workaround: Summarize sometimes won't work for an unknown reason.
+    // https://linear.app/replay/issue/RUN-1920
+    return;
+  }
+
   if (resumable_fn_on_stack_) return;
 
   StackFrame* frame = iterator_.frame();
