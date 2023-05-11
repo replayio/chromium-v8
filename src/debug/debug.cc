@@ -3617,6 +3617,13 @@ bool RecordReplayHasRegisteredScript(Script script) {
     gRegisteredScripts->find(script.id()) != gRegisteredScripts->end();
 }
 
+bool RecordReplayIsDivergentUserJSWithoutPause(
+    const SharedFunctionInfo& shared) {
+  return recordreplay::AreEventsDisallowed() &&
+         !recordreplay::HasDivergedFromRecording() &&
+         shared.IsUserJavaScript() && shared.HasSourceCode();
+}
+
 typedef std::vector<std::pair<Eternal<Value>*, bool>> NewScriptHandlerVector;
 static NewScriptHandlerVector* gNewScriptHandlers;
 

@@ -22,6 +22,8 @@ namespace internal {
 
 extern bool RecordReplayHasRegisteredScript(Script script);
 
+extern bool RecordReplayIsDivergentUserJSWithoutPause(const SharedFunctionInfo& shared);
+
 namespace {
 
 Handle<Object> NormalizeReceiver(Isolate* isolate, Handle<Object> receiver) {
@@ -275,12 +277,6 @@ MaybeHandle<Context> NewScriptContext(Isolate* isolate,
   return result;
 }
 
-static bool IsDivergentUserJSWithoutPause(const SharedFunctionInfo& shared) {
-  return recordreplay::AreEventsDisallowed() &&
-         !recordreplay::HasDivergedFromRecording() &&
-         shared.IsUserJavaScript() && shared.HasSourceCode();
-}
-
 V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
                                                  const InvokeParams& params) {
   RCS_SCOPE(isolate, RuntimeCallCounterId::kInvoke);
@@ -359,7 +355,7 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
           RecordReplayHasRegisteredScript(Script::cast(function->shared().script()))) {
         // Print log and prevent execution.
         recordreplay::Warning(
-            "JS Invoke: Non-deterministic UserJS %d %d %d fun=\"%s\"",
+            "JS Invoke: Non-deterministic user JS %d %d %d fun=\"%s\"",
             (int)function->shared().kind(), function->shared().SourceSize(),
             function->shared().StartPosition(),
             function->shared().DebugNameCStr().get());
