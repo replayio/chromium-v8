@@ -2194,9 +2194,10 @@ void OptimizedFrame::Summarize(std::vector<FrameSummary>* frames) const {
 
     CHECK(data.is_null());
 
-    // Replay workaround: let failure be no-op instead of crash.
-    // https://linear.app/replay/issue/RUN-1920
     if (recordreplay::IsRecordingOrReplaying()) {
+      // Replay workaround: Sometimes, DeoptimizationData could not be found for an unknown reason.
+      // → Let this be a no-op instead of a crash.
+      recordreplay::Warning("[RUN-1920] Missing deoptimization information for OptimizedFrame::Summarize.");
       return;
     }
     FATAL("Missing deoptimization information for OptimizedFrame::Summarize.");

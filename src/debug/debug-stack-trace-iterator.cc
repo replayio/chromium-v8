@@ -219,13 +219,12 @@ void DebugStackTraceIterator::UpdateInlineFrameIndexAndResumableFnOnStack() {
   iterator_.frame()->Summarize(&frames);
   inlined_frame_index_ = static_cast<int>(frames.size());
 
+  if (resumable_fn_on_stack_) return;
+
   if (recordreplay::IsRecordingOrReplaying() && !frames.size()) {
-    // Replay workaround: Summarize sometimes won't work for an unknown reason.
-    // https://linear.app/replay/issue/RUN-1920
+    recordreplay::Warning("[RUN-1920] Frame summary was empty.");
     return;
   }
-
-  if (resumable_fn_on_stack_) return;
 
   StackFrame* frame = iterator_.frame();
   if (!frame->is_java_script()) return;
