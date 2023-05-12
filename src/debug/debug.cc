@@ -2793,7 +2793,13 @@ bool Debug::PerformSideEffectCheck(Handle<JSFunction> function,
                          &is_compiled_scope)) {
     return false;
   }
-  DCHECK(is_compiled_scope.is_compiled());
+  if (recordreplay::IsReplaying() && recordreplay::AreEventsDisallowed()) {
+    // TODO: IsInReplayCode (RUN-1502)
+    // Always allow Replay code.
+    // https://linear.app/replay/issue/RUN-1908/fix-devtools-crashes
+    return true;
+  }
+  CHECK(is_compiled_scope.is_compiled());
   Handle<SharedFunctionInfo> shared(function->shared(), isolate_);
   Handle<DebugInfo> debug_info = GetOrCreateDebugInfo(shared);
   DebugInfo::SideEffectState side_effect_state =
