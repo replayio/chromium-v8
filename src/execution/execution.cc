@@ -21,8 +21,8 @@ namespace v8 {
 namespace internal {
 
 extern bool RecordReplayHasRegisteredScript(Script script);
-
 extern bool RecordReplayIsDivergentUserJSWithoutPause(const SharedFunctionInfo& shared);
+extern uint64_t* gProgressCounter;
 
 namespace {
 
@@ -349,18 +349,28 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
 #endif
 
     if (RecordReplayIsDivergentUserJSWithoutPause(function->shared())) {
-      // [RUN-1621] User JS should not get executed in divergent code paths,
+      // User JS should not get executed in divergent code paths,
       // unless we have paused.
-      if (function->shared().script().IsScript() &&
-          RecordReplayHasRegisteredScript(Script::cast(function->shared().script()))) {
-        // Print log and prevent execution.
-        recordreplay::Warning(
-            "JS Invoke: Non-deterministic user JS %d %d %d fun=\"%s\"",
-            (int)function->shared().kind(), function->shared().SourceSize(),
-            function->shared().StartPosition(),
-            function->shared().DebugNameCStr().get());
-        return isolate->factory()->undefined_value();
+      // → Print log and prevent execution.
+      Script::PositionInfo info;
+      std::string name;
+      Handle<Script> script;
+      if (function->shared().script().IsScript()) {
+        script = Handle<Script>(Script::cast(function->shared().script()), isolate);
+        Script::GetPositionInfo(script, function->shared().StartPosition(),
+                                &info, Script::WITH_OFFSET);
+        name = script->name().IsString()
+                   ? String::cast(script->name()).ToCString().get()
+                   : "(anonymous script)";
       }
+      std::stringstream stack;
+      isolate->PrintCurrentStackTrace(stack);
+
+      recordreplay::Warning(
+          "JS Invoke: Non-deterministic user JS PC=%zu scriptId=%d @%s:%d:%d stack=%s",
+          *gProgressCounter, script.is_null() ? script->id() : -1, name.c_str(), info.line + 1,
+          info.column, stack.str().c_str());
+      return isolate->factory()->undefined_value();
     }
 
     // Set up a ScriptContext when running scripts that need it.

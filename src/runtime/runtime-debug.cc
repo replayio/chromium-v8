@@ -1000,7 +1000,7 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
                           Script::WITH_OFFSET);
   std::string name = script->name().IsString()
                          ? String::cast(script->name()).ToCString().get()
-                         : "(script without name)";
+                         : "(anonymous script)";
 
   if (!RecordReplayBytecodeAllowed()) {
     recordreplay::Diagnostic("RecordReplayAssertExecutionProgress not allowed %s:%d:%d",
@@ -1015,14 +1015,10 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
   }
 
   recordreplay::Assert(
-      "JS ExecutionProgress PC=%zu scriptId=%d @%s:%d:%d (%d %d %d %d)",
-      *gProgressCounter, script->id(), name.c_str(), info.line + 1, info.column,
-      recordreplay::AreEventsDisallowed(),
-      !recordreplay::HasDivergedFromRecording(),
-      function->shared().IsUserJavaScript(),
-      function->shared().HasSourceCode());
+      "JS ExecutionProgress PC=%zu scriptId=%d @%s:%d:%d",
+      *gProgressCounter, script->id(), name.c_str(), info.line + 1, info.column);
 
-  if ((RecordReplayIsDivergentUserJSWithoutPause(function->shared())) ||
+  if (RecordReplayIsDivergentUserJSWithoutPause(function->shared()) ||
       (recordreplay::IsReplaying() && recordreplay::HadMismatch())) {
     // Print JS stack if user JS was executed non-deterministically
     // and we were not paused, or if we had a mismatch.
@@ -1032,13 +1028,11 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
       isolate->PrintCurrentStackTrace(stack);
 
       recordreplay::Warning(
-          "JS-Stack ExecutionProgress PC=%zu scriptId=%d @%s:%d:%d (%d %d %d "
-          "%d) stack=%s",
+          "JS-Stack ExecutionProgress%s PC=%zu scriptId=%d @%s:%d:%d stack=%s",
+          RecordReplayIsDivergentUserJSWithoutPause(function->shared()) ?
+            " in non-deterministic user JS" : "",
           *gProgressCounter, script->id(), name.c_str(), info.line + 1,
-          info.column, recordreplay::AreEventsDisallowed(),
-          !recordreplay::HasDivergedFromRecording(),
-          function->shared().IsUserJavaScript(),
-          function->shared().HasSourceCode(), stack.str().c_str());
+          info.column, stack.str().c_str());
     }
   }
 
@@ -1168,12 +1162,9 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertValue) {
   std::string contents = RecordReplayBasicValueContents(value);
 
   recordreplay::Assert(
-      "JS %s Value=%s PC=%zu scriptId=%d @%s (%d %d %d %d)", site.desc_.c_str(),
+      "JS %s Value=%s PC=%zu scriptId=%d @%s", site.desc_.c_str(),
       contents.c_str(), *gProgressCounter, script->id(),
-      site.location_.c_str(), recordreplay::AreEventsDisallowed(),
-      !recordreplay::HasDivergedFromRecording(),
-      function->shared().IsUserJavaScript(),
-      function->shared().HasSourceCode());
+      site.location_.c_str());
 
   if ((RecordReplayIsDivergentUserJSWithoutPause(function->shared())) ||
       (recordreplay::IsReplaying() && recordreplay::HadMismatch())) {
@@ -1185,12 +1176,12 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertValue) {
       isolate->PrintCurrentStackTrace(stack);
 
       recordreplay::Warning(
-          "JS-Stack %s PC=%zu scriptId=%d @%s (%d %d %d %d) stack=%s",
-          site.desc_.c_str(), *gProgressCounter, script->id(),
-          site.location_.c_str(), recordreplay::AreEventsDisallowed(),
-          !recordreplay::HasDivergedFromRecording(),
-          function->shared().IsUserJavaScript(),
-          function->shared().HasSourceCode(), stack.str().c_str());
+          "JS-Stack %s%s PC=%zu scriptId=%d @%s stack=%s", site.desc_.c_str(),
+          RecordReplayIsDivergentUserJSWithoutPause(function->shared())
+              ? " in non-deterministic user JS"
+              : "",
+          *gProgressCounter, script->id(), site.location_.c_str(),
+          stack.str().c_str());
     }
   }
 

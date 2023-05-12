@@ -11740,11 +11740,10 @@ extern "C" DLLEXPORT void V8RecordReplayOnNavigationEvent(const char* kind, cons
   gRecordReplayOnNavigationEvent(kind, url);
 }
 
-#define MaxJsStackTraceSize (4096)
-static char gLastJsStackTrace[MaxJsStackTraceSize];
-
-extern "C" DLLEXPORT const char* V8RecordReplayGetCurrentJSStackTmp() {
+extern "C" DLLEXPORT void V8RecordReplayGetCurrentJSStack(std::string* stackTrace) {
   CHECK(recordreplay::IsRecordingOrReplaying());
+  CHECK(stackTrace);
+
   std::stringstream stack;
 
   i::Isolate* isolate = internal::Isolate::TryGetCurrent();
@@ -11752,8 +11751,8 @@ extern "C" DLLEXPORT const char* V8RecordReplayGetCurrentJSStackTmp() {
   if (isolate) {
     isolate->PrintCurrentStackTrace(stack);
   }
-  strncpy(gLastJsStackTrace, stack.str().c_str(), MaxJsStackTraceSize);
-  return gLastJsStackTrace;
+
+  *stackTrace = stack.str();
 }
 
 template <typename Src, typename Dst>
