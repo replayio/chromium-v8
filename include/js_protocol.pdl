@@ -575,9 +575,11 @@ domain Debugger
       optional Location location
 
   command getPendingException
+    parameters
+      # Symbolic group name that can be used to release multiple objects.
+      optional string objectGroup
     returns
       optional Runtime.RemoteObject exception
-      optional string objectGroup
 
   # Fired when the virtual machine stopped on breakpoint or exception or any other stop criteria.
   event paused
