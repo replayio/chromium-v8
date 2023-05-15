@@ -3623,6 +3623,15 @@ bool RecordReplayHasRegisteredScript(Script script) {
     gRegisteredScripts->find(script.id()) != gRegisteredScripts->end();
 }
 
+bool RecordReplayIsDivergentUserJSWithoutPause(
+    const SharedFunctionInfo& shared) {
+  return recordreplay::AreEventsDisallowed() &&
+         !recordreplay::HasDivergedFromRecording() &&
+         shared.script().IsScript() &&
+         RecordReplayHasRegisteredScript(
+             Script::cast(shared.script()));
+}
+
 typedef std::vector<std::pair<Eternal<Value>*, bool>> NewScriptHandlerVector;
 static NewScriptHandlerVector* gNewScriptHandlers;
 
@@ -3904,7 +3913,7 @@ int RecordReplayObjectId(v8::Isolate* v8_isolate, v8::Local<v8::Context> cx,
         if (id_value->IsInt32()) {
           int id = id_value.As<v8::Int32>()->Value();
           if (gRecordReplayAssertTrackedObjects) {
-            recordreplay::Assert("ReuseObjectId %d", id);
+            recordreplay::Assert("JS ReuseObjectId %d", id);
           }
           return id;
         }
@@ -3919,7 +3928,7 @@ int RecordReplayObjectId(v8::Isolate* v8_isolate, v8::Local<v8::Context> cx,
   int id = gNextObjectId++;
 
   if (gRecordReplayAssertTrackedObjects) {
-    recordreplay::Assert("NewObjectId %d", id);
+    recordreplay::Assert("JS NewObjectId %d", id);
   }
 
   Local<Value> id_value = v8::Integer::New(v8_isolate, id);

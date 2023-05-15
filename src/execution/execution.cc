@@ -21,6 +21,8 @@ namespace v8 {
 namespace internal {
 
 extern bool RecordReplayHasRegisteredScript(Script script);
+extern bool RecordReplayIsDivergentUserJSWithoutPause(const SharedFunctionInfo& shared);
+extern uint64_t* gProgressCounter;
 
 namespace {
 
@@ -275,12 +277,6 @@ MaybeHandle<Context> NewScriptContext(Isolate* isolate,
   return result;
 }
 
-static bool IsDivergentUserJSWithoutPause(const SharedFunctionInfo& shared) {
-  return recordreplay::AreEventsDisallowed() &&
-         !recordreplay::HasDivergedFromRecording() &&
-         shared.IsUserJavaScript() && shared.HasSourceCode();
-}
-
 V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
                                                  const InvokeParams& params) {
   RCS_SCOPE(isolate, RuntimeCallCounterId::kInvoke);
@@ -352,19 +348,29 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
     }
 #endif
 
-    if (IsDivergentUserJSWithoutPause(function->shared())) {
-      // [RUN-1621] User JS should not get executed in divergent code paths,
+    if (RecordReplayIsDivergentUserJSWithoutPause(function->shared())) {
+      // User JS should not get executed in divergent code paths,
       // unless we have paused.
-      if (function->shared().script().IsScript() &&
-          RecordReplayHasRegisteredScript(Script::cast(function->shared().script()))) {
-        // Print log and prevent execution.
-        recordreplay::Warning(
-            "[RUN-1621] Invoke: Non-deterministic UserJS %d %d %d fun=\"%s\"",
-            (int)function->shared().kind(), function->shared().SourceSize(),
-            function->shared().StartPosition(),
-            function->shared().DebugNameCStr().get());
-        return isolate->factory()->undefined_value();
+      // → Print log and prevent execution.
+      Script::PositionInfo info;
+      std::string name;
+      Handle<Script> script;
+      if (function->shared().script().IsScript()) {
+        script = Handle<Script>(Script::cast(function->shared().script()), isolate);
+        Script::GetPositionInfo(script, function->shared().StartPosition(),
+                                &info, Script::WITH_OFFSET);
+        name = script->name().IsString()
+                   ? String::cast(script->name()).ToCString().get()
+                   : "(anonymous script)";
       }
+      std::stringstream stack;
+      isolate->PrintCurrentStackTrace(stack);
+
+      recordreplay::Warning(
+          "JS Invoke: Non-deterministic user JS PC=%zu scriptId=%d @%s:%d:%d stack=%s",
+          *gProgressCounter, script.is_null() ? script->id() : -1, name.c_str(), info.line + 1,
+          info.column, stack.str().c_str());
+      return isolate->factory()->undefined_value();
     }
 
     // Set up a ScriptContext when running scripts that need it.
