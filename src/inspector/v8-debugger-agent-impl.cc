@@ -1662,7 +1662,7 @@ Response V8DebuggerAgentImpl::getTopFrameLocation(Maybe<protocol::Debugger::Loca
 extern "C" void V8RecordReplayGetCurrentException(v8::MaybeLocal<v8::Value>* exception);
 
 Response V8DebuggerAgentImpl::getPendingException(
-    Maybe<StringView> objectGroup, Maybe<RemoteObject>* out_exception) {
+    Maybe<String16> objectGroup, Maybe<RemoteObject>* out_exception) {
   v8::MaybeLocal<v8::Value> maybe_exception;
   V8RecordReplayGetCurrentException(&maybe_exception);
 
@@ -1670,7 +1670,7 @@ Response V8DebuggerAgentImpl::getPendingException(
     v8::Local<v8::Context> context = m_isolate->GetCurrentContext();
     v8::Local<v8::Value> exception = maybe_exception.ToLocalChecked();
     std::unique_ptr<RemoteObject> obj =
-        m_session->wrapObject(context, exception, String16(objectGroup), false);
+        m_session->wrapObject(context, exception, objectGroup.fromMaybe(""), false);
 
     *out_exception = std::move(obj);
   }
