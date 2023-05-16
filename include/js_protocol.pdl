@@ -567,6 +567,8 @@ domain Debugger
       optional integer maxFrames
       # Don't generate scopes or "this" object for returned frames.
       optional boolean noContents
+      # Symbolic group name that can be used to release multiple objects.
+      optional string objectGroup
     returns
       array of CallFrame callFrames
 
