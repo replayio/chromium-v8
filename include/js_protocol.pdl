@@ -567,6 +567,8 @@ domain Debugger
       optional integer maxFrames
       # Don't generate scopes or "this" object for returned frames.
       optional boolean noContents
+      # Symbolic group name that can be used to release multiple objects.
+      optional string objectGroup
     returns
       array of CallFrame callFrames
 
@@ -575,8 +577,11 @@ domain Debugger
       optional Location location
 
   command getPendingException
+    parameters
+      # Symbolic group name that can be used to release multiple objects.
+      optional string objectGroup
     returns
-      Runtime.RemoteObject exception
+      optional Runtime.RemoteObject exception
 
   # Fired when the virtual machine stopped on breakpoint or exception or any other stop criteria.
   event paused

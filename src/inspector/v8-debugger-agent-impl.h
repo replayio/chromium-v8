@@ -149,10 +149,12 @@ class V8DebuggerAgentImpl : public protocol::Debugger::Backend {
           positions) override;
   Response getCallFrames(
       Maybe<int> maxFrames, Maybe<bool> noContents,
+      Maybe<String16> objectGroup,
       std::unique_ptr<protocol::Array<protocol::Debugger::CallFrame>>* out_callFrames) override;
   Response getTopFrameLocation(Maybe<protocol::Debugger::Location>* out_location) override;
   Response getPendingException(
-      std::unique_ptr<protocol::Runtime::RemoteObject>* out_exception) override;
+      Maybe<String16> objectGroup,
+      Maybe<protocol::Runtime::RemoteObject>* out_exception) override;
 
   bool enabled() const { return m_enabled; }
 
@@ -193,6 +195,7 @@ class V8DebuggerAgentImpl : public protocol::Debugger::Backend {
 
   Response currentCallFrames(
       Maybe<int> maxFrames, Maybe<bool> noContents,
+      Maybe<String16> objectGroup,
       std::unique_ptr<protocol::Array<protocol::Debugger::CallFrame>>*);
   std::unique_ptr<protocol::Runtime::RemoteObject> wrapObject(int contextId,
                                                               v8::Local<v8::Value> val);
