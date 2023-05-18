@@ -424,6 +424,8 @@ void LocalHeap::UnmarkSharedLinearAllocationArea() {
 Address LocalHeap::PerformCollectionAndAllocateAgain(
     int object_size, AllocationType type, AllocationOrigin origin,
     AllocationAlignment alignment) {
+  recordreplay::AutoDisallowEvents disallow("LocalHeap::PerformCollectionAndAllocateAgain");
+
   CHECK(!allocation_failed_);
   CHECK(!main_thread_parked_);
   allocation_failed_ = true;
