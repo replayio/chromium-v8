@@ -775,6 +775,7 @@ class Sweeper::SweeperImpl final {
   ~SweeperImpl() { CancelSweepers(); }
 
   void Start(SweepingConfig config, cppgc::Platform* platform) {
+    v8::recordreplay::AutoDisallowEvents disallow("SweeperImpl::Start");
     StatsCollector::EnabledScope stats_scope(stats_collector_,
                                              StatsCollector::kAtomicSweep);
     is_in_progress_ = true;
