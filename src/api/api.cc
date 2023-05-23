@@ -10893,7 +10893,7 @@ extern char* CommandCallback(const char* command, const char* params);
 extern void ClearPauseDataCallback();
 
 bool gRecordReplayAssertValues;
-bool gRecordReplayAssertProgress;
+int gRecordReplayAssertProgress;
 bool gRecordReplayAssertTrackedObjects;
 
 // Only finish recordings if there were interesting sources loaded
@@ -12033,7 +12033,8 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
 
   internal::gRecordReplayAssertValues = !!getenv("RECORD_REPLAY_JS_ASSERTS");
   internal::gRecordReplayAssertProgress =
-      internal::gRecordReplayAssertValues || !!getenv("RECORD_REPLAY_JS_PROGRESS_ASSERTS");
+      (internal::gRecordReplayAssertValues || !!getenv("RECORD_REPLAY_JS_PROGRESS_ASSERTS")) ?
+        -1 : 0;
   internal::gRecordReplayAssertTrackedObjects =
       internal::gRecordReplayAssertValues || !!getenv("RECORD_REPLAY_JS_OBJECT_ASSERTS");
 

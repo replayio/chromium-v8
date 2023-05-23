@@ -944,7 +944,7 @@ RUNTIME_FUNCTION(Runtime_ProfileCreateSnapshotDataBlob) {
 
 extern uint64_t* gProgressCounter;
 extern uint64_t gTargetProgress;
-extern bool gRecordReplayAssertProgress;
+extern int gRecordReplayAssertProgress;
 
 // Define this to check preconditions for using record/replay opcodes.
 //#define RECORD_REPLAY_CHECK_OPCODES
@@ -1020,6 +1020,10 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
 
   if (RecordReplayIsDivergentUserJSWithoutPause(function->shared()) ||
       (recordreplay::IsReplaying() && recordreplay::HadMismatch())) {
+
+    // [RUN-1988] We only want some JS Asserts. Dial it back down, once we hit a mismatch.
+    if (gRecordReplayAssertProgress > 0) --gRecordReplayAssertProgress;
+
     // Print JS stack if user JS was executed non-deterministically
     // and we were not paused, or if we had a mismatch.
     if (!gHasPrintedStack) {  // Prevent flood.

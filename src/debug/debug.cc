@@ -3739,6 +3739,8 @@ static InternalCommandCallback gInternalCommandCallbacks[] = {
 static Eternal<Value>* gCommandCallback;
 
 extern "C" void V8RecordReplayGetDefaultContext(v8::Isolate* isolate, v8::Local<v8::Context>* cx);
+extern uint64_t* gProgressCounter;
+extern int gRecordReplayAssertProgress;
 
 // Make sure that the isolate has a context by switching to the default
 // context if necessary.
@@ -3753,6 +3755,7 @@ static void EnsureIsolateContext(Isolate* isolate, base::Optional<SaveAndSwitchC
 
 char* CommandCallback(const char* command, const char* params) {
   CHECK(IsMainThread());
+  uint64_t startProgressCounter = *gProgressCounter;
   recordreplay::AutoDisallowEvents disallow("CommandCallback");
 
   Isolate* isolate = Isolate::Current();
@@ -3811,6 +3814,19 @@ char* CommandCallback(const char* command, const char* params) {
     }
   }
 
+  if (startProgressCounter < *gProgressCounter && !recordreplay::HasDivergedFromRecording()) {
+    // [RUN-1988] We found a PC mismatch.
+    // Our command handler somehow incremented the PC. That means we
+    // likely caused a divergence by calling into user code.
+    // → Reset the PC, and...
+    // → Enable limited JS Asserts during PC updates to help identify the culprit.
+    recordreplay::Warning(
+        "JS Progress Counter Mismatch when handling %s (actual: %llu expected: "
+        "%llu). Enabling JS Asserts...",
+        command, *gProgressCounter, startProgressCounter);
+    *gProgressCounter = startProgressCounter;
+    gRecordReplayAssertProgress = 1;
+  }
 
   return strdup(rvCStr.get());
 }

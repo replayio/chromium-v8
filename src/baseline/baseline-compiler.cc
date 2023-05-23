@@ -62,7 +62,7 @@
 namespace v8 {
 namespace internal {
 
-extern bool gRecordReplayAssertProgress;
+extern int gRecordReplayAssertProgress;
 
 namespace baseline {
 
