@@ -155,7 +155,7 @@ void V8_Fatal(const char* format, ...) {
 #endif
 
   {
-    char str[1024];
+    char str[4096];
     va_list arguments;
     va_start(arguments, format);
     vsnprintf(str, sizeof(str), format, arguments);
