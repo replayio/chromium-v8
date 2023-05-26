@@ -10725,6 +10725,7 @@ static void (*gRecordReplaySetCommandCallback)(const char* method, CommandCallba
 static void (*gRecordReplayPrint)(const char* format, va_list args);
 static void (*gRecordReplayDiagnostic)(const char* format, va_list args);
 static void (*gRecordReplayWarning)(const char* format, va_list args);
+static void (*gRecordReplayTrace)(const char* format, va_list args);
 static void (*gRecordReplayOnInstrument)(const char* kind, const char* function, int offset);
 static bool (*gRecordReplayHadMismatch)();
 static void (*gRecordReplayAssert)(const char*, va_list);
@@ -11281,9 +11282,25 @@ void recordreplay::Warning(const char* format, ...) {
 }
 
 extern "C" DLLEXPORT void V8RecordReplayWarning(const char* format,
-                                                     va_list args) {
+                                                va_list args) {
   if (recordreplay::IsRecordingOrReplaying()) {
     gRecordReplayWarning(format, args);
+  }
+}
+
+void recordreplay::Trace(const char* format, ...) {
+  if (IsRecordingOrReplaying()) {
+    va_list args;
+    va_start(args, format);
+    gRecordReplayTrace(format, args);
+    va_end(args);
+  }
+}
+
+extern "C" DLLEXPORT void V8RecordReplayTrace(const char* format,
+                                              va_list args) {
+  if (recordreplay::IsRecordingOrReplaying()) {
+    gRecordReplayTrace(format, args);
   }
 }
 
@@ -11764,6 +11781,10 @@ extern "C" DLLEXPORT void V8RecordReplayGetCurrentJSStack(std::string* stackTrac
   *stackTrace = stack.str();
 }
 
+void recordreplay::GetCurrentJSStack(std::string* stackTrace) {
+  return V8RecordReplayGetCurrentJSStack(stackTrace);
+}
+
 template <typename Src, typename Dst>
 static inline void CastPointer(const Src src, Dst* dst) {
   static_assert(sizeof(Src) == sizeof(uintptr_t), "bad size");
@@ -11924,6 +11945,7 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   RecordReplayLoadSymbol(handle, "RecordReplayPrint", gRecordReplayPrint);
   RecordReplayLoadSymbol(handle, "RecordReplayDiagnostic", gRecordReplayDiagnostic);
   RecordReplayLoadSymbol(handle, "RecordReplayWarning", gRecordReplayWarning);
+  RecordReplayLoadSymbol(handle, "RecordReplayTrace", gRecordReplayTrace);
   RecordReplayLoadSymbol(handle, "RecordReplayHadMismatch", gRecordReplayHadMismatch);
   RecordReplayLoadSymbol(handle, "RecordReplayAssert", gRecordReplayAssert);
   RecordReplayLoadSymbol(handle, "RecordReplayAssertBytes", gRecordReplayAssertBytes);
