@@ -11140,6 +11140,11 @@ static std::set<std::string>* gRecordReplayKnownFeatures = new std::set<std::str
   // their owner's lifetime.
   // (e.g. RUN-1335, RUN-1537)
   "task-lifetime",
+
+  // Eagerly initialize things that would otherwise be initialized
+  // lazily (or would diverge for some other reason).
+  // (e.g. RUN-1348)
+  "eager-initialization"
 });
 
 // The set of all experimental flags pertaining to features we are currently developing.
