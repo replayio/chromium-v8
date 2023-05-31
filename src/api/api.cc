@@ -11941,6 +11941,7 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   RecordReplayLoadSymbol(handle, "RecordReplayPrint", gRecordReplayPrint);
   RecordReplayLoadSymbol(handle, "RecordReplayDiagnostic", gRecordReplayDiagnostic);
   RecordReplayLoadSymbol(handle, "RecordReplayWarning", gRecordReplayWarning);
+  RecordReplayLoadSymbol(handle, "RecordReplayTrace", gRecordReplayTrace);
   RecordReplayLoadSymbol(handle, "RecordReplayHadMismatch", gRecordReplayHadMismatch);
   RecordReplayLoadSymbol(handle, "RecordReplayAssert", gRecordReplayAssert);
   RecordReplayLoadSymbol(handle, "RecordReplayAssertBytes", gRecordReplayAssertBytes);
