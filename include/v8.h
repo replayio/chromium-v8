@@ -103,6 +103,7 @@ static bool GetTestEnvironmentFlag();
 static void Print(const char* format, ...);
 static void Diagnostic(const char* format, ...);
 static void Warning(const char* format, ...);
+static void Trace(const char* format, ...);
 static bool HadMismatch();
 static void Assert(const char* format, ...);
 static void AssertBytes(const char* why, const void* buf, size_t size);
