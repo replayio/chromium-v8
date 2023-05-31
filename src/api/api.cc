@@ -10893,8 +10893,9 @@ extern char* CommandCallback(const char* command, const char* params);
 extern void ClearPauseDataCallback();
 
 bool gRecordReplayAssertValues;
-int gRecordReplayAssertProgress;
+bool gRecordReplayAssertProgress;
 bool gRecordReplayAssertTrackedObjects;
+int gRecordReplayCheckProgress;
 
 // Only finish recordings if there were interesting sources loaded
 // into the process.
@@ -12038,10 +12039,11 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
 
   internal::gRecordReplayAssertValues = !!getenv("RECORD_REPLAY_JS_ASSERTS");
   internal::gRecordReplayAssertProgress =
-      (internal::gRecordReplayAssertValues || !!getenv("RECORD_REPLAY_JS_PROGRESS_ASSERTS")) ?
-        -1 : 0;
+      internal::gRecordReplayAssertValues || !!getenv("RECORD_REPLAY_JS_PROGRESS_ASSERTS");
   internal::gRecordReplayAssertTrackedObjects =
       internal::gRecordReplayAssertValues || !!getenv("RECORD_REPLAY_JS_OBJECT_ASSERTS");
+  internal::gRecordReplayCheckProgress =
+      internal::gRecordReplayAssertProgress || !!getenv("RECORD_REPLAY_JS_PROGRESS_CHECKS");
 
   // Set flags to disable non-deterministic posting of tasks to other threads.
   // We don't support this yet when recording/replaying.

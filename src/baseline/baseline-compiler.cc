@@ -62,8 +62,6 @@
 namespace v8 {
 namespace internal {
 
-extern int gRecordReplayAssertProgress;
-
 namespace baseline {
 
 template <typename IsolateT>

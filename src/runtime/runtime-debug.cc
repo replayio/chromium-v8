@@ -944,14 +944,16 @@ RUNTIME_FUNCTION(Runtime_ProfileCreateSnapshotDataBlob) {
 
 extern uint64_t* gProgressCounter;
 extern uint64_t gTargetProgress;
-extern int gRecordReplayAssertProgress;
+extern bool gRecordReplayAssertProgress;
+extern int gRecordReplayCheckProgress;
 
 // Define this to check preconditions for using record/replay opcodes.
 //#define RECORD_REPLAY_CHECK_OPCODES
 
 #ifdef RECORD_REPLAY_CHECK_OPCODES
 
-extern bool RecordReplayHasRegisteredScript(Script script);
+    extern bool
+    RecordReplayHasRegisteredScript(Script script);
 
 static inline bool RecordReplayBytecodeAllowed() {
   return IsMainThread()
@@ -960,7 +962,8 @@ static inline bool RecordReplayBytecodeAllowed() {
 
 #else // !RECORD_REPLAY_CHECK_OPCODES
 
-static inline bool RecordReplayHasRegisteredScript(Script script) {
+    static inline bool
+    RecordReplayHasRegisteredScript(Script script) {
   return true;
 }
 
@@ -978,23 +981,28 @@ extern bool RecordReplayIsDivergentUserJSWithoutPause(
 
 static bool gHasPrintedStack = false;
 
+// static void RecordReplayPrintLocation() {
+//   snprintf(location, sizeof(location), "%s:%d:%d", name.get(), info.line + 1,
+//            info.column);
+// }
+
 RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
   if (++*gProgressCounter == gTargetProgress) {
     RecordReplayOnTargetProgressReached();
   }
 
-  if (!gRecordReplayAssertProgress) {
+  if (!gRecordReplayCheckProgress) {
     return ReadOnlyRoots(isolate).undefined_value();
   }
 
+  TODO;
+  // TODO: don't do all this extra work unless its actually necessary!
   HandleScope scope(isolate);
   DCHECK_EQ(1, args.length());
   Handle<JSFunction> function = args.at<JSFunction>(0);
-
   Handle<SharedFunctionInfo> shared(function->shared(), isolate);
   Handle<Script> script(Script::cast(shared->script()), isolate);
   CHECK(RecordReplayHasRegisteredScript(*script));
-
   Script::PositionInfo info;
   Script::GetPositionInfo(script, shared->StartPosition(), &info,
                           Script::WITH_OFFSET);
@@ -1014,9 +1022,11 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
     CHECK(gRecordReplayHasCheckpoint);
   }
 
-  recordreplay::Assert(
-      "JS ExecutionProgress PC=%zu scriptId=%d @%s:%d:%d",
-      *gProgressCounter, script->id(), name.c_str(), info.line + 1, info.column);
+  if (gRecordReplayAssertProgress) {
+    recordreplay::Assert(
+        "JS ExecutionProgress PC=%zu scriptId=%d @%s:%d:%d",
+        *gProgressCounter, script->id(), name.c_str(), info.line + 1, info.column);
+  }
 
   if (RecordReplayIsDivergentUserJSWithoutPause(function->shared()) ||
       (recordreplay::IsReplaying() && recordreplay::HadMismatch())) {

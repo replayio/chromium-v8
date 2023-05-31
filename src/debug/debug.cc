@@ -2847,6 +2847,12 @@ bool Debug::PerformSideEffectCheckForCallback(
       i::CallHandlerInfo::cast(*callback_info).NextCallHasNoSideEffect()) {
     return true;
   }
+  if (recordreplay::IsReplaying() && recordreplay::AreEventsDisallowed()) {
+    // TODO: IsInReplayCode (RUN-1502)
+    // Always allow Replay code.
+    // https://linear.app/replay/issue/RUN-1908/fix-devtools-crashes
+    return true;
+  }
   // TODO(7515): always pass a valid callback info object.
   if (!callback_info.is_null()) {
     if (callback_info->IsAccessorInfo()) {
@@ -2899,6 +2905,13 @@ bool Debug::PerformSideEffectCheckAtBytecode(InterpretedFrame* frame) {
   RCS_SCOPE(isolate_, RuntimeCallCounterId::kDebugger);
   using interpreter::Bytecode;
 
+  if (recordreplay::IsReplaying() && recordreplay::AreEventsDisallowed()) {
+    // TODO: IsInReplayCode (RUN-1502)
+    // Always allow Replay code.
+    // https://linear.app/replay/issue/RUN-1908/fix-devtools-crashes
+    return true;
+  }
+
   DCHECK_EQ(isolate_->debug_execution_mode(), DebugInfo::kSideEffects);
   SharedFunctionInfo shared = frame->function().shared();
   BytecodeArray bytecode_array = shared.GetBytecodeArray(isolate_);
@@ -2942,6 +2955,13 @@ bool Debug::PerformSideEffectCheckForObject(Handle<Object> object) {
   if (object->IsName()) return true;
 
   if (temporary_objects_->HasObject(Handle<HeapObject>::cast(object))) {
+    return true;
+  }
+
+  if (recordreplay::IsReplaying() && recordreplay::AreEventsDisallowed()) {
+    // TODO: IsInReplayCode (RUN-1502)
+    // Always allow Replay code.
+    // https://linear.app/replay/issue/RUN-1908/fix-devtools-crashes
     return true;
   }
 
@@ -3740,7 +3760,7 @@ static Eternal<Value>* gCommandCallback;
 
 extern "C" void V8RecordReplayGetDefaultContext(v8::Isolate* isolate, v8::Local<v8::Context>* cx);
 extern uint64_t* gProgressCounter;
-extern int gRecordReplayAssertProgress;
+extern int gRecordReplayCheckProgress;
 
 // Make sure that the isolate has a context by switching to the default
 // context if necessary.
@@ -3757,6 +3777,11 @@ char* CommandCallback(const char* command, const char* params) {
   CHECK(IsMainThread());
   uint64_t startProgressCounter = *gProgressCounter;
   recordreplay::AutoDisallowEvents disallow("CommandCallback");
+
+  // Check for unwanted JS invocations during command handling.
+  const isPausedAtStart = recordreplay::HasDivergedFromRecording();
+  if (!isPausedAtStart)
+    ++gRecordReplayCheckProgress;
 
   Isolate* isolate = Isolate::Current();
   base::Optional<SaveAndSwitchContext> ssc;
@@ -3814,19 +3839,18 @@ char* CommandCallback(const char* command, const char* params) {
     }
   }
 
-  if (startProgressCounter < *gProgressCounter && !recordreplay::HasDivergedFromRecording()) {
+  if (startProgressCounter < *gProgressCounter && !isPausedAtStart) {
     // [RUN-1988] We found a PC mismatch.
     // Our command handler somehow incremented the PC. That means we
     // likely caused a divergence by calling into user code.
-    // → Reset the PC, and...
-    // → Enable limited JS Asserts during PC updates to help identify the culprit.
-    recordreplay::Warning(
-        "JS Progress Counter Mismatch when handling %s (actual: %llu expected: "
-        "%llu). Enabling JS Asserts...",
-        command, *gProgressCounter, startProgressCounter);
+    // → Let's reset the PC.
+    // Note that a warning would have already been generated due to
+    // gRecordReplayCheckProgress.
     *gProgressCounter = startProgressCounter;
-    gRecordReplayAssertProgress = 1;
   }
+
+  // Stop checking for unwanted JS invocations during command handling.
+  if (!isPausedAtStart) --gRecordReplayCheckProgress;
 
   return strdup(rvCStr.get());
 }
