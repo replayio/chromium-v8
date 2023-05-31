@@ -10711,6 +10711,10 @@ std::shared_ptr<WasmStreaming> WasmStreaming::Unpack(Isolate* v8_isolate,
 #define DLLEXPORT
 #endif
 
+// This callback is null if there are no disabled features (the typical case).
+static bool (*gRecordReplayFeatureEnabled)(const char* feature, const char* subfeature);
+static void (*gRecordReplayDisableFeatures)(const char* json);
+
 static bool gRecordingOrReplaying;
 static bool gARMRecording;
 static void (*gRecordReplayRememberRecording)();
@@ -11018,218 +11022,45 @@ extern void RecordReplayInitInstrumentationState();
 
 } // namespace internal
 
-static std::set<std::string>* gRecordReplayDisabledFeatures;
-
-// Known features which can be disabled via RECORD_REPLAY_DISABLE_FEATURES.
-// Used to catch misspellings when testing if a feature is enabled or specifying
-// disabled features.
-static std::set<std::string>* gRecordReplayKnownFeatures = new std::set<std::string>({
-  // Disable all tests for whether we are recording/replaying.
-  "record-replay",
-
-  // Assorted changes related to the GC and inspecting the heap.
-  "gc-changes",
-
-  // References are held on assorted objects to avoid problems when they are
-  // destroyed at non-deterministic points.
-  "leak-references",
-
-  // Register scripts with the recorder.
-  "register-scripts",
-
-  // Emit special record/replay opcodes in registered scripts.
-  "emit-opcodes",
-
-  // Behavior changes in places when events are disallowed.
-  "disallow-events",
-
-  // Use strong pointers instead of weak pointers in certain places.
-  "avoid-weak-pointers",
-
-  // Behavior changes in places when events are passed through.
-  "pass-through-events",
-
-  // Don't compile "use asm" scripts as wasm.
-  "no-asm-wasm",
-
-  // Don't use cached results of script compilations.
-  "no-compile-cache",
-
-  // Compute IDs for pointers where necessary.
-  "pointer-ids",
-
-  // Explicitly record/replay values where necessary.
-  "values",
-
-  // Create checkpoints and setup functionality for inspecting state afterwards.
-  "checkpoints",
-
-  // Ensure that API interrupts will be performed at deterministic points.
-  "interrupts",
-
-  // Creating WebGL canvas contexts is disabled.
-  "no-webgl",
-
-  // Detecting the language in text is disabled.
-  "no-language-detection",
-
-  // Media playback is disabled.
-  "no-media",
-
-  // Field trials of new features are disabled.
-  "no-field-trials",
-
-  // Don't report V8 feature usage to the browser process.
-  "no-count-usage",
-
-  // Don't sample stacks for profiling.
-  "no-stack-sampling",
-
-  // Using the GPU is disabled.
-  "no-gpu",
-
-  // Computing stats for calls is disabled.
-  "no-call-stats",
-
-  // Parking strings is disabled.
-  "no-park-strings",
-
-  // Creating multiple worker threads for rendering is disabled.
-  "no-render-workers",
-
-  // Page timing metrics are not sent at non-deterministic points.
-  "no-page-timing-metrics",
-
-  // Disable the interactive detector related metrics, which can behave non-deterministically.
-  "no-interactive-detector",
-
-  // Notify the recorder about paints.
-  "notify-paints",
-
-  // Notify the recorder about network events.
-  "notify-network",
-
-  // Notify the recorder about HTML parses.
-  "notify-html-parse",
-
-  // Collect source maps referenced by scripts in the recording. This can be
-  // separately disabled with the RECORD_REPLAY_DISABLE_SOURCEMAP_COLLECTION
-  // environment variable.
-  "collect-source-maps",
-
-  // Force window proxies to be initialized for consistency with inspector
-  // state when replaying.
-  "initialize-window-proxy",
-
-  // Install hook used by react devtools backend.
-  "react-devtools-backend",
-
-  // Disable baseline JIT compiler.
-  "disable-baseline-jit",
-
-  // Use optimizing JIT compiler.
-  "use-optimizing-jit",
-
-  // Send certain event information to render thread.
-  "browser-event",
-
-  // Collect generic event data (RUN-1609)
-  "collect-events",
-
-  // Prevent asynchronous tasks from being scheduled past
-  // their owner's lifetime.
-  // (e.g. RUN-1335, RUN-1537)
-  "task-lifetime",
-
-  // Eagerly initialize things that would otherwise be initialized
-  // lazily (or would diverge for some other reason).
-  // (e.g. RUN-1348)
-  "eager-initialization"
-});
-
-// The set of all experimental flags pertaining to features we are currently developing.
-// Ideally, this should always be a short list.
-// NOTE: These should generally be "double-negative" flags which we need to convert to positive in the near future.
-static const char* gExperimentalFlags[] = {
-};
-
-static inline void RecordReplayCheckKnownFeature(const char* feature) {
-  std::string sFeature(feature);
-  if (gRecordReplayKnownFeatures->find(sFeature) == gRecordReplayKnownFeatures->end()) {
-    fprintf(stderr, "UnknownFeature %s\n", feature);
-    recordreplay::Print("UnknownFeature %s", feature);
-  }
-}
-
-bool recordreplay::FeatureEnabled(const char* feature) {
-  if (!gRecordReplayDisabledFeatures) {
+bool recordreplay::FeatureEnabled(const char* feature, const char* subfeature) {
+  if (!gRecordReplayFeatureEnabled) {
     return true;
   }
-
-  std::string sFeature(feature);
-  if (gRecordReplayDisabledFeatures->find(sFeature) != gRecordReplayDisabledFeatures->end()) {
-    return false;
-  }
-
-  RecordReplayCheckKnownFeature(feature);
-  return true;
+  return gRecordReplayFeatureEnabled(feature, subfeature);
 }
 
-extern "C" DLLEXPORT bool V8RecordReplayFeatureEnabled(const char* feature) {
+extern "C" DLLEXPORT bool V8RecordReplayFeatureEnabled(const char* feature, const char* subfeature) {
   return recordreplay::FeatureEnabled(feature);
 }
 
-// Disabled features are specified with "," as a separator.
-//
-// This is used to disable functionality, typically to test the performance impact of
-// recording-specific changes or narrow down the reason for incorrect behavior while
-// recording.
-static const char* GetDisabledFeatureSpecifier() {
-  return getenv("RECORD_REPLAY_DISABLE_FEATURES");
-}
-
-bool recordreplay::GetTestEnvironmentFlag() {
+// Return whether this is a test environment where experimental features
+// can be used.
+static bool GetTestEnvironmentFlag() {
   auto* sTestEnvironment = getenv("RECORD_REPLAY_TEST_ENVIRONMENT");
-  // check is based on TestEnv in Utils.cpp
   return sTestEnvironment && sTestEnvironment[0] && sTestEnvironment[0] != '0';
 }
 
+// JSON for features we are currently developing and only want to use in
+// test environments. Because all features are enabled by default and
+// disabled via this JSON, the feature names need to be negatives like
+// no-experimental-whatzit.
+static const char* gExperimentalFeaturesJSON = nullptr;
+
 static void RecordReplayInitializeDisabledFeatures() {
-  const char* env = GetDisabledFeatureSpecifier();
-  auto isTestEnvironment = recordreplay::GetTestEnvironmentFlag();
-
-  gRecordReplayDisabledFeatures = new std::set<std::string>();
-
-  if (isTestEnvironment) {
-    for (auto* experimentalFeature : gExperimentalFlags) {
-      gRecordReplayDisabledFeatures->insert(experimentalFeature);
-    }
-  }
-  
-  if (!env) {
+  if (!gExperimentalFeaturesJSON) {
     return;
   }
-
-  while (true) {
-    const char* sep = strchr(env, ',');
-    if (sep) {
-      gRecordReplayDisabledFeatures->emplace(env, sep - env);
-      env = sep + 1;
-    } else {
-      if (strlen(env)) {
-        gRecordReplayDisabledFeatures->emplace(env);
-      }
-      break;
-    }
+  if (GetTestEnvironmentFlag()) {
+    gRecordReplayDisableFeatures(gExperimentalFeaturesJSON);
   }
 }
 
-bool recordreplay::IsRecordingOrReplaying(const char* feature) {
-  return gRecordingOrReplaying && (!feature || FeatureEnabled(feature));
+bool recordreplay::IsRecordingOrReplaying(const char* feature, const char* subfeature) {
+  return gRecordingOrReplaying && (!feature || FeatureEnabled(feature, subfeature));
 }
 
-extern "C" DLLEXPORT bool V8IsRecordingOrReplaying(const char* feature) {
-  return recordreplay::IsRecordingOrReplaying(feature);
+extern "C" DLLEXPORT bool V8IsRecordingOrReplaying(const char* feature, const char* subfeature) {
+  return recordreplay::IsRecordingOrReplaying(feature, subfeature);
 }
 
 void recordreplay::Print(const char* format, ...) {
@@ -11340,7 +11171,7 @@ extern "C" DLLEXPORT void V8RecordReplayAssertBytes(const char* why, const void*
 }
 
 uintptr_t recordreplay::RecordReplayValue(const char* why, uintptr_t v) {
-  if (IsRecordingOrReplaying("values")) {
+  if (IsRecordingOrReplaying("values", why)) {
     return gRecordReplayValue(why, v);
   }
   return v;
@@ -11351,7 +11182,7 @@ extern "C" DLLEXPORT uintptr_t V8RecordReplayValue(const char* why, uintptr_t va
 }
 
 void recordreplay::RecordReplayBytes(const char* why, void* buf, size_t size) {
-  if (IsRecordingOrReplaying("values")) {
+  if (IsRecordingOrReplaying("values", why)) {
     gRecordReplayBytes(why, buf, size);
   }
 }
@@ -11360,30 +11191,30 @@ extern "C" DLLEXPORT void V8RecordReplayBytes(const char* why, void* buf, size_t
   recordreplay::RecordReplayBytes(why, buf, size);
 }
 
-bool recordreplay::AreEventsDisallowed() {
-  if (IsRecordingOrReplaying("disallow-events")) {
+bool recordreplay::AreEventsDisallowed(const char* why) {
+  if (IsRecordingOrReplaying("disallow-events", why)) {
     return gRecordReplayAreEventsDisallowed();
   }
   return false;
 }
 
-extern "C" DLLEXPORT bool V8RecordReplayAreEventsDisallowed() {
-  return recordreplay::AreEventsDisallowed();
+extern "C" DLLEXPORT bool V8RecordReplayAreEventsDisallowed(const char* why) {
+  return recordreplay::AreEventsDisallowed(why);
 }
 
-bool recordreplay::AreEventsPassedThrough() {
-  if (IsRecordingOrReplaying("pass-through-events")) {
+bool recordreplay::AreEventsPassedThrough(const char* why) {
+  if (IsRecordingOrReplaying("pass-through-events", why)) {
     return gRecordReplayAreEventsPassedThrough();
   }
   return false;
 }
 
-extern "C" DLLEXPORT bool V8RecordReplayAreEventsPassedThrough() {
-  return recordreplay::AreEventsPassedThrough();
+extern "C" DLLEXPORT bool V8RecordReplayAreEventsPassedThrough(const char* why) {
+  return recordreplay::AreEventsPassedThrough(why);
 }
 
 void recordreplay::BeginPassThroughEvents() {
-  if (IsRecordingOrReplaying("pass-through-events")) {
+  if (IsRecordingOrReplaying()) {
     gRecordReplayBeginPassThroughEvents();
   }
 }
@@ -11393,7 +11224,7 @@ extern "C" DLLEXPORT void V8RecordReplayBeginPassThroughEvents() {
 }
 
 void recordreplay::EndPassThroughEvents() {
-  if (IsRecordingOrReplaying("pass-through-events")) {
+  if (IsRecordingOrReplaying()) {
     gRecordReplayEndPassThroughEvents();
   }
 }
@@ -11907,9 +11738,16 @@ static pthread_t gMainThread;
 #endif
 
 void recordreplay::SetRecordingOrReplaying(void* handle) {
+  RecordReplayLoadSymbol(handle, "RecordReplayDisableFeatures", gRecordReplayDisableFeatures);
   RecordReplayInitializeDisabledFeatures();
 
-  gRecordingOrReplaying = V8RecordReplayFeatureEnabled("record-replay");
+  bool (*hasDisabledFeatures)();
+  RecordReplayLoadSymbol(handle, "RecordReplayHasDisabledFeatures", hasDisabledFeatures);
+  if (hasDisabledFeatures()) {
+    RecordReplayLoadSymbol(handle, "RecordReplayFeatureEnabled", gRecordReplayFeatureEnabled);
+  }
+
+  gRecordingOrReplaying = V8RecordReplayFeatureEnabled("record-replay", nullptr);
 #if V8_OS_WIN
   gMainThread = GetCurrentThreadId();
 #else
@@ -12064,10 +11902,10 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   // The compilation cache can interfere with getting consistent script IDs.
   internal::FLAG_compilation_cache = false;
 
-  if (V8RecordReplayFeatureEnabled("disable-baseline-jit")) {
+  if (V8RecordReplayFeatureEnabled("disable-baseline-jit", nullptr)) {
     internal::v8_flags.sparkplug = false;
   }
-  if (!V8RecordReplayFeatureEnabled("use-optimizing-jit")) {
+  if (!V8RecordReplayFeatureEnabled("use-optimizing-jit", nullptr)) {
     internal::v8_flags.turbofan = false;
   }
 

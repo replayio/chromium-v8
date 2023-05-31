@@ -660,7 +660,7 @@ void GCTracer::Output(const char* format, ...) const {
 
 void GCTracer::Print() const {
   // Avoid getting the current time below at non-deterministic points.
-  if (recordreplay::IsRecordingOrReplaying("gc-changes")) {
+  if (recordreplay::IsRecordingOrReplaying("gc-changes", "GCTracer::Print")) {
     return;
   }
 
