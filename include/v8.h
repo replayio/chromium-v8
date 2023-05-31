@@ -118,7 +118,7 @@ static void NewCheckpoint();
 
 static void BeginPassThroughEvents();
 static void EndPassThroughEvents();
-static bool AreEventsPassedThrough(const char* why);
+static bool AreEventsPassedThrough(const char* why = nullptr);
 
 static void BeginDisallowEvents();
 static void BeginDisallowEventsWithLabel(const char* label);
