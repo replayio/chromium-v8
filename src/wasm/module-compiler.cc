@@ -1457,6 +1457,8 @@ void TransitiveTypeFeedbackProcessor::ProcessFunction(int func_index) {
 }
 
 void TriggerTierUp(WasmInstanceObject instance, int func_index) {
+  recordreplay::AutoDisallowEvents disallow("wasm::TriggerTierUp");
+
   NativeModule* native_module = instance.module_object().native_module();
   CompilationStateImpl* compilation_state =
       Impl(native_module->compilation_state());
