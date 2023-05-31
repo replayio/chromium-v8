@@ -3778,11 +3778,6 @@ char* CommandCallback(const char* command, const char* params) {
   uint64_t startProgressCounter = *gProgressCounter;
   recordreplay::AutoDisallowEvents disallow("CommandCallback");
 
-  // Check for unwanted JS invocations during command handling.
-  const isPausedAtStart = recordreplay::HasDivergedFromRecording();
-  if (!isPausedAtStart)
-    ++gRecordReplayCheckProgress;
-
   Isolate* isolate = Isolate::Current();
   base::Optional<SaveAndSwitchContext> ssc;
   EnsureIsolateContext(isolate, ssc);
@@ -3839,18 +3834,14 @@ char* CommandCallback(const char* command, const char* params) {
     }
   }
 
-  if (startProgressCounter < *gProgressCounter && !isPausedAtStart) {
-    // [RUN-1988] We found a PC mismatch.
-    // Our command handler somehow incremented the PC. That means we
-    // likely caused a divergence by calling into user code.
+  if (startProgressCounter < *gProgressCounter && !recordreplay::HasDivergedFromRecording()) {
+    // [RUN-1988] Our command handler incremented the PC by accidentally calling
+    // into instrumented user code.
+    // Note that a warning has already been generated due to
+    // gRecordReplayCheckProgress being set.
     // → Let's reset the PC.
-    // Note that a warning would have already been generated due to
-    // gRecordReplayCheckProgress.
     *gProgressCounter = startProgressCounter;
   }
-
-  // Stop checking for unwanted JS invocations during command handling.
-  if (!isPausedAtStart) --gRecordReplayCheckProgress;
 
   return strdup(rvCStr.get());
 }

@@ -11406,12 +11406,14 @@ extern "C" DLLEXPORT void V8RecordReplayEndPassThroughEvents() {
 void recordreplay::BeginDisallowEvents() {
   if (IsRecordingOrReplaying()) {
     gRecordReplayBeginDisallowEvents();
+    if (!recordreplay::HasDivergedFromRecording()) ++internal::gRecordReplayCheckProgress;
   }
 }
 
 void recordreplay::BeginDisallowEventsWithLabel(const char* label) {
   if (IsRecordingOrReplaying()) {
     gRecordReplayBeginDisallowEventsWithLabel(label);
+    if (!recordreplay::HasDivergedFromRecording()) ++internal::gRecordReplayCheckProgress;
   }
 }
 
@@ -11425,6 +11427,7 @@ extern "C" DLLEXPORT void V8RecordReplayBeginDisallowEventsWithLabel(const char*
 
 void recordreplay::EndDisallowEvents() {
   if (IsRecordingOrReplaying()) {
+    if (!recordreplay::HasDivergedFromRecording()) --internal::gRecordReplayCheckProgress;
     gRecordReplayEndDisallowEvents();
   }
 }

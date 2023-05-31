@@ -991,13 +991,10 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
     RecordReplayOnTargetProgressReached();
   }
 
-  if (!gRecordReplayCheckProgress) {
-    return ReadOnlyRoots(isolate).undefined_value();
-  }
+  // if (!gRecordReplayCheckProgress) {
+  //   return ReadOnlyRoots(isolate).undefined_value();
+  // }
 
-  TODO;
-  // TODO: don't do all this extra work unless its actually necessary!
-  HandleScope scope(isolate);
   DCHECK_EQ(1, args.length());
   Handle<JSFunction> function = args.at<JSFunction>(0);
   Handle<SharedFunctionInfo> shared(function->shared(), isolate);
@@ -1009,34 +1006,32 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
   std::string name = script->name().IsString()
                          ? String::cast(script->name()).ToCString().get()
                          : "(anonymous script)";
-
-  if (!RecordReplayBytecodeAllowed()) {
-    recordreplay::Diagnostic("RecordReplayAssertExecutionProgress not allowed %s:%d:%d",
-                             name.c_str(), info.line + 1, info.column);
-  }
-  CHECK(RecordReplayBytecodeAllowed());
-
-  if (!gRecordReplayHasCheckpoint) {
-    recordreplay::Diagnostic("ExecutionProgress before first checkpoint %s:%d:%d",
-                             name.c_str(), info.line + 1, info.column);
-    CHECK(gRecordReplayHasCheckpoint);
-  }
-
   if (gRecordReplayAssertProgress) {
+    if (!RecordReplayBytecodeAllowed()) {
+      recordreplay::Diagnostic(
+          "RecordReplayAssertExecutionProgress not allowed %s:%d:%d",
+          name.c_str(), info.line + 1, info.column);
+    }
+    CHECK(RecordReplayBytecodeAllowed());
+
+    if (!gRecordReplayHasCheckpoint) {
+      recordreplay::Diagnostic(
+          "ExecutionProgress before first checkpoint %s:%d:%d", name.c_str(),
+          info.line + 1, info.column);
+    }
+    CHECK(gRecordReplayHasCheckpoint);
+
     recordreplay::Assert(
         "JS ExecutionProgress PC=%zu scriptId=%d @%s:%d:%d",
         *gProgressCounter, script->id(), name.c_str(), info.line + 1, info.column);
   }
 
   if (RecordReplayIsDivergentUserJSWithoutPause(function->shared()) ||
-      (recordreplay::IsReplaying() && recordreplay::HadMismatch())) {
-
-    // [RUN-1988] We only want some JS Asserts. Dial it back down, once we hit a mismatch.
-    if (gRecordReplayAssertProgress > 0) --gRecordReplayAssertProgress;
-
+      (gRecordReplayAssertProgress && recordreplay::IsReplaying() &&
+       recordreplay::HadMismatch())) {
     // Print JS stack if user JS was executed non-deterministically
     // and we were not paused, or if we had a mismatch.
-    if (!gHasPrintedStack) {  // Prevent flood.
+    // if (!gHasPrintedStack) {  // Prevent flood.
       gHasPrintedStack = true;
       std::stringstream stack;
       isolate->PrintCurrentStackTrace(stack);
@@ -1047,7 +1042,7 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
             " in non-deterministic user JS" : "",
           *gProgressCounter, script->id(), name.c_str(), info.line + 1,
           info.column, stack.str().c_str());
-    }
+    // }
   }
 
   return ReadOnlyRoots(isolate).undefined_value();
@@ -1067,6 +1062,7 @@ RUNTIME_FUNCTION(Runtime_RecordReplayNotifyActivity) {
 }
 
 static std::string GetStackLocation(Isolate* isolate) {
+  HandleScope scope(isolate);
   char location[1024];
   strcpy(location, "<no frame>");
   for (StackFrameIterator it(isolate); !it.done(); it.Advance()) {
@@ -1100,10 +1096,10 @@ static std::string GetStackLocation(Isolate* isolate) {
     Script::GetPositionInfo(script, source_position, &info, Script::WITH_OFFSET);
 
     if (script->name().IsUndefined()) {
-      snprintf(location, sizeof(location), "<none>:%d:%d", info.line + 1, info.column);
+      snprintf(location, sizeof(location), "@<none>:%d:%d", info.line + 1, info.column);
     } else {
       std::unique_ptr<char[]> name = String::cast(script->name()).ToCString();
-      snprintf(location, sizeof(location), "%s:%d:%d", name.get(), info.line + 1, info.column);
+      snprintf(location, sizeof(location), "@%s:%d:%d", name.get(), info.line + 1, info.column);
     }
     location[sizeof(location) - 1] = 0;
     break;
