@@ -1000,7 +1000,7 @@ static std::string GetScriptProgressEntryString(uint64_t v) {
   int script_id = static_cast<int>(v >> 32);
   int start_position = static_cast<int>(v);
 
-  Handle<Script> script = GetScript(isolate, *script_id);
+  Handle<Script> script = GetScript(isolate, script_id);
   std::string script_name = GetScriptName(script);
 
   Script::PositionInfo info;
