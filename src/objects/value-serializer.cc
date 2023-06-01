@@ -527,7 +527,7 @@ void ValueSerializer::WriteString(Handle<String> string) {
     // Whether a string has a one or two byte representation can vary when
     // replaying due to JIT and other VM behavior. Only write out strings
     // as two bytes to ensure serialized buffers have a consistent size.
-    if (recordreplay::IsRecordingOrReplaying("values")) {
+    if (recordreplay::IsRecordingOrReplaying("values", "ValueSerializer::WriteString")) {
       base::ScopedVector<base::uc16> new_chars(chars.length());
       for (int i = 0; i < chars.length(); i++)
         new_chars[i] = chars[i];

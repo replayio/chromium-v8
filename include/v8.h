@@ -89,20 +89,20 @@ class V8_EXPORT recordreplay {
   public:
 
 static void SetRecordingOrReplaying(void* handle);
-static bool IsRecordingOrReplaying(const char* feature = nullptr);
+static bool IsRecordingOrReplaying(const char* feature = nullptr,
+                                   const char* subfeature = nullptr);
 static bool IsRecording();
 static bool IsReplaying();
 static const char* GetRecordingId();
 
 static bool IsARMRecording();
 
-static bool FeatureEnabled(const char* feature);
-
-static bool GetTestEnvironmentFlag();
+static bool FeatureEnabled(const char* feature, const char* subfeature = nullptr);
 
 static void Print(const char* format, ...);
 static void Diagnostic(const char* format, ...);
 static void Warning(const char* format, ...);
+static void Trace(const char* format, ...);
 static bool HadMismatch();
 static void Assert(const char* format, ...);
 static void AssertBytes(const char* why, const void* buf, size_t size);
@@ -119,12 +119,15 @@ static void NewCheckpoint();
 
 static void BeginPassThroughEvents();
 static void EndPassThroughEvents();
-static bool AreEventsPassedThrough();
+static bool AreEventsPassedThrough(const char* why = nullptr);
 
 static void BeginDisallowEvents();
 static void BeginDisallowEventsWithLabel(const char* label);
 static void EndDisallowEvents();
-static bool AreEventsDisallowed();
+
+// A "why" string should be used whenever there are substantive behavior changes
+// resulting from this check.
+static bool AreEventsDisallowed(const char* why = nullptr);
 
 static bool HasDivergedFromRecording();
 static bool AllowSideEffects();
