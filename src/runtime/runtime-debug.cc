@@ -975,10 +975,10 @@ static inline bool RecordReplayBytecodeAllowed() {
 // the recorder's assert data callbacks API. Each progress advancement is
 // associated with a single 64 bit value encoding the script ID and location
 // within that script of the function which executed.
-static std::vector<uint64_t> gProgressData;
+static std::vector<uint64_t>* gProgressData;
 
 // Buffer holding data most recently reported to the recorder.
-static std::vector<uint64_t> gReportedProgressData;
+static std::vector<uint64_t>* gReportedProgressData;
 
 static inline uint64_t BuildScriptProgressEntry(Handle<JSFunction> fun) {
   int script_id = Script::cast(fun->shared().script()).id();
@@ -994,7 +994,9 @@ static inline std::string GetScriptName(Handle<Script> script) {
     : "(anonymous script)";
 }
 
-static std::string GetScriptProgressEntryString(Isolate* isolate, uint64_t v) {
+static std::string GetScriptProgressEntryString(uint64_t v) {
+  Isolate* isolate = Isolate::Current();
+
   int script_id = static_cast<int>(v >> 32);
   int start_position = static_cast<int>(v);
 
@@ -1015,9 +1017,12 @@ void RecordReplayCallbackAssertGetData(void** pbuf, size_t* psize) {
     return;
   }
 
-  gReportedProgressData = std::move(gProgressData);
-  *pbuf = &gReportedProgressData[0];
-  *psize = gReportedProgressData.size() * sizeof(uint64_t);
+  if (gReportedProgressData) {
+    delete gReportedProgressData;
+  }
+  gReportedProgressData = gProgressData;
+  *pbuf = &(*gReportedProgressData)[0];
+  *psize = gReportedProgressData->size() * sizeof(uint64_t);
 }
 
 extern void RecordReplayDescribeAssertData(const char* text);
@@ -1058,7 +1063,7 @@ char* RecordReplayCallbackAssertOnDataMismatch(void* recorded_buf, size_t record
   }
 
   // We shouldn't ever be able to get here.
-  return strdup("Recorded <assertion> Replayed <assertion>";
+  return strdup("Recorded <assertion> Replayed <assertion>");
 }
 
 void RecordReplayCallbackAssertDescribeData(void* buf, size_t buf_size) {
@@ -1088,7 +1093,10 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
     return ReadOnlyRoots(isolate).undefined_value();
   }
 
-  gProgressData.push_back(BuildScriptProgressEntry(args.at<JSFunction>(0)));
+  if (!gProgressData) {
+    gProgressData = new std::vector<uint64_t>();
+  }
+  gProgressData->push_back(BuildScriptProgressEntry(args.at<JSFunction>(0)));
 
   // FIXME the logic below should be gated on gRecordReplayCheckProgress when that exists.
 

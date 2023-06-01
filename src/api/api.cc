@@ -11909,7 +11909,7 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   internal::gRecordReplayAssertTrackedObjects =
       internal::gRecordReplayAssertValues || !!getenv("RECORD_REPLAY_JS_OBJECT_ASSERTS");
 
-  if (gRecordReplayAssertProgress) {
+  if (internal::gRecordReplayAssertProgress) {
     void (*setAssertDataCallbacks)(void (*aGetData)(void**, size_t*),
                                    char* (*aOnMismatch)(void*, size_t, void*, size_t),
                                    void (*aDescribeData)(void*, size_t));
