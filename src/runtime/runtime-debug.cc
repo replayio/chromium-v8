@@ -1012,7 +1012,7 @@ static std::string GetScriptProgressEntryString(uint64_t v) {
 }
 
 void RecordReplayCallbackAssertGetData(void** pbuf, size_t* psize) {
-  if (!IsMainThread()) {
+  if (!IsMainThread() || !gProgressData) {
     *psize = 0;
     return;
   }
@@ -1021,6 +1021,7 @@ void RecordReplayCallbackAssertGetData(void** pbuf, size_t* psize) {
     delete gReportedProgressData;
   }
   gReportedProgressData = gProgressData;
+  gProgressData = nullptr;
   *pbuf = &(*gReportedProgressData)[0];
   *psize = gReportedProgressData->size() * sizeof(uint64_t);
 }
