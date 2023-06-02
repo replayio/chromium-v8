@@ -10734,6 +10734,7 @@ static void (*gRecordReplayOnInstrument)(const char* kind, const char* function,
 static bool (*gRecordReplayHadMismatch)();
 static void (*gRecordReplayAssert)(const char*, va_list);
 static void (*gRecordReplayAssertBytes)(const char* why, const void* ptr, size_t nbytes);
+static void (*gRecordReplayDescribeAssertData)(const char* text);
 static void (*gRecordReplayBytes)(const char* why, void* buf, size_t size);
 static uintptr_t (*gRecordReplayValue)(const char* why, uintptr_t v);
 static bool (*gRecordReplayAreEventsDisallowed)();
@@ -10894,6 +10895,11 @@ void RecordReplayInstrument(const char* kind, const char* function, int offset) 
 extern void TrackObjectsCallback(bool track_objects);
 extern void RecordReplayGetPossibleBreakpointsCallback(const char* source_id);
 
+extern void RecordReplayCallbackAssertGetData(void** pbuf, size_t* psize);
+extern char* RecordReplayCallbackAssertOnDataMismatch(void* recorded, size_t recorded_size,
+                                                      void* replayed, size_t replayed_size);
+extern void RecordReplayCallbackAssertDescribeData(void* buf, size_t size);
+
 extern char* CommandCallback(const char* command, const char* params);
 extern void ClearPauseDataCallback();
 
@@ -11021,6 +11027,10 @@ bool RecordReplayHasDefaultContext() {
 }
 
 extern void RecordReplayInitInstrumentationState();
+
+void RecordReplayDescribeAssertData(const char* text) {
+  gRecordReplayDescribeAssertData(text);
+}
 
 } // namespace internal
 
@@ -11787,6 +11797,7 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   RecordReplayLoadSymbol(handle, "RecordReplayHadMismatch", gRecordReplayHadMismatch);
   RecordReplayLoadSymbol(handle, "RecordReplayAssert", gRecordReplayAssert);
   RecordReplayLoadSymbol(handle, "RecordReplayAssertBytes", gRecordReplayAssertBytes);
+  RecordReplayLoadSymbol(handle, "RecordReplayDescribeAssertData", gRecordReplayDescribeAssertData);
   RecordReplayLoadSymbol(handle, "RecordReplayBytes", gRecordReplayBytes);
   RecordReplayLoadSymbol(handle, "RecordReplayValue", gRecordReplayValue);
   RecordReplayLoadSymbol(handle, "RecordReplayOnInstrument", gRecordReplayOnInstrument);
@@ -11903,6 +11914,16 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
       internal::gRecordReplayAssertValues || !!getenv("RECORD_REPLAY_JS_OBJECT_ASSERTS");
   internal::gRecordReplayCheckProgress =
       internal::gRecordReplayAssertProgress || !!getenv("RECORD_REPLAY_JS_PROGRESS_CHECKS");
+
+  if (internal::gRecordReplayAssertProgress) {
+    void (*setAssertDataCallbacks)(void (*aGetData)(void**, size_t*),
+                                   char* (*aOnMismatch)(void*, size_t, void*, size_t),
+                                   void (*aDescribeData)(void*, size_t));
+    RecordReplayLoadSymbol(handle, "RecordReplaySetAssertDataCallbacks", setAssertDataCallbacks);
+    setAssertDataCallbacks(internal::RecordReplayCallbackAssertGetData,
+                           internal::RecordReplayCallbackAssertOnDataMismatch,
+                           internal::RecordReplayCallbackAssertDescribeData);
+  }
 
   // Set flags to disable non-deterministic posting of tasks to other threads.
   // We don't support this yet when recording/replaying.

@@ -973,6 +973,113 @@ static inline bool RecordReplayBytecodeAllowed() {
 
 #endif // !RECORD_REPLAY_CHECK_OPCODES
 
+// When gRecordReplayAssertProgress is set we keep track of all the progress
+// made on the main thread and associate it with main-thread assertions using
+// the recorder's assert data callbacks API. Each progress advancement is
+// associated with a single 64 bit value encoding the script ID and location
+// within that script of the function which executed.
+static std::vector<uint64_t>* gProgressData;
+
+// Buffer holding data most recently reported to the recorder.
+static std::vector<uint64_t>* gReportedProgressData;
+
+static inline uint64_t BuildScriptProgressEntry(Handle<JSFunction> fun) {
+  int script_id = Script::cast(fun->shared().script()).id();
+  int start_position = fun->shared().StartPosition();
+  return (static_cast<uint64_t>(script_id) << 32) | static_cast<uint64_t>(start_position);
+}
+
+extern Handle<Script> GetScript(Isolate* isolate, int script_id);
+
+static inline std::string GetScriptName(Handle<Script> script) {
+  return script->name().IsString()
+    ? String::cast(script->name()).ToCString().get()
+    : "(anonymous script)";
+}
+
+static std::string GetScriptProgressEntryString(uint64_t v) {
+  Isolate* isolate = Isolate::Current();
+
+  int script_id = static_cast<int>(v >> 32);
+  int start_position = static_cast<int>(v);
+
+  Handle<Script> script = GetScript(isolate, script_id);
+  std::string script_name = GetScriptName(script);
+
+  Script::PositionInfo info;
+  Script::GetPositionInfo(script, start_position, &info, Script::WITH_OFFSET);
+
+  std::ostringstream os;
+  os << script_id << ":" << script_name << ":" << info.line + 1 << ":" << info.column;
+  return os.str();
+}
+
+void RecordReplayCallbackAssertGetData(void** pbuf, size_t* psize) {
+  if (!IsMainThread() || !gProgressData) {
+    *psize = 0;
+    return;
+  }
+
+  if (gReportedProgressData) {
+    delete gReportedProgressData;
+  }
+  gReportedProgressData = gProgressData;
+  gProgressData = nullptr;
+  *pbuf = &(*gReportedProgressData)[0];
+  *psize = gReportedProgressData->size() * sizeof(uint64_t);
+}
+
+extern void RecordReplayDescribeAssertData(const char* text);
+
+char* RecordReplayCallbackAssertOnDataMismatch(void* recorded_buf, size_t recorded_buf_size,
+                                               void* replayed_buf, size_t replayed_buf_size) {
+  const uint64_t* recorded = reinterpret_cast<const uint64_t*>(recorded_buf);
+  size_t recorded_size = recorded_buf_size / sizeof(uint64_t);
+
+  const uint64_t* replayed = reinterpret_cast<const uint64_t*>(replayed_buf);
+  size_t replayed_size = replayed_buf_size / sizeof(uint64_t);
+
+  for (size_t i = 0; i < std::min<size_t>(recorded_size, replayed_size); i++) {
+    if (recorded[i] == replayed[i]) {
+      std::string text = GetScriptProgressEntryString(recorded[i]);
+      RecordReplayDescribeAssertData(text.c_str());
+    } else {
+      std::string recorded_text = GetScriptProgressEntryString(recorded[i]);
+      std::string replayed_text = GetScriptProgressEntryString(replayed[i]);
+      std::ostringstream os;
+      os << "Recorded " << recorded_text << " Replayed " << replayed_text;
+      return strdup(os.str().c_str());
+    }
+  }
+
+  if (recorded_size < replayed_size) {
+    std::string replayed_text = GetScriptProgressEntryString(replayed[recorded_size]);
+    std::ostringstream os;
+    os << "Recorded <assertion> Replayed " << replayed_text;
+    return strdup(os.str().c_str());
+  }
+
+  if (replayed_size < recorded_size) {
+    std::string recorded_text = GetScriptProgressEntryString(recorded[replayed_size]);
+    std::ostringstream os;
+    os << "Recorded " << recorded_text << " Replayed <assertion>";
+    return strdup(os.str().c_str());
+  }
+
+  // We shouldn't ever be able to get here.
+  return strdup("Recorded <assertion> Replayed <assertion>");
+}
+
+void RecordReplayCallbackAssertDescribeData(void* buf, size_t buf_size) {
+  const uint64_t* entries = reinterpret_cast<const uint64_t*>(buf);
+  size_t size = buf_size / sizeof(uint64_t);
+
+  for (size_t i = 0; i < size; i++) {
+    std::string text = GetScriptProgressEntryString(entries[i]);
+    RecordReplayDescribeAssertData(text.c_str());
+  }
+}
+
 extern bool gRecordReplayHasCheckpoint;
 
 extern void RecordReplayOnTargetProgressReached();
@@ -995,6 +1102,14 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
   //   return ReadOnlyRoots(isolate).undefined_value();
   // }
 
+  if (!gProgressData) {
+    gProgressData = new std::vector<uint64_t>();
+  }
+  gProgressData->push_back(BuildScriptProgressEntry(args.at<JSFunction>(0)));
+
+  // FIXME the logic below should be gated on gRecordReplayCheckProgress when that exists.
+
+  HandleScope scope(isolate);
   DCHECK_EQ(1, args.length());
   Handle<JSFunction> function = args.at<JSFunction>(0);
   Handle<SharedFunctionInfo> shared(function->shared(), isolate);
@@ -1003,28 +1118,14 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
   Script::PositionInfo info;
   Script::GetPositionInfo(script, shared->StartPosition(), &info,
                           Script::WITH_OFFSET);
-  std::string name = script->name().IsString()
-                         ? String::cast(script->name()).ToCString().get()
-                         : "(anonymous script)";
-  if (gRecordReplayAssertProgress) {
-    if (!RecordReplayBytecodeAllowed()) {
-      recordreplay::Diagnostic(
-          "RecordReplayAssertExecutionProgress not allowed %s:%d:%d",
-          name.c_str(), info.line + 1, info.column);
-    }
-    CHECK(RecordReplayBytecodeAllowed());
+  std::string name = GetScriptName(script);
 
-    if (!gRecordReplayHasCheckpoint) {
-      recordreplay::Diagnostic(
-          "ExecutionProgress before first checkpoint %s:%d:%d", name.c_str(),
-          info.line + 1, info.column);
-    }
-    CHECK(gRecordReplayHasCheckpoint);
-
-    recordreplay::Assert(
-        "JS ExecutionProgress PC=%zu scriptId=%d @%s:%d:%d",
-        *gProgressCounter, script->id(), name.c_str(), info.line + 1, info.column);
-  }
+  // if (!gRecordReplayHasCheckpoint) {
+  //   recordreplay::Diagnostic(
+  //       "ExecutionProgress before first checkpoint %s:%d:%d", name.c_str(),
+  //       info.line + 1, info.column);
+  // }
+  // CHECK(gRecordReplayHasCheckpoint);
 
   if (RecordReplayIsDivergentUserJSWithoutPause(function->shared()) ||
       (gRecordReplayAssertProgress && recordreplay::IsReplaying() &&
