@@ -1098,9 +1098,9 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
     RecordReplayOnTargetProgressReached();
   }
 
-  // if (!gRecordReplayCheckProgress) {
-  //   return ReadOnlyRoots(isolate).undefined_value();
-  // }
+  if (!gRecordReplayCheckProgress) {
+    return ReadOnlyRoots(isolate).undefined_value();
+  }
 
   if (!gProgressData) {
     gProgressData = new std::vector<uint64_t>();
@@ -1127,9 +1127,7 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
   // }
   // CHECK(gRecordReplayHasCheckpoint);
 
-  if (RecordReplayIsDivergentUserJSWithoutPause(function->shared()) ||
-      (gRecordReplayAssertProgress && recordreplay::IsReplaying() &&
-       recordreplay::HadMismatch())) {
+  if (RecordReplayIsDivergentUserJSWithoutPause(function->shared())) {
     // Print JS stack if user JS was executed non-deterministically
     // and we were not paused, or if we had a mismatch.
     // if (!gHasPrintedStack) {  // Prevent flood.
