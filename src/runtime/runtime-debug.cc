@@ -1111,6 +1111,7 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
   Handle<SharedFunctionInfo> shared(function->shared(), isolate);
   Handle<Script> script(Script::cast(shared->script()), isolate);
 
+  CHECK(RecordReplayBytecodeAllowed());
   CHECK(gRecordReplayHasCheckpoint);
   CHECK(RecordReplayHasRegisteredScript(*script));
 
@@ -1191,10 +1192,10 @@ static std::string GetStackLocation(Isolate* isolate) {
     Script::GetPositionInfo(script, source_position, &info, Script::WITH_OFFSET);
 
     if (script->name().IsUndefined()) {
-      snprintf(location, sizeof(location), "@<none>:%d:%d", info.line + 1, info.column);
+      snprintf(location, sizeof(location), "<none>:%d:%d", info.line + 1, info.column);
     } else {
       std::unique_ptr<char[]> name = String::cast(script->name()).ToCString();
-      snprintf(location, sizeof(location), "@%s:%d:%d", name.get(), info.line + 1, info.column);
+      snprintf(location, sizeof(location), "%s:%d:%d", name.get(), info.line + 1, info.column);
     }
     location[sizeof(location) - 1] = 0;
     break;
