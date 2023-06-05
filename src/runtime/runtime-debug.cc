@@ -1124,7 +1124,7 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
 
   if (recordreplay::AreEventsDisallowed() && !recordreplay::HasDivergedFromRecording()) {
     // Print JS stack if user JS was executed non-deterministically
-    // and we were not paused, or if we had a mismatch.
+    // and we were not paused.
     if (!gHasPrintedStack) {  // Prevent flood.
       gHasPrintedStack = true;
       HandleScope scope(isolate);
