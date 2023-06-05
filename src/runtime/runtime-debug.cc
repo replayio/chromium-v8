@@ -952,8 +952,7 @@ extern int gRecordReplayCheckProgress;
 
 #ifdef RECORD_REPLAY_CHECK_OPCODES
 
-    extern bool
-    RecordReplayHasRegisteredScript(Script script);
+extern bool RecordReplayHasRegisteredScript(Script script);
 
 static inline bool RecordReplayBytecodeAllowed() {
   return IsMainThread()
@@ -962,8 +961,7 @@ static inline bool RecordReplayBytecodeAllowed() {
 
 #else // !RECORD_REPLAY_CHECK_OPCODES
 
-    static inline bool
-    RecordReplayHasRegisteredScript(Script script) {
+static inline bool RecordReplayHasRegisteredScript(Script script) {
   return true;
 }
 
@@ -997,12 +995,9 @@ static inline std::string GetScriptName(Handle<Script> script) {
     : "(anonymous script)";
 }
 
-static std::string GetScriptProgressEntryString(uint64_t v) {
+static std::string GetScriptLocationString(int script_id,
+                                           int start_position) {
   Isolate* isolate = Isolate::Current();
-
-  int script_id = static_cast<int>(v >> 32);
-  int start_position = static_cast<int>(v);
-
   Handle<Script> script = GetScript(isolate, script_id);
   std::string script_name = GetScriptName(script);
 
@@ -1012,6 +1007,30 @@ static std::string GetScriptProgressEntryString(uint64_t v) {
   std::ostringstream os;
   os << script_id << ":" << script_name << ":" << info.line + 1 << ":" << info.column;
   return os.str();
+}
+
+static std::string GetScriptProgressEntryString(uint64_t v) {
+  int script_id = static_cast<int>(v >> 32);
+  int start_position = static_cast<int>(v);
+
+  return GetScriptLocationString(script_id, start_position);
+}
+
+static char* GetScriptProgressMessage(uint64_t recordedEntry, uint64_t replayedEntry) {
+  Isolate* isolate = Isolate::Current();
+  std::string recorded_text = recordedEntry
+                                  ? GetScriptProgressEntryString(recordedEntry)
+                                  : "<assertion>";
+  std::string replayed_text = replayedEntry
+                                  ? GetScriptProgressEntryString(replayedEntry)
+                                  : "<assertion>";
+  std::ostringstream os;
+  os << "Recorded " << recorded_text << " Replayed " << replayed_text
+     << " Stack=";
+  
+  isolate->PrintCurrentStackTrace(os);
+  
+  return strdup(os.str().c_str());
 }
 
 void RecordReplayCallbackAssertGetData(void** pbuf, size_t* psize) {
@@ -1044,30 +1063,20 @@ char* RecordReplayCallbackAssertOnDataMismatch(void* recorded_buf, size_t record
       std::string text = GetScriptProgressEntryString(recorded[i]);
       RecordReplayDescribeAssertData(text.c_str());
     } else {
-      std::string recorded_text = GetScriptProgressEntryString(recorded[i]);
-      std::string replayed_text = GetScriptProgressEntryString(replayed[i]);
-      std::ostringstream os;
-      os << "Recorded " << recorded_text << " Replayed " << replayed_text;
-      return strdup(os.str().c_str());
+      return GetScriptProgressMessage(recorded[i], replayed[i]);
     }
   }
 
   if (recorded_size < replayed_size) {
-    std::string replayed_text = GetScriptProgressEntryString(replayed[recorded_size]);
-    std::ostringstream os;
-    os << "Recorded <assertion> Replayed " << replayed_text;
-    return strdup(os.str().c_str());
+    return GetScriptProgressMessage(0, replayed[recorded_size]);
   }
 
   if (replayed_size < recorded_size) {
-    std::string recorded_text = GetScriptProgressEntryString(recorded[replayed_size]);
-    std::ostringstream os;
-    os << "Recorded " << recorded_text << " Replayed <assertion>";
-    return strdup(os.str().c_str());
+    return GetScriptProgressMessage(recorded[replayed_size], 0);
   }
 
   // We shouldn't ever be able to get here.
-  return strdup("Recorded <assertion> Replayed <assertion>");
+  return GetScriptProgressMessage(0, 0);
 }
 
 void RecordReplayCallbackAssertDescribeData(void* buf, size_t buf_size) {
@@ -1088,11 +1097,6 @@ extern bool RecordReplayIsDivergentUserJSWithoutPause(
 
 static bool gHasPrintedStack = false;
 
-// static void RecordReplayPrintLocation() {
-//   snprintf(location, sizeof(location), "%s:%d:%d", name.get(), info.line + 1,
-//            info.column);
-// }
-
 RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
   if (++*gProgressCounter == gTargetProgress) {
     RecordReplayOnTargetProgressReached();
@@ -1101,47 +1105,39 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
   if (!gRecordReplayCheckProgress) {
     return ReadOnlyRoots(isolate).undefined_value();
   }
+  CHECK_EQ(1, args.length());
 
-  if (!gProgressData) {
-    gProgressData = new std::vector<uint64_t>();
-  }
-  gProgressData->push_back(BuildScriptProgressEntry(args.at<JSFunction>(0)));
-
-  // FIXME the logic below should be gated on gRecordReplayCheckProgress when that exists.
-
-  HandleScope scope(isolate);
-  DCHECK_EQ(1, args.length());
   Handle<JSFunction> function = args.at<JSFunction>(0);
   Handle<SharedFunctionInfo> shared(function->shared(), isolate);
   Handle<Script> script(Script::cast(shared->script()), isolate);
+
+  CHECK(gRecordReplayHasCheckpoint);
   CHECK(RecordReplayHasRegisteredScript(*script));
-  Script::PositionInfo info;
-  Script::GetPositionInfo(script, shared->StartPosition(), &info,
-                          Script::WITH_OFFSET);
-  std::string name = GetScriptName(script);
 
-  // if (!gRecordReplayHasCheckpoint) {
-  //   recordreplay::Diagnostic(
-  //       "ExecutionProgress before first checkpoint %s:%d:%d", name.c_str(),
-  //       info.line + 1, info.column);
-  // }
-  // CHECK(gRecordReplayHasCheckpoint);
+  if (gRecordReplayAssertProgress) {
+    if (!gProgressData) {
+      gProgressData = new std::vector<uint64_t>();
+    }
+    gProgressData->push_back(BuildScriptProgressEntry(function));
+  }
 
-  if (RecordReplayIsDivergentUserJSWithoutPause(function->shared())) {
+  if (recordreplay::AreEventsDisallowed() && !recordreplay::HasDivergedFromRecording()) {
     // Print JS stack if user JS was executed non-deterministically
     // and we were not paused, or if we had a mismatch.
-    // if (!gHasPrintedStack) {  // Prevent flood.
+    if (!gHasPrintedStack) {  // Prevent flood.
       gHasPrintedStack = true;
+      HandleScope scope(isolate);
       std::stringstream stack;
       isolate->PrintCurrentStackTrace(stack);
 
       recordreplay::Warning(
-          "JS-Stack ExecutionProgress%s PC=%zu scriptId=%d @%s:%d:%d stack=%s",
-          RecordReplayIsDivergentUserJSWithoutPause(function->shared()) ?
-            " in non-deterministic user JS" : "",
-          *gProgressCounter, script->id(), name.c_str(), info.line + 1,
-          info.column, stack.str().c_str());
-    // }
+          "JS-Stack ExecutionProgress in non-deterministic user JS PC=%zu "
+          "scriptId=%d @%s stack=%s",
+          *gProgressCounter, script->id(),
+          GetScriptLocationString(script->id(), shared->StartPosition())
+              .c_str(),
+          stack.str().c_str());
+    }
   }
 
   return ReadOnlyRoots(isolate).undefined_value();

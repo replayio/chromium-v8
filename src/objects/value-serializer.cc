@@ -1230,7 +1230,8 @@ ValueDeserializer::ValueDeserializer(Isolate* isolate,
       end_(data.end()),
       id_map_(isolate->global_handles()->Create(
           ReadOnlyRoots(isolate_).empty_fixed_array())) {
-  recordreplay::Assert("[RUN-1618] ValueDeserializer::ValueDeserializer #1 %u %d",
+
+  recordreplay::Assert("[RUN-2037] ValueDeserializer::ValueDeserializer #1 %u %d",
                        data.size(), HashBytes(&data[0], data.size()));
 }
 
@@ -1242,8 +1243,9 @@ ValueDeserializer::ValueDeserializer(Isolate* isolate, const uint8_t* data,
       end_(data + size),
       id_map_(isolate->global_handles()->Create(
           ReadOnlyRoots(isolate_).empty_fixed_array())) {
-  recordreplay::Assert("[RUN-1618] ValueDeserializer::ValueDeserializer #2 %u %d",
-                       size, HashBytes(data, size));
+  recordreplay::Assert(
+      "[RUN-2037] ValueDeserializer::ValueDeserializer #2 %u %d", size,
+      HashBytes(data, size));
 }
 
 ValueDeserializer::~ValueDeserializer() {
