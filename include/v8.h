@@ -98,6 +98,7 @@ static const char* GetRecordingId();
 static bool IsARMRecording();
 
 static bool FeatureEnabled(const char* feature, const char* subfeature = nullptr);
+static bool HasDisabledFeatures();
 
 static void Print(const char* format, ...);
 static void Diagnostic(const char* format, ...);
