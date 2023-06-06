@@ -11044,6 +11044,14 @@ extern "C" DLLEXPORT bool V8RecordReplayFeatureEnabled(const char* feature, cons
   return recordreplay::FeatureEnabled(feature);
 }
 
+bool recordreplay::HasDisabledFeatures() {
+  return !!gRecordReplayFeatureEnabled;
+}
+
+extern "C" DLLEXPORT bool V8RecordReplayHasDisabledFeatures() {
+  return recordreplay::HasDisabledFeatures();
+}
+
 // Return whether this is a test environment where experimental features
 // can be used.
 static bool GetTestEnvironmentFlag() {
