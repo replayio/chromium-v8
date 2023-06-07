@@ -1103,7 +1103,6 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
   }
 
   if (gRecordReplayAssertProgress) {
-    CHECK_EQ(1, args.length());
     Handle<JSFunction> function = args.at<JSFunction>(0);
 
     if (!gProgressData) {
@@ -1113,7 +1112,6 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
   }
 
   if (gRecordReplayCheckProgress) {
-    CHECK_EQ(1, args.length());
     Handle<JSFunction> function = args.at<JSFunction>(0);
 
     Handle<SharedFunctionInfo> shared(function->shared(), isolate);
