@@ -11908,12 +11908,11 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   gARMRecording = RecordReplayValue("ARMRecording", gARMRecording);
 
   internal::gRecordReplayAssertValues = !!getenv("RECORD_REPLAY_JS_ASSERTS");
+  internal::gRecordReplayCheckProgress = !!getenv("RECORD_REPLAY_JS_PROGRESS_CHECKS");
   internal::gRecordReplayAssertProgress =
       internal::gRecordReplayAssertValues || !!getenv("RECORD_REPLAY_JS_PROGRESS_ASSERTS");
   internal::gRecordReplayAssertTrackedObjects =
       internal::gRecordReplayAssertValues || !!getenv("RECORD_REPLAY_JS_OBJECT_ASSERTS");
-  internal::gRecordReplayCheckProgress =
-      internal::gRecordReplayAssertProgress || !!getenv("RECORD_REPLAY_JS_PROGRESS_CHECKS");
 
   if (internal::gRecordReplayAssertProgress) {
     void (*setAssertDataCallbacks)(void (*aGetData)(void**, size_t*),

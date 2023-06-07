@@ -1102,19 +1102,6 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
     RecordReplayOnTargetProgressReached();
   }
 
-  if (!gRecordReplayCheckProgress) {
-    return ReadOnlyRoots(isolate).undefined_value();
-  }
-  CHECK_EQ(1, args.length());
-
-  Handle<JSFunction> function = args.at<JSFunction>(0);
-  Handle<SharedFunctionInfo> shared(function->shared(), isolate);
-  Handle<Script> script(Script::cast(shared->script()), isolate);
-
-  CHECK(RecordReplayBytecodeAllowed());
-  CHECK(gRecordReplayHasCheckpoint);
-  CHECK(RecordReplayHasRegisteredScript(*script));
-
   if (gRecordReplayAssertProgress) {
     if (!gProgressData) {
       gProgressData = new std::vector<uint64_t>();
@@ -1122,22 +1109,34 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
     gProgressData->push_back(BuildScriptProgressEntry(function));
   }
 
-  if (recordreplay::AreEventsDisallowed() && !recordreplay::HasDivergedFromRecording()) {
-    // Print JS stack if user JS was executed non-deterministically
-    // and we were not paused.
-    if (!gHasPrintedStack) {  // Prevent flood.
-      gHasPrintedStack = true;
-      HandleScope scope(isolate);
-      std::stringstream stack;
-      isolate->PrintCurrentStackTrace(stack);
+  if (gRecordReplayCheckProgress) {
+    CHECK_EQ(1, args.length());
 
-      recordreplay::Warning(
-          "JS-Stack ExecutionProgress in non-deterministic user JS PC=%zu "
-          "scriptId=%d @%s stack=%s",
-          *gProgressCounter, script->id(),
-          GetScriptLocationString(script->id(), shared->StartPosition())
-              .c_str(),
-          stack.str().c_str());
+    Handle<JSFunction> function = args.at<JSFunction>(0);
+    Handle<SharedFunctionInfo> shared(function->shared(), isolate);
+    Handle<Script> script(Script::cast(shared->script()), isolate);
+
+    CHECK(RecordReplayBytecodeAllowed());
+    CHECK(gRecordReplayHasCheckpoint);
+    CHECK(RecordReplayHasRegisteredScript(*script));
+
+    if (recordreplay::AreEventsDisallowed() && !recordreplay::HasDivergedFromRecording()) {
+      // Print JS stack if user JS was executed non-deterministically
+      // and we were not paused.
+      if (!gHasPrintedStack) {  // Prevent flood.
+        gHasPrintedStack = true;
+        HandleScope scope(isolate);
+        std::stringstream stack;
+        isolate->PrintCurrentStackTrace(stack);
+
+        recordreplay::Warning(
+            "JS ExecutionProgress in non-deterministic user JS PC=%zu "
+            "scriptId=%d @%s stack=%s",
+            *gProgressCounter, script->id(),
+            GetScriptLocationString(script->id(), shared->StartPosition())
+                .c_str(),
+            stack.str().c_str());
+      }
     }
   }
 
