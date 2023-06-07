@@ -213,6 +213,10 @@ void V8InspectorImpl::contextCreated(const V8ContextInfo& info) {
                     .first;
   const auto& contextById = contextIt->second;
 
+  recordreplay::Trace(
+      "[RUN-2042-2109] V8InspectorImpl::contextCreated %d %d %zu %zu", contextId,
+      info.contextGroupId, m_sessions.size(), contextById.size());
+
   DCHECK(contextById->find(contextId) == contextById->cend());
   (*contextById)[contextId].reset(context);
   forEachSession(
@@ -245,6 +249,12 @@ void V8InspectorImpl::contextCollected(int groupId, int contextId) {
 }
 
 void V8InspectorImpl::resetContextGroup(int contextGroupId) {
+  recordreplay::Trace(
+      "[RUN-2042-2109] V8InspectorImpl::resetContextGroup %d %zu %zu",
+      contextGroupId, m_sessions.size(),
+      m_contexts.find(contextGroupId) != m_contexts.end()
+          ? m_contexts.find(contextGroupId)->second->size()
+          : 0);
   m_consoleStorageMap.erase(contextGroupId);
   m_muteExceptionsMap.erase(contextGroupId);
   auto contextsIt = m_contexts.find(contextGroupId);
@@ -362,6 +372,11 @@ void V8InspectorImpl::discardInspectedContext(int contextGroupId,
                                               int contextId) {
   auto* context = getContext(contextGroupId, contextId);
   if (!context) return;
+  recordreplay::Trace(
+      "[RUN-2042-2109] V8InspectorImpl::discardInspectedContext %d %d %zu %zu",
+      contextId, contextGroupId, m_sessions.size(),
+      m_contexts[contextGroupId]->size());
+
   m_uniqueIdToContextId.erase(context->uniqueId().pair());
   m_contexts[contextGroupId]->erase(contextId);
   if (m_contexts[contextGroupId]->empty()) m_contexts.erase(contextGroupId);
