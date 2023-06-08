@@ -213,9 +213,9 @@ void V8InspectorImpl::contextCreated(const V8ContextInfo& info) {
                     .first;
   const auto& contextById = contextIt->second;
 
-  recordreplay::Trace(
+  v8::recordreplay::Trace(
       "[RUN-2042-2109] V8InspectorImpl::contextCreated %d %d %zu %zu", contextId,
-      info.contextGroupId, m_sessions.size(), contextById.size());
+      info.contextGroupId, m_sessions.size(), contextById->size());
 
   DCHECK(contextById->find(contextId) == contextById->cend());
   (*contextById)[contextId].reset(context);
@@ -249,7 +249,7 @@ void V8InspectorImpl::contextCollected(int groupId, int contextId) {
 }
 
 void V8InspectorImpl::resetContextGroup(int contextGroupId) {
-  recordreplay::Trace(
+  v8::recordreplay::Trace(
       "[RUN-2042-2109] V8InspectorImpl::resetContextGroup %d %zu %zu",
       contextGroupId, m_sessions.size(),
       m_contexts.find(contextGroupId) != m_contexts.end()
@@ -372,7 +372,7 @@ void V8InspectorImpl::discardInspectedContext(int contextGroupId,
                                               int contextId) {
   auto* context = getContext(contextGroupId, contextId);
   if (!context) return;
-  recordreplay::Trace(
+  v8::recordreplay::Trace(
       "[RUN-2042-2109] V8InspectorImpl::discardInspectedContext %d %d %zu %zu",
       contextId, contextGroupId, m_sessions.size(),
       m_contexts[contextGroupId]->size());
