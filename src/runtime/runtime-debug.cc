@@ -1102,7 +1102,6 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
     RecordReplayOnTargetProgressReached();
   }
 
-
   if (gRecordReplayAssertProgress) {
     Handle<JSFunction> function = args.at<JSFunction>(0);
 
