@@ -10906,6 +10906,7 @@ extern void ClearPauseDataCallback();
 bool gRecordReplayAssertValues;
 bool gRecordReplayAssertProgress;
 bool gRecordReplayAssertTrackedObjects;
+int gRecordReplayCheckProgress;
 
 // Only finish recordings if there were interesting sources loaded
 // into the process.
@@ -11271,12 +11272,14 @@ extern "C" DLLEXPORT void V8RecordReplayEndPassThroughEvents() {
 void recordreplay::BeginDisallowEvents() {
   if (IsRecordingOrReplaying()) {
     gRecordReplayBeginDisallowEvents();
+    if (!recordreplay::HasDivergedFromRecording()) ++internal::gRecordReplayCheckProgress;
   }
 }
 
 void recordreplay::BeginDisallowEventsWithLabel(const char* label) {
   if (IsRecordingOrReplaying()) {
     gRecordReplayBeginDisallowEventsWithLabel(label);
+    if (!recordreplay::HasDivergedFromRecording()) ++internal::gRecordReplayCheckProgress;
   }
 }
 
@@ -11290,6 +11293,7 @@ extern "C" DLLEXPORT void V8RecordReplayBeginDisallowEventsWithLabel(const char*
 
 void recordreplay::EndDisallowEvents() {
   if (IsRecordingOrReplaying()) {
+    if (!recordreplay::HasDivergedFromRecording()) --internal::gRecordReplayCheckProgress;
     gRecordReplayEndDisallowEvents();
   }
 }
@@ -11912,6 +11916,8 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   gARMRecording = RecordReplayValue("ARMRecording", gARMRecording);
 
   internal::gRecordReplayAssertValues = !!getenv("RECORD_REPLAY_JS_ASSERTS");
+  internal::gRecordReplayCheckProgress =
+      internal::gRecordReplayAssertValues || !!getenv("RECORD_REPLAY_JS_PROGRESS_CHECKS");
   internal::gRecordReplayAssertProgress =
       internal::gRecordReplayAssertValues || !!getenv("RECORD_REPLAY_JS_PROGRESS_ASSERTS");
   internal::gRecordReplayAssertTrackedObjects =

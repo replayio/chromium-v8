@@ -2847,6 +2847,12 @@ bool Debug::PerformSideEffectCheckForCallback(
       i::CallHandlerInfo::cast(*callback_info).NextCallHasNoSideEffect()) {
     return true;
   }
+  if (recordreplay::IsReplaying() && recordreplay::AreEventsDisallowed()) {
+    // TODO: IsInReplayCode (RUN-1502)
+    // Always allow Replay code.
+    // https://linear.app/replay/issue/RUN-1908/fix-devtools-crashes
+    return true;
+  }
   // TODO(7515): always pass a valid callback info object.
   if (!callback_info.is_null()) {
     if (callback_info->IsAccessorInfo()) {
@@ -2899,6 +2905,13 @@ bool Debug::PerformSideEffectCheckAtBytecode(InterpretedFrame* frame) {
   RCS_SCOPE(isolate_, RuntimeCallCounterId::kDebugger);
   using interpreter::Bytecode;
 
+  if (recordreplay::IsReplaying() && recordreplay::AreEventsDisallowed()) {
+    // TODO: IsInReplayCode (RUN-1502)
+    // Always allow Replay code.
+    // https://linear.app/replay/issue/RUN-1908/fix-devtools-crashes
+    return true;
+  }
+
   DCHECK_EQ(isolate_->debug_execution_mode(), DebugInfo::kSideEffects);
   SharedFunctionInfo shared = frame->function().shared();
   BytecodeArray bytecode_array = shared.GetBytecodeArray(isolate_);
@@ -2942,6 +2955,13 @@ bool Debug::PerformSideEffectCheckForObject(Handle<Object> object) {
   if (object->IsName()) return true;
 
   if (temporary_objects_->HasObject(Handle<HeapObject>::cast(object))) {
+    return true;
+  }
+
+  if (recordreplay::IsReplaying() && recordreplay::AreEventsDisallowed()) {
+    // TODO: IsInReplayCode (RUN-1502)
+    // Always allow Replay code.
+    // https://linear.app/replay/issue/RUN-1908/fix-devtools-crashes
     return true;
   }
 
@@ -3739,6 +3759,8 @@ static InternalCommandCallback gInternalCommandCallbacks[] = {
 static Eternal<Value>* gCommandCallback;
 
 extern "C" void V8RecordReplayGetDefaultContext(v8::Isolate* isolate, v8::Local<v8::Context>* cx);
+extern uint64_t* gProgressCounter;
+extern int gRecordReplayCheckProgress;
 
 // Make sure that the isolate has a context by switching to the default
 // context if necessary.
@@ -3753,6 +3775,7 @@ static void EnsureIsolateContext(Isolate* isolate, base::Optional<SaveAndSwitchC
 
 char* CommandCallback(const char* command, const char* params) {
   CHECK(IsMainThread());
+  uint64_t startProgressCounter = *gProgressCounter;
   recordreplay::AutoDisallowEvents disallow("CommandCallback");
 
   Isolate* isolate = Isolate::Current();
@@ -3811,6 +3834,14 @@ char* CommandCallback(const char* command, const char* params) {
     }
   }
 
+  if (startProgressCounter < *gProgressCounter && !recordreplay::HasDivergedFromRecording()) {
+    // [RUN-1988] Our command handler incremented the PC by accidentally calling
+    // into instrumented user code.
+    // Note that a warning has already been generated due to
+    // gRecordReplayCheckProgress being set.
+    // → Let's reset the PC.
+    *gProgressCounter = startProgressCounter;
+  }
 
   return strdup(rvCStr.get());
 }
