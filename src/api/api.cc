@@ -11933,9 +11933,9 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
                            internal::RecordReplayCallbackAssertDescribeData);
   }
 
-  if (V8RecordReplayFeatureEnabled("v8-flags", nullptr)) {
-    // Set flags to disable non-deterministic posting of tasks to other threads.
-    // We don't support this yet when recording/replaying.
+  // Set flags to disable non-deterministic posting of tasks to other threads.
+  // We don't support this yet when recording/replaying.
+  if (V8RecordReplayFeatureEnabled("v8-gc-flags", nullptr)) {
     internal::FLAG_concurrent_array_buffer_sweeping = false;
     internal::FLAG_concurrent_marking = false;
     internal::FLAG_concurrent_sweeping = false;
@@ -11945,23 +11945,32 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
     internal::FLAG_parallel_pointer_update = false;
     internal::FLAG_parallel_scavenge = false;
     internal::FLAG_scavenge_task = false;
+  }
 
-    // Incremental GC is also disabled for now.
+  // Incremental GC is also disabled for now.
+  if (V8RecordReplayFeatureEnabled("disable-incremental-marking", nullptr)) {
     internal::FLAG_incremental_marking = false;
+  }
 
-    // Disable wasm background compilation.
+  // Disable wasm background compilation.
+  if (V8RecordReplayFeatureEnabled("disable-wasm-compilation-tasks", nullptr)) {
     internal::FLAG_wasm_num_compilation_tasks = 0;
     internal::FLAG_wasm_async_compilation = false;
+  }
 
-    // The compilation cache can interfere with getting consistent script IDs.
+  // The compilation cache can interfere with getting consistent script IDs.
+  if (V8RecordReplayFeatureEnabled("disable-compilation-cache", nullptr)) {
     internal::FLAG_compilation_cache = false;
+  }
 
-    if (V8RecordReplayFeatureEnabled("disable-baseline-jit", nullptr)) {
-      internal::v8_flags.sparkplug = false;
-    }
-    if (!V8RecordReplayFeatureEnabled("use-optimizing-jit", nullptr)) {
-      internal::v8_flags.turbofan = false;
-    }
+  // The baseline JIT's handling of some record/replay opcodes is buggy.
+  if (V8RecordReplayFeatureEnabled("disable-baseline-jit", nullptr)) {
+    internal::v8_flags.sparkplug = false;
+  }
+
+  // The optimizing JIT is used by default but can be disabled via a feature.
+  if (!V8RecordReplayFeatureEnabled("use-optimizing-jit", nullptr)) {
+    internal::v8_flags.turbofan = false;
   }
 
   // Write out our pid to a file if specified.
