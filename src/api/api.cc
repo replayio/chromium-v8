@@ -11935,7 +11935,7 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
 
   // Set flags to disable non-deterministic posting of tasks to other threads.
   // We don't support this yet when recording/replaying.
-  if (V8RecordReplayFeatureEnabled("v8-gc-flags", nullptr)) {
+  if (V8RecordReplayFeatureEnabled("v8-gc-tasks", nullptr)) {
     internal::FLAG_concurrent_array_buffer_sweeping = false;
     internal::FLAG_concurrent_marking = false;
     internal::FLAG_concurrent_sweeping = false;
