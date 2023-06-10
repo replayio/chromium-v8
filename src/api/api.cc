@@ -11952,8 +11952,10 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   internal::FLAG_wasm_num_compilation_tasks = 0;
   internal::FLAG_wasm_async_compilation = false;
 
-  // The compilation cache can interfere with getting consistent script IDs.
-  internal::FLAG_compilation_cache = false;
+  // For now the compilation cache is only used when recording.
+  if (recordreplay::IsReplaying()) {
+    internal::FLAG_compilation_cache = false;
+  }
 
   if (V8RecordReplayFeatureEnabled("disable-baseline-jit", nullptr)) {
     internal::v8_flags.sparkplug = false;
