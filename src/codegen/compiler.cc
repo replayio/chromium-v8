@@ -4080,7 +4080,8 @@ void Compiler::FinalizeMaglevCompilationJob(maglev::MaglevCompilationJob* job,
 
 // static
 void Compiler::PostInstantiation(Handle<JSFunction> function) {
-  recordreplay::Assert("[RUN-2134] Compiler::PostInstantiation");
+  if (!recordreplay::AreEventsDisallowed())
+    recordreplay::Assert("[RUN-2134] Compiler::PostInstantiation");
 
   Isolate* isolate = function->GetIsolate();
   Handle<SharedFunctionInfo> shared(function->shared(), isolate);
@@ -4124,17 +4125,20 @@ void Compiler::PostInstantiation(Handle<JSFunction> function) {
     }
   }
 
-  recordreplay::Assert("[RUN-2134] Compiler::PostInstantiation #1");
+  if (!recordreplay::AreEventsDisallowed())
+    recordreplay::Assert("[RUN-2134] Compiler::PostInstantiation #1");
 
   if (shared->is_toplevel() || shared->is_wrapped()) {
-    recordreplay::Assert("[RUN-2134] Compiler::PostInstantiation #2");
+    if (!recordreplay::AreEventsDisallowed())
+      recordreplay::Assert("[RUN-2134] Compiler::PostInstantiation #2");
 
     // If it's a top-level script, report compilation to the debugger.
     Handle<Script> script(Script::cast(shared->script()), isolate);
     isolate->debug()->OnAfterCompile(script);
   }
 
-  recordreplay::Assert("[RUN-2134] Compiler::PostInstantiation Done");
+  if (!recordreplay::AreEventsDisallowed())
+    recordreplay::Assert("[RUN-2134] Compiler::PostInstantiation Done");
 }
 
 // ----------------------------------------------------------------------------

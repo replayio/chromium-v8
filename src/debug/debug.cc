@@ -2422,6 +2422,9 @@ void Debug::OnAfterCompile(Handle<Script> script) {
 static void RecordReplayRegisterScript(Handle<Script> script);
 
 void Debug::DoProcessCompileEvent(bool has_compile_error, Handle<Script> script) {
+  if (!recordreplay::AreEventsDisallowed())
+    recordreplay::Assert("[RUN-2138] Debug::DoProcessCompileEvent");
+
   RCS_SCOPE(isolate_, RuntimeCallCounterId::kDebugger);
   // Ignore temporary scripts.
   if (script->id() == Script::kTemporaryScriptId) return;
@@ -2445,11 +2448,18 @@ void Debug::DoProcessCompileEvent(bool has_compile_error, Handle<Script> script)
   HandleScope scope(isolate_);
   DisableBreak no_recursive_break(this);
   AllowJavascriptExecution allow_script(isolate_);
+
+  if (!recordreplay::AreEventsDisallowed())
+    recordreplay::Assert("[RUN-2138] Debug::DoProcessCompileEvent #1");
+
   {
     RCS_SCOPE(isolate_, RuntimeCallCounterId::kDebuggerCallback);
     debug_delegate_->ScriptCompiled(ToApiHandle<debug::Script>(script),
                                     running_live_edit_, has_compile_error);
   }
+
+  if (!recordreplay::AreEventsDisallowed())
+    recordreplay::Assert("[RUN-2138] Debug::DoProcessCompileEvent Done");
 }
 
 void Debug::ProcessCompileEvent(bool has_compile_error, Handle<Script> script) {
@@ -3658,7 +3668,12 @@ static NewScriptHandlerVector* gNewScriptHandlers;
 static void RecordReplayRegisterScript(Handle<Script> script) {
   CHECK(IsMainThread());
 
+  if (!recordreplay::AreEventsDisallowed())
+    recordreplay::Assert("[RUN-2134] RecordReplayRegisterScript %d", script->id());
+
   if (!RecordReplayHasDefaultContext()) {
+    if (!recordreplay::AreEventsDisallowed())
+      recordreplay::Assert("[RUN-2134] RecordReplayRegisterScript #1");
     return;
   }
 
@@ -3668,6 +3683,8 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
   auto iter = gRecordReplayScripts->find(script->id());
   if (iter != gRecordReplayScripts->end()) {
     // Ignore duplicate registers.
+    if (!recordreplay::AreEventsDisallowed())
+      recordreplay::Assert("[RUN-2134] RecordReplayRegisterScript #2");
     return;
   }
 
@@ -3680,6 +3697,8 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
   std::unique_ptr<char[]> id = String::cast(*idStr).ToCString();
 
   if (script->type() == Script::TYPE_WASM) {
+    if (!recordreplay::AreEventsDisallowed())
+      recordreplay::Assert("[RUN-2134] RecordReplayRegisterScript #3");
     return;
   }
 
