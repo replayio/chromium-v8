@@ -11934,15 +11934,22 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
   }
 
   // Disable wasm background compilation.
-  internal::FLAG_wasm_num_compilation_tasks = 0;
-  internal::FLAG_wasm_async_compilation = false;
+  if (V8RecordReplayFeatureEnabled("disable-wasm-compilation-tasks", nullptr)) {
+    internal::FLAG_wasm_num_compilation_tasks = 0;
+    internal::FLAG_wasm_async_compilation = false;
+  }
 
   // The compilation cache can interfere with getting consistent script IDs.
-  internal::FLAG_compilation_cache = false;
+  if (V8RecordReplayFeatureEnabled("disable-compilation-cache", nullptr)) {
+    internal::FLAG_compilation_cache = false;
+  }
 
+  // The baseline JIT's handling of some record/replay opcodes is buggy.
   if (V8RecordReplayFeatureEnabled("disable-baseline-jit", nullptr)) {
     internal::v8_flags.sparkplug = false;
   }
+
+  // The optimizing JIT is used by default but can be disabled via a feature.
   if (!V8RecordReplayFeatureEnabled("use-optimizing-jit", nullptr)) {
     internal::v8_flags.turbofan = false;
   }
