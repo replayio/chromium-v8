@@ -2005,6 +2005,8 @@ ScriptCompiler::StreamedSource::StreamedSource(
 ScriptCompiler::StreamedSource::~StreamedSource() = default;
 
 Local<Script> UnboundScript::BindToCurrentContext() {
+  recordreplay::Assert("[RUN-2134] UnboundScript::BindToCurrentContext");
+
   auto function_info =
       i::Handle<i::SharedFunctionInfo>::cast(Utils::OpenHandle(this));
   i::Isolate* i_isolate = function_info->GetIsolate();
@@ -2013,6 +2015,9 @@ Local<Script> UnboundScript::BindToCurrentContext() {
       i::Factory::JSFunctionBuilder{i_isolate, function_info,
                                     i_isolate->native_context()}
           .Build();
+
+  recordreplay::Assert("[RUN-2134] UnboundScript::BindToCurrentContext Done");
+
   return ToApiHandle<Script>(function);
 }
 
@@ -2623,6 +2628,8 @@ MaybeLocal<Script> ScriptCompiler::Compile(Local<Context> context,
                                            Source* source,
                                            CompileOptions options,
                                            NoCacheReason no_cache_reason) {
+  recordreplay::Assert("[RUN-2134] ScriptCompiler::Compile");
+
   Utils::ApiCheck(
       !source->GetResourceOptions().IsModule(), "v8::ScriptCompiler::Compile",
       "v8::ScriptCompiler::CompileModule must be used to compile modules");
@@ -2631,6 +2638,9 @@ MaybeLocal<Script> ScriptCompiler::Compile(Local<Context> context,
       CompileUnboundInternal(i_isolate, source, options, no_cache_reason);
   Local<UnboundScript> result;
   if (!maybe.ToLocal(&result)) return MaybeLocal<Script>();
+
+  recordreplay::Assert("[RUN-2134] ScriptCompiler::Compile #1");
+
   v8::Context::Scope scope(context);
   return result->BindToCurrentContext();
 }
