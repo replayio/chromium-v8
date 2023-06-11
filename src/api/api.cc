@@ -11945,31 +11945,40 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
 
   // Set flags to disable non-deterministic posting of tasks to other threads.
   // We don't support this yet when recording/replaying.
-  internal::FLAG_concurrent_array_buffer_sweeping = false;
-  internal::FLAG_concurrent_marking = false;
-  internal::FLAG_concurrent_sweeping = false;
-  internal::FLAG_incremental_marking_task = false;
-  internal::FLAG_parallel_compaction = false;
-  internal::FLAG_parallel_marking = false;
-  internal::FLAG_parallel_pointer_update = false;
-  internal::FLAG_parallel_scavenge = false;
-  internal::FLAG_scavenge_task = false;
+  if (V8RecordReplayFeatureEnabled("v8-gc-tasks", nullptr)) {
+    internal::FLAG_concurrent_array_buffer_sweeping = false;
+    internal::FLAG_concurrent_marking = false;
+    internal::FLAG_concurrent_sweeping = false;
+    internal::FLAG_incremental_marking_task = false;
+    internal::FLAG_parallel_compaction = false;
+    internal::FLAG_parallel_marking = false;
+    internal::FLAG_parallel_pointer_update = false;
+    internal::FLAG_parallel_scavenge = false;
+    internal::FLAG_scavenge_task = false;
+  }
 
   // Incremental GC is also disabled for now.
-  internal::FLAG_incremental_marking = false;
+  if (V8RecordReplayFeatureEnabled("disable-incremental-marking", nullptr)) {
+    internal::FLAG_incremental_marking = false;
+  }
 
   // Disable wasm background compilation.
-  internal::FLAG_wasm_num_compilation_tasks = 0;
-  internal::FLAG_wasm_async_compilation = false;
+  if (V8RecordReplayFeatureEnabled("disable-wasm-compilation-tasks", nullptr)) {
+    internal::FLAG_wasm_num_compilation_tasks = 0;
+    internal::FLAG_wasm_async_compilation = false;
+  }
 
   // For now the compilation cache is only used when recording.
   if (recordreplay::IsReplaying()) {
     internal::FLAG_compilation_cache = false;
   }
 
+  // The baseline JIT's handling of some record/replay opcodes is buggy.
   if (V8RecordReplayFeatureEnabled("disable-baseline-jit", nullptr)) {
     internal::v8_flags.sparkplug = false;
   }
+
+  // The optimizing JIT is used by default but can be disabled via a feature.
   if (!V8RecordReplayFeatureEnabled("use-optimizing-jit", nullptr)) {
     internal::v8_flags.turbofan = false;
   }
