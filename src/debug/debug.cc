@@ -3668,8 +3668,16 @@ static NewScriptHandlerVector* gNewScriptHandlers;
 static void RecordReplayRegisterScript(Handle<Script> script) {
   CHECK(IsMainThread());
 
-  if (!recordreplay::AreEventsDisallowed())
-    recordreplay::Assert("[RUN-2134] RecordReplayRegisterScript %d", script->id());
+  std::string url;
+  if (!script->name().IsUndefined()) {
+    std::unique_ptr<char[]> name = String::cast(script->name()).ToCString();
+    url = name.get();
+  }
+
+  if (!recordreplay::AreEventsDisallowed()) {
+    recordreplay::Assert("[RUN-2134] RecordReplayRegisterScript %d url=%s is_user_js=%d",
+                         script->id(), url.c_str(), script->IsUserJavaScript());
+  }
 
   if (!RecordReplayHasDefaultContext()) {
     if (!recordreplay::AreEventsDisallowed())
@@ -3704,12 +3712,6 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
 
   if (recordreplay::AreEventsDisallowed()) {
     return;
-  }
-
-  std::string url;
-  if (!script->name().IsUndefined()) {
-    std::unique_ptr<char[]> name = String::cast(script->name()).ToCString();
-    url = name.get();
   }
 
   if (!RecordReplayIsInternalScriptURL(url.c_str())) {
