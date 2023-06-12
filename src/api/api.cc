@@ -11933,6 +11933,11 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
                            internal::RecordReplayCallbackAssertDescribeData);
   }
 
+  // Disable some GC settings while replaying for causing mysterious crashes.
+  if (IsReplaying()) {
+    internal::FLAG_concurrent_marking = false;
+  }
+
   // Disable wasm background compilation.
   if (V8RecordReplayFeatureEnabled("disable-wasm-compilation-tasks", nullptr)) {
     internal::FLAG_wasm_num_compilation_tasks = 0;
