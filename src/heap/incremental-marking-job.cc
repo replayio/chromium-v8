@@ -40,6 +40,8 @@ class IncrementalMarkingJob::Task : public CancelableTask {
 };
 
 void IncrementalMarkingJob::ScheduleTask() {
+  recordreplay::AutoDisallowEvents disallow("IncrementalMarkingJob::ScheduleTask");
+
   base::MutexGuard guard(&mutex_);
 
   if (is_task_pending_ || heap_->IsTearingDown() ||

@@ -70,6 +70,8 @@ void StatsCollector::NotifySafePointForTesting() {
 }
 
 void StatsCollector::AllocatedObjectSizeSafepointImpl() {
+  recordreplay::AutoDisallowEvents disallow("StatsCollector::AllocatedObjectSizeSafepointImpl");
+
   allocated_bytes_since_end_of_marking_ +=
       static_cast<int64_t>(allocated_bytes_since_safepoint_) -
       static_cast<int64_t>(explicitly_freed_bytes_since_safepoint_);
