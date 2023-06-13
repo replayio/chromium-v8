@@ -953,8 +953,7 @@ void ConcurrentMarking::ScheduleJob(GarbageCollector garbage_collector,
   DCHECK(!heap_->IsTearingDown());
   DCHECK(IsStopped());
 
-  // FIXME RUN-2137
-  CHECK(recordreplay::AreEventsDisallowed());
+  recordreplay::AutoDisallowEvents disallow("ConcurrentMarking::ScheduleJob");
 
   garbage_collector_ = garbage_collector;
   if (garbage_collector == GarbageCollector::MARK_COMPACTOR) {
