@@ -63,6 +63,7 @@ IncrementalMarking::IncrementalMarking(Heap* heap, WeakObjects* weak_objects)
 
 void IncrementalMarking::MarkBlackAndVisitObjectDueToLayoutChange(
     HeapObject obj) {
+  recordreplay::AutoDisallowEvents disallow("IncrementalMarking::MarkBlackAndVisitObjectDueToLayoutChange");
   // TODO(v8:13012): Add scope for MinorMC.
   TRACE_EVENT0("v8", "V8.GCIncrementalMarkingLayoutChange");
   TRACE_GC(heap()->tracer(), GCTracer::Scope::MC_INCREMENTAL_LAYOUT_CHANGE);
