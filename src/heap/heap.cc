@@ -1535,6 +1535,8 @@ void Heap::PreciseCollectAllGarbage(int flags,
 }
 
 void Heap::ReportExternalMemoryPressure() {
+  recordreplay::AutoDisallowEvents disallow("Heap::ReportExternalMemoryPressure");
+
   const GCCallbackFlags kGCCallbackFlagsForExternalMemory =
       static_cast<GCCallbackFlags>(
           kGCCallbackFlagSynchronousPhantomCallbackProcessing |
