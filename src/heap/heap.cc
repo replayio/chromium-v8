@@ -1834,6 +1834,8 @@ void Heap::StartIncrementalMarking(int gc_flags,
                                    GarbageCollector collector) {
   DCHECK(incremental_marking()->IsStopped());
 
+  recordreplay::AutoDisallowEvents disallow("Heap::StartIncrementalMarking");
+
   if (IsYoungGenerationCollector(collector)) {
     CompleteSweepingYoung(collector);
   } else {
