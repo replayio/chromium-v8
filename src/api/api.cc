@@ -2581,7 +2581,8 @@ MaybeLocal<UnboundScript> ScriptCompiler::CompileUnboundInternal(
       source->host_defined_options, source->resource_options);
 
   i::MaybeHandle<i::SharedFunctionInfo> maybe_function_info;
-  if (options == kConsumeCodeCache) {
+  if (options == kConsumeCodeCache &&
+      !recordreplay::IsRecordingOrReplaying("no-compile-unbound-cache")) {
     if (source->consume_cache_task) {
       // Take ownership of the internal deserialization task and clear it off
       // the consume task on the source.
