@@ -40,6 +40,8 @@ class IncrementalMarkingJob::Task : public CancelableTask {
 };
 
 void IncrementalMarkingJob::ScheduleTask() {
+  recordreplay::AutoDisallowEvents disallow("IncrementalMarkingJob::ScheduleTask");
+
   base::MutexGuard guard(&mutex_);
 
   if (is_task_pending_ || heap_->IsTearingDown() ||
@@ -67,6 +69,10 @@ void IncrementalMarkingJob::ScheduleTask() {
 }
 
 void IncrementalMarkingJob::Task::RunInternal() {
+  // RUN-2140: This shouldn't be necessary, this task should run at non-deterministic
+  // points in general and be unordered.
+  recordreplay::AutoDisallowEvents disallow("IncrementalMarkingJob::Task::RunInternal");
+
   VMState<GC> state(isolate());
   TRACE_EVENT_CALL_STATS_SCOPED(isolate(), "v8", "V8.Task");
 
