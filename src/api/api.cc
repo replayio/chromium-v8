@@ -11933,10 +11933,8 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
                            internal::RecordReplayCallbackAssertDescribeData);
   }
 
-  // Set flags to disable non-deterministic posting of tasks to other threads.
-  // We don't support this yet when recording/replaying.
-  if (V8RecordReplayFeatureEnabled("v8-gc-tasks", nullptr)) {
-    internal::FLAG_concurrent_array_buffer_sweeping = false;
+  // Disable some GC settings while replaying for causing mysterious crashes.
+  if (IsReplaying()) {
     internal::FLAG_concurrent_marking = false;
     internal::FLAG_concurrent_sweeping = false;
     internal::FLAG_incremental_marking_task = false;
@@ -11945,10 +11943,6 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
     internal::FLAG_parallel_pointer_update = false;
     internal::FLAG_parallel_scavenge = false;
     internal::FLAG_scavenge_task = false;
-  }
-
-  // Incremental GC is also disabled for now.
-  if (V8RecordReplayFeatureEnabled("disable-incremental-marking", nullptr)) {
     internal::FLAG_incremental_marking = false;
   }
 

@@ -1535,6 +1535,8 @@ void Heap::PreciseCollectAllGarbage(int flags,
 }
 
 void Heap::ReportExternalMemoryPressure() {
+  recordreplay::AutoDisallowEvents disallow("Heap::ReportExternalMemoryPressure");
+
   const GCCallbackFlags kGCCallbackFlagsForExternalMemory =
       static_cast<GCCallbackFlags>(
           kGCCallbackFlagSynchronousPhantomCallbackProcessing |
@@ -1834,6 +1836,8 @@ void Heap::StartIncrementalMarking(int gc_flags,
                                    GarbageCollector collector) {
   DCHECK(incremental_marking()->IsStopped());
 
+  recordreplay::AutoDisallowEvents disallow("Heap::StartIncrementalMarking");
+
   if (IsYoungGenerationCollector(collector)) {
     CompleteSweepingYoung(collector);
   } else {
@@ -1885,6 +1889,7 @@ void Heap::CompleteSweepingFull() {
 
 void Heap::StartIncrementalMarkingIfAllocationLimitIsReached(
     int gc_flags, const GCCallbackFlags gc_callback_flags) {
+  recordreplay::AutoDisallowEvents disallow("Heap::StartIncrementalMarkingIfAllocationLimitIsReached");
   if (v8_flags.separate_gc_phases && gc_callbacks_depth_ > 0) {
     // Do not start incremental marking while invoking GC callbacks.
     // Heap::CollectGarbage already decided which GC is going to be invoked. In
