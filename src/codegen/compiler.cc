@@ -3521,7 +3521,8 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
   // For extensions or REPL mode scripts neither do a compilation cache lookup,
   // nor put the compilation result back into the cache.
   const bool use_compilation_cache =
-      extension == nullptr && script_details.repl_mode == REPLMode::kNo;
+      extension == nullptr && script_details.repl_mode == REPLMode::kNo &&
+      !recordreplay::IsRecordingOrReplaying("no-compile-cache", "GetSharedFunctionInfoForScriptImpl");
   MaybeHandle<SharedFunctionInfo> maybe_result;
   MaybeHandle<Script> maybe_script;
   IsCompiledScope is_compiled_scope;
