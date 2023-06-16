@@ -3480,6 +3480,17 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
     ScriptCompiler::NoCacheReason no_cache_reason, NativesFlag natives) {
   ScriptCompileTimerScope compile_timer(isolate, no_cache_reason);
 
+  std::string script_url;
+  Handle<Object> script_name;
+  if (script_details.name_obj.ToHandle(&script_name)) {
+    std::unique_ptr<char[]> name = String::cast(script_name).ToCString();
+    script_url = name.get();
+  }
+  recordreplay::Assert("[RUN-2134] GetSharedFunctionInfoForScriptImpl %s %d %d %d",
+                       script_url.c_str(),
+                       script_details.line_offset, script_details.column_offset,
+                       source->length());
+
   if (compile_options == ScriptCompiler::kNoCompileOptions ||
       compile_options == ScriptCompiler::kEagerCompile) {
     DCHECK_NULL(cached_data);
@@ -3526,6 +3537,8 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
   MaybeHandle<Script> maybe_script;
   IsCompiledScope is_compiled_scope;
   if (use_compilation_cache) {
+    recordreplay::Assert("[RUN-2134] GetSharedFunctionInfoForScriptImpl #1");
+
     bool can_consume_code_cache =
         compile_options == ScriptCompiler::kConsumeCodeCache;
     if (can_consume_code_cache) {
@@ -3539,8 +3552,10 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
     maybe_result = lookup_result.toplevel_sfi();
     is_compiled_scope = lookup_result.is_compiled_scope();
     if (!maybe_result.is_null()) {
+      recordreplay::Assert("[RUN-2134] GetSharedFunctionInfoForScriptImpl #2");
       compile_timer.set_hit_isolate_cache();
     } else if (can_consume_code_cache) {
+      recordreplay::Assert("[RUN-2134] GetSharedFunctionInfoForScriptImpl #3");
       compile_timer.set_consuming_code_cache();
       // Then check cached code provided by embedder.
       NestedTimedHistogramScope timer(
@@ -3580,6 +3595,7 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
       bool consuming_code_cache_succeeded = false;
       Handle<SharedFunctionInfo> result;
       if (maybe_result.ToHandle(&result)) {
+        recordreplay::Assert("[RUN-2134] GetSharedFunctionInfoForScriptImpl #4");
         is_compiled_scope = result->is_compiled_scope(isolate);
         if (is_compiled_scope.is_compiled()) {
           consuming_code_cache_succeeded = true;
@@ -3595,6 +3611,7 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
   }
 
   if (maybe_result.is_null()) {
+    recordreplay::Assert("[RUN-2134] GetSharedFunctionInfoForScriptImpl #5");
     // No cache entry found compile the script.
     if (v8_flags.stress_background_compile &&
         CanBackgroundCompile(script_details, extension, compile_options,
@@ -3632,6 +3649,8 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
       isolate->ReportPendingMessages();
     }
   }
+
+  recordreplay::Assert("[RUN-2134] GetSharedFunctionInfoForScriptImpl Done");
 
   return maybe_result;
 }
