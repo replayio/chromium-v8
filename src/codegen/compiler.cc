@@ -3564,7 +3564,7 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
         script_id = script->id();
         CHECK(script_id != v8::UnboundScript::kNoScriptId);
       }
-      script_id = recordreplay::RecordReplayValue("GetSharedFunctionInfoForScriptImpl script_id", script_id);
+      script_id = (int)recordreplay::RecordReplayValue("GetSharedFunctionInfoForScriptImpl script_id", script_id);
       if (recordreplay::IsReplaying() && script_id != v8::UnboundScript::kNoScriptId) {
         maybe_script = GetScript(isolate, script_id);
       }
