@@ -3472,6 +3472,8 @@ MaybeHandle<SharedFunctionInfo> CompileScriptOnBothBackgroundAndMainThread(
   return maybe_result;
 }
 
+extern Handle<Script> GetScript(Isolate* isolate, int script_id);
+
 MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
     Isolate* isolate, Handle<String> source,
     const ScriptDetails& script_details, v8::Extension* extension,
@@ -3551,11 +3553,26 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
     maybe_script = lookup_result.script();
     maybe_result = lookup_result.toplevel_sfi();
     is_compiled_scope = lookup_result.is_compiled_scope();
+
+    // The compilation cache isn't enabled when replaying, but we still need
+    // to record/replay whether a script was found when recording so that the
+    // same scripts are created at the same points. The SFI will need to be
+    // recompiled when replaying but that's fine when the right script ID is used.
+    if (recordreplay::IsRecordingOrReplaying("values")) {
+      int script_id = v8::UnboundScript::kNoScriptId;
+      if (Handle<Script> script; maybe_script.ToHandle(&script)) {
+        script_id = script->id();
+        CHECK(script_id != v8::UnboundScript::kNoScriptId);
+      }
+      script_id = recordreplay::RecordReplayValue("GetSharedFunctionInfoForScriptImpl script_id", script_id);
+      if (recordreplay::IsReplaying() && script_id != v8::UnboundScript::kNoScriptId) {
+        maybe_script = GetScript(isolate, script_id);
+      }
+    }
+
     if (!maybe_result.is_null()) {
-      recordreplay::Assert("[RUN-2134] GetSharedFunctionInfoForScriptImpl #2");
       compile_timer.set_hit_isolate_cache();
     } else if (can_consume_code_cache) {
-      recordreplay::Assert("[RUN-2134] GetSharedFunctionInfoForScriptImpl #3");
       compile_timer.set_consuming_code_cache();
       // Then check cached code provided by embedder.
       NestedTimedHistogramScope timer(
@@ -3595,7 +3612,6 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
       bool consuming_code_cache_succeeded = false;
       Handle<SharedFunctionInfo> result;
       if (maybe_result.ToHandle(&result)) {
-        recordreplay::Assert("[RUN-2134] GetSharedFunctionInfoForScriptImpl #4");
         is_compiled_scope = result->is_compiled_scope(isolate);
         if (is_compiled_scope.is_compiled()) {
           consuming_code_cache_succeeded = true;
@@ -3611,7 +3627,6 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
   }
 
   if (maybe_result.is_null()) {
-    recordreplay::Assert("[RUN-2134] GetSharedFunctionInfoForScriptImpl #5");
     // No cache entry found compile the script.
     if (v8_flags.stress_background_compile &&
         CanBackgroundCompile(script_details, extension, compile_options,
