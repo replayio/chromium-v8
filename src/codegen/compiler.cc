@@ -3483,7 +3483,7 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
   std::string script_url;
   Handle<Object> script_name;
   if (script_details.name_obj.ToHandle(&script_name)) {
-    std::unique_ptr<char[]> name = String::cast(script_name).ToCString();
+    std::unique_ptr<char[]> name = String::cast(*script_name).ToCString();
     script_url = name.get();
   }
   recordreplay::Assert("[RUN-2134] GetSharedFunctionInfoForScriptImpl %s %d %d %d",
