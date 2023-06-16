@@ -73,6 +73,8 @@
 namespace v8 {
 namespace internal {
 
+extern Handle<Script> GetScript(Isolate* isolate, int script_id);
+
 namespace {
 
 constexpr bool IsOSR(BytecodeOffset osr_offset) { return !osr_offset.IsNone(); }
@@ -3471,8 +3473,6 @@ MaybeHandle<SharedFunctionInfo> CompileScriptOnBothBackgroundAndMainThread(
 
   return maybe_result;
 }
-
-extern Handle<Script> GetScript(Isolate* isolate, int script_id);
 
 MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
     Isolate* isolate, Handle<String> source,
