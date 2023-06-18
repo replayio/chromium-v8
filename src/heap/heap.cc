@@ -3722,6 +3722,7 @@ void Heap::ActivateMemoryReducerIfNeeded() {
   const int kMinCommittedMemory = 7 * Page::kPageSize;
   if (ms_count_ == 0 && CommittedMemory() > kMinCommittedMemory &&
       isolate()->IsIsolateInBackground()) {
+    recordreplay::AutoDisallowEvents disallow("Heap::ActivateMemoryReducerIfNeeded");
     MemoryReducer::Event event;
     event.type = MemoryReducer::kPossibleGarbage;
     event.time_ms = MonotonicallyIncreasingTimeInMs();
