@@ -3675,8 +3675,8 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
   }
 
   if (recordreplay::AreEventsDisallowed()) {
-    recordreplay::Print("[RUN-2134] RecordReplayRegisterScriptEventsDisallowed recordingId=%s id=%d url=%s is_user_js=%d",
-                        recordreplay::GetRecordingId(), script->id(), url.c_str(), script->IsUserJavaScript());
+    recordreplay::Print("[RUN-2134] RecordReplayRegisterScriptEventsDisallowed id=%d url=%s is_user_js=%d",
+                        script->id(), url.c_str(), script->IsUserJavaScript());
     recordreplay::Trace("[RUN-2134] RecordReplayRegisterScriptEventsDisallowed id=%d url=%s is_user_js=%d",
                         script->id(), url.c_str(), script->IsUserJavaScript());
   } else {
