@@ -3482,16 +3482,18 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
     ScriptCompiler::NoCacheReason no_cache_reason, NativesFlag natives) {
   ScriptCompileTimerScope compile_timer(isolate, no_cache_reason);
 
-  std::string script_url;
-  Handle<Object> script_name;
-  if (script_details.name_obj.ToHandle(&script_name)) {
-    std::unique_ptr<char[]> name = String::cast(*script_name).ToCString();
-    script_url = name.get();
+  if (!recordreplay::AreEventsDisallowed()) {
+    std::string script_url;
+    Handle<Object> script_name;
+    if (script_details.name_obj.ToHandle(&script_name)) {
+      std::unique_ptr<char[]> name = String::cast(*script_name).ToCString();
+      script_url = name.get();
+    }
+    recordreplay::Assert("[RUN-2134] GetSharedFunctionInfoForScriptImpl %s %d %d %d",
+                         script_url.c_str(),
+                         script_details.line_offset, script_details.column_offset,
+                         source->length());
   }
-  recordreplay::Assert("[RUN-2134] GetSharedFunctionInfoForScriptImpl %s %d %d %d",
-                       script_url.c_str(),
-                       script_details.line_offset, script_details.column_offset,
-                       source->length());
 
   if (compile_options == ScriptCompiler::kNoCompileOptions ||
       compile_options == ScriptCompiler::kEagerCompile) {
@@ -3539,7 +3541,8 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
   MaybeHandle<Script> maybe_script;
   IsCompiledScope is_compiled_scope;
   if (use_compilation_cache) {
-    recordreplay::Assert("[RUN-2134] GetSharedFunctionInfoForScriptImpl #1");
+    if (!recordreplay::AreEventsDisallowed())
+      recordreplay::Assert("[RUN-2134] GetSharedFunctionInfoForScriptImpl #1");
 
     bool can_consume_code_cache =
         compile_options == ScriptCompiler::kConsumeCodeCache;
@@ -3558,7 +3561,8 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
     // to record/replay whether a script was found when recording so that the
     // same scripts are created at the same points. The SFI will need to be
     // recompiled when replaying but that's fine when the right script ID is used.
-    if (recordreplay::IsRecordingOrReplaying("values")) {
+    if (recordreplay::IsRecordingOrReplaying("values") &&
+        !recordreplay::AreEventsDisallowed()) {
       int script_id = v8::UnboundScript::kNoScriptId;
       if (Handle<Script> script; maybe_script.ToHandle(&script)) {
         script_id = script->id();
@@ -3665,7 +3669,8 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
     }
   }
 
-  recordreplay::Assert("[RUN-2134] GetSharedFunctionInfoForScriptImpl Done");
+  if (!recordreplay::AreEventsDisallowed())
+    recordreplay::Assert("[RUN-2134] GetSharedFunctionInfoForScriptImpl Done");
 
   return maybe_result;
 }
