@@ -3477,7 +3477,7 @@ MaybeHandle<SharedFunctionInfo> CompileScriptOnBothBackgroundAndMainThread(
 static int GetMaybeFunctionInfoId(i::MaybeHandle<i::SharedFunctionInfo> function) {
   i::Handle<i::SharedFunctionInfo> nfunction;
   if (function.ToHandle(&nfunction))
-    return i::Script::cast(nfunction.script()).id();
+    return i::Script::cast(nfunction->script()).id();
   return 0;
 }
 
