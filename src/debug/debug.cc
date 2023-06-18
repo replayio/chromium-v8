@@ -3679,18 +3679,18 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
                          script->id(), url.c_str(), script->IsUserJavaScript());
   }
 
-  if (!RecordReplayHasDefaultContext()) {
-    if (!recordreplay::AreEventsDisallowed())
-      recordreplay::Assert("[RUN-2134] RecordReplayRegisterScript #1");
-    return;
-  }
-
   if (!gRecordReplayScripts) {
     gRecordReplayScripts = new ScriptIdMap();
   }
   auto iter = gRecordReplayScripts->find(script->id());
   if (iter != gRecordReplayScripts->end()) {
     // Ignore duplicate registers.
+    if (!recordreplay::AreEventsDisallowed())
+      recordreplay::Assert("[RUN-2134] RecordReplayRegisterScript #1");
+    return;
+  }
+
+  if (!RecordReplayHasDefaultContext()) {
     if (!recordreplay::AreEventsDisallowed())
       recordreplay::Assert("[RUN-2134] RecordReplayRegisterScript #2");
     return;

@@ -2562,6 +2562,13 @@ i::ScriptDetails GetScriptDetails(
 
 }  // namespace
 
+static int GetMaybeFunctionInfoId(i::MaybeHandle<i::SharedFunctionInfo> function) {
+  i::Handle<i::SharedFunctionInfo> nfunction;
+  if (function.ToHandle(&nfunction))
+    return i::Script::cast(nfunction.script()).id();
+  return 0;
+}
+
 MaybeLocal<UnboundScript> ScriptCompiler::CompileUnboundInternal(
     Isolate* v8_isolate, Source* source, CompileOptions options,
     NoCacheReason no_cache_reason) {
@@ -2593,6 +2600,10 @@ MaybeLocal<UnboundScript> ScriptCompiler::CompileUnboundInternal(
               i_isolate, str, script_details, deserialize_task.get(), options,
               no_cache_reason, i::NOT_NATIVES_CODE);
       source->cached_data->rejected = deserialize_task->rejected();
+
+      if (!recordreplay::AreEventsDisallowed())
+        recordreplay::Assert("[RUN-2134] ScriptCompiler::CompileUnboundInternal #1 %d",
+                             GetMaybeFunctionInfoId(maybe_function_info));
     } else {
       DCHECK(source->cached_data);
       // AlignedCachedData takes care of pointer-aligning the data.
@@ -2603,12 +2614,20 @@ MaybeLocal<UnboundScript> ScriptCompiler::CompileUnboundInternal(
               i_isolate, str, script_details, cached_data.get(), options,
               no_cache_reason, i::NOT_NATIVES_CODE);
       source->cached_data->rejected = cached_data->rejected();
+
+      if (!recordreplay::AreEventsDisallowed())
+        recordreplay::Assert("[RUN-2134] ScriptCompiler::CompileUnboundInternal #2 %d",
+                             GetMaybeFunctionInfoId(maybe_function_info));
     }
   } else {
     // Compile without any cache.
     maybe_function_info = i::Compiler::GetSharedFunctionInfoForScript(
         i_isolate, str, script_details, options, no_cache_reason,
         i::NOT_NATIVES_CODE);
+
+    if (!recordreplay::AreEventsDisallowed())
+      recordreplay::Assert("[RUN-2134] ScriptCompiler::CompileUnboundInternal #3 %d",
+                           GetMaybeFunctionInfoId(maybe_function_info));
   }
 
   has_pending_exception = !maybe_function_info.ToHandle(&result);

@@ -3474,6 +3474,13 @@ MaybeHandle<SharedFunctionInfo> CompileScriptOnBothBackgroundAndMainThread(
   return maybe_result;
 }
 
+static int GetMaybeFunctionInfoId(i::MaybeHandle<i::SharedFunctionInfo> function) {
+  i::Handle<i::SharedFunctionInfo> nfunction;
+  if (function.ToHandle(&nfunction))
+    return i::Script::cast(nfunction.script()).id();
+  return 0;
+}
+
 MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
     Isolate* isolate, Handle<String> source,
     const ScriptDetails& script_details, v8::Extension* extension,
@@ -3659,6 +3666,10 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
       maybe_result = CompileScriptOnMainThread(
           flags, source, script_details, natives, extension, isolate,
           maybe_script, &is_compiled_scope);
+
+      if (!recordreplay::AreEventsDisallowed())
+        recordreplay::Assert("[RUN-2134] GetSharedFunctionInfoForScriptImpl #5 %d %d",
+                             script_id, GetMaybeFunctionInfoId(maybe_result));
     }
 
     // Add the result to the isolate cache.
@@ -3672,7 +3683,8 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
   }
 
   if (!recordreplay::AreEventsDisallowed())
-    recordreplay::Assert("[RUN-2134] GetSharedFunctionInfoForScriptImpl Done");
+    recordreplay::Assert("[RUN-2134] GetSharedFunctionInfoForScriptImpl Done %d",
+                         GetMaybeFunctionInfoId(maybe_result));
 
   return maybe_result;
 }
