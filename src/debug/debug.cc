@@ -3674,8 +3674,13 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
     url = name.get();
   }
 
-  if (!recordreplay::AreEventsDisallowed()) {
-    recordreplay::Assert("[RUN-2134] RecordReplayRegisterScript %d url=%s is_user_js=%d",
+  if (recordreplay::AreEventsDisallowed()) {
+    recordreplay::Print("[RUN-2134] RecordReplayRegisterScriptEventsDisallowed recordingId=%s id=%d url=%s is_user_js=%d",
+                        recordreplay::GetRecordingId(), script->id(), url.c_str(), script->IsUserJavaScript());
+    recordreplay::Trace("[RUN-2134] RecordReplayRegisterScriptEventsDisallowed id=%d url=%s is_user_js=%d",
+                        script->id(), url.c_str(), script->IsUserJavaScript());
+  } else {
+    recordreplay::Assert("[RUN-2134] RecordReplayRegisterScript id=%d url=%s is_user_js=%d",
                          script->id(), url.c_str(), script->IsUserJavaScript());
   }
 
@@ -3686,13 +3691,13 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
   if (iter != gRecordReplayScripts->end()) {
     // Ignore duplicate registers.
     if (!recordreplay::AreEventsDisallowed())
-      recordreplay::Assert("[RUN-2134] RecordReplayRegisterScript #1");
+      recordreplay::Assert("[RUN-2134] RecordReplayRegisterScript ExistingEntry");
     return;
   }
 
   if (!RecordReplayHasDefaultContext()) {
     if (!recordreplay::AreEventsDisallowed())
-      recordreplay::Assert("[RUN-2134] RecordReplayRegisterScript #2");
+      recordreplay::Assert("[RUN-2134] RecordReplayRegisterScript NoDefaultContext");
     return;
   }
 
@@ -3706,7 +3711,7 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
 
   if (script->type() == Script::TYPE_WASM) {
     if (!recordreplay::AreEventsDisallowed())
-      recordreplay::Assert("[RUN-2134] RecordReplayRegisterScript #3");
+      recordreplay::Assert("[RUN-2134] RecordReplayRegisterScript Wasm");
     return;
   }
 

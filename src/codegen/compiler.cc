@@ -3666,10 +3666,6 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
       maybe_result = CompileScriptOnMainThread(
           flags, source, script_details, natives, extension, isolate,
           maybe_script, &is_compiled_scope);
-
-      if (!recordreplay::AreEventsDisallowed())
-        recordreplay::Assert("[RUN-2134] GetSharedFunctionInfoForScriptImpl #5 %d %d",
-                             script_id, GetMaybeFunctionInfoId(maybe_result));
     }
 
     // Add the result to the isolate cache.
