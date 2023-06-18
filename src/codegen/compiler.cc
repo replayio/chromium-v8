@@ -3640,19 +3640,21 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
       maybe_result = CompileScriptOnBothBackgroundAndMainThread(
           source, script_details, isolate, &is_compiled_scope);
     } else {
+      int script_id = UnboundScript::kNoScriptId;
+      if (Handle<Script> script; maybe_script.ToHandle(&script)) {
+        script_id = script->id();
+      }
+
       UnoptimizedCompileFlags flags =
           UnoptimizedCompileFlags::ForToplevelCompile(
               isolate, natives == NOT_NATIVES_CODE, language_mode,
               script_details.repl_mode,
               script_details.origin_options.IsModule() ? ScriptType::kModule
                                                        : ScriptType::kClassic,
-              v8_flags.lazy);
+              v8_flags.lazy,
+              script_id);
 
       flags.set_is_eager(compile_options == ScriptCompiler::kEagerCompile);
-
-      if (Handle<Script> script; maybe_script.ToHandle(&script)) {
-        flags.set_script_id(script->id());
-      }
 
       maybe_result = CompileScriptOnMainThread(
           flags, source, script_details, natives, extension, isolate,
