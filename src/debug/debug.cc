@@ -3074,6 +3074,7 @@ static MaybeHandle<Script> MaybeGetScript(Isolate* isolate, int script_id) {
   CHECK(gRecordReplayScripts);
   auto iter = gRecordReplayScripts->find(script_id);
   if (iter == gRecordReplayScripts->end()) {
+    recordreplay::Print("MaybeGetScript no entry %d", script_id);
     return MaybeHandle<Script>();
   }
 
@@ -3088,6 +3089,7 @@ static MaybeHandle<Script> MaybeGetScript(Isolate* isolate, int script_id) {
 Handle<Script> GetScript(Isolate* isolate, int script_id) {
   MaybeHandle<Script> script = MaybeGetScript(isolate, script_id);
   if (script.is_null()) {
+    recordreplay::Print("GetScript unknown script %d", script_id);
     recordreplay::Diagnostic("GetScript unknown script %d", script_id);
   }
   return script.ToHandleChecked();
@@ -3680,6 +3682,9 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
     recordreplay::Trace("[RUN-2134] RecordReplayRegisterScriptEventsDisallowed id=%d url=%s is_user_js=%d",
                         script->id(), url.c_str(), script->IsUserJavaScript());
   } else {
+    if (recordreplay::IsReplaying())
+      recordreplay::Print("[RUN-2134] RecordReplayRegisterScript id=%d url=%s is_user_js=%d",
+                          script->id(), url.c_str(), script->IsUserJavaScript());
     recordreplay::Assert("[RUN-2134] RecordReplayRegisterScript id=%d url=%s is_user_js=%d",
                          script->id(), url.c_str(), script->IsUserJavaScript());
   }
@@ -3692,12 +3697,16 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
     // Ignore duplicate registers.
     if (!recordreplay::AreEventsDisallowed())
       recordreplay::Assert("[RUN-2134] RecordReplayRegisterScript ExistingEntry");
+    if (recordreplay::IsReplaying())
+      recordreplay::Print("[RUN-2134] RecordReplayRegisterScript ExistingEntry");
     return;
   }
 
   if (!RecordReplayHasDefaultContext()) {
     if (!recordreplay::AreEventsDisallowed())
       recordreplay::Assert("[RUN-2134] RecordReplayRegisterScript NoDefaultContext");
+    if (recordreplay::IsReplaying())
+      recordreplay::Print("[RUN-2134] RecordReplayRegisterScript NoDefaultContext");
     return;
   }
 
@@ -3705,6 +3714,9 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
 
   (*gRecordReplayScripts)[script->id()] =
     Eternal<Value>((v8::Isolate*)isolate, v8::Utils::ToLocal(script));
+
+  if (recordreplay::IsReplaying())
+    recordreplay::Print("[RUN-2134] RecordReplayRegisterScript AddEntry id=%d", script->id());
 
   Handle<String> idStr = GetProtocolSourceId(isolate, script);
   std::unique_ptr<char[]> id = String::cast(*idStr).ToCString();

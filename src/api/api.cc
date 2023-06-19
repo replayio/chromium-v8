@@ -2006,7 +2006,7 @@ ScriptCompiler::StreamedSource::~StreamedSource() = default;
 
 Local<Script> UnboundScript::BindToCurrentContext() {
   if (!recordreplay::AreEventsDisallowed())
-    recordreplay::Assert("[RUN-2134] UnboundScript::BindToCurrentContext id=%d", GetId());
+    recordreplay::Assert("[RUN-2134] UnboundScript::BindToCurrentContext id=%d HelloThere!", GetId());
 
   auto function_info =
       i::Handle<i::SharedFunctionInfo>::cast(Utils::OpenHandle(this));
@@ -2665,6 +2665,10 @@ MaybeLocal<Script> ScriptCompiler::Compile(Local<Context> context,
     recordreplay::Assert("[RUN-2134] ScriptCompiler::Compile #1");
 
   v8::Context::Scope scope(context);
+
+  if (!recordreplay::AreEventsDisallowed())
+    recordreplay::Assert("[RUN-2134] ScriptCompiler::Compile #2");
+
   return result->BindToCurrentContext();
 }
 
