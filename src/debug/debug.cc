@@ -3670,35 +3670,12 @@ static NewScriptHandlerVector* gNewScriptHandlers;
 static void RecordReplayRegisterScript(Handle<Script> script) {
   CHECK(IsMainThread());
 
-  std::string url;
-  if (!script->name().IsUndefined()) {
-    std::unique_ptr<char[]> name = String::cast(script->name()).ToCString();
-    url = name.get();
-  }
-
-  if (recordreplay::AreEventsDisallowed()) {
-    recordreplay::Print("[RUN-2134] RecordReplayRegisterScriptEventsDisallowed id=%d url=%s is_user_js=%d",
-                        script->id(), url.c_str(), script->IsUserJavaScript());
-    recordreplay::Trace("[RUN-2134] RecordReplayRegisterScriptEventsDisallowed id=%d url=%s is_user_js=%d",
-                        script->id(), url.c_str(), script->IsUserJavaScript());
-  } else {
-    if (recordreplay::IsReplaying())
-      recordreplay::Print("[RUN-2134] RecordReplayRegisterScript id=%d url=%s is_user_js=%d",
-                          script->id(), url.c_str(), script->IsUserJavaScript());
-    recordreplay::Assert("[RUN-2134] RecordReplayRegisterScript id=%d url=%s is_user_js=%d",
-                         script->id(), url.c_str(), script->IsUserJavaScript());
-  }
-
   if (!gRecordReplayScripts) {
     gRecordReplayScripts = new ScriptIdMap();
   }
   auto iter = gRecordReplayScripts->find(script->id());
   if (iter != gRecordReplayScripts->end()) {
     // Ignore duplicate registers.
-    if (!recordreplay::AreEventsDisallowed())
-      recordreplay::Assert("[RUN-2134] RecordReplayRegisterScript ExistingEntry");
-    if (recordreplay::IsReplaying())
-      recordreplay::Print("[RUN-2134] RecordReplayRegisterScript ExistingEntry");
     return;
   }
 
@@ -3707,14 +3684,7 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
   (*gRecordReplayScripts)[script->id()] =
     Eternal<Value>((v8::Isolate*)isolate, v8::Utils::ToLocal(script));
 
-  if (recordreplay::IsReplaying())
-    recordreplay::Print("[RUN-2134] RecordReplayRegisterScript AddEntry id=%d", script->id());
-
   if (!RecordReplayHasDefaultContext()) {
-    if (!recordreplay::AreEventsDisallowed())
-      recordreplay::Assert("[RUN-2134] RecordReplayRegisterScript NoDefaultContext");
-    if (recordreplay::IsReplaying())
-      recordreplay::Print("[RUN-2134] RecordReplayRegisterScript NoDefaultContext");
     return;
   }
 
@@ -3722,13 +3692,17 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
   std::unique_ptr<char[]> id = String::cast(*idStr).ToCString();
 
   if (script->type() == Script::TYPE_WASM) {
-    if (!recordreplay::AreEventsDisallowed())
-      recordreplay::Assert("[RUN-2134] RecordReplayRegisterScript Wasm");
     return;
   }
 
   if (recordreplay::AreEventsDisallowed()) {
     return;
+  }
+
+  std::string url;
+  if (!script->name().IsUndefined()) {
+    std::unique_ptr<char[]> name = String::cast(script->name()).ToCString();
+    url = name.get();
   }
 
   if (!RecordReplayIsInternalScriptURL(url.c_str())) {

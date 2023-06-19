@@ -3474,13 +3474,6 @@ MaybeHandle<SharedFunctionInfo> CompileScriptOnBothBackgroundAndMainThread(
   return maybe_result;
 }
 
-static int GetMaybeFunctionInfoId(i::MaybeHandle<i::SharedFunctionInfo> function) {
-  i::Handle<i::SharedFunctionInfo> nfunction;
-  if (function.ToHandle(&nfunction))
-    return i::Script::cast(nfunction->script()).id();
-  return 0;
-}
-
 MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
     Isolate* isolate, Handle<String> source,
     const ScriptDetails& script_details, v8::Extension* extension,
@@ -3488,19 +3481,6 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
     ScriptCompiler::CompileOptions compile_options,
     ScriptCompiler::NoCacheReason no_cache_reason, NativesFlag natives) {
   ScriptCompileTimerScope compile_timer(isolate, no_cache_reason);
-
-  if (!recordreplay::AreEventsDisallowed()) {
-    std::string script_url;
-    Handle<Object> script_name;
-    if (script_details.name_obj.ToHandle(&script_name)) {
-      std::unique_ptr<char[]> name = String::cast(*script_name).ToCString();
-      script_url = name.get();
-    }
-    recordreplay::Assert("[RUN-2134] GetSharedFunctionInfoForScriptImpl %s %d %d %d",
-                         script_url.c_str(),
-                         script_details.line_offset, script_details.column_offset,
-                         source->length());
-  }
 
   if (compile_options == ScriptCompiler::kNoCompileOptions ||
       compile_options == ScriptCompiler::kEagerCompile) {
@@ -3548,9 +3528,6 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
   MaybeHandle<Script> maybe_script;
   IsCompiledScope is_compiled_scope;
   if (use_compilation_cache) {
-    if (!recordreplay::AreEventsDisallowed())
-      recordreplay::Assert("[RUN-2134] GetSharedFunctionInfoForScriptImpl #1");
-
     bool can_consume_code_cache =
         compile_options == ScriptCompiler::kConsumeCodeCache;
     if (can_consume_code_cache) {
@@ -3677,10 +3654,6 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
       isolate->ReportPendingMessages();
     }
   }
-
-  if (!recordreplay::AreEventsDisallowed())
-    recordreplay::Assert("[RUN-2134] GetSharedFunctionInfoForScriptImpl Done %d",
-                         GetMaybeFunctionInfoId(maybe_result));
 
   return maybe_result;
 }
@@ -4175,9 +4148,6 @@ void Compiler::PostInstantiation(Handle<JSFunction> function) {
   }
 
   if (shared->is_toplevel() || shared->is_wrapped()) {
-    if (!recordreplay::AreEventsDisallowed())
-      recordreplay::Assert("[RUN-2134] Compiler::PostInstantiation #2");
-
     // If it's a top-level script, report compilation to the debugger.
     Handle<Script> script(Script::cast(shared->script()), isolate);
     isolate->debug()->OnAfterCompile(script);

@@ -2005,9 +2005,6 @@ ScriptCompiler::StreamedSource::StreamedSource(
 ScriptCompiler::StreamedSource::~StreamedSource() = default;
 
 Local<Script> UnboundScript::BindToCurrentContext() {
-  if (!recordreplay::AreEventsDisallowed())
-    recordreplay::Assert("[RUN-2134] UnboundScript::BindToCurrentContext id=%d HelloThere!", GetId());
-
   auto function_info =
       i::Handle<i::SharedFunctionInfo>::cast(Utils::OpenHandle(this));
   i::Isolate* i_isolate = function_info->GetIsolate();
@@ -2016,10 +2013,6 @@ Local<Script> UnboundScript::BindToCurrentContext() {
       i::Factory::JSFunctionBuilder{i_isolate, function_info,
                                     i_isolate->native_context()}
           .Build();
-
-  if (!recordreplay::AreEventsDisallowed())
-    recordreplay::Assert("[RUN-2134] UnboundScript::BindToCurrentContext Done");
-
   return ToApiHandle<Script>(function);
 }
 
@@ -2562,13 +2555,6 @@ i::ScriptDetails GetScriptDetails(
 
 }  // namespace
 
-static int GetMaybeFunctionInfoId(i::MaybeHandle<i::SharedFunctionInfo> function) {
-  i::Handle<i::SharedFunctionInfo> nfunction;
-  if (function.ToHandle(&nfunction))
-    return i::Script::cast(nfunction->script()).id();
-  return 0;
-}
-
 MaybeLocal<UnboundScript> ScriptCompiler::CompileUnboundInternal(
     Isolate* v8_isolate, Source* source, CompileOptions options,
     NoCacheReason no_cache_reason) {
@@ -2600,10 +2586,6 @@ MaybeLocal<UnboundScript> ScriptCompiler::CompileUnboundInternal(
               i_isolate, str, script_details, deserialize_task.get(), options,
               no_cache_reason, i::NOT_NATIVES_CODE);
       source->cached_data->rejected = deserialize_task->rejected();
-
-      if (!recordreplay::AreEventsDisallowed())
-        recordreplay::Assert("[RUN-2134] ScriptCompiler::CompileUnboundInternal #1 %d",
-                             GetMaybeFunctionInfoId(maybe_function_info));
     } else {
       DCHECK(source->cached_data);
       // AlignedCachedData takes care of pointer-aligning the data.
@@ -2614,20 +2596,12 @@ MaybeLocal<UnboundScript> ScriptCompiler::CompileUnboundInternal(
               i_isolate, str, script_details, cached_data.get(), options,
               no_cache_reason, i::NOT_NATIVES_CODE);
       source->cached_data->rejected = cached_data->rejected();
-
-      if (!recordreplay::AreEventsDisallowed())
-        recordreplay::Assert("[RUN-2134] ScriptCompiler::CompileUnboundInternal #2 %d",
-                             GetMaybeFunctionInfoId(maybe_function_info));
     }
   } else {
     // Compile without any cache.
     maybe_function_info = i::Compiler::GetSharedFunctionInfoForScript(
         i_isolate, str, script_details, options, no_cache_reason,
         i::NOT_NATIVES_CODE);
-
-    if (!recordreplay::AreEventsDisallowed())
-      recordreplay::Assert("[RUN-2134] ScriptCompiler::CompileUnboundInternal #3 %d",
-                           GetMaybeFunctionInfoId(maybe_function_info));
   }
 
   has_pending_exception = !maybe_function_info.ToHandle(&result);
@@ -2649,9 +2623,6 @@ MaybeLocal<Script> ScriptCompiler::Compile(Local<Context> context,
                                            Source* source,
                                            CompileOptions options,
                                            NoCacheReason no_cache_reason) {
-  if (!recordreplay::AreEventsDisallowed())
-    recordreplay::Assert("[RUN-2134] ScriptCompiler::Compile");
-
   Utils::ApiCheck(
       !source->GetResourceOptions().IsModule(), "v8::ScriptCompiler::Compile",
       "v8::ScriptCompiler::CompileModule must be used to compile modules");
@@ -2661,14 +2632,7 @@ MaybeLocal<Script> ScriptCompiler::Compile(Local<Context> context,
   Local<UnboundScript> result;
   if (!maybe.ToLocal(&result)) return MaybeLocal<Script>();
 
-  if (!recordreplay::AreEventsDisallowed())
-    recordreplay::Assert("[RUN-2134] ScriptCompiler::Compile #1");
-
   v8::Context::Scope scope(context);
-
-  if (!recordreplay::AreEventsDisallowed())
-    recordreplay::Assert("[RUN-2134] ScriptCompiler::Compile #2");
-
   return result->BindToCurrentContext();
 }
 
@@ -2898,10 +2862,6 @@ MaybeLocal<Script> ScriptCompiler::Compile(Local<Context> context,
   i::Handle<i::SharedFunctionInfo> sfi;
   i::MaybeHandle<i::SharedFunctionInfo> maybe_sfi =
       CompileStreamedSource(i_isolate, v8_source, full_source_string, origin);
-
-  if (!recordreplay::AreEventsDisallowed())
-    recordreplay::Assert("[RUN-2134] ScriptCompiler::Compile (Streaming) #1 %d",
-                         GetMaybeFunctionInfoId(maybe_sfi));
 
   has_pending_exception = !maybe_sfi.ToHandle(&sfi);
   if (has_pending_exception) i_isolate->ReportPendingMessages();
