@@ -2445,7 +2445,6 @@ void Debug::DoProcessCompileEvent(bool has_compile_error, Handle<Script> script)
   HandleScope scope(isolate_);
   DisableBreak no_recursive_break(this);
   AllowJavascriptExecution allow_script(isolate_);
-
   {
     RCS_SCOPE(isolate_, RuntimeCallCounterId::kDebuggerCallback);
     debug_delegate_->ScriptCompiled(ToApiHandle<debug::Script>(script),
