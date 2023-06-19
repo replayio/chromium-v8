@@ -2631,7 +2631,6 @@ MaybeLocal<Script> ScriptCompiler::Compile(Local<Context> context,
       CompileUnboundInternal(i_isolate, source, options, no_cache_reason);
   Local<UnboundScript> result;
   if (!maybe.ToLocal(&result)) return MaybeLocal<Script>();
-
   v8::Context::Scope scope(context);
   return result->BindToCurrentContext();
 }
@@ -2862,7 +2861,6 @@ MaybeLocal<Script> ScriptCompiler::Compile(Local<Context> context,
   i::Handle<i::SharedFunctionInfo> sfi;
   i::MaybeHandle<i::SharedFunctionInfo> maybe_sfi =
       CompileStreamedSource(i_isolate, v8_source, full_source_string, origin);
-
   has_pending_exception = !maybe_sfi.ToHandle(&sfi);
   if (has_pending_exception) i_isolate->ReportPendingMessages();
   RETURN_ON_FAILED_EXECUTION(Script);

@@ -2422,9 +2422,6 @@ void Debug::OnAfterCompile(Handle<Script> script) {
 static void RecordReplayRegisterScript(Handle<Script> script);
 
 void Debug::DoProcessCompileEvent(bool has_compile_error, Handle<Script> script) {
-  if (!recordreplay::AreEventsDisallowed())
-    recordreplay::Assert("[RUN-2138] Debug::DoProcessCompileEvent");
-
   RCS_SCOPE(isolate_, RuntimeCallCounterId::kDebugger);
   // Ignore temporary scripts.
   if (script->id() == Script::kTemporaryScriptId) return;
@@ -2449,17 +2446,11 @@ void Debug::DoProcessCompileEvent(bool has_compile_error, Handle<Script> script)
   DisableBreak no_recursive_break(this);
   AllowJavascriptExecution allow_script(isolate_);
 
-  if (!recordreplay::AreEventsDisallowed())
-    recordreplay::Assert("[RUN-2138] Debug::DoProcessCompileEvent #1");
-
   {
     RCS_SCOPE(isolate_, RuntimeCallCounterId::kDebuggerCallback);
     debug_delegate_->ScriptCompiled(ToApiHandle<debug::Script>(script),
                                     running_live_edit_, has_compile_error);
   }
-
-  if (!recordreplay::AreEventsDisallowed())
-    recordreplay::Assert("[RUN-2138] Debug::DoProcessCompileEvent Done");
 }
 
 void Debug::ProcessCompileEvent(bool has_compile_error, Handle<Script> script) {
@@ -3074,7 +3065,6 @@ static MaybeHandle<Script> MaybeGetScript(Isolate* isolate, int script_id) {
   CHECK(gRecordReplayScripts);
   auto iter = gRecordReplayScripts->find(script_id);
   if (iter == gRecordReplayScripts->end()) {
-    recordreplay::Print("MaybeGetScript no entry %d", script_id);
     return MaybeHandle<Script>();
   }
 
@@ -3089,7 +3079,6 @@ static MaybeHandle<Script> MaybeGetScript(Isolate* isolate, int script_id) {
 Handle<Script> GetScript(Isolate* isolate, int script_id) {
   MaybeHandle<Script> script = MaybeGetScript(isolate, script_id);
   if (script.is_null()) {
-    recordreplay::Print("GetScript unknown script %d", script_id);
     recordreplay::Diagnostic("GetScript unknown script %d", script_id);
   }
   return script.ToHandleChecked();
