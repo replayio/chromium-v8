@@ -2898,6 +2898,11 @@ MaybeLocal<Script> ScriptCompiler::Compile(Local<Context> context,
   i::Handle<i::SharedFunctionInfo> sfi;
   i::MaybeHandle<i::SharedFunctionInfo> maybe_sfi =
       CompileStreamedSource(i_isolate, v8_source, full_source_string, origin);
+
+  if (!recordreplay::AreEventsDisallowed())
+    recordreplay::Assert("[RUN-2134] ScriptCompiler::Compile (Streaming) #1 %d",
+                         GetMaybeFunctionInfoId(maybe_sfi));
+
   has_pending_exception = !maybe_sfi.ToHandle(&sfi);
   if (has_pending_exception) i_isolate->ReportPendingMessages();
   RETURN_ON_FAILED_EXECUTION(Script);

@@ -3702,14 +3702,6 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
     return;
   }
 
-  if (!RecordReplayHasDefaultContext()) {
-    if (!recordreplay::AreEventsDisallowed())
-      recordreplay::Assert("[RUN-2134] RecordReplayRegisterScript NoDefaultContext");
-    if (recordreplay::IsReplaying())
-      recordreplay::Print("[RUN-2134] RecordReplayRegisterScript NoDefaultContext");
-    return;
-  }
-
   Isolate* isolate = Isolate::Current();
 
   (*gRecordReplayScripts)[script->id()] =
@@ -3717,6 +3709,14 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
 
   if (recordreplay::IsReplaying())
     recordreplay::Print("[RUN-2134] RecordReplayRegisterScript AddEntry id=%d", script->id());
+
+  if (!RecordReplayHasDefaultContext()) {
+    if (!recordreplay::AreEventsDisallowed())
+      recordreplay::Assert("[RUN-2134] RecordReplayRegisterScript NoDefaultContext");
+    if (recordreplay::IsReplaying())
+      recordreplay::Print("[RUN-2134] RecordReplayRegisterScript NoDefaultContext");
+    return;
+  }
 
   Handle<String> idStr = GetProtocolSourceId(isolate, script);
   std::unique_ptr<char[]> id = String::cast(*idStr).ToCString();

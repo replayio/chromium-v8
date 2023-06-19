@@ -3841,7 +3841,11 @@ Compiler::GetSharedFunctionInfoForStreamedScript(
   // Check if compile cache already holds the SFI, if so no need to finalize
   // the code compiled on the background thread.
   CompilationCache* compilation_cache = isolate->compilation_cache();
-  {
+
+  // For now we don't support using the compilation cache with streamed scripts,
+  // due to the lack of support for handling the case when the script is present
+  // but not the top level SFI.
+  if (!recordreplay::IsRecordingOrReplaying("no-streamed-script-cache")) {
     TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("v8.compile"),
                  "V8.StreamingFinalization.CheckCache");
     CompilationCacheScript::LookupResult lookup_result =
