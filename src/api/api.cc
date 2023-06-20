@@ -10834,7 +10834,7 @@ ForEachRecordReplaySymbol(DeclareRecordReplaySymbol)
 #undef DeclareRecordReplaySymbol
 
 #define DeclareRecordReplaySymbolVoid(Name, Params)                           \
-  static ReturnType (*g##Name) Params;
+  static void (*g##Name) Params;
 ForEachRecordReplaySymbolVoid(DeclareRecordReplaySymbolVoid)
 #undef DeclareRecordReplaySymbolVoid
 
