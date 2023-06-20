@@ -10757,7 +10757,7 @@ typedef char* (CommandCallbackRaw)(const char* params);
   Macro(RecordReplayOnInstrument,                                             \
         (const char* kind, const char* function, int offset))                 \
   Macro(RecordReplayAssert, (const char*, va_list))                           \
-  Macro(gRecordReplayAssertBytes,                                             \
+  Macro(RecordReplayAssertBytes,                                              \
         (const char* why, const void* ptr, size_t nbytes))                    \
   Macro(RecordReplayDescribeAssertData, (const char* text))                   \
   Macro(RecordReplayBytes, (const char* why, void* buf, size_t size))         \
@@ -10801,7 +10801,7 @@ typedef char* (CommandCallbackRaw)(const char* params);
   Macro(RecordReplaySetDefaultCommandCallback,                                \
         (char* (*callback)(const char* command, const char* params)))         \
   Macro(RecordReplaySetClearPauseDataCallback, (void (*callback)()))          \
-  Macro(RecordReplaySetCrashReasonCallback, const char* (*aCallback)())       \
+  Macro(RecordReplaySetCrashReasonCallback, (const char* (*aCallback)()))     \
   Macro(RecordReplaySetChangeInstrumentCallback,                              \
         (void (*callback)(bool wantInstrumentation)))                         \
   Macro(RecordReplaySetProgressCallback, (void (*aCallback)(uint64_t)))       \
