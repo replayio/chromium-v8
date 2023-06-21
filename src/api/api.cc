@@ -11092,7 +11092,7 @@ extern "C" DLLEXPORT bool V8RecordReplayFeatureEnabled(const char* feature, cons
 }
 
 bool recordreplay::HasDisabledFeatures() {
-  return gRecordReplayHasDisabledFeatures;
+  return gHasDisabledFeatures;
 }
 
 extern "C" DLLEXPORT bool V8RecordReplayHasDisabledFeatures() {
