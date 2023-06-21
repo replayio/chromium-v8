@@ -10711,86 +10711,132 @@ std::shared_ptr<WasmStreaming> WasmStreaming::Unpack(Isolate* v8_isolate,
 #define DLLEXPORT
 #endif
 
-// This callback is null if there are no disabled features (the typical case).
-static bool (*gRecordReplayFeatureEnabled)(const char* feature, const char* subfeature);
-static void (*gRecordReplayDisableFeatures)(const char* json);
-
 static bool gRecordingOrReplaying;
 static bool gARMRecording;
-static void (*gRecordReplayRememberRecording)();
-static void (*gRecordReplayOnNewSource)(const char* id, const char* kind,
-                                        const char* url);
-static void (*gRecordReplayOnConsoleMessage)(size_t bookmark);
-static void (*gRecordReplayOnExceptionUnwind)();
+static bool gHasDisabledFeatures;
 
 typedef char* (CommandCallbackRaw)(const char* params);
-static void (*gRecordReplaySetCommandCallback)(const char* method, CommandCallbackRaw callback);
 
-static void (*gRecordReplayPrint)(const char* format, va_list args);
-static void (*gRecordReplayDiagnostic)(const char* format, va_list args);
-static void (*gRecordReplayWarning)(const char* format, va_list args);
-static void (*gRecordReplayTrace)(const char* format, va_list args);
-static void (*gRecordReplayOnInstrument)(const char* kind, const char* function, int offset);
-static bool (*gRecordReplayHadMismatch)();
-static void (*gRecordReplayAssert)(const char*, va_list);
-static void (*gRecordReplayAssertBytes)(const char* why, const void* ptr, size_t nbytes);
-static void (*gRecordReplayDescribeAssertData)(const char* text);
-static void (*gRecordReplayBytes)(const char* why, void* buf, size_t size);
-static uintptr_t (*gRecordReplayValue)(const char* why, uintptr_t v);
-static bool (*gRecordReplayAreEventsDisallowed)();
-static bool (*gRecordReplayAreEventsPassedThrough)();
-static void (*gRecordReplayProgressReached)();
-static void (*gRecordReplayTriggerProgressInterrupt)();
-static void (*gRecordReplayBeginPassThroughEvents)();
-static void (*gRecordReplayEndPassThroughEvents)();
-static void (*gRecordReplayBeginDisallowEvents)();
-static void (*gRecordReplayBeginDisallowEventsWithLabel)(const char* label);
-static void (*gRecordReplayEndDisallowEvents)();
-static size_t (*gRecordReplayCreateOrderedLock)(const char* name);
-static void (*gRecordReplayOrderedLock)(int lock);
-static void (*gRecordReplayOrderedUnlock)(int lock);
+#define ForEachRecordReplaySymbol(Macro)                                      \
+  Macro(RecordReplayHasDisabledFeatures, (), bool, false)                     \
+  Macro(RecordReplayFeatureEnabled,                                           \
+        (const char* feature, const char* subfeature), bool, true)            \
+  Macro(RecordReplayHadMismatch, (), bool, false)                             \
+  Macro(RecordReplayValue, (const char* why, uintptr_t v), uintptr_t, v)      \
+  Macro(RecordReplayAreEventsDisallowed, (), bool, false)                     \
+  Macro(RecordReplayAreEventsPassedThrough, (), bool, false)                  \
+  Macro(RecordReplayCreateOrderedLock, (const char* name), size_t, 0)         \
+  Macro(RecordReplayIsReplaying, (), bool, false)                             \
+  Macro(RecordReplayHasDivergedFromRecording, (), bool, false)                \
+  Macro(RecordReplayAllowSideEffects, (), bool, true)                         \
+  Macro(RecordReplayPointerId, (const void* ptr), int, 0)                     \
+  Macro(RecordReplayIdPointer, (int id), void*, nullptr)                      \
+  Macro(RecordReplayGetRecordingId, (), char*, nullptr)                       \
+  Macro(RecordReplayGetUnusableRecordingReason, (), char*, nullptr)           \
+  Macro(RecordReplayNewBookmark, (), uint64_t, 0)                             \
+  Macro(RecordReplayPaintStart, (), size_t, 0)                                \
+  Macro(RecordReplayJSONCreateString, (const char*), void*, nullptr)          \
+  Macro(RecordReplayJSONCreateObject,                                         \
+        (size_t, const char**, void**), void*, nullptr)                       \
+  Macro(RecordReplayJSONToString, (void*), char*, nullptr)                    \
+  Macro(RecordReplayProgressCounter, (), uint64_t*, nullptr)
+
+#define ForEachRecordReplaySymbolVoidShared(Macro)                            \
+  Macro(RecordReplayDisableFeatures, (const char* json))                      \
+  Macro(RecordReplayRememberRecording, ())                                    \
+  Macro(RecordReplayOnNewSource,                                              \
+        (const char* id, const char* kind, const char* url))                  \
+  Macro(RecordReplayOnConsoleMessage, (size_t bookmark))                      \
+  Macro(RecordReplayOnExceptionUnwind, ())                                    \
+  Macro(RecordReplaySetCommandCallback,                                       \
+        (const char* method, CommandCallbackRaw callback))                    \
+  Macro(RecordReplayPrint, (const char* format, va_list args))                \
+  Macro(RecordReplayDiagnostic, (const char* format, va_list args))           \
+  Macro(RecordReplayWarning, (const char* format, va_list args))              \
+  Macro(RecordReplayTrace, (const char* format, va_list args))                \
+  Macro(RecordReplayOnInstrument,                                             \
+        (const char* kind, const char* function, int offset))                 \
+  Macro(RecordReplayAssert, (const char*, va_list))                           \
+  Macro(RecordReplayAssertBytes,                                              \
+        (const char* why, const void* ptr, size_t nbytes))                    \
+  Macro(RecordReplayDescribeAssertData, (const char* text))                   \
+  Macro(RecordReplayBytes, (const char* why, void* buf, size_t size))         \
+  Macro(RecordReplayProgressReached, ())                                      \
+  Macro(RecordReplayTriggerProgressInterrupt, ())                             \
+  Macro(RecordReplayBeginPassThroughEvents, ())                               \
+  Macro(RecordReplayEndPassThroughEvents, ())                                 \
+  Macro(RecordReplayBeginDisallowEvents, ())                                  \
+  Macro(RecordReplayBeginDisallowEventsWithLabel, (const char* label))        \
+  Macro(RecordReplayEndDisallowEvents, ())                                    \
+  Macro(RecordReplayOrderedLock, (int lock))                                  \
+  Macro(RecordReplayOrderedUnlock, (int lock))                                \
+  Macro(RecordReplayInvalidateRecording, (const char* format, ...))           \
+  Macro(RecordReplayNewCheckpoint, ())                                        \
+  Macro(RecordReplayRegisterPointerWithName,                                  \
+        (const char* name, const void* ptr))                                  \
+  Macro(RecordReplayUnregisterPointer, (const void* ptr))                     \
+  Macro(RecordReplayFinishRecording, ())                                      \
+  Macro(RecordReplayOnNetworkRequest,                                         \
+        (const char* id, const char* kind, uint64_t bookmark))                \
+  Macro(RecordReplayOnNetworkRequestEvent, (const char* id))                  \
+  Macro(RecordReplayOnNetworkStreamStart,                                     \
+        (const char* id, const char* kind, const char* parentId))             \
+  Macro(RecordReplayOnNetworkStreamData,                                      \
+        (const char* id, size_t offset, size_t length, uint64_t bookmark))    \
+  Macro(RecordReplayOnNetworkStreamEnd, (const char* id, size_t length))      \
+  Macro(RecordReplayPaintFinished, (size_t bookmark))                         \
+  Macro(RecordReplaySetPaintCallback, (char* (*callback)(const char*, int)))  \
+  Macro(RecordReplayOnDebuggerStatement, ())                                  \
+  Macro(RecordReplayNotifyActivity, ())                                       \
+  Macro(RecordReplayAddMetadata, (const char* metadata))                      \
+  Macro(RecordReplayJSONFree, (void*))                                        \
+  Macro(RecordReplayOnAnnotation, (const char* kind, const char* contents))   \
+  Macro(RecordReplayAddPossibleBreakpoint,                                    \
+        (int line, int column, const char* function_id, int offset))          \
+  Macro(RecordReplayOnEvent, (const char* aEvent, bool aBefore))              \
+  Macro(RecordReplayOnMouseEvent,                                             \
+        (const char* aKind, size_t aClientX, size_t aClientY))                \
+  Macro(RecordReplayOnKeyEvent, (const char* aKind, const char* aKey))        \
+  Macro(RecordReplayOnNavigationEvent, (const char* aKind, const char* aUrl)) \
+  Macro(RecordReplaySetDefaultCommandCallback,                                \
+        (char* (*callback)(const char* command, const char* params)))         \
+  Macro(RecordReplaySetClearPauseDataCallback, (void (*callback)()))          \
+  Macro(RecordReplaySetCrashReasonCallback, (const char* (*aCallback)()))     \
+  Macro(RecordReplaySetChangeInstrumentCallback,                              \
+        (void (*callback)(bool wantInstrumentation)))                         \
+  Macro(RecordReplaySetProgressCallback, (void (*aCallback)(uint64_t)))       \
+  Macro(RecordReplaySetProgressInterruptCallback, (void (*aCallback)()))      \
+  Macro(RecordReplayEnableProgressCheckpoints, ())                            \
+  Macro(RecordReplaySetTrackObjectsCallback,                                  \
+        (void (*aCallback)(bool aTrackObjects)))                              \
+  Macro(RecordReplaySetPossibleBreakpointsCallback,                           \
+        (void (*aCallback)(const char*)))                                     \
+  Macro(RecordReplaySetAssertDataCallbacks,                                   \
+        (void (*aGetData)(void**, size_t*),                                   \
+         char* (*aOnMismatch)(void*, size_t, void*, size_t),                  \
+         void (*aDescribeData)(void*, size_t)))
+
 #if !V8_OS_WIN
-static void (*gRecordReplayAddOrderedPthreadMutex)(const char* name, pthread_mutex_t* mutex);
+#define ForEachRecordReplaySymbolVoid(Macro)                                  \
+  ForEachRecordReplaySymbolVoidShared(Macro)                                  \
+  Macro(RecordReplayAddOrderedPthreadMutex,                                   \
+        (const char* name, pthread_mutex_t* mutex))
 #else
-static void (*gRecordReplayAddOrderedSRWLock)(const char* name, void* lock);
-static void (*gRecordReplayRemoveOrderedSRWLock)(void* lock);
+#define ForEachRecordReplaySymbolVoid(Macro)                                  \
+  ForEachRecordReplaySymbolVoidShared(Macro)                                  \
+  Macro(RecordReplayAddOrderedSRWLock, (const char* name, void* lock))        \
+  Macro(RecordReplayRemoveOrderedSRWLock, (void* lock))
 #endif
-static void (*gRecordReplayInvalidateRecording)(const char* format, ...);
-static void (*gRecordReplayNewCheckpoint)();
-static bool (*gRecordReplayIsReplaying)();
-static bool (*gRecordReplayHasDivergedFromRecording)();
-static bool (*gRecordReplayAllowSideEffects)();
-static void (*gRecordReplayRegisterPointerWithName)(const char* name, const void* ptr);
-static void (*gRecordReplayUnregisterPointer)(const void* ptr);
-static int (*gRecordReplayPointerId)(const void* ptr);
-static void* (*gRecordReplayIdPointer)(int id);
-static void (*gRecordReplayFinishRecording)();
-static char* (*gGetRecordingId)();
-static char* (*gGetUnusableRecordingReason)();
-static uint64_t (*gRecordReplayNewBookmark)();
-static void (*gRecordReplayOnNetworkRequest)(const char* id, const char* kind, uint64_t bookmark);
-static void (*gRecordReplayOnNetworkRequestEvent)(const char* id);
-static void (*gRecordReplayOnNetworkStreamStart)(const char* id, const char* kind, const char* parentId);
-static void (*gRecordReplayOnNetworkStreamData)(const char* id, size_t offset, size_t length, uint64_t bookmark);
-static void (*gRecordReplayOnNetworkStreamEnd)(const char* id, size_t length);
-static size_t (*gRecordReplayPaintStart)();
-static void (*gRecordReplayPaintFinished)(size_t bookmark);
-static void (*gRecordReplaySetPaintCallback)(char* (*callback)(const char*, int));
-static void (*gRecordReplayOnDebuggerStatement)();
-static void (*gRecordReplayNotifyActivity)();
-static void (*gRecordReplayAddMetadata)(const char* metadata);
-static void* (*gJSONCreateString)(const char*);
-static void* (*gJSONCreateObject)(size_t, const char**, void**);
-static char* (*gJSONToString)(void*);
-static void (*gJSONFree)(void*);
-static void (*gRecordReplayOnAnnotation)(const char* kind, const char* contents);
-static void (*gRecordReplayAddPossibleBreakpoint)(int line, int column, const char* function_id, int offset);
-static void (*gRecordReplayOnEvent)(const char* aEvent, bool aBefore);
-static void (*gRecordReplayOnMouseEvent)(const char* aKind, size_t aClientX,
-                                         size_t aClientY);
-static void (*gRecordReplayOnKeyEvent)(const char* aKind, const char* aKey);
-static void (*gRecordReplayOnNavigationEvent)(const char* aKind,
-                                              const char* aUrl);
+
+#define DeclareRecordReplaySymbol(Name, Params, ReturnType, ReturnDefault)    \
+  static ReturnType (*g##Name) Params;
+ForEachRecordReplaySymbol(DeclareRecordReplaySymbol)
+#undef DeclareRecordReplaySymbol
+
+#define DeclareRecordReplaySymbolVoid(Name, Params)                           \
+  static void (*g##Name) Params;
+ForEachRecordReplaySymbolVoid(DeclareRecordReplaySymbolVoid)
+#undef DeclareRecordReplaySymbolVoid
 
 namespace internal {
 
@@ -10988,17 +11034,17 @@ void RecordReplayAddHTMLParse(const char* url) {
   }
   gHasHTMLParse = true;
 
-  void* str = gJSONCreateString(url);
+  void* str = gRecordReplayJSONCreateString(url);
 
   const char* property = "uri";
-  void* object = gJSONCreateObject(1, &property, &str);
+  void* object = gRecordReplayJSONCreateObject(1, &property, &str);
 
-  char* objectStr = gJSONToString(object);
+  char* objectStr = gRecordReplayJSONToString(object);
   gRecordReplayAddMetadata(objectStr);
 
   free(objectStr);
-  gJSONFree(str);
-  gJSONFree(object);
+  gRecordReplayJSONFree(str);
+  gRecordReplayJSONFree(object);
 }
 
 // For posting tasks to the main thread.
@@ -11035,7 +11081,7 @@ void RecordReplayDescribeAssertData(const char* text) {
 } // namespace internal
 
 bool recordreplay::FeatureEnabled(const char* feature, const char* subfeature) {
-  if (!gRecordReplayFeatureEnabled) {
+  if (!gHasDisabledFeatures) {
     return true;
   }
   return gRecordReplayFeatureEnabled(feature, subfeature);
@@ -11046,7 +11092,7 @@ extern "C" DLLEXPORT bool V8RecordReplayFeatureEnabled(const char* feature, cons
 }
 
 bool recordreplay::HasDisabledFeatures() {
-  return !!gRecordReplayFeatureEnabled;
+  return gHasDisabledFeatures;
 }
 
 extern "C" DLLEXPORT bool V8RecordReplayHasDisabledFeatures() {
@@ -11667,7 +11713,7 @@ static void RecordReplayLoadSymbol(void* handle, const char* name, T& function) 
 
 static bool IsRecordingUnusable() {
   if (recordreplay::IsRecording()) {
-    char* reason = gGetUnusableRecordingReason();
+    char* reason = gRecordReplayGetUnusableRecordingReason();
     if (reason) {
       free(reason);
       return true;
@@ -11687,7 +11733,7 @@ const char* recordreplay::GetRecordingId() {
     // RecordReplayGetRecordingId() is not currently supported while replaying,
     // so we embed the recording ID in the recording itself.
     if (recordreplay::IsRecording()) {
-      char* recordingId = gGetRecordingId();
+      char* recordingId = gRecordReplayGetRecordingId();
       if (!recordingId) {
         CHECK(IsRecordingUnusable());
         return nullptr;
@@ -11772,142 +11818,53 @@ extern "C" V8_EXPORT void V8RecordReplayFinishRecording() {
 
 #if V8_OS_WIN
 static DWORD gMainThread;
+static void InitMainThread() {
+  gMainThread = GetCurrentThreadId();
+}
+bool IsMainThread() {
+  return gMainThread == GetCurrentThreadId();
+}
 #else
 static pthread_t gMainThread;
+static void InitMainThread() {
+  gMainThread = pthread_self();
+}
+bool IsMainThread() {
+  return gMainThread == pthread_self();
+}
 #endif
 
 void recordreplay::SetRecordingOrReplaying(void* handle) {
-  RecordReplayLoadSymbol(handle, "RecordReplayDisableFeatures", gRecordReplayDisableFeatures);
-  RecordReplayInitializeDisabledFeatures();
+#define LoadRecordReplaySymbol(Name, Params, ReturnType, ReturnDefault)    \
+  RecordReplayLoadSymbol(handle, #Name, g##Name);
+ForEachRecordReplaySymbol(LoadRecordReplaySymbol)
+#undef LoadRecordReplaySymbol
 
-  bool (*hasDisabledFeatures)();
-  RecordReplayLoadSymbol(handle, "RecordReplayHasDisabledFeatures", hasDisabledFeatures);
-  if (hasDisabledFeatures()) {
-    RecordReplayLoadSymbol(handle, "RecordReplayFeatureEnabled", gRecordReplayFeatureEnabled);
-  }
+#define LoadRecordReplaySymbolVoid(Name, Params)                           \
+  RecordReplayLoadSymbol(handle, #Name, g##Name);
+ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
+#undef LoadRecordReplaySymbolVoid
+
+  RecordReplayInitializeDisabledFeatures();
+  gHasDisabledFeatures = gRecordReplayHasDisabledFeatures();
 
   gRecordingOrReplaying = V8RecordReplayFeatureEnabled("record-replay", nullptr);
-#if V8_OS_WIN
-  gMainThread = GetCurrentThreadId();
-#else
-  gMainThread = pthread_self();
-#endif
+  InitMainThread();
 
-  RecordReplayLoadSymbol(handle, "RecordReplayRememberRecording", gRecordReplayRememberRecording);
-  RecordReplayLoadSymbol(handle, "RecordReplayOnNewSource", gRecordReplayOnNewSource);
-  RecordReplayLoadSymbol(handle, "RecordReplayOnConsoleMessage", gRecordReplayOnConsoleMessage);
-  RecordReplayLoadSymbol(handle, "RecordReplayOnExceptionUnwind", gRecordReplayOnExceptionUnwind);
-  RecordReplayLoadSymbol(handle, "RecordReplaySetCommandCallback", gRecordReplaySetCommandCallback);
-  RecordReplayLoadSymbol(handle, "RecordReplayPrint", gRecordReplayPrint);
-  RecordReplayLoadSymbol(handle, "RecordReplayDiagnostic", gRecordReplayDiagnostic);
-  RecordReplayLoadSymbol(handle, "RecordReplayWarning", gRecordReplayWarning);
-  RecordReplayLoadSymbol(handle, "RecordReplayTrace", gRecordReplayTrace);
-  RecordReplayLoadSymbol(handle, "RecordReplayHadMismatch", gRecordReplayHadMismatch);
-  RecordReplayLoadSymbol(handle, "RecordReplayAssert", gRecordReplayAssert);
-  RecordReplayLoadSymbol(handle, "RecordReplayAssertBytes", gRecordReplayAssertBytes);
-  RecordReplayLoadSymbol(handle, "RecordReplayDescribeAssertData", gRecordReplayDescribeAssertData);
-  RecordReplayLoadSymbol(handle, "RecordReplayBytes", gRecordReplayBytes);
-  RecordReplayLoadSymbol(handle, "RecordReplayValue", gRecordReplayValue);
-  RecordReplayLoadSymbol(handle, "RecordReplayOnInstrument", gRecordReplayOnInstrument);
-  RecordReplayLoadSymbol(handle, "RecordReplayAreEventsDisallowed", gRecordReplayAreEventsDisallowed);
-  RecordReplayLoadSymbol(handle, "RecordReplayAreEventsPassedThrough", gRecordReplayAreEventsPassedThrough);
-  RecordReplayLoadSymbol(handle, "RecordReplayProgressReached", gRecordReplayProgressReached);
-  RecordReplayLoadSymbol(handle, "RecordReplayTriggerProgressInterrupt", gRecordReplayTriggerProgressInterrupt);
-  RecordReplayLoadSymbol(handle, "RecordReplayBeginPassThroughEvents", gRecordReplayBeginPassThroughEvents);
-  RecordReplayLoadSymbol(handle, "RecordReplayEndPassThroughEvents", gRecordReplayEndPassThroughEvents);
-  RecordReplayLoadSymbol(handle, "RecordReplayBeginDisallowEvents", gRecordReplayBeginDisallowEvents);
-  RecordReplayLoadSymbol(handle, "RecordReplayBeginDisallowEventsWithLabel", gRecordReplayBeginDisallowEventsWithLabel);
-  RecordReplayLoadSymbol(handle, "RecordReplayEndDisallowEvents", gRecordReplayEndDisallowEvents);
-  RecordReplayLoadSymbol(handle, "RecordReplayInvalidateRecording", gRecordReplayInvalidateRecording);
-  RecordReplayLoadSymbol(handle, "RecordReplayNewCheckpoint", gRecordReplayNewCheckpoint);
-  RecordReplayLoadSymbol(handle, "RecordReplayCreateOrderedLock", gRecordReplayCreateOrderedLock);
-  RecordReplayLoadSymbol(handle, "RecordReplayOrderedLock", gRecordReplayOrderedLock);
-  RecordReplayLoadSymbol(handle, "RecordReplayOrderedUnlock", gRecordReplayOrderedUnlock);
-#if !V8_OS_WIN
-  RecordReplayLoadSymbol(handle, "RecordReplayAddOrderedPthreadMutex", gRecordReplayAddOrderedPthreadMutex);
-#else
-  RecordReplayLoadSymbol(handle, "RecordReplayAddOrderedSRWLock", gRecordReplayAddOrderedSRWLock);
-  RecordReplayLoadSymbol(handle, "RecordReplayRemoveOrderedSRWLock", gRecordReplayRemoveOrderedSRWLock);
-#endif
-  RecordReplayLoadSymbol(handle, "RecordReplayIsReplaying", gRecordReplayIsReplaying);
-  RecordReplayLoadSymbol(handle, "RecordReplayHasDivergedFromRecording", gRecordReplayHasDivergedFromRecording);
-  RecordReplayLoadSymbol(handle, "RecordReplayAllowSideEffects", gRecordReplayAllowSideEffects);
-  RecordReplayLoadSymbol(handle, "RecordReplayRegisterPointerWithName", gRecordReplayRegisterPointerWithName);
-  RecordReplayLoadSymbol(handle, "RecordReplayUnregisterPointer", gRecordReplayUnregisterPointer);
-  RecordReplayLoadSymbol(handle, "RecordReplayPointerId", gRecordReplayPointerId);
-  RecordReplayLoadSymbol(handle, "RecordReplayIdPointer", gRecordReplayIdPointer);
-  RecordReplayLoadSymbol(handle, "RecordReplayFinishRecording", gRecordReplayFinishRecording);
-  RecordReplayLoadSymbol(handle, "RecordReplayGetRecordingId", gGetRecordingId);
-  RecordReplayLoadSymbol(handle, "RecordReplayGetUnusableRecordingReason", gGetUnusableRecordingReason);
-  RecordReplayLoadSymbol(handle, "RecordReplayNewBookmark", gRecordReplayNewBookmark);
-  RecordReplayLoadSymbol(handle, "RecordReplayOnNetworkRequest", gRecordReplayOnNetworkRequest);
-  RecordReplayLoadSymbol(handle, "RecordReplayOnNetworkRequestEvent", gRecordReplayOnNetworkRequestEvent);
-  RecordReplayLoadSymbol(handle, "RecordReplayOnNetworkStreamStart", gRecordReplayOnNetworkStreamStart);
-  RecordReplayLoadSymbol(handle, "RecordReplayOnNetworkStreamData", gRecordReplayOnNetworkStreamData);
-  RecordReplayLoadSymbol(handle, "RecordReplayOnNetworkStreamEnd", gRecordReplayOnNetworkStreamEnd);
-  RecordReplayLoadSymbol(handle, "RecordReplayPaintStart", gRecordReplayPaintStart);
-  RecordReplayLoadSymbol(handle, "RecordReplayPaintFinished", gRecordReplayPaintFinished);
-  RecordReplayLoadSymbol(handle, "RecordReplaySetPaintCallback", gRecordReplaySetPaintCallback);
-  RecordReplayLoadSymbol(handle, "RecordReplayOnDebuggerStatement", gRecordReplayOnDebuggerStatement);
-  RecordReplayLoadSymbol(handle, "RecordReplayNotifyActivity", gRecordReplayNotifyActivity);
-  RecordReplayLoadSymbol(handle, "RecordReplayAddMetadata", gRecordReplayAddMetadata);
-  RecordReplayLoadSymbol(handle, "RecordReplayJSONCreateString", gJSONCreateString);
-  RecordReplayLoadSymbol(handle, "RecordReplayJSONCreateObject", gJSONCreateObject);
-  RecordReplayLoadSymbol(handle, "RecordReplayJSONToString", gJSONToString);
-  RecordReplayLoadSymbol(handle, "RecordReplayJSONFree", gJSONFree);
-  RecordReplayLoadSymbol(handle, "RecordReplayOnAnnotation", gRecordReplayOnAnnotation);
-  RecordReplayLoadSymbol(handle, "RecordReplayAddPossibleBreakpoint", gRecordReplayAddPossibleBreakpoint);
-
-  RecordReplayLoadSymbol(handle, "RecordReplayOnEvent",
-                         gRecordReplayOnEvent);
-  RecordReplayLoadSymbol(handle, "RecordReplayOnMouseEvent",
-                         gRecordReplayOnMouseEvent);
-  RecordReplayLoadSymbol(handle, "RecordReplayOnKeyEvent",
-                         gRecordReplayOnKeyEvent);
-  RecordReplayLoadSymbol(handle, "RecordReplayOnNavigationEvent",
-                         gRecordReplayOnNavigationEvent);
-
-  void (*setDefaultCommandCallback)(char* (*callback)(const char* command, const char* params));
-  RecordReplayLoadSymbol(handle, "RecordReplaySetDefaultCommandCallback", setDefaultCommandCallback);
-  setDefaultCommandCallback(i::CommandCallback);
-
-  void (*setClearPauseDataCallback)(void (*callback)());
-  RecordReplayLoadSymbol(handle, "RecordReplaySetClearPauseDataCallback", setClearPauseDataCallback);
-  setClearPauseDataCallback(i::ClearPauseDataCallback);
-
-  void (*setCrashReasonCallback)(const char* (*aCallback)());
-  RecordReplayLoadSymbol(handle, "RecordReplaySetCrashReasonCallback", setCrashReasonCallback);
-  setCrashReasonCallback(V8RecordReplayCrashReasonCallback);
+  gRecordReplaySetDefaultCommandCallback(i::CommandCallback);
+  gRecordReplaySetClearPauseDataCallback(i::ClearPauseDataCallback);
+  gRecordReplaySetCrashReasonCallback(V8RecordReplayCrashReasonCallback);
 
   gFinishRecordingOrderedLockId = (int)CreateOrderedLock("FinishRecording");
 
-  uint64_t* (*getProgressCounter)();
-  RecordReplayLoadSymbol(handle, "RecordReplayProgressCounter", getProgressCounter);
-  internal::gProgressCounter = getProgressCounter();
+  i::gProgressCounter = gRecordReplayProgressCounter();
 
-  void (*setChangeInstrumentCallback)(void (*callback)(bool wantInstrumentation));
-  RecordReplayLoadSymbol(handle, "RecordReplaySetChangeInstrumentCallback", setChangeInstrumentCallback);
-  setChangeInstrumentCallback(internal::RecordReplayChangeInstrument);
-
-  void (*setProgressCallback)(void (*aCallback)(uint64_t));
-  RecordReplayLoadSymbol(handle, "RecordReplaySetProgressCallback", setProgressCallback);
-  setProgressCallback(internal::RecordReplaySetTargetProgress);
-
-  void (*setProgressInterruptCallback)(void (*aCallback)());
-  RecordReplayLoadSymbol(handle, "RecordReplaySetProgressInterruptCallback", setProgressInterruptCallback);
-  setProgressInterruptCallback(internal::RecordReplayProgressInterruptCallback);
-
-  void (*enableProgressCheckpoints)();
-  RecordReplayLoadSymbol(handle, "RecordReplayEnableProgressCheckpoints", enableProgressCheckpoints);
-  enableProgressCheckpoints();
-
-  void (*setTrackObjectsCallback)(void (*aCallback)(bool aTrackObjects));
-  RecordReplayLoadSymbol(handle, "RecordReplaySetTrackObjectsCallback", setTrackObjectsCallback);
-  setTrackObjectsCallback(internal::TrackObjectsCallback);
-
-  void (*setPossibleBreakpointsCallback)(void (*aCallback)(const char*));
-  RecordReplayLoadSymbol(handle, "RecordReplaySetPossibleBreakpointsCallback", setPossibleBreakpointsCallback);
-  setPossibleBreakpointsCallback(internal::RecordReplayGetPossibleBreakpointsCallback);
+  gRecordReplaySetChangeInstrumentCallback(i::RecordReplayChangeInstrument);
+  gRecordReplaySetProgressCallback(i::RecordReplaySetTargetProgress);
+  gRecordReplaySetProgressInterruptCallback(i::RecordReplayProgressInterruptCallback);
+  gRecordReplayEnableProgressCheckpoints();
+  gRecordReplaySetTrackObjectsCallback(i::TrackObjectsCallback);
+  gRecordReplaySetPossibleBreakpointsCallback(i::RecordReplayGetPossibleBreakpointsCallback);
 
   // Remember whether this recording was made on ARM.
 #if V8_TARGET_ARCH_ARM64
@@ -11915,56 +11872,52 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
 #endif
   gARMRecording = RecordReplayValue("ARMRecording", gARMRecording);
 
-  internal::gRecordReplayAssertValues = !!getenv("RECORD_REPLAY_JS_ASSERTS");
-  internal::gRecordReplayCheckProgress =
-      internal::gRecordReplayAssertValues || !!getenv("RECORD_REPLAY_JS_PROGRESS_CHECKS");
-  internal::gRecordReplayAssertProgress =
-      internal::gRecordReplayAssertValues || !!getenv("RECORD_REPLAY_JS_PROGRESS_ASSERTS");
-  internal::gRecordReplayAssertTrackedObjects =
-      internal::gRecordReplayAssertValues || !!getenv("RECORD_REPLAY_JS_OBJECT_ASSERTS");
+  i::gRecordReplayAssertValues = !!getenv("RECORD_REPLAY_JS_ASSERTS");
+  i::gRecordReplayCheckProgress =
+      i::gRecordReplayAssertValues || !!getenv("RECORD_REPLAY_JS_PROGRESS_CHECKS");
+  i::gRecordReplayAssertProgress =
+      i::gRecordReplayAssertValues || !!getenv("RECORD_REPLAY_JS_PROGRESS_ASSERTS");
+  i::gRecordReplayAssertTrackedObjects =
+      i::gRecordReplayAssertValues || !!getenv("RECORD_REPLAY_JS_OBJECT_ASSERTS");
 
-  if (internal::gRecordReplayAssertProgress) {
-    void (*setAssertDataCallbacks)(void (*aGetData)(void**, size_t*),
-                                   char* (*aOnMismatch)(void*, size_t, void*, size_t),
-                                   void (*aDescribeData)(void*, size_t));
-    RecordReplayLoadSymbol(handle, "RecordReplaySetAssertDataCallbacks", setAssertDataCallbacks);
-    setAssertDataCallbacks(internal::RecordReplayCallbackAssertGetData,
-                           internal::RecordReplayCallbackAssertOnDataMismatch,
-                           internal::RecordReplayCallbackAssertDescribeData);
+  if (i::gRecordReplayAssertProgress) {
+    gRecordReplaySetAssertDataCallbacks(i::RecordReplayCallbackAssertGetData,
+                                        i::RecordReplayCallbackAssertOnDataMismatch,
+                                        i::RecordReplayCallbackAssertDescribeData);
   }
 
   // Disable some GC settings while replaying for causing mysterious crashes.
   if (IsReplaying()) {
-    internal::FLAG_concurrent_marking = false;
-    internal::FLAG_concurrent_sweeping = false;
-    internal::FLAG_incremental_marking_task = false;
-    internal::FLAG_parallel_compaction = false;
-    internal::FLAG_parallel_marking = false;
-    internal::FLAG_parallel_pointer_update = false;
-    internal::FLAG_parallel_scavenge = false;
-    internal::FLAG_scavenge_task = false;
-    internal::FLAG_incremental_marking = false;
+    i::FLAG_concurrent_marking = false;
+    i::FLAG_concurrent_sweeping = false;
+    i::FLAG_incremental_marking_task = false;
+    i::FLAG_parallel_compaction = false;
+    i::FLAG_parallel_marking = false;
+    i::FLAG_parallel_pointer_update = false;
+    i::FLAG_parallel_scavenge = false;
+    i::FLAG_scavenge_task = false;
+    i::FLAG_incremental_marking = false;
   }
 
   // Disable wasm background compilation.
   if (V8RecordReplayFeatureEnabled("disable-wasm-compilation-tasks", nullptr)) {
-    internal::FLAG_wasm_num_compilation_tasks = 0;
-    internal::FLAG_wasm_async_compilation = false;
+    i::FLAG_wasm_num_compilation_tasks = 0;
+    i::FLAG_wasm_async_compilation = false;
   }
 
   // The compilation cache can interfere with getting consistent script IDs.
   if (V8RecordReplayFeatureEnabled("disable-compilation-cache", nullptr)) {
-    internal::FLAG_compilation_cache = false;
+    i::FLAG_compilation_cache = false;
   }
 
   // The baseline JIT's handling of some record/replay opcodes is buggy.
   if (V8RecordReplayFeatureEnabled("disable-baseline-jit", nullptr)) {
-    internal::v8_flags.sparkplug = false;
+    i::v8_flags.sparkplug = false;
   }
 
   // The optimizing JIT is used by default but can be disabled via a feature.
   if (!V8RecordReplayFeatureEnabled("use-optimizing-jit", nullptr)) {
-    internal::v8_flags.turbofan = false;
+    i::v8_flags.turbofan = false;
   }
 
   // Write out our pid to a file if specified.
@@ -11977,7 +11930,7 @@ void recordreplay::SetRecordingOrReplaying(void* handle) {
     }
   }
 
-  internal::RecordReplayInitInstrumentationState();
+  i::RecordReplayInitInstrumentationState();
 }
 
 extern "C" void V8SetRecordingOrReplaying(void* handle) {
@@ -11989,14 +11942,6 @@ extern "C" void V8InitializeNotRecordingOrReplaying() {
   // reasons. See https://linear.app/replay/issue/RUN-1071
   internal::v8_flags.sparkplug = false;
   internal::FLAG_incremental_marking_task = false;
-}
-
-bool IsMainThread() {
-#if V8_OS_WIN
-  return gMainThread == GetCurrentThreadId();
-#else
-  return gMainThread == pthread_self();
-#endif
 }
 
 extern "C" DLLEXPORT bool V8IsMainThread() {
