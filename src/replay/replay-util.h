@@ -1,4 +1,6 @@
-/** Copyright 2023 Record Replay Inc. */
+// Copyright 2023 Record Replay Inc. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 #ifndef V8_REPLAY_REPLAY_UTIL_H_
 #define V8_REPLAY_REPLAY_UTIL_H_
@@ -31,6 +33,8 @@ std::string GetScriptLocationString(int script_id, int start_position);
 /**
  * Get a script location string of the format:
  * |"PC=<pc> scriptId=<scriptId> @<script-name>:<line>:<col> stack=<js-stack>"|
+ * or, if no script is given:
+ * |"PC=<pc> stack=<js-stack>"|
  */
 std::string GetCurrentLocationStringExtended(int script_id = -1, int start_position = 0);
 

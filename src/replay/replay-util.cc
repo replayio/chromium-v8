@@ -1,4 +1,6 @@
-/* Copyright 2023 Record Replay Inc. */
+// Copyright 2023 Record Replay Inc. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 #include "./replay-util.h"
 
@@ -45,7 +47,7 @@ std::string GetCurrentLocationStringExtended(int script_id,
   
   Isolate* isolate = Isolate::Current();
   HandleScope scope(isolate);
-  
+
   os << " stack=";
   isolate->PrintCurrentStackTrace(os);
 
