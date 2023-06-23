@@ -11886,6 +11886,22 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
                                         i::RecordReplayCallbackAssertDescribeData);
   }
 
+  // Disable wasm background compilation.
+  if (V8RecordReplayFeatureEnabled("disable-wasm-compilation-tasks", nullptr)) {
+    i::FLAG_wasm_num_compilation_tasks = 0;
+    i::FLAG_wasm_async_compilation = false;
+  }
+
+  // The baseline JIT's handling of some record/replay opcodes is buggy.
+  if (V8RecordReplayFeatureEnabled("disable-baseline-jit", nullptr)) {
+    i::v8_flags.sparkplug = false;
+  }
+
+  // The optimizing JIT is used by default but can be disabled via a feature.
+  if (!V8RecordReplayFeatureEnabled("use-optimizing-jit", nullptr)) {
+    i::v8_flags.turbofan = false;
+  }
+
   // Disable some GC settings while replaying for causing mysterious crashes.
   if (IsReplaying()) {
     i::FLAG_concurrent_marking = false;
@@ -11899,25 +11915,9 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
     i::FLAG_incremental_marking = false;
   }
 
-  // Disable wasm background compilation.
-  if (V8RecordReplayFeatureEnabled("disable-wasm-compilation-tasks", nullptr)) {
-    i::FLAG_wasm_num_compilation_tasks = 0;
-    i::FLAG_wasm_async_compilation = false;
-  }
-
-  // The compilation cache can interfere with getting consistent script IDs.
-  if (V8RecordReplayFeatureEnabled("disable-compilation-cache", nullptr)) {
+  // For now the compilation cache is only used when recording.
+  if (IsReplaying()) {
     i::FLAG_compilation_cache = false;
-  }
-
-  // The baseline JIT's handling of some record/replay opcodes is buggy.
-  if (V8RecordReplayFeatureEnabled("disable-baseline-jit", nullptr)) {
-    i::v8_flags.sparkplug = false;
-  }
-
-  // The optimizing JIT is used by default but can be disabled via a feature.
-  if (!V8RecordReplayFeatureEnabled("use-optimizing-jit", nullptr)) {
-    i::v8_flags.turbofan = false;
   }
 
   // Write out our pid to a file if specified.

@@ -71,7 +71,8 @@ class V8_EXPORT_PRIVATE UnoptimizedCompileFlags {
                                                     bool is_user_javascript,
                                                     LanguageMode language_mode,
                                                     REPLMode repl_mode,
-                                                    ScriptType type, bool lazy);
+                                                    ScriptType type, bool lazy,
+                                                    int script_id = UnboundScript::kNoScriptId);
 
   // Set-up flags for a compiling a particular function (either a lazy compile
   // or a recompile).

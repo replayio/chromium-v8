@@ -3658,10 +3658,6 @@ static NewScriptHandlerVector* gNewScriptHandlers;
 static void RecordReplayRegisterScript(Handle<Script> script) {
   CHECK(IsMainThread());
 
-  if (!RecordReplayHasDefaultContext()) {
-    return;
-  }
-
   if (!gRecordReplayScripts) {
     gRecordReplayScripts = new ScriptIdMap();
   }
@@ -3675,6 +3671,10 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
 
   (*gRecordReplayScripts)[script->id()] =
     Eternal<Value>((v8::Isolate*)isolate, v8::Utils::ToLocal(script));
+
+  if (!RecordReplayHasDefaultContext()) {
+    return;
+  }
 
   Handle<String> idStr = GetProtocolSourceId(isolate, script);
   std::unique_ptr<char[]> id = String::cast(*idStr).ToCString();

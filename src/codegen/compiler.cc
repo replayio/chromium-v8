@@ -73,6 +73,8 @@
 namespace v8 {
 namespace internal {
 
+extern Handle<Script> GetScript(Isolate* isolate, int script_id);
+
 namespace {
 
 constexpr bool IsOSR(BytecodeOffset osr_offset) { return !osr_offset.IsNone(); }
@@ -3521,8 +3523,7 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
   // For extensions or REPL mode scripts neither do a compilation cache lookup,
   // nor put the compilation result back into the cache.
   const bool use_compilation_cache =
-      extension == nullptr && script_details.repl_mode == REPLMode::kNo &&
-      !recordreplay::IsRecordingOrReplaying("no-compile-cache");
+      extension == nullptr && script_details.repl_mode == REPLMode::kNo;
   MaybeHandle<SharedFunctionInfo> maybe_result;
   MaybeHandle<Script> maybe_script;
   IsCompiledScope is_compiled_scope;
@@ -3539,6 +3540,24 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
     maybe_script = lookup_result.script();
     maybe_result = lookup_result.toplevel_sfi();
     is_compiled_scope = lookup_result.is_compiled_scope();
+
+    // The compilation cache isn't enabled when replaying, but we still need
+    // to record/replay whether a script was found when recording so that the
+    // same scripts are created at the same points. The SFI will need to be
+    // recompiled when replaying but that's fine when the right script ID is used.
+    if (recordreplay::IsRecordingOrReplaying("values") &&
+        !recordreplay::AreEventsDisallowed()) {
+      int script_id = v8::UnboundScript::kNoScriptId;
+      if (Handle<Script> script; maybe_script.ToHandle(&script)) {
+        script_id = script->id();
+        CHECK(script_id != v8::UnboundScript::kNoScriptId);
+      }
+      script_id = (int)recordreplay::RecordReplayValue("GetSharedFunctionInfoForScriptImpl script_id", script_id);
+      if (recordreplay::IsReplaying() && script_id != v8::UnboundScript::kNoScriptId) {
+        maybe_script = GetScript(isolate, script_id);
+      }
+    }
+
     if (!maybe_result.is_null()) {
       compile_timer.set_hit_isolate_cache();
     } else if (can_consume_code_cache) {
@@ -3605,19 +3624,21 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
       maybe_result = CompileScriptOnBothBackgroundAndMainThread(
           source, script_details, isolate, &is_compiled_scope);
     } else {
+      int script_id = UnboundScript::kNoScriptId;
+      if (Handle<Script> script; maybe_script.ToHandle(&script)) {
+        script_id = script->id();
+      }
+
       UnoptimizedCompileFlags flags =
           UnoptimizedCompileFlags::ForToplevelCompile(
               isolate, natives == NOT_NATIVES_CODE, language_mode,
               script_details.repl_mode,
               script_details.origin_options.IsModule() ? ScriptType::kModule
                                                        : ScriptType::kClassic,
-              v8_flags.lazy);
+              v8_flags.lazy,
+              script_id);
 
       flags.set_is_eager(compile_options == ScriptCompiler::kEagerCompile);
-
-      if (Handle<Script> script; maybe_script.ToHandle(&script)) {
-        flags.set_script_id(script->id());
-      }
 
       maybe_result = CompileScriptOnMainThread(
           flags, source, script_details, natives, extension, isolate,
@@ -3793,7 +3814,11 @@ Compiler::GetSharedFunctionInfoForStreamedScript(
   // Check if compile cache already holds the SFI, if so no need to finalize
   // the code compiled on the background thread.
   CompilationCache* compilation_cache = isolate->compilation_cache();
-  {
+
+  // For now we don't support using the compilation cache with streamed scripts,
+  // due to the lack of support for handling the case when the script is present
+  // but not the top level SFI.
+  if (!recordreplay::IsRecordingOrReplaying("no-streamed-script-cache")) {
     TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("v8.compile"),
                  "V8.StreamingFinalization.CheckCache");
     CompilationCacheScript::LookupResult lookup_result =
