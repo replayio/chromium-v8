@@ -1656,7 +1656,8 @@ Object Isolate::ThrowAt(Handle<JSObject> exception, MessageLocation* location) {
 
 Object Isolate::TerminateExecution() {
   if (recordreplay::AreEventsDisallowed()) {
-    recordreplay::Warning("Isolate::TerminateExecution called when EventsDisallowed.");
+    recordreplay::Warning(
+        "Isolate::TerminateExecution called when EventsDisallowed.");
   }
   return Throw(ReadOnlyRoots(this).termination_exception());
 }
@@ -1678,7 +1679,6 @@ void Isolate::CancelTerminateExecution() {
 void Isolate::RequestInterrupt(InterruptCallback callback, void* data) {
   recordreplay::OrderedLock(record_replay_api_interrupts_ordered_lock_id_);
   ExecutionAccess access(this);
-  recordreplay::Trace("[RUN-TODO] Isolate::RequestInterrupt");
   api_interrupts_queue_.push(InterruptEntry(callback, data));
   stack_guard()->RequestApiInterrupt();
   recordreplay::OrderedUnlock(record_replay_api_interrupts_ordered_lock_id_);
@@ -1687,7 +1687,6 @@ void Isolate::RequestInterrupt(InterruptCallback callback, void* data) {
 extern void RecordReplayTriggerProgressInterrupt();
 
 void Isolate::InvokeApiInterruptCallbacks() {
-  recordreplay::Trace("InvokeApiInterruptCallbacks");
   if (recordreplay::IsRecordingOrReplaying("interrupts")) {
     // When recording, we can't invoke API interrupt callbacks at arbitrary points
     // where we check for interrupts, as we won't be able to invoke those callbacks

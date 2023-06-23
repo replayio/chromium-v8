@@ -979,7 +979,6 @@ void V8RuntimeAgentImpl::reportExecutionContextCreated(
         protocol::Value::parseBinary(cbor.data(), cbor.size())));
   }
   m_frontend.executionContextCreated(std::move(description));
-  V8_Fatal("BAM!");
 }
 
 void V8RuntimeAgentImpl::reportExecutionContextDestroyed(

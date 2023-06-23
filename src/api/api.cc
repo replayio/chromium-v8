@@ -176,6 +176,8 @@
 #include <dlfcn.h>
 #endif
 
+#include "include/replay.h"
+
 extern const char* gCrashReason;
 
 namespace v8 {
@@ -10925,6 +10927,14 @@ void RecordReplayTriggerProgressInterrupt() {
 
 void RecordReplayOnTargetProgressReached() {
   CHECK(IsMainThread());
+  if (recordreplay::AreEventsDisallowed()) {
+    // We should not have progress updates when events disallowed.
+    if (!recordreplay::HasDivergedFromRecording()) {
+        recordreplay::Warning("OnProgressReached %s",
+            ::recordreplay::GetCurrentLocationStringExtended().c_str());
+    }
+    return;
+  }
   gRecordReplayProgressReached();
 }
 
