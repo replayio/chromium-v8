@@ -17,6 +17,8 @@
 #include "src/wasm/wasm-engine.h"
 #endif  // V8_ENABLE_WEBASSEMBLY
 
+#include "src/replay/replay-util.h"
+
 namespace v8 {
 namespace internal {
 
@@ -352,24 +354,15 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
       // User JS should not get executed in divergent code paths,
       // unless we have paused.
       // → Print log and prevent execution.
-      Script::PositionInfo info;
-      std::string name;
       Handle<Script> script;
       if (function->shared().script().IsScript()) {
-        script = Handle<Script>(Script::cast(function->shared().script()), isolate);
-        Script::GetPositionInfo(script, function->shared().StartPosition(),
-                                &info, Script::WITH_OFFSET);
-        name = script->name().IsString()
-                   ? String::cast(script->name()).ToCString().get()
-                   : "(anonymous script)";
+        script =
+            Handle<Script>(Script::cast(function->shared().script()), isolate);
       }
-      std::stringstream stack;
-      isolate->PrintCurrentStackTrace(stack);
-
       recordreplay::Warning(
-          "JS Invoke: Non-deterministic user JS PC=%zu scriptId=%d @%s:%d:%d stack=%s",
-          *gProgressCounter, script.is_null() ? script->id() : -1, name.c_str(), info.line + 1,
-          info.column, stack.str().c_str());
+          "JS Invoke: Non-deterministic user JS %s",
+          ::recordreplay::GetCurrentLocationStringExtended(
+              script->id(), function->shared().StartPosition()).c_str());
       return isolate->factory()->undefined_value();
     }
 

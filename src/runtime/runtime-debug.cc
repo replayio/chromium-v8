@@ -35,6 +35,8 @@
 
 #include "src/api/api-inl.h"
 
+#include "src/replay/replay-util.h"
+
 namespace v8 {
 namespace internal {
 
@@ -989,31 +991,11 @@ static inline uint64_t BuildScriptProgressEntry(Handle<JSFunction> fun) {
 
 extern Handle<Script> GetScript(Isolate* isolate, int script_id);
 
-static inline std::string GetScriptName(Handle<Script> script) {
-  return script->name().IsString()
-    ? String::cast(script->name()).ToCString().get()
-    : "(anonymous script)";
-}
-
-static std::string GetScriptLocationString(int script_id,
-                                           int start_position) {
-  Isolate* isolate = Isolate::Current();
-  Handle<Script> script = GetScript(isolate, script_id);
-  std::string script_name = GetScriptName(script);
-
-  Script::PositionInfo info;
-  Script::GetPositionInfo(script, start_position, &info, Script::WITH_OFFSET);
-
-  std::ostringstream os;
-  os << script_id << ":" << script_name << ":" << info.line + 1 << ":" << info.column;
-  return os.str();
-}
-
 static std::string GetScriptProgressEntryString(uint64_t v) {
   int script_id = static_cast<int>(v >> 32);
   int start_position = static_cast<int>(v);
 
-  return GetScriptLocationString(script_id, start_position);
+  return ::recordreplay::GetScriptLocationString(script_id, start_position);
 }
 
 static char* GetScriptProgressMessage(uint64_t recordedEntry, uint64_t replayedEntry) {
@@ -1126,17 +1108,11 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
       // and we were not paused.
       if (!gHasPrintedStack) {  // Prevent flood.
         gHasPrintedStack = true;
-        HandleScope scope(isolate);
-        std::stringstream stack;
-        isolate->PrintCurrentStackTrace(stack);
-
         recordreplay::Warning(
-            "[RUN-1919] JS ExecutionProgress in non-deterministic user JS PC=%zu "
-            "scriptId=%d @%s stack=%s",
-            *gProgressCounter, script->id(),
-            GetScriptLocationString(script->id(), shared->StartPosition())
-                .c_str(),
-            stack.str().c_str());
+            "[RUN-1919] JS ExecutionProgress in non-deterministic user JS %s",
+            ::recordreplay::GetCurrentLocationStringExtended(
+                script->id(), shared->StartPosition())
+                .c_str());
       }
     }
   }
@@ -1250,19 +1226,8 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertValue) {
   AssertionSite& site = (*gAssertionSites)[index];
 
   if (!site.location_.length()) {
-    Script::PositionInfo info;
-    Script::GetPositionInfo(script, site.source_position_, &info, Script::WITH_OFFSET);
-
-    char buf[1024];
-    if (script->name().IsUndefined()) {
-      snprintf(buf, sizeof(buf), "<none>:%d:%d", info.line + 1, info.column);
-    } else {
-      std::unique_ptr<char[]> name = String::cast(script->name()).ToCString();
-      snprintf(buf, sizeof(buf), "%s:%d:%d", name.get(), info.line + 1, info.column);
-    }
-    buf[sizeof(buf) - 1] = 0;
-
-    site.location_ = buf;
+    site.location_ = ::recordreplay::GetScriptLocationString(
+        script->id(), site.source_position_);
   }
 
   std::string contents = RecordReplayBasicValueContents(value);
@@ -1277,17 +1242,14 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertValue) {
     // Print JS stack if user JS was executed non-deterministically
     // and we were not paused, or if we had a mismatch.
     if (!gHasPrintedStack) {  // Prevent flood.
-      gHasPrintedStack = true;
-      std::stringstream stack;
-      isolate->PrintCurrentStackTrace(stack);
-
       recordreplay::Warning(
-          "JS-Stack %s%s PC=%zu scriptId=%d @%s stack=%s", site.desc_.c_str(),
+          "JS-Stack %s%s %s", site.desc_.c_str(),
           RecordReplayIsDivergentUserJSWithoutPause(function->shared())
               ? " in non-deterministic user JS"
               : "",
-          *gProgressCounter, script->id(), site.location_.c_str(),
-          stack.str().c_str());
+          ::recordreplay::GetCurrentLocationStringExtended(
+              script->id(), function->shared().StartPosition())
+              .c_str());
     }
   }
 
