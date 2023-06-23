@@ -1466,6 +1466,7 @@ void ReportDuplicates(int size, std::vector<HeapObject>* objects) {
 }  // anonymous namespace
 
 void Heap::CollectAllAvailableGarbage(GarbageCollectionReason gc_reason) {
+  recordreplay::AutoDisallowEvents disallow("Heap::CollectAllAvailableGarbage");
   // Since we are ignoring the return value, the exact choice of space does
   // not matter, so long as we do not specify NEW_SPACE, which would not
   // cause a full GC.
@@ -3722,6 +3723,7 @@ void Heap::ActivateMemoryReducerIfNeeded() {
   const int kMinCommittedMemory = 7 * Page::kPageSize;
   if (ms_count_ == 0 && CommittedMemory() > kMinCommittedMemory &&
       isolate()->IsIsolateInBackground()) {
+    recordreplay::AutoDisallowEvents disallow("Heap::ActivateMemoryReducerIfNeeded");
     MemoryReducer::Event event;
     event.type = MemoryReducer::kPossibleGarbage;
     event.time_ms = MonotonicallyIncreasingTimeInMs();
@@ -5764,6 +5766,8 @@ void Heap::RegisterExternallyReferencedObject(Address* location) {
 }
 
 void Heap::StartTearDown() {
+  recordreplay::AutoDisallowEvents disallow("Heap::StartTearDown");
+
   // Finish any ongoing sweeping to avoid stray background tasks still accessing
   // the heap during teardown.
   CompleteSweepingFull();

@@ -867,6 +867,8 @@ class Sweeper::SweeperImpl final {
   }
 
   bool FinishIfRunning() {
+    v8::recordreplay::AutoDisallowEvents disallow("SweeperImpl::FinishIfRunning");
+
     if (!is_in_progress_) return false;
 
     // Bail out for recursive sweeping calls. This can happen when finalizers
