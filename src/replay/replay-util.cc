@@ -15,8 +15,7 @@ extern Handle<Script> GetScript(Isolate* isolate, int script_id);
 using namespace v8::internal;
 
 namespace recordreplay {
-std::string GetScriptLocationString(int script_id,
-                                                      int start_position) {
+std::string GetScriptLocationString(int script_id, int start_position) {
   Isolate* isolate = Isolate::Current();
   Handle<Script> script = GetScript(isolate, script_id);
   std::string script_name = GetScriptName(script);
@@ -44,10 +43,10 @@ std::string GetCurrentLocationStringExtended(int script_id,
     os << " scriptId=" << script_id << " @" << loc.c_str();
   }
   
-  os << " stack=";
-
   Isolate* isolate = Isolate::Current();
   HandleScope scope(isolate);
+  
+  os << " stack=";
   isolate->PrintCurrentStackTrace(os);
 
   return os.str();
