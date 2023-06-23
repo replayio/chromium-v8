@@ -22,18 +22,18 @@ inline std::string GetScriptName(
              : "(anonymous script)";
 }
 
-  /**
-   * Get a script location string of the format:
-   * |"<script-name>:<line>:<col>"|
-   */
-  std::string GetScriptLocationString(int script_id, int start_position);
+/**
+ * Get a script location string of the format:
+ * |"<script-name>:<line>:<col>"|
+ */
+std::string GetScriptLocationString(int script_id, int start_position);
 
-  /**
-   * Get a script location string of the format:
-   * |"PC=<pc> scriptId=<scriptId> @<script-name>:<line>:<col> stack=<js-stack>"|
-   */
-  std::string GetCurrentLocationStringExtended(int script_id = -1, int start_position = 0);
+/**
+ * Get a script location string of the format:
+ * |"PC=<pc> scriptId=<scriptId> @<script-name>:<line>:<col> stack=<js-stack>"|
+ */
+std::string GetCurrentLocationStringExtended(int script_id = -1, int start_position = 0);
 
-  }  // namespace recordreplay
+}  // namespace recordreplay
 
 #endif
