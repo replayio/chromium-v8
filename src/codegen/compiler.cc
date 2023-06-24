@@ -73,6 +73,7 @@
 namespace v8 {
 namespace internal {
 
+extern MaybeHandle<Script> MaybeGetScript(Isolate* isolate, int script_id);
 extern Handle<Script> GetScript(Isolate* isolate, int script_id);
 
 namespace {
@@ -3548,9 +3549,19 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
     if (recordreplay::IsRecordingOrReplaying("values") &&
         !recordreplay::AreEventsDisallowed()) {
       int script_id = v8::UnboundScript::kNoScriptId;
-      if (Handle<Script> script; maybe_script.ToHandle(&script)) {
+      if (Handle<Script> script;
+          recordreplay::IsRecording() && maybe_script.ToHandle(&script)) {
         script_id = script->id();
         CHECK(script_id != v8::UnboundScript::kNoScriptId);
+
+        // Make sure the script has been registered, if it hasn't then we won't
+        // be able to find it when replaying.
+        if (MaybeGetScript(isolate, script_id).is_null()) {
+          maybe_script = MaybeHandle<Script>();
+          maybe_result = MaybeHandle<SharedFunctionInfo>();
+          is_compiled_scope = IsCompiledScope();
+          script_id = v8::UnboundScript::kNoScriptId;
+        }
       }
       script_id = (int)recordreplay::RecordReplayValue("GetSharedFunctionInfoForScriptImpl script_id", script_id);
       if (recordreplay::IsReplaying() && script_id != v8::UnboundScript::kNoScriptId) {
