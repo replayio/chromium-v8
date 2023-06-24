@@ -73,6 +73,7 @@
 namespace v8 {
 namespace internal {
 
+extern MaybeHandle<Script> MaybeGetScript(Isolate* isolate, int script_id);
 extern Handle<Script> GetScript(Isolate* isolate, int script_id);
 
 namespace {
