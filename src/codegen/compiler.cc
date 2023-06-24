@@ -3556,7 +3556,7 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
 
         // Make sure the script has been registered, if it hasn't then we won't
         // be able to find it when replaying.
-        if (!MaybeGetScript(isolate, script_id)) {
+        if (MaybeGetScript(isolate, script_id).is_null()) {
           maybe_script = MaybeHandle<Script>();
           maybe_result = MaybeHandle<SharedFunctionInfo>();
           is_compiled_scope = IsCompiledScope();
