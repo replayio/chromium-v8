@@ -10741,7 +10741,8 @@ typedef char* (CommandCallbackRaw)(const char* params);
   Macro(RecordReplayJSONCreateObject,                                         \
         (size_t, const char**, void**), void*, nullptr)                       \
   Macro(RecordReplayJSONToString, (void*), char*, nullptr)                    \
-  Macro(RecordReplayProgressCounter, (), uint64_t*, nullptr)
+  Macro(RecordReplayProgressCounter, (), uint64_t*, nullptr)                  \
+  Macro(RecordReplayGetStack, (char* aStack, size_t aSize), bool, false)
 
 #define ForEachRecordReplaySymbolVoidShared(Macro)                            \
   Macro(RecordReplayDisableFeatures, (const char* json))                      \
@@ -11360,6 +11361,9 @@ extern "C" DLLEXPORT void V8RecordReplayEndDisallowEvents() {
 
 void recordreplay::InvalidateRecording(const char* why) {
   if (IsRecordingOrReplaying()) {
+    // constexpr int N = 16386;
+    // char stack[N];
+    // gRecordReplayGetStack(stack, N);
     gRecordReplayInvalidateRecording("%s", why);
   }
 }
@@ -11631,6 +11635,11 @@ extern "C" DLLEXPORT void V8RecordReplayOnAnnotation(const char* kind, const cha
   if (internal::gRecordReplayHasCheckpoint) {
     gRecordReplayOnAnnotation(kind, contents);
   }
+}
+
+extern "C" DLLEXPORT bool V8RecordReplayGetStack(char* aStack, size_t aSize) {
+  DCHECK(recordreplay::IsRecordingOrReplaying());
+  return gRecordReplayGetStack(aStack, aSize);
 }
 
 namespace internal {
