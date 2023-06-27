@@ -995,8 +995,7 @@ static inline std::string GetScriptName(Handle<Script> script) {
     : "(anonymous script)";
 }
 
-static std::string GetScriptLocationString(int script_id,
-                                           int start_position) {
+std::string GetScriptLocationString(int script_id, int start_position) {
   Isolate* isolate = Isolate::Current();
   Handle<Script> script = GetScript(isolate, script_id);
   std::string script_name = GetScriptName(script);
