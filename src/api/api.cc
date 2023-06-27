@@ -10926,7 +10926,7 @@ void RecordReplayTriggerProgressInterrupt() {
 
 extern std::string GetScriptLocationString(int script_id, int start_position);
 
-    void RecordReplayOnTargetProgressReached() {
+void RecordReplayOnTargetProgressReached() {
   CHECK(IsMainThread());
   if (recordreplay::AreEventsDisallowed()) {
     // We should not have progress updates when events disallowed.
