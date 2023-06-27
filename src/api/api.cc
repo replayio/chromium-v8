@@ -10739,7 +10739,8 @@ typedef char* (CommandCallbackRaw)(const char* params);
   Macro(RecordReplayJSONCreateObject,                                         \
         (size_t, const char**, void**), void*, nullptr)                       \
   Macro(RecordReplayJSONToString, (void*), char*, nullptr)                    \
-  Macro(RecordReplayProgressCounter, (), uint64_t*, nullptr)
+  Macro(RecordReplayProgressCounter, (), uint64_t*, nullptr)                  \
+  Macro(RecordReplayGetStack, (char* aStack, size_t aSize), bool, false)
 
 #define ForEachRecordReplaySymbolVoidShared(Macro)                            \
   Macro(RecordReplayDisableFeatures, (const char* json))                      \
@@ -10923,8 +10924,25 @@ void RecordReplayTriggerProgressInterrupt() {
   gRecordReplayTriggerProgressInterrupt();
 }
 
+extern std::string GetScriptLocationString(int script_id, int start_position);
+
 void RecordReplayOnTargetProgressReached() {
   CHECK(IsMainThread());
+  if (recordreplay::AreEventsDisallowed()) {
+    // We should not have progress updates when events disallowed.
+    if (!recordreplay::HasDivergedFromRecording()) {
+      // TODO: [RUN-2235] Replace with GetCurrentLocationStringExtended.
+      std::ostringstream os;
+      os << "PC=" << *gProgressCounter;
+      Isolate* isolate = Isolate::Current();
+      HandleScope scope(isolate);
+      os << " stack=";
+      isolate->PrintCurrentStackTrace(os);
+
+      recordreplay::Warning("OnProgressReached %s", os.str().c_str());
+    }
+    return;
+  }
   gRecordReplayProgressReached();
 }
 
@@ -11621,6 +11639,11 @@ extern "C" DLLEXPORT void V8RecordReplayOnAnnotation(const char* kind, const cha
   if (internal::gRecordReplayHasCheckpoint) {
     gRecordReplayOnAnnotation(kind, contents);
   }
+}
+
+extern "C" DLLEXPORT bool V8RecordReplayGetStack(char* aStack, size_t aSize) {
+  DCHECK(recordreplay::IsRecordingOrReplaying());
+  return gRecordReplayGetStack(aStack, aSize);
 }
 
 namespace internal {
