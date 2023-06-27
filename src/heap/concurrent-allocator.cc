@@ -232,6 +232,11 @@ ConcurrentAllocator::AllocateFromSpaceFreeList(size_t min_size_in_bytes,
                                                       space_->AreaSize())) {
     result = space_->TryExpandBackground(max_size_in_bytes);
     if (result) return result;
+    recordreplay::Diagnostic("[RUN-851] ConcurrentAllocator::AllocateFromSpaceFreeList TryExpandBackgroundFailed");
+  } else {
+    recordreplay::Diagnostic("[RUN-851] ConcurrentAllocator::AllocateFromSpaceFreeList CantExpand %d %d",
+                             owning_heap()->ShouldExpandOldGenerationOnSlowAllocation(local_heap_),
+                             owning_heap()->CanExpandOldGenerationBackground(local_heap_, space_->AreaSize()));
   }
 
   if (owning_heap()->sweeping_in_progress()) {
