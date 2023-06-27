@@ -11368,10 +11368,7 @@ extern "C" DLLEXPORT void V8RecordReplayEndDisallowEvents() {
 
 void recordreplay::InvalidateRecording(const char* why) {
   if (IsRecordingOrReplaying()) {
-    constexpr int N = 16386;
-    char stack[N];
-    gRecordReplayGetStack(stack, N);
-    gRecordReplayInvalidateRecording("%s %s", why, stack);
+    gRecordReplayInvalidateRecording("%s", why);
   }
 }
 
