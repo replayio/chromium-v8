@@ -3704,8 +3704,9 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
   Script::PositionInfo start_info;
   Script::GetPositionInfo(script, 0, &start_info, Script::WITH_OFFSET);
 
-  // [RUN-2172] Inline scripts sometimes might have line and column but no
-  // URL in case of blink-internal scripts.
+  // [RUN-2172] Blink-internal scripts sometimes might have line or column, but 
+  // no URL. Since the backend requires inlineScripts to have a URL, don't flag 
+  // it as such.
   const char* kind = ((start_info.line || start_info.column) && !url.empty())
                          ? "inlineScript"
                          : "scriptSource";
