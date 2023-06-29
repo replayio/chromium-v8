@@ -3703,7 +3703,13 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
   // than line zero / column zero, the script must be inlined into another file.
   Script::PositionInfo start_info;
   Script::GetPositionInfo(script, 0, &start_info, Script::WITH_OFFSET);
-  const char* kind = (start_info.line || start_info.column) ? "inlineScript" : "scriptSource";
+
+  // [RUN-2172] Blink-internal scripts sometimes might have line or column, but 
+  // no URL. Since the backend requires inlineScripts to have a URL, don't flag 
+  // it as such.
+  const char* kind = ((start_info.line || start_info.column) && !url.empty())
+                         ? "inlineScript"
+                         : "scriptSource";
 
   recordreplay::Diagnostic("OnNewSource %s %s", id.get(), kind);
 
