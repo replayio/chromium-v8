@@ -108,6 +108,7 @@ static bool HadMismatch();
 static void Assert(const char* format, ...);
 static void AssertMaybeEventsDisallowed(const char* format, ...);
 static void AssertBytes(const char* why, const void* buf, size_t size);
+static bool AreAssertsDisabled();
 
 static uintptr_t RecordReplayValue(const char* why, uintptr_t v);
 static void RecordReplayBytes(const char* why, void* buf, size_t size);

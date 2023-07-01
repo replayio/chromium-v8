@@ -11287,6 +11287,14 @@ extern "C" DLLEXPORT void V8RecordReplayAssertBytes(const char* why, const void*
   recordreplay::AssertBytes(why, buf, size);
 }
 
+bool recordreplay::AreAssertsDisabled() {
+  return gAssertsDisabled;
+}
+
+extern "C" DLLEXPORT bool V8RecordReplayAreAssertsDisabled() {
+  return recordreplay::AreAssertsDisabled();
+}
+
 uintptr_t recordreplay::RecordReplayValue(const char* why, uintptr_t v) {
   if (IsRecordingOrReplaying("values", why)) {
     return gRecordReplayValue(why, v);
