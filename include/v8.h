@@ -106,6 +106,7 @@ static void Warning(const char* format, ...);
 static void Trace(const char* format, ...);
 static bool HadMismatch();
 static void Assert(const char* format, ...);
+static void AssertMaybeEventsDisallowed(const char* format, ...);
 static void AssertBytes(const char* why, const void* buf, size_t size);
 
 static uintptr_t RecordReplayValue(const char* why, uintptr_t v);

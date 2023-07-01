@@ -2163,13 +2163,13 @@ MaybeLocal<Value> Script::Run(Local<Context> context,
     }
   }
 
-  if (recordreplay::IsRecordingOrReplaying() && !recordreplay::AreEventsDisallowed()) {
-    // TODO: IsInReplayCode (RUN-1502)
-    v8::recordreplay::Assert("JS Script::Run %d",
-                             fun->shared().script().IsScript()
-                                 ? i::Script::cast(fun->shared().script()).id()
-                                 : 0);
-  }
+  // TODO: IsInReplayCode (RUN-1502)
+  v8::recordreplay::AssertMaybeEventsDisallowed(
+    "JS Script::Run %d",
+    fun->shared().script().IsScript()
+      ? i::Script::cast(fun->shared().script()).id()
+      : 0
+  );
 
   i::Handle<i::Object> receiver = i_isolate->global_proxy();
   // TODO(cbruni, chromium:1244145): Remove once migrated to the context.
@@ -2453,10 +2453,8 @@ MaybeLocal<Value> Module::Evaluate(Local<Context> context) {
   Utils::ApiCheck(self->status() >= i::Module::kLinked, "Module::Evaluate",
                   "Expected instantiated module");
 
-  if (recordreplay::IsRecordingOrReplaying() && !recordreplay::AreEventsDisallowed()) {
-    // TODO: IsInReplayCode (RUN-1502)
-    v8::recordreplay::Assert("JS Module::Evaluate %d", ScriptId());
-  }
+  // TODO: IsInReplayCode (RUN-1502)
+  v8::recordreplay::AssertMaybeEventsDisallowed("JS Module::Evaluate %d", ScriptId());
 
   Local<Value> result;
   has_pending_exception =
@@ -5245,11 +5243,11 @@ MaybeLocal<Value> Object::CallAsFunction(Local<Context> context,
   static_assert(sizeof(v8::Local<v8::Value>) == sizeof(i::Handle<i::Object>));
   i::Handle<i::Object>* args = reinterpret_cast<i::Handle<i::Object>*>(argv);
   
-  if (recordreplay::IsRecordingOrReplaying() && !recordreplay::AreEventsDisallowed()) {
-    // TODO: IsInReplayCode (RUN-1502)
-    v8::recordreplay::Assert(
-        "JS Object::CallAsFunction %d", IsCodeLike(context->GetIsolate()));
-  }
+  // TODO: IsInReplayCode (RUN-1502)
+  v8::recordreplay::AssertMaybeEventsDisallowed(
+    "JS Object::CallAsFunction %d",
+    IsCodeLike(context->GetIsolate())
+  );
 
   Local<Value> result;
   has_pending_exception = !ToLocal<Value>(
@@ -5271,11 +5269,11 @@ MaybeLocal<Value> Object::CallAsConstructor(Local<Context> context, int argc,
   static_assert(sizeof(v8::Local<v8::Value>) == sizeof(i::Handle<i::Object>));
   i::Handle<i::Object>* args = reinterpret_cast<i::Handle<i::Object>*>(argv);
 
-  if (recordreplay::IsRecordingOrReplaying() && !recordreplay::AreEventsDisallowed()) {
-    // TODO: IsInReplayCode (RUN-1502)
-    v8::recordreplay::Assert("JS Object::CallAsConstructor %d",
-                             IsCodeLike(context->GetIsolate()));
-  }
+  // TODO: IsInReplayCode (RUN-1502)
+  v8::recordreplay::AssertMaybeEventsDisallowed(
+    "JS Object::CallAsConstructor %d",
+    IsCodeLike(context->GetIsolate())
+  );
 
   Local<Value> result;
   has_pending_exception = !ToLocal<Value>(
@@ -5371,11 +5369,11 @@ MaybeLocal<v8::Value> Function::Call(Local<Context> context,
   static_assert(sizeof(v8::Local<v8::Value>) == sizeof(i::Handle<i::Object>));
   i::Handle<i::Object>* args = reinterpret_cast<i::Handle<i::Object>*>(argv);
 
-  if (recordreplay::IsRecordingOrReplaying() && !recordreplay::AreEventsDisallowed()) {
-    // TODO: IsInReplayCode (RUN-1502)
-    v8::recordreplay::Assert("JS Function::Call %d %d %d",
-                             ScriptId(), GetScriptLineNumber(), GetScriptColumnNumber());
-  }
+  // TODO: IsInReplayCode (RUN-1502)
+  v8::recordreplay::AssertMaybeEventsDisallowed(
+    "JS Function::Call %d %d %d",
+    ScriptId(), GetScriptLineNumber(), GetScriptColumnNumber()
+  );
 
   Local<Value> result;
   has_pending_exception = !ToLocal<Value>(
@@ -9889,9 +9887,7 @@ String::Value::~Value() { i::DeleteArray(str_); }
       i::HandleScope scope(i_isolate);                                     \
       i::Handle<i::String> message = Utils::OpenHandle(*raw_message);      \
       std::unique_ptr<char[]> message_str = message->ToCString();          \
-      if (!recordreplay::AreEventsDisallowed()) {                          \
-        recordreplay::Assert("CreateException %s %s", #NAME, message_str.get()); \
-      }                                                                    \
+      recordreplay::AssertMaybeEventsDisallowed("CreateException %s %s", #NAME, message_str.get()); \
       i::Handle<i::JSFunction> constructor = i_isolate->name##_function(); \
       error = *i_isolate->factory()->NewError(constructor, message);       \
     }                                                                      \
@@ -10714,6 +10710,7 @@ std::shared_ptr<WasmStreaming> WasmStreaming::Unpack(Isolate* v8_isolate,
 static bool gRecordingOrReplaying;
 static bool gARMRecording;
 static bool gHasDisabledFeatures;
+static bool gAssertsDisabled;
 
 typedef char* (CommandCallbackRaw)(const char* params);
 
@@ -10725,6 +10722,7 @@ typedef char* (CommandCallbackRaw)(const char* params);
   Macro(RecordReplayValue, (const char* why, uintptr_t v), uintptr_t, v)      \
   Macro(RecordReplayAreEventsDisallowed, (), bool, false)                     \
   Macro(RecordReplayAreEventsPassedThrough, (), bool, false)                  \
+  Macro(RecordReplayAreAssertsDisabled, (), bool, false)                      \
   Macro(RecordReplayCreateOrderedLock, (const char* name), size_t, 0)         \
   Macro(RecordReplayIsReplaying, (), bool, false)                             \
   Macro(RecordReplayHasDivergedFromRecording, (), bool, false)                \
@@ -11237,7 +11235,7 @@ extern "C" DLLEXPORT bool V8RecordReplayHadMismatch() {
 }
 
 void recordreplay::Assert(const char* format, ...) {
-  if (IsRecordingOrReplaying()) {
+  if (!gAssertsDisabled && IsRecordingOrReplaying()) {
     va_list ap;
     va_start(ap, format);
     gRecordReplayAssert(format, ap);
@@ -11246,7 +11244,7 @@ void recordreplay::Assert(const char* format, ...) {
 }
 
 extern "C" void V8RecordReplayAssert(const char* format, ...) {
-  if (recordreplay::IsRecordingOrReplaying()) {
+  if (!gAssertsDisabled && recordreplay::IsRecordingOrReplaying()) {
     va_list ap;
     va_start(ap, format);
     gRecordReplayAssert(format, ap);
@@ -11255,13 +11253,32 @@ extern "C" void V8RecordReplayAssert(const char* format, ...) {
 }
 
 extern "C" DLLEXPORT void V8RecordReplayAssertVA(const char* format, va_list args) {
-  if (recordreplay::IsRecordingOrReplaying()) {
+  if (!gAssertsDisabled && recordreplay::IsRecordingOrReplaying()) {
+    gRecordReplayAssert(format, args);
+  }
+}
+
+void recordreplay::AssertMaybeEventsDisallowed(const char* format, ...) {
+  if (!gAssertsDisabled &&
+      IsRecordingOrReplaying() &&
+      !AreEventsDisallowed("AssertMaybeEventsDisallowed")) {
+    va_list ap;
+    va_start(ap, format);
+    gRecordReplayAssertMaybeEventsDisallowed(format, ap);
+    va_end(ap);
+  }
+}
+
+extern "C" DLLEXPORT void V8RecordReplayAssertMaybeEventsDisallowedVA(const char* format, va_list args) {
+  if (!gAssertsDisabled &&
+      recordreplay::IsRecordingOrReplaying() &&
+      !recordreplay::AreEventsDisallowed("AssertMaybeEventsDisallowed")) {
     gRecordReplayAssert(format, args);
   }
 }
 
 void recordreplay::AssertBytes(const char* why, const void* buf, size_t size) {
-  if (IsRecordingOrReplaying()) {
+  if (!gAssertsDisabled && IsRecordingOrReplaying()) {
     gRecordReplayAssertBytes(why, buf, size);
   }
 }
@@ -11873,6 +11890,8 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
 
   gRecordingOrReplaying = V8RecordReplayFeatureEnabled("record-replay", nullptr);
   InitMainThread();
+
+  gAssertsDisabled = gRecordReplayAreAssertsDisabled();
 
   gRecordReplaySetDefaultCommandCallback(i::CommandCallback);
   gRecordReplaySetClearPauseDataCallback(i::ClearPauseDataCallback);
