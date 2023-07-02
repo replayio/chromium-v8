@@ -11264,7 +11264,7 @@ void recordreplay::AssertMaybeEventsDisallowed(const char* format, ...) {
       !AreEventsDisallowed("AssertMaybeEventsDisallowed")) {
     va_list ap;
     va_start(ap, format);
-    gRecordReplayAssertMaybeEventsDisallowed(format, ap);
+    gRecordReplayAssert(format, ap);
     va_end(ap);
   }
 }
