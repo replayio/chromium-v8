@@ -10970,6 +10970,9 @@ extern void ClearPauseDataCallback();
 bool gRecordReplayAssertValues;
 bool gRecordReplayAssertProgress;
 bool gRecordReplayAssertTrackedObjects;
+
+// Enable various checks when advancing the progress counter. Set via the
+// environment, or when events are disallowed on the main thread.
 int gRecordReplayCheckProgress;
 
 // Only finish recordings if there were interesting sources loaded
@@ -11336,14 +11339,16 @@ extern "C" DLLEXPORT void V8RecordReplayEndPassThroughEvents() {
 void recordreplay::BeginDisallowEvents() {
   if (IsRecordingOrReplaying()) {
     gRecordReplayBeginDisallowEvents();
-    if (!recordreplay::HasDivergedFromRecording()) ++internal::gRecordReplayCheckProgress;
+    if (IsMainThread())
+      ++internal::gRecordReplayCheckProgress;
   }
 }
 
 void recordreplay::BeginDisallowEventsWithLabel(const char* label) {
   if (IsRecordingOrReplaying()) {
     gRecordReplayBeginDisallowEventsWithLabel(label);
-    if (!recordreplay::HasDivergedFromRecording()) ++internal::gRecordReplayCheckProgress;
+    if (IsMainThread())
+      ++internal::gRecordReplayCheckProgress;
   }
 }
 
@@ -11357,7 +11362,8 @@ extern "C" DLLEXPORT void V8RecordReplayBeginDisallowEventsWithLabel(const char*
 
 void recordreplay::EndDisallowEvents() {
   if (IsRecordingOrReplaying()) {
-    if (!recordreplay::HasDivergedFromRecording()) --internal::gRecordReplayCheckProgress;
+    if (IsMainThread())
+      --internal::gRecordReplayCheckProgress;
     gRecordReplayEndDisallowEvents();
   }
 }
