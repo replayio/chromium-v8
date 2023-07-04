@@ -31,6 +31,7 @@
 namespace v8 {
 namespace internal {
 
+extern bool gRecordReplayAssertProgress;
 extern bool gRecordReplayInstrumentationEnabled;
 
 namespace compiler {
