@@ -3607,7 +3607,7 @@ void BytecodeGraphBuilder::VisitRecordReplayIncExecutionProgressCounter() {
   //
   // The optimized path is currently disabled while recording as well.
   // See https://linear.app/replay/issue/RUN-744
-  if ((true)/*gRecordReplayAssertProgress || recordreplay::IsReplaying()*/) {
+  if (gRecordReplayAssertProgress || recordreplay::IsReplaying()) {
     Node* closure = GetFunctionClosure();
     const Operator* op = javascript()->CallRuntime(Runtime::kRecordReplayAssertExecutionProgress);
 
