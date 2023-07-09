@@ -436,6 +436,7 @@ namespace interpreter {
                                                                                \
   /* Record Replay */                                                          \
   V(RecordReplayIncExecutionProgressCounter, ImplicitRegisterUse::kNone)       \
+  V(RecordReplayIncExecutionProgressCounter2, ImplicitRegisterUse::kNone)      \
   V(RecordReplayNotifyActivity, ImplicitRegisterUse::kNone)                    \
   V(RecordReplayInstrumentation, ImplicitRegisterUse::kNone,                   \
     OperandType::kIdx)                                                         \

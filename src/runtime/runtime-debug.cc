@@ -1143,6 +1143,16 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
   return ReadOnlyRoots(isolate).undefined_value();
 }
 
+static uint64_t gProgressCounter2;
+
+RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
+  ++gProgressCounter2;
+
+  CHECK(*gProgressCounter == gProgressCounter2);
+
+  return ReadOnlyRoots(isolate).undefined_value();
+}
+
 RUNTIME_FUNCTION(Runtime_RecordReplayTargetProgressReached) {
   CHECK(*gProgressCounter == gTargetProgress);
   RecordReplayOnTargetProgressReached();

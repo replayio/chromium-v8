@@ -1380,6 +1380,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::IncBlockCounter(
 BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayOnProgress() {
   if (emit_record_replay_opcodes_) {
     OutputRecordReplayIncExecutionProgressCounter();
+    OutputRecordReplayIncExecutionProgressCounter2();
   } else if (recordreplay::IsReplaying()) {
     OutputRecordReplayNotifyActivity();
   }
