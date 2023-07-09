@@ -1145,7 +1145,7 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
 
 static uint64_t gProgressCounter2;
 
-RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
+RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress2) {
   ++gProgressCounter2;
 
   CHECK(*gProgressCounter == gProgressCounter2);
