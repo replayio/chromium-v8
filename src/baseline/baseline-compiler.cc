@@ -2310,11 +2310,6 @@ void BaselineCompiler::VisitRecordReplayIncExecutionProgressCounter() {
   }
 }
 
-void BaselineCompiler::VisitRecordReplayIncExecutionProgressCounter2() {
-  CallRuntime(Runtime::kRecordReplayAssertExecutionProgress2,
-              __ FunctionOperand());
-}
-
 void BaselineCompiler::VisitRecordReplayNotifyActivity() {
   CallRuntime(Runtime::kRecordReplayNotifyActivity);
 }

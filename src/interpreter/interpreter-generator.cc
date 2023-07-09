@@ -2854,13 +2854,6 @@ IGNITION_HANDLER(RecordReplayIncExecutionProgressCounter, InterpreterAssembler) 
   Dispatch();
 }
 
-IGNITION_HANDLER(RecordReplayIncExecutionProgressCounter2, InterpreterAssembler) {
-  TNode<Context> context = GetContext();
-  TNode<Object> closure = LoadRegister(Register::function_closure());
-  CallRuntime(Runtime::kRecordReplayAssertExecutionProgress2, context, closure);
-  Dispatch();
-}
-
 IGNITION_HANDLER(RecordReplayNotifyActivity, InterpreterAssembler) {
   TNode<Context> context = GetContext();
   CallRuntime(Runtime::kRecordReplayNotifyActivity, context);

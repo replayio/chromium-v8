@@ -3386,11 +3386,6 @@ void MaglevGraphBuilder::VisitRecordReplayIncExecutionProgressCounter() {
   BuildCallRuntime(Runtime::kRecordReplayAssertExecutionProgress, {closure});
 }
 
-void MaglevGraphBuilder::VisitRecordReplayIncExecutionProgressCounter2() {
-  ValueNode* closure = GetClosure();
-  BuildCallRuntime(Runtime::kRecordReplayAssertExecutionProgress2, {closure});
-}
-
 void MaglevGraphBuilder::VisitRecordReplayNotifyActivity() {
   BuildCallRuntime(Runtime::kRecordReplayNotifyActivity, {});
 }
