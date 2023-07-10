@@ -2038,7 +2038,7 @@ const Operator* SimplifiedOperatorBuilder::TransitionAndStoreNonNumberElement(
 
 const Operator* SimplifiedOperatorBuilder::IncrementAndCheckProgressCounter() {
   return zone()->New<Operator>(IrOpcode::kIncrementAndCheckProgressCounter,
-                               Operator::kNoProperties,
+                               Operator::kNoDeopt | Operator::kNoThrow,
                                "IncrementAndCheckProgressCounter",
                                0, 1, 0, 1, 1, 0);
 }
