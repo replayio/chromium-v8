@@ -809,8 +809,7 @@ bool operator==(CheckMinusZeroParameters const& lhs,
   V(StringCodePointAt, Operator::kNoProperties, 2, 1)     \
   V(StringFromCodePointAt, Operator::kNoProperties, 2, 1) \
   V(StringSubstring, Operator::kNoProperties, 3, 1)       \
-  V(DateNow, Operator::kNoProperties, 0, 1)               \
-  V(IncrementAndCheckProgressCounter, Operator::kNoProperties, 0, 0)
+  V(DateNow, Operator::kNoProperties, 0, 1)
 
 #define SPECULATIVE_NUMBER_BINOP_LIST(V)      \
   SIMPLIFIED_SPECULATIVE_NUMBER_BINOP_LIST(V) \
@@ -2035,6 +2034,13 @@ const Operator* SimplifiedOperatorBuilder::TransitionAndStoreNonNumberElement(
       IrOpcode::kTransitionAndStoreNonNumberElement,
       Operator::kNoDeopt | Operator::kNoThrow,
       "TransitionAndStoreNonNumberElement", 3, 1, 1, 0, 1, 0, parameters);
+}
+
+const Operator* SimplifiedOperatorBuilder::IncrementAndCheckProgressCounter() {
+  return zone()->New<Operator>(IrOpcode::kIncrementAndCheckProgressCounter,
+                               Operator::kNoDeopt | Operator::kNoThrow,
+                               "IncrementAndCheckProgressCounter",
+                               0, 1, 0, 1, 1, 0);
 }
 
 const Operator* SimplifiedOperatorBuilder::FastApiCall(
