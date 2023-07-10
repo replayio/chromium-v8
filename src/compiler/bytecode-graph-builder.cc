@@ -3612,9 +3612,7 @@ void BytecodeGraphBuilder::VisitRecordReplayIncExecutionProgressCounter() {
     Node* node = NewNode(op, closure);
     environment()->RecordAfterState(node, Environment::kAttachFrameState);
   } else {
-    recordreplay::Diagnostic("[RUN-2312] BytecodeGraphBuilder::VisitRecordReplayIncExecutionProgressCounter #1");
     Node* node = NewNode(simplified()->IncrementAndCheckProgressCounter());
-    recordreplay::Diagnostic("[RUN-2312] BytecodeGraphBuilder::VisitRecordReplayIncExecutionProgressCounter #2 %d", needs_eager_checkpoint());
     environment()->RecordAfterState(node, Environment::kAttachFrameState);
   }
   CHECK(needs_eager_checkpoint());
@@ -4368,9 +4366,6 @@ Node* BytecodeGraphBuilder::MakeNode(const Operator* op, int value_input_count,
   bool has_control = op->ControlInputCount() == 1;
   bool has_effect = op->EffectInputCount() == 1;
 
-  recordreplay::Diagnostic("[RUN-2312] BytecodeGraphBuilder::MakeNode #1 %s %d %d %d %d",
-                           op->mnemonic(), has_context, has_frame_state, has_control, has_effect);
-
   DCHECK_LT(op->ControlInputCount(), 2);
   DCHECK_LT(op->EffectInputCount(), 2);
 
@@ -4440,7 +4435,6 @@ Node* BytecodeGraphBuilder::MakeNode(const Operator* op, int value_input_count,
     }
     // Ensure checkpoints are created after operations with side-effects.
     if (has_effect && !result->op()->HasProperty(Operator::kNoWrite)) {
-      recordreplay::Diagnostic("[RUN-2312] BytecodeGraphBuilder::MakeNode #2");
       mark_as_needing_eager_checkpoint(true);
     }
   }
