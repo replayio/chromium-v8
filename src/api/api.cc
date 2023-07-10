@@ -11949,7 +11949,7 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
   }
 
   // The baseline JIT's handling of some record/replay opcodes is buggy.
-  if (V8RecordReplayFeatureEnabled("disable-baseline-jit", nullptr)) {
+  if (IsReplaying()) {
     i::v8_flags.sparkplug = false;
   }
 
