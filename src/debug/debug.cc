@@ -3146,8 +3146,7 @@ static void ForEachInstrumentationOp(Isolate* isolate, Handle<Script> script,
       if (!is_compiled_scope.is_compiled()) {
         if (!Compiler::Compile(isolate, candidate, Compiler::CLEAR_EXCEPTION,
                                &is_compiled_scope)) {
-          recordreplay::Diagnostic("Compiler::Compile failed, crashing.");
-          IMMEDIATE_CRASH();
+          V8_Fatal("Compiler::Compile failed in ForEachInstrumentationOp.");
         } else {
           was_compiled = true;
         }
@@ -3347,6 +3346,73 @@ static Handle<Object> RecordReplayGetPossibleBreakpoints(Isolate* isolate,
   return rv;
 }
 
+static SharedFunctionInfo GetSharedFunctionInfoById(Isolate* isolate,
+                                                    Handle<Script> script,
+                                                    int startPosition) {
+  SharedFunctionInfo::ScriptIterator iterator(isolate, *script);
+  for (SharedFunctionInfo info = iterator.Next(); !info.is_null();
+       info = iterator.Next()) {
+    if (info.StartPosition() == startPosition) {
+      return info;
+    }
+  }
+  SharedFunctionInfo empty;
+  return empty;
+}
+
+extern void ParseRecordReplayFunctionId(const std::string& function_id,
+                                        int* script_id, int* source_position);
+
+static void ParseRecordReplayFunctionIdFromParams(Isolate* isolate,
+                                                  Handle<Object> params,
+                                                  std::string* function_id,
+                                                  int* script_id,
+                                                  int* source_position) {
+  Handle<Object> function_id_raw = GetProperty(isolate, params, "functionId");
+  std::unique_ptr<char[]> function_id_chars =
+      String::cast(*function_id_raw).ToCString();
+  *function_id = function_id_chars.get();
+  ParseRecordReplayFunctionId(*function_id, script_id, source_position);
+}
+
+static Handle<Object> RecordReplayGetBytecode(Isolate* isolate,
+                                              Handle<Object> params) {
+  int script_id, function_source_position;
+  std::string function_id;
+  ParseRecordReplayFunctionIdFromParams(isolate, params, &function_id,
+                                        &script_id, &function_source_position);
+  MaybeHandle<Script> maybe_script = MaybeGetScript(isolate, script_id);
+  Handle<JSObject> rv = NewPlainObject(isolate);
+
+  if (!maybe_script.is_null()) {
+    Handle<Script> script = maybe_script.ToHandleChecked();
+    SetProperty(isolate, rv, "sourceId", script_id);
+
+    SharedFunctionInfo info =
+        GetSharedFunctionInfoById(isolate, script, function_source_position);
+    if (!info.is_null()) {
+      SetProperty(isolate, rv, "name", SharedFunctionInfo::DebugName(handle(info, isolate)));
+      SetProperty(isolate, rv, "debuggable", info.IsSubjectToDebugging());
+      SetProperty(isolate, rv, "compiled", info.is_compiled());
+      SetProperty(isolate, rv, "hasBytecode", info.HasBytecodeArray());
+
+      if (info.IsSubjectToDebugging() && info.is_compiled() &&
+          info.HasBytecodeArray()) {
+        // Get Bytecode.
+        // (based on InterpreterCompilationJob::DoFinalizeJobImpl)
+        BytecodeArray bytecode = info.GetBytecodeArray(isolate);
+        std::ostringstream bytecodeResult;
+        bytecode.Disassemble(bytecodeResult);
+
+        SetProperty(isolate, rv, "bytecode", bytecodeResult.str().c_str());
+        SetProperty(isolate, rv, "bytecodeLength", bytecode.length());
+      }
+    }
+  }
+
+  return rv;
+}
+
 extern void RecordReplayAddPossibleBreakpoint(int line, int column, const char* function_id, int offset);
 
 static void EnsureIsolateContext(Isolate* isolate, base::Optional<SaveAndSwitchContext>& ssc);
@@ -3418,23 +3484,14 @@ static Handle<String> GetProtocolSourceId(Isolate* isolate, Handle<Script> scrip
   return CStringToHandle(isolate, os.str().c_str());
 }
 
-extern void ParseRecordReplayFunctionId(const std::string& function_id,
-                                        int* script_id, int* source_position);
-
-static Handle<Object> RecordReplayConvertFunctionOffsetToLocation(Isolate* isolate,
-                                                                  Handle<Object> params) {
-  Handle<Object> function_id_raw = GetProperty(isolate, params, "functionId");
-
-  std::unique_ptr<char[]> function_id_chars = String::cast(*function_id_raw).ToCString();
-  std::string function_id(function_id_chars.get());
-  int script_id;
-  int function_source_position;
-  ParseRecordReplayFunctionId(function_id,
-                              &script_id, &function_source_position);
-
-  Handle<Object> offset_raw = GetProperty(isolate, params, "offset");
-
+static Handle<Object> RecordReplayConvertFunctionOffsetToLocation(
+    Isolate* isolate, Handle<Object> params) {
+  int script_id, function_source_position;
+  std::string function_id;
+  ParseRecordReplayFunctionIdFromParams(isolate, params, &function_id,
+                                        &script_id, &function_source_position);
   Handle<Script> script = GetScript(isolate, script_id);
+  Handle<Object> offset_raw = GetProperty(isolate, params, "offset");
 
   // The offset may or may not be present. If the offset is present, use it as the
   // instrumentation site to get the source position.
