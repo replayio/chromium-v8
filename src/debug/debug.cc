@@ -3375,10 +3375,12 @@ static void ParseRecordReplayFunctionIdFromParams(Isolate* isolate,
   ParseRecordReplayFunctionId(*function_id, script_id, source_position);
 }
 
-static Handle<Object> RecordReplayGetBytecode(Isolate* isolate,
-                                              Handle<Object> params) {
+v8::Local<v8::Object> RecordReplayGetBytecode(v8::Isolate* isolate_,
+                                                     v8::Local<v8::Object> paramsObj) {
+  i::Isolate* isolate = reinterpret_cast<i::Isolate*>(isolate_);
   int script_id, function_source_position;
   std::string function_id;
+  Handle<Object> params = Utils::OpenHandle(*paramsObj);
   ParseRecordReplayFunctionIdFromParams(isolate, params, &function_id,
                                         &script_id, &function_source_position);
   MaybeHandle<Script> maybe_script = MaybeGetScript(isolate, script_id);
@@ -3410,7 +3412,7 @@ static Handle<Object> RecordReplayGetBytecode(Isolate* isolate,
     }
   }
 
-  return rv;
+  return v8::Utils::ToLocal(rv);
 }
 
 extern void RecordReplayAddPossibleBreakpoint(int line, int column, const char* function_id, int offset);
