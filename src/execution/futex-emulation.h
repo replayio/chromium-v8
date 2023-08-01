@@ -58,7 +58,7 @@ class AtomicsWaitWakeHandle {
 class FutexWaitListNode {
  public:
   // Create a sync FutexWaitListNode.
-  FutexWaitListNode() = default;
+  FutexWaitListNode();
 
   // Create an async FutexWaitListNode.
   FutexWaitListNode(const std::shared_ptr<BackingStore>& backing_store,
