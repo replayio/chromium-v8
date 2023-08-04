@@ -105,22 +105,11 @@ namespace {
 // and `interrupted_` fields for each individual list node that is currently
 // part of the list. It must be the mutex used together with the `cond_`
 // condition variable of such nodes.
-struct RecordReplayOrderedFutexEmulationMutexConstructor {
-  // Constructs the mutex with an ordered name.
-  static void Construct(void* allocated_ptr) { new (allocated_ptr) base::Mutex("FutexEmulation"); }
-};
-using LazyMutex =
-  base::LazyStaticInstance<
-    base::Mutex,
-    RecordReplayOrderedFutexEmulationMutexConstructor,
-    base::ThreadSafeInitOnceTrait
-  >::type;
-LazyMutex g_mutex = LAZY_MUTEX_INITIALIZER;
+base::LazyMutex g_mutex = LAZY_MUTEX_INITIALIZER;
 base::LazyInstance<FutexWaitList>::type g_wait_list = LAZY_INSTANCE_INITIALIZER;
 }  // namespace
 
 FutexWaitListNode::~FutexWaitListNode() {
-  recordreplay::UnregisterPointer(this);
   // Assert that the timeout task was cancelled.
   DCHECK_EQ(CancelableTaskManager::kInvalidTaskId, timeout_task_id_);
 }
@@ -146,9 +135,6 @@ void FutexWaitListNode::NotifyWake() {
   // if not waiting, this will not have any effect.
   cond_.NotifyOne();
   interrupted_ = true;
-  recordreplay::Assert("[RUN-2378-2433] FutexWaitListNode::NotifyWake %d",
-    recordreplay::PointerId(this)
-  );
 }
 
 class ResolveAsyncWaiterPromisesTask : public CancelableTask {
@@ -415,9 +401,6 @@ Object FutexEmulation::WaitSync(Isolate* isolate,
     node->wait_location_ = wait_location;
     node->waiting_ = true;
 
-    int node_record_replay_id = recordreplay::PointerId(node);
-    recordreplay::Assert("[RUN-2378-2433] FutexEmulation::WaitSync #105 node=%d",
-      node_record_replay_id);
 
     // Reset node->waiting_ = false when leaving this scope (but while
     // still holding the lock).
@@ -459,8 +442,8 @@ Object FutexEmulation::WaitSync(Isolate* isolate,
       bool interrupted = node->interrupted_;
       node->interrupted_ = false;
 
-      recordreplay::Assert("[RUN-2378-2418] FutexEmulation::WaitSync #131 node=%d intr=%d",
-        node_record_replay_id, (int) interrupted);
+      recordreplay::Assert("[RUN-2378-2418] FutexEmulation::WaitSync #131 intr=%d",
+        (int) interrupted);
 
       // Unlock the mutex here to prevent deadlock from lock ordering between
       // mutex and mutexes locked by HandleInterrupts.
@@ -560,9 +543,6 @@ Object FutexEmulation::WaitSync(Isolate* isolate,
   return *result;
 }
 
-FutexWaitListNode::FutexWaitListNode() {
-  recordreplay::RegisterPointer("FutexWaitListNode", this);
-}
 FutexWaitListNode::FutexWaitListNode(
     const std::shared_ptr<BackingStore>& backing_store, size_t wait_addr,
     Handle<JSObject> promise, Isolate* isolate)
@@ -572,7 +552,6 @@ FutexWaitListNode::FutexWaitListNode(
       wait_location_(
           FutexWaitList::ToWaitLocation(backing_store.get(), wait_addr)),
       waiting_(true) {
-  recordreplay::RegisterPointer("FutexWaitListNode", this);
   auto v8_isolate = reinterpret_cast<v8::Isolate*>(isolate);
   task_runner_ = V8::GetCurrentPlatform()->GetForegroundTaskRunner(v8_isolate);
   cancelable_task_manager_ = isolate->cancelable_task_manager();
