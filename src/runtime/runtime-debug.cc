@@ -1030,8 +1030,8 @@ static char* GetProgressMismatchMessage(size_t replayedIndex, uint64_t recordedE
                                   : "<assertion>";
   std::ostringstream os;
   os << "{ \"recorded\": \"" << recorded_text 
-     << "\", \"replayed\" \"" << replayed_text
-     << "\", \"pc\":\" " << (*gProgressCounter - replayedIndex)
+     << "\", \"replayed\": \"" << replayed_text
+     << "\", \"pc\": " << (*gProgressCounter - replayedIndex)
      << ", \"stack\": \"";
   isolate->PrintCurrentStackTrace(os);
   os << "\" }";
