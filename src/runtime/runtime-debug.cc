@@ -1015,10 +1015,12 @@ static std::string GetScriptProgressEntryString(uint64_t v) {
   return GetScriptLocationString(script_id, start_position);
 }
 
-// Produce a string explaining a JS mismatch, including the first mismatching
-// replayed PC (if there is any).The mismatching replay PC is the current PC
-// minus the index of the mismatching replayed entry, since every PC update
-// before the following (current) Assert added one more entry.
+// Produce a string explaining a JS mismatch during an Assert call when a C++
+// mismatch was detected. It includes the first mismatching replayed PC (if
+// there is any). That PC is the current PC minus the index of the mismatching
+// replayed entry, since every PC update before the current Assert added one
+// JS mismatch entry.
+// See https://linear.app/replay/issue/RUN-2096#comment-a334b15f
 static char* GetProgressMismatchMessage(size_t replayedIndex, uint64_t recordedEntry,
                                         uint64_t replayedEntry) {
   Isolate* isolate = Isolate::Current();
