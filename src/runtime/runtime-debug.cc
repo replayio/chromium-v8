@@ -1015,7 +1015,14 @@ static std::string GetScriptProgressEntryString(uint64_t v) {
   return GetScriptLocationString(script_id, start_position);
 }
 
-static char* GetScriptProgressMessage(uint64_t recordedEntry, uint64_t replayedEntry) {
+// Produce a string explaining a JS mismatch during an Assert call when a C++
+// mismatch was detected. It includes the first mismatching replayed PC (if
+// there is any). That PC is the current PC minus the index of the mismatching
+// replayed entry, since every PC update before the current Assert added one
+// JS mismatch entry.
+// See https://linear.app/replay/issue/RUN-2096#comment-a334b15f
+static char* GetProgressMismatchMessage(size_t replayedIndex, uint64_t recordedEntry,
+                                        uint64_t replayedEntry) {
   Isolate* isolate = Isolate::Current();
   std::string recorded_text = recordedEntry
                                   ? GetScriptProgressEntryString(recordedEntry)
@@ -1024,10 +1031,12 @@ static char* GetScriptProgressMessage(uint64_t recordedEntry, uint64_t replayedE
                                   ? GetScriptProgressEntryString(replayedEntry)
                                   : "<assertion>";
   std::ostringstream os;
-  os << "Recorded " << recorded_text << " Replayed " << replayed_text
-     << " Stack=";
-  
+  os << "{ \"recorded\": \"" << recorded_text 
+     << "\", \"replayed\": \"" << replayed_text
+     << "\", \"pc\": " << (*gProgressCounter - replayedIndex)
+     << ", \"stack\": \"";
   isolate->PrintCurrentStackTrace(os);
+  os << "\" }";
   
   return strdup(os.str().c_str());
 }
@@ -1062,20 +1071,22 @@ char* RecordReplayCallbackAssertOnDataMismatch(void* recorded_buf, size_t record
       std::string text = GetScriptProgressEntryString(recorded[i]);
       RecordReplayDescribeAssertData(text.c_str());
     } else {
-      return GetScriptProgressMessage(recorded[i], replayed[i]);
+      return GetProgressMismatchMessage(i, recorded[i], replayed[i]);
     }
   }
 
   if (recorded_size < replayed_size) {
-    return GetScriptProgressMessage(0, replayed[recorded_size]);
+    return GetProgressMismatchMessage(recorded_size, 0, replayed[recorded_size]);
   }
 
   if (replayed_size < recorded_size) {
-    return GetScriptProgressMessage(recorded[replayed_size], 0);
+    // We don't have a replayed entry. Report the last matching replayed entry instead.
+    return GetProgressMismatchMessage(replayed_size - 1,
+                                      recorded[replayed_size], 0);
   }
 
   // We shouldn't ever be able to get here.
-  return GetScriptProgressMessage(0, 0);
+  return GetProgressMismatchMessage(replayed_size-1, 0, 0);
 }
 
 void RecordReplayCallbackAssertDescribeData(void* buf, size_t buf_size) {
