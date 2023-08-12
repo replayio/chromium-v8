@@ -3838,8 +3838,21 @@ static void EnsureIsolateContext(Isolate* isolate, base::Optional<SaveAndSwitchC
   }
 }
 
+extern "C" void V8RecordReplayEnterReplayCode();
+extern "C" void V8RecordReplayExitReplayCode();
+
+struct AutoMarkReplayCode {
+  AutoMarkReplayCode() {
+    V8RecordReplayEnterReplayCode();
+  }
+  ~AutoMarkReplayCode() {
+    V8RecordReplayExitReplayCode();
+  }
+};
+
 char* CommandCallback(const char* command, const char* params) {
   CHECK(IsMainThread());
+  AutoMarkReplayCode amrc;
   uint64_t startProgressCounter = *gProgressCounter;
   recordreplay::AutoDisallowEvents disallow("CommandCallback");
 
@@ -3915,6 +3928,7 @@ static Eternal<Value>* gClearPauseDataCallback;
 
 void ClearPauseDataCallback() {
   CHECK(IsMainThread());
+  AutoMarkReplayCode amrc;
   recordreplay::AutoDisallowEvents disallow("ClearPauseDataCallback");
 
   if (!gClearPauseDataCallback) {
