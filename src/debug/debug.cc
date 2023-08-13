@@ -3782,6 +3782,7 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
       auto handlerEternalValue = entry.first;
       auto disallowEvents = entry.second;
 
+      AutoMarkReplayCode amrc;
       base::Optional<recordreplay::AutoDisallowEvents> disallow;
       if (disallowEvents) {
         disallow.emplace("RecordReplayRegisterScript");
