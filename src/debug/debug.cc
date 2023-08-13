@@ -3714,6 +3714,22 @@ bool RecordReplayIsDivergentUserJSWithoutPause(
 typedef std::vector<std::pair<Eternal<Value>*, bool>> NewScriptHandlerVector;
 static NewScriptHandlerVector* gNewScriptHandlers;
 
+extern "C" void V8RecordReplayEnterReplayCode();
+extern "C" void V8RecordReplayExitReplayCode();
+
+namespace {
+
+struct AutoMarkReplayCode {
+  AutoMarkReplayCode() {
+    V8RecordReplayEnterReplayCode();
+  }
+  ~AutoMarkReplayCode() {
+    V8RecordReplayExitReplayCode();
+  }
+};
+
+} // anonymous namespace
+
 static void RecordReplayRegisterScript(Handle<Script> script) {
   CHECK(IsMainThread());
 
@@ -3838,18 +3854,6 @@ static void EnsureIsolateContext(Isolate* isolate, base::Optional<SaveAndSwitchC
     ssc.emplace(isolate, *context);
   }
 }
-
-extern "C" void V8RecordReplayEnterReplayCode();
-extern "C" void V8RecordReplayExitReplayCode();
-
-struct AutoMarkReplayCode {
-  AutoMarkReplayCode() {
-    V8RecordReplayEnterReplayCode();
-  }
-  ~AutoMarkReplayCode() {
-    V8RecordReplayExitReplayCode();
-  }
-};
 
 char* CommandCallback(const char* command, const char* params) {
   CHECK(IsMainThread());
