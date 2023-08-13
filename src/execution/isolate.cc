@@ -1532,6 +1532,8 @@ void Isolate::ReportFailedAccessCheck(Handle<JSObject> receiver) {
       v8::Utils::ToLocal(receiver), v8::ACCESS_HAS, v8::Utils::ToLocal(data));
 }
 
+extern "C" bool V8RecordReplayIsInReplayCode();
+
 bool Isolate::MayAccess(Handle<Context> accessing_context,
                         Handle<JSObject> receiver) {
   DCHECK(receiver->IsJSGlobalProxy() || receiver->IsAccessCheckNeeded());
@@ -1541,6 +1543,10 @@ bool Isolate::MayAccess(Handle<Context> accessing_context,
 
   // During bootstrapping, callback functions are not enabled yet.
   if (bootstrapper()->IsActive()) return true;
+
+  // Allow all accesses made while replay code is running.
+  if (V8RecordReplayIsInReplayCode()) return true;
+
   {
     DisallowGarbageCollection no_gc;
 

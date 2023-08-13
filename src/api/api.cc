@@ -12004,6 +12004,21 @@ extern "C" DLLEXPORT bool V8IsMainThread() {
   return IsMainThread();
 }
 
+static size_t gInReplayCode;
+
+extern "C" DLLEXPORT bool V8RecordReplayIsInReplayCode() {
+  return IsMainThread() && gInReplayCode;
+}
+
+extern "C" DLLEXPORT void V8RecordReplayEnterReplayCode() {
+  CHECK(IsMainThread());
+  gInReplayCode++;
+}
+
+extern "C" DLLEXPORT void V8RecordReplayExitReplayCode() {
+  gInReplayCode--;
+}
+
 namespace internal {
 
 const size_t HandleScopeImplementer::kEnteredContextsOffset =

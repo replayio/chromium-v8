@@ -3714,6 +3714,22 @@ bool RecordReplayIsDivergentUserJSWithoutPause(
 typedef std::vector<std::pair<Eternal<Value>*, bool>> NewScriptHandlerVector;
 static NewScriptHandlerVector* gNewScriptHandlers;
 
+extern "C" void V8RecordReplayEnterReplayCode();
+extern "C" void V8RecordReplayExitReplayCode();
+
+namespace {
+
+struct AutoMarkReplayCode {
+  AutoMarkReplayCode() {
+    V8RecordReplayEnterReplayCode();
+  }
+  ~AutoMarkReplayCode() {
+    V8RecordReplayExitReplayCode();
+  }
+};
+
+} // anonymous namespace
+
 static void RecordReplayRegisterScript(Handle<Script> script) {
   CHECK(IsMainThread());
 
@@ -3782,6 +3798,7 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
       auto handlerEternalValue = entry.first;
       auto disallowEvents = entry.second;
 
+      AutoMarkReplayCode amrc;
       base::Optional<recordreplay::AutoDisallowEvents> disallow;
       if (disallowEvents) {
         disallow.emplace("RecordReplayRegisterScript");
@@ -3840,6 +3857,7 @@ static void EnsureIsolateContext(Isolate* isolate, base::Optional<SaveAndSwitchC
 
 char* CommandCallback(const char* command, const char* params) {
   CHECK(IsMainThread());
+  AutoMarkReplayCode amrc;
   uint64_t startProgressCounter = *gProgressCounter;
   recordreplay::AutoDisallowEvents disallow("CommandCallback");
 
@@ -3915,6 +3933,7 @@ static Eternal<Value>* gClearPauseDataCallback;
 
 void ClearPauseDataCallback() {
   CHECK(IsMainThread());
+  AutoMarkReplayCode amrc;
   recordreplay::AutoDisallowEvents disallow("ClearPauseDataCallback");
 
   if (!gClearPauseDataCallback) {
