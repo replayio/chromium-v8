@@ -252,7 +252,9 @@ Response V8InspectorSessionImpl::findInjectedScript(
   InspectedContext* context =
       m_inspector->getContext(m_contextGroupId, contextId);
   if (!context)
-    return Response::ServerError("Cannot find context with specified id B");
+    // return Response::ServerError("Cannot find context with specified id");
+    return Response::ServerError(
+        "[RUN-2486-2498] Cannot find context with specified id B");
   injectedScript = context->getInjectedScript(m_sessionId);
   if (!injectedScript) {
     injectedScript = context->createInjectedScript(m_sessionId);
@@ -265,7 +267,9 @@ Response V8InspectorSessionImpl::findInjectedScript(
 Response V8InspectorSessionImpl::findInjectedScript(
     RemoteObjectIdBase* objectId, InjectedScript*& injectedScript) {
   if (objectId->isolateId() != m_inspector->isolateId())
-    return Response::ServerError("Cannot find context with specified id C");
+    // return Response::ServerError("Cannot find context with specified id");
+    return Response::ServerError(
+        "[RUN-2486-2498] Cannot find context with specified id C");
   return findInjectedScript(objectId->contextId(), injectedScript);
 }
 
