@@ -1137,7 +1137,7 @@ Response InjectedScript::bindRemoteObjectIfNeeded(
         inspectedContext ? inspectedContext->getInjectedScript(sessionId)
                          : nullptr;
     if (!injectedScript) {
-      return Response::ServerError("Cannot find context with specified id");
+      return Response::ServerError("Cannot find context with specified id A");
     }
     remoteObject->setObjectId(injectedScript->bindObject(value, groupName));
 
