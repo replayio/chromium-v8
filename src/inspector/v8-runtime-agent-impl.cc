@@ -231,10 +231,13 @@ Response ensureContext(V8InspectorImpl* inspector, int contextGroupId,
     v8::HandleScope handles(inspector->isolate());
     v8::Local<v8::Context> defaultContext =
         inspector->client()->ensureDefaultContextInGroup(contextGroupId);
-    if (defaultContext.IsEmpty())
-      // return Response::ServerError("Cannot find default execution context");
-      return Response::ServerError(
-          "[RUN-2486-2498] Cannot find default execution context");
+    if (defaultContext.IsEmpty()) {
+      // TODO: RUN-2499
+      recordreplay::Warning(
+          "[RUN-2486-2498] Cannot find default execution context %d",
+          contextGroupId);
+      return Response::ServerError("Cannot find default execution context");
+    }
     *contextId = InspectedContext::contextId(defaultContext);
   }
 
