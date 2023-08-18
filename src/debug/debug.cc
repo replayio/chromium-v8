@@ -3906,17 +3906,6 @@ char* CommandCallback(const char* command, const char* params) {
   Handle<Object> rvStr = JsonStringify(isolate, result, undefined, undefined).ToHandleChecked();
   std::unique_ptr<char[]> rvCStr = String::cast(*rvStr).ToCString();
 
-  Handle<String> is_error_string = isolate->factory()->NewStringFromAsciiChecked("is_error");
-  MaybeHandle<Object> is_error_value = Object::GetProperty(isolate, result, is_error_string);
-  if (!is_error_value.is_null()) {
-    if (is_error_value.ToHandleChecked()->BooleanValue(isolate)) {
-      // If we get back an object from the call with a "is_error" property on it, set to true,
-      // then our command experienced an error.  Report it to the log (in such a way as it
-      // can be recovered by our error reporting), and then crash.
-      V8_Fatal("%s", rvCStr.get());
-    }
-  }
-
   if (startProgressCounter < *gProgressCounter && !recordreplay::HasDivergedFromRecording()) {
     // [RUN-1988] Our command handler incremented the PC by accidentally calling
     // into instrumented user code.
