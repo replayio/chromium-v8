@@ -233,7 +233,7 @@ Response ensureContext(V8InspectorImpl* inspector, int contextGroupId,
         inspector->client()->ensureDefaultContextInGroup(contextGroupId);
     if (defaultContext.IsEmpty()) {
       // TODO: RUN-2499
-      recordreplay::Warning(
+      v8::recordreplay::Warning(
           "[RUN-2486-2498] Cannot find default execution context %d",
           contextGroupId);
       return Response::ServerError("Cannot find default execution context");

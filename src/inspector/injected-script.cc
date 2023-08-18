@@ -1138,7 +1138,7 @@ Response InjectedScript::bindRemoteObjectIfNeeded(
                          : nullptr;
     if (!injectedScript) {
       // TODO: RUN-2499
-      recordreplay::Warning(
+      v8::recordreplay::Warning(
           "[RUN-2486-2498] Cannot find context with specified id A %d %d %d",
           sessionId, InspectedContext::contextId(context), !!inspectedContext);
       return Response::ServerError("Cannot find context with specified id");
