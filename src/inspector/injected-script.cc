@@ -1137,6 +1137,10 @@ Response InjectedScript::bindRemoteObjectIfNeeded(
         inspectedContext ? inspectedContext->getInjectedScript(sessionId)
                          : nullptr;
     if (!injectedScript) {
+      // TODO: RUN-2499
+      v8::recordreplay::Warning(
+          "[RUN-2486-2498] Cannot find context with specified id A %d %d %d",
+          sessionId, InspectedContext::contextId(context), !!inspectedContext);
       return Response::ServerError("Cannot find context with specified id");
     }
     remoteObject->setObjectId(injectedScript->bindObject(value, groupName));
