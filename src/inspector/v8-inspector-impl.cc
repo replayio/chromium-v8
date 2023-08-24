@@ -185,7 +185,7 @@ InspectedContext* V8InspectorImpl::getContext(int groupId,
   }
 
   return contextIt->second.get();
-  }
+}
 
 InspectedContext* V8InspectorImpl::getContext(int contextId) const {
   return getContext(contextGroupId(contextId), contextId);
