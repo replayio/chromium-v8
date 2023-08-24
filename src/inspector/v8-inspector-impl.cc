@@ -169,13 +169,23 @@ InspectedContext* V8InspectorImpl::getContext(int groupId,
   if (!groupId || !contextId) return nullptr;
 
   auto contextGroupIt = m_contexts.find(groupId);
-  if (contextGroupIt == m_contexts.end()) return nullptr;
+  if (contextGroupIt == m_contexts.end()) {
+    v8::recordreplay::CommandDiagnostic(
+        "[RUN-2486-2537] V8InspectorImpl::getContext A %d %d %zu", contextId,
+        groupId, m_contexts.size());
+    return nullptr;
+  }
 
   auto contextIt = contextGroupIt->second->find(contextId);
-  if (contextIt == contextGroupIt->second->end()) return nullptr;
+  if (contextIt == contextGroupIt->second->end()) {
+    v8::recordreplay::CommandDiagnostic(
+        "[RUN-2486-2537] V8InspectorImpl::getContext B %d %d %zu", contextId,
+        groupId, contextGroupIt->second->size());
+    return nullptr;
+  }
 
   return contextIt->second.get();
-}
+  }
 
 InspectedContext* V8InspectorImpl::getContext(int contextId) const {
   return getContext(contextGroupId(contextId), contextId);

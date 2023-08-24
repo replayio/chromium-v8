@@ -11187,6 +11187,23 @@ extern "C" DLLEXPORT void V8RecordReplayDiagnosticVA(const char* format, va_list
   }
 }
 
+void recordreplay::CommandDiagnostic(const char* format, ...) {
+  if (IsReplaying()) {
+    va_list args;
+    va_start(args, format);
+    // TODO: RUN-2499
+    gRecordReplayPrint(format, args);
+    va_end(args);
+  }
+}
+
+extern "C" DLLEXPORT void V8RecordReplayCommandDiagnosticVA(const char* format, va_list args) {
+  if (recordreplay::IsReplaying()) {
+    // TODO: RUN-2499
+    gRecordReplayPrint(format, args);
+  }
+}
+
 void recordreplay::Warning(const char* format, ...) {
   if (IsRecordingOrReplaying()) {
     va_list args;
