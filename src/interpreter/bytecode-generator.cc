@@ -2999,6 +2999,9 @@ void BytecodeGenerator::VisitConditional(Conditional* expr) {
   ConditionalControlFlowBuilder conditional_builder(
       builder(), block_coverage_builder_, expr);
 
+  // [Replay Instrumentation] We don't emit breakpoints before the call,
+  // because those should generally be emitted by the nesting statement.
+
   if (expr->condition()->ToBooleanIsTrue()) {
     // Generate then block unconditionally as always true.
     conditional_builder.Then();
@@ -3010,12 +3013,19 @@ void BytecodeGenerator::VisitConditional(Conditional* expr) {
   } else {
     VisitForTest(expr->condition(), conditional_builder.then_labels(),
                  conditional_builder.else_labels(), TestFallthrough::kThen);
-
     conditional_builder.Then();
+
+    builder()->RecordReplayInstrumentation("breakpoint",
+                                           expr->then_expression()->position());
+
     VisitForAccumulatorValue(expr->then_expression());
     conditional_builder.JumpToEnd();
 
     conditional_builder.Else();
+
+    builder()->RecordReplayInstrumentation("breakpoint",
+                                           expr->else_expression()->position());
+
     VisitForAccumulatorValue(expr->else_expression());
   }
 }
