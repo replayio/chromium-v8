@@ -45,7 +45,7 @@ extern bool RecordReplayTrackThisObjectAssignment(const std::string& property);
 /**
  * We are currently primarily only interested in calls.
  */
-static bool RecordReplayShouldBeBreakable(AstNode* node) {
+static bool RecordReplayShouldBeBreakable(Expression* node) {
   return node->IsCall() || node->IsCallNew() || node->IsImportCallExpression();
 }
 
