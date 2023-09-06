@@ -3023,7 +3023,7 @@ void BytecodeGenerator::VisitConditional(Conditional* expr) {
     if (RecordReplayShouldBeBreakable(expr->then_expression())) {
       builder()->RecordReplayInstrumentation(
           "breakpoint", expr->then_expression()->position());
-      }
+    }
 
     VisitForAccumulatorValue(expr->then_expression());
     conditional_builder.JumpToEnd();
