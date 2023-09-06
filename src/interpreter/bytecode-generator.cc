@@ -3017,6 +3017,7 @@ void BytecodeGenerator::VisitConditional(Conditional* expr) {
   } else {
     VisitForTest(expr->condition(), conditional_builder.then_labels(),
                  conditional_builder.else_labels(), TestFallthrough::kThen);
+
     conditional_builder.Then();
 
     if (RecordReplayShouldBeBreakable(expr->then_expression())) {
