@@ -104,6 +104,7 @@ static char* ReadSystemFileContents(bool relative, const char* path, size_t* siz
 static void Print(const char* format, ...);
 static void Diagnostic(const char* format, ...);
 static void CommandDiagnostic(const char* format, ...);
+static void CommandDiagnosticTrace(const char* format, ...);
 static void Warning(const char* format, ...);
 static void Trace(const char* format, ...);
 static bool HadMismatch();
