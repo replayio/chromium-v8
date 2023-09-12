@@ -11187,7 +11187,8 @@ extern "C" DLLEXPORT void V8RecordReplayDiagnosticVA(const char* format, va_list
   }
 }
 
-extern "C" DLLEXPORT void V8RecordReplayCommandDiagnosticVA(const char* format, va_list args) {
+extern "C" DLLEXPORT void V8RecordReplayCommandDiagnosticVA(const char* format,
+                                                            va_list args) {
   if (recordreplay::IsReplaying()) {
     // TODO: RUN-2499
     std::string finalFormat = "[CommandDiagnostic]" + std::string(format);
@@ -11200,6 +11201,24 @@ void recordreplay::CommandDiagnostic(const char* format, ...) {
     va_list args;
     va_start(args, format);
     V8RecordReplayCommandDiagnosticVA(format, args);
+    va_end(args);
+  }
+}
+
+extern "C" DLLEXPORT void V8RecordReplayCommandDiagnosticTraceVA(
+    const char* format, va_list args) {
+  if (recordreplay::IsReplaying()) {
+    // TODO: RUN-2499
+    std::string finalFormat = "[CommandDiagnostic]" + std::string(format);
+    gRecordReplayTrace(finalFormat.c_str(), args);
+  }
+}
+
+void recordreplay::CommandDiagnosticTrace(const char* format, ...) {
+  if (IsReplaying()) {
+    va_list args;
+    va_start(args, format);
+    V8RecordReplayCommandDiagnosticTraceVA(format, args);
     va_end(args);
   }
 }

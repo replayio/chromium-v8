@@ -119,6 +119,9 @@ V8InspectorSessionImpl::V8InspectorSessionImpl(
       m_clientTrustLevel(clientTrustLevel) {
   m_state->getBoolean("use_binary_protocol", &use_binary_protocol_);
 
+  v8::recordreplay::CommandDiagnosticTrace(
+      "[RUN-2486-2577] V8InspectorSessionImpl %d %d", contextGroupId, sessionId);
+
   m_runtimeAgent.reset(new V8RuntimeAgentImpl(
       this, this, agentState(protocol::Runtime::Metainfo::domainName)));
   protocol::Runtime::Dispatcher::wire(&m_dispatcher, m_runtimeAgent.get());
