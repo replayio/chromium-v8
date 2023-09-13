@@ -42,13 +42,6 @@ namespace internal {
 extern bool gRecordReplayAssertValues;
 extern bool RecordReplayTrackThisObjectAssignment(const std::string& property);
 
-/**
- * We are currently primarily only interested in calls.
- */
-static bool RecordReplayShouldBeBreakable(Expression* node) {
-  return node->IsCall() || node->IsCallNew() || node->IsImportCallExpression();
-}
-
 namespace interpreter {
 
 // Scoped class tracking context objects created by the visitor. Represents
@@ -3019,22 +3012,10 @@ void BytecodeGenerator::VisitConditional(Conditional* expr) {
                  conditional_builder.else_labels(), TestFallthrough::kThen);
 
     conditional_builder.Then();
-
-    if (RecordReplayShouldBeBreakable(expr->then_expression())) {
-      builder()->RecordReplayInstrumentation(
-          "breakpoint", expr->then_expression()->position());
-    }
-
     VisitForAccumulatorValue(expr->then_expression());
     conditional_builder.JumpToEnd();
 
     conditional_builder.Else();
-
-    if (RecordReplayShouldBeBreakable(expr->else_expression())) {
-      builder()->RecordReplayInstrumentation(
-          "breakpoint", expr->else_expression()->position());
-    }
-
     VisitForAccumulatorValue(expr->else_expression());
   }
 }
@@ -5651,6 +5632,9 @@ void BytecodeGenerator::VisitCall(Call* expr) {
   }
 
   builder()->SetExpressionPosition(expr);
+
+  // Emit a breakpoint for all call expressions.
+  builder()->RecordReplayInstrumentation("breakpoint", expr->position());
 
   if (spread_position == Call::kHasFinalSpread) {
     DCHECK(!implicit_undefined_receiver);

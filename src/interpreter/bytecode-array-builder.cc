@@ -1400,7 +1400,9 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayInstrumentation(const ch
   if (emit_record_replay_opcodes_ && recordreplay::IsReplaying()) {
     int bytecode_offset = bytecode_array_writer_.size();
     int index = RegisterInstrumentationSite(kind, source_position, bytecode_offset);
-    OutputRecordReplayInstrumentation(index);
+    if (index > 0) {
+      OutputRecordReplayInstrumentation(index);
+    }
   }
   return *this;
 }
@@ -1412,7 +1414,9 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayInstrumentationGenerator
   if (emit_record_replay_opcodes_ && (recordreplay::IsReplaying() || gRecordReplayAssertValues)) {
     int bytecode_offset = bytecode_array_writer_.size();
     int index = RegisterInstrumentationSite(kind, kNoSourcePosition, bytecode_offset);
-    OutputRecordReplayInstrumentationGenerator(index, generator_object);
+    if (index > 0) {
+      OutputRecordReplayInstrumentationGenerator(index, generator_object);
+    }
   }
   return *this;
 }

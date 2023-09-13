@@ -1344,6 +1344,13 @@ int RegisterInstrumentationSite(const char* kind, int source_position,
   base::MutexGuard lock(gInstrumentationSitesMutex);
 
   int index = (int)gInstrumentationSites->size();
+
+  if (index > 0 && gInstrumentationSites->at(index - 1).source_position_ ==
+                       source_position) {
+    // Don't insert the same location more than once.
+    return -1;
+  }
+
   gInstrumentationSites->push_back(site);
 
   return index + BytecodeSiteOffset;
