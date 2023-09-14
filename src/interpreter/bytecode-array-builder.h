@@ -465,6 +465,9 @@ class V8_EXPORT_PRIVATE BytecodeArrayBuilder final {
 
   BytecodeArrayBuilder& RecordReplayOnProgress();
   BytecodeArrayBuilder& RecordReplayAssertValue(const std::string& desc);
+
+  void OutputRecordReplayInstrumentation(
+      const char* kind, int source_position);
   BytecodeArrayBuilder& RecordReplayInstrumentation(const char* kind,
                                                     int source_position = kNoSourcePosition);
   BytecodeArrayBuilder& RecordReplayInstrumentationGenerator(const char* kind,
@@ -669,7 +672,7 @@ class V8_EXPORT_PRIVATE BytecodeArrayBuilder final {
   BytecodeSourceInfo deferred_source_info_;
   int most_recent_source_position_ = -1;
   bool emit_record_replay_opcodes_ = false;
-  int replay_most_recent_instrumentation_offset_ = -1;
+  std::unordered_set<int> record_replay_instrumentation_site_locations_;
 };
 
 V8_EXPORT_PRIVATE std::ostream& operator<<(

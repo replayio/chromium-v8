@@ -1394,23 +1394,26 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayAssertValue(const std::s
   return *this;
 }
 
-BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayInstrumentation(const char* kind,
-                                                                        int source_position) {
+void BytecodeArrayBuilder::OutputRecordReplayInstrumentation(
+    const char* kind, int source_position) {
+  if (record_replay_instrumentation_site_locations_.find(source_position) !=
+      record_replay_instrumentation_site_locations_.end()) {
+    // Don't insert a site at the same location more than once.
+    return;
+  }
+  record_replay_instrumentation_site_locations_.insert(source_position);
+
+  int bytecode_offset = bytecode_array_writer_.size();
+  int index =
+      RegisterInstrumentationSite(kind, source_position, bytecode_offset);
+  OutputRecordReplayInstrumentation(index);
+}
+
+BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayInstrumentation(
+    const char* kind, int source_position) {
   // Instrumentation opcodes aren't needed when recording.
   if (emit_record_replay_opcodes_ && recordreplay::IsReplaying()) {
-    int bytecode_offset = bytecode_array_writer_.size();
-    int last_bytecode_offset = bytecode_offset;
-    if (replay_most_recent_instrumentation_offset_ != last_bytecode_offset) {
-      // Prevent duplicate Replay instrumentation site.
-      // Only emit an instrumentation site if the previous entry was not also
-      // one.
-      int index =
-          RegisterInstrumentationSite(kind, source_position, bytecode_offset);
-      if (index > 0) {
-        OutputRecordReplayInstrumentation(index);
-      }
-      replay_most_recent_instrumentation_offset_ = bytecode_array_writer_.size();
-    }
+    OutputRecordReplayInstrumentation(kind, source_position);
   }
   return *this;
 }
@@ -1420,19 +1423,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayInstrumentationGenerator
   // Instrumentation opcodes aren't needed when recording, except when we are asserting
   // encountered values and need consistent IDs for these objects when recording.
   if (emit_record_replay_opcodes_ && (recordreplay::IsReplaying() || gRecordReplayAssertValues)) {
-    int bytecode_offset = bytecode_array_writer_.size();
-    int last_bytecode_offset = bytecode_offset;
-    if (replay_most_recent_instrumentation_offset_ != last_bytecode_offset) {
-      // Prevent duplicate Replay instrumentation site.
-      // Only emit an instrumentation site if the previous entry was not also
-      // one.
-      int index =
-          RegisterInstrumentationSite(kind, kNoSourcePosition, bytecode_offset);
-      if (index > 0) {
-        OutputRecordReplayInstrumentationGenerator(index, generator_object);
-      }
-      replay_most_recent_instrumentation_offset_ = bytecode_array_writer_.size();
-    }
+    OutputRecordReplayInstrumentation(kind, kNoSourcePosition);
   }
   return *this;
 }
