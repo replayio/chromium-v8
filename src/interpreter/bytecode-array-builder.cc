@@ -1399,9 +1399,17 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayInstrumentation(const ch
   // Instrumentation opcodes aren't needed when recording.
   if (emit_record_replay_opcodes_ && recordreplay::IsReplaying()) {
     int bytecode_offset = bytecode_array_writer_.size();
-    int index = RegisterInstrumentationSite(kind, source_position, bytecode_offset);
-    if (index > 0) {
-      OutputRecordReplayInstrumentation(index);
+    int last_bytecode_offset = bytecode_offset;
+    if (replay_most_recent_instrumentation_offset_ != last_bytecode_offset) {
+      // Prevent duplicate Replay instrumentation site.
+      // Only emit an instrumentation site if the previous entry was not also
+      // one.
+      int index =
+          RegisterInstrumentationSite(kind, source_position, bytecode_offset);
+      if (index > 0) {
+        OutputRecordReplayInstrumentation(index);
+      }
+      replay_most_recent_instrumentation_offset_ = bytecode_array_writer_.size();
     }
   }
   return *this;
@@ -1413,9 +1421,17 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayInstrumentationGenerator
   // encountered values and need consistent IDs for these objects when recording.
   if (emit_record_replay_opcodes_ && (recordreplay::IsReplaying() || gRecordReplayAssertValues)) {
     int bytecode_offset = bytecode_array_writer_.size();
-    int index = RegisterInstrumentationSite(kind, kNoSourcePosition, bytecode_offset);
-    if (index > 0) {
-      OutputRecordReplayInstrumentationGenerator(index, generator_object);
+    int last_bytecode_offset = bytecode_offset;
+    if (replay_most_recent_instrumentation_offset_ != last_bytecode_offset) {
+      // Prevent duplicate Replay instrumentation site.
+      // Only emit an instrumentation site if the previous entry was not also
+      // one.
+      int index =
+          RegisterInstrumentationSite(kind, kNoSourcePosition, bytecode_offset);
+      if (index > 0) {
+        OutputRecordReplayInstrumentationGenerator(index, generator_object);
+      }
+      replay_most_recent_instrumentation_offset_ = bytecode_array_writer_.size();
     }
   }
   return *this;

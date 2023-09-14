@@ -669,6 +669,7 @@ class V8_EXPORT_PRIVATE BytecodeArrayBuilder final {
   BytecodeSourceInfo deferred_source_info_;
   int most_recent_source_position_ = -1;
   bool emit_record_replay_opcodes_ = false;
+  int replay_most_recent_instrumentation_offset_ = -1;
 };
 
 V8_EXPORT_PRIVATE std::ostream& operator<<(
