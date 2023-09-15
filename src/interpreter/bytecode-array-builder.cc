@@ -1396,9 +1396,10 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayAssertValue(const std::s
 
 int BytecodeArrayBuilder::RecordReplayRegisterInstrumentationSite(
     const char* kind, int source_position) {
-  if (record_replay_instrumentation_site_locations_.find(source_position) !=
-      record_replay_instrumentation_site_locations_.end()) {
-    // Don't insert a site at the same location more than once.
+  if (!strcmp(kind, "breakpoint") && source_position != kNoSourcePosition &&
+      record_replay_instrumentation_site_locations_.find(source_position) !=
+          record_replay_instrumentation_site_locations_.end()) {
+    // Don't insert a breakpoint at the same location more than once.
     return -1;
   }
   record_replay_instrumentation_site_locations_.insert(source_position);
