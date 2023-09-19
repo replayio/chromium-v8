@@ -1394,13 +1394,28 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayAssertValue(const std::s
   return *this;
 }
 
-BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayInstrumentation(const char* kind,
-                                                                        int source_position) {
+int BytecodeArrayBuilder::RecordReplayRegisterInstrumentationSite(
+    const char* kind, int source_position) {
+  if (!strcmp(kind, "breakpoint") && source_position != kNoSourcePosition &&
+      record_replay_instrumentation_site_locations_.find(source_position) !=
+          record_replay_instrumentation_site_locations_.end()) {
+    // Don't insert a breakpoint at the same location more than once.
+    return -1;
+  }
+  record_replay_instrumentation_site_locations_.insert(source_position);
+
+  int bytecode_offset = bytecode_array_writer_.size();
+  return RegisterInstrumentationSite(kind, source_position, bytecode_offset);
+}
+
+BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayInstrumentation(
+    const char* kind, int source_position) {
   // Instrumentation opcodes aren't needed when recording.
   if (emit_record_replay_opcodes_ && recordreplay::IsReplaying()) {
-    int bytecode_offset = bytecode_array_writer_.size();
-    int index = RegisterInstrumentationSite(kind, source_position, bytecode_offset);
-    OutputRecordReplayInstrumentation(index);
+    int index = RecordReplayRegisterInstrumentationSite(kind, source_position);
+    if (index >= 0) {
+      OutputRecordReplayInstrumentation(index);
+    }
   }
   return *this;
 }
@@ -1410,9 +1425,11 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayInstrumentationGenerator
   // Instrumentation opcodes aren't needed when recording, except when we are asserting
   // encountered values and need consistent IDs for these objects when recording.
   if (emit_record_replay_opcodes_ && (recordreplay::IsReplaying() || gRecordReplayAssertValues)) {
-    int bytecode_offset = bytecode_array_writer_.size();
-    int index = RegisterInstrumentationSite(kind, kNoSourcePosition, bytecode_offset);
-    OutputRecordReplayInstrumentationGenerator(index, generator_object);
+    int index =
+        RecordReplayRegisterInstrumentationSite(kind, kNoSourcePosition);
+    if (index >= 0) {
+      OutputRecordReplayInstrumentationGenerator(index, generator_object);
+    }
   }
   return *this;
 }
