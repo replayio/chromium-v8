@@ -376,6 +376,15 @@ void Scope::SetDefaults() {
   num_heap_slots_ = ContextHeaderLength();
 
   set_language_mode(LanguageMode::kSloppy);
+
+  // While replaying, tell v8 that inner scopes contain an eval().  This will
+  // keep scope analysis from optimizing away unreferenced variables in
+  // closures.
+  // (RUN-2604)
+  if (recordreplay::FeatureEnabled("OptimizedAway") &&
+      recordreplay::IsReplaying()) {
+    inner_scope_calls_eval_ = true;
+  }
 }
 
 bool Scope::HasSimpleParameters() {
