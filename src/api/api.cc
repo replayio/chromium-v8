@@ -11898,7 +11898,7 @@ extern "C" DLLEXPORT void V8RecordReplayMaybeTerminate(void (*callback)(void*), 
   }
 }
 
-extern "C" V8_EXPORT void V8RecordReplayFinishRecording() {
+extern "C" DLLEXPORT void V8RecordReplayFinishRecording() {
   recordreplay::Assert("V8RecordReplayFinishRecording");
   if (recordreplay::IsRecordingOrReplaying()) {
     if (internal::gRecordReplayInterestingRecording) {
