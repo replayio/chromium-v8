@@ -381,7 +381,7 @@ void Scope::SetDefaults() {
   // keep scope analysis from optimizing away unreferenced variables in
   // closures.
   // (RUN-2604)
-  if (recordreplay::FeatureEnabled("OptimizedAway") &&
+  if (!recordreplay::FeatureEnabled("optimize-away") &&
       recordreplay::IsReplaying()) {
     inner_scope_calls_eval_ = true;
   }
