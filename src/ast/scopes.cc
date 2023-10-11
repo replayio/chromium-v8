@@ -1041,6 +1041,14 @@ Variable* DeclarationScope::DeclareParameter(const AstRawString* name,
   // TODO(verwaest): Reevaluate whether we always need to do this, since
   // strict-mode function.arguments does not make the arguments available.
   var->set_is_used();
+  // While replaying, force all variables to be context-allocated.
+  // Ideally we'd only do this for non-leaf functions, but it's not
+  // immediately obvious how to do that at this level.
+  // (RUN-2604)
+  if (recordreplay::IsReplaying() &&
+      recordreplay::FeatureEnabled("optimize-away")) {
+    var->ForceContextAllocation();
+  }
   return var;
 }
 
