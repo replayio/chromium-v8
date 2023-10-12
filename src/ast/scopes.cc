@@ -1046,7 +1046,7 @@ Variable* DeclarationScope::DeclareParameter(const AstRawString* name,
   // immediately obvious how to do that at this level.
   // (RUN-2604)
   if (recordreplay::IsReplaying() &&
-      recordreplay::FeatureEnabled("optimize-away")) {
+      !recordreplay::FeatureEnabled("optimize-away")) {
     var->ForceContextAllocation();
   }
   return var;
@@ -1183,7 +1183,7 @@ Variable* Scope::DeclareVariable(
   // immediately obvious how to do that at this level.
   // (RUN-2604)
   if (recordreplay::IsReplaying() &&
-      recordreplay::FeatureEnabled("optimize-away") &&
+      !recordreplay::FeatureEnabled("optimize-away") &&
       kind == VariableKind::NORMAL_VARIABLE) {
         var->ForceContextAllocation();
   }
