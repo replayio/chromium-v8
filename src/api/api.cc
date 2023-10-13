@@ -12063,8 +12063,14 @@ extern "C" DLLEXPORT bool V8IsMainThread() {
 
 static size_t gInReplayCode;
 
-extern "C" DLLEXPORT bool V8RecordReplayIsInReplayCode() {
-  return IsMainThread() && gInReplayCode;
+bool recordreplay::IsInReplayCode(const char* why) {
+  return V8IsRecordingOrReplaying("replay-code", why) && 
+        IsMainThread() &&
+        gInReplayCode;
+}
+
+extern "C" DLLEXPORT bool V8RecordReplayIsInReplayCode(const char* why) {
+  return recordreplay::IsInReplayCode(why);
 }
 
 extern "C" DLLEXPORT void V8RecordReplayEnterReplayCode() {

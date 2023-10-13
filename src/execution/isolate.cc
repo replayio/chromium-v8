@@ -5575,7 +5575,7 @@ static int gNextDisallowedScriptId = 1 << 30;
 int Isolate::GetNextScriptId() {
   // Use a separate pool of IDs when events are disallowed, as these scripts
   // won't be created at consistently when recording vs. replaying.
-  if (recordreplay::AreEventsDisallowed()) {
+  if (recordreplay::AreEventsDisallowed("Isolate::GetNextScriptId")) {
     CHECK(IsMainThread());
     return gNextDisallowedScriptId++;
   }

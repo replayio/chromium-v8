@@ -135,6 +135,10 @@ static void EndDisallowEvents();
 // resulting from this check.
 static bool AreEventsDisallowed(const char* why = nullptr);
 
+// A "why" string should be used whenever there are substantive behavior changes
+// resulting from this check.
+static bool IsInReplayCode(const char* why = nullptr);
+
 static bool HasDivergedFromRecording();
 static bool AllowSideEffects();
 
