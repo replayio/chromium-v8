@@ -11110,7 +11110,7 @@ bool recordreplay::FeatureEnabled(const char* feature, const char* subfeature) {
 }
 
 extern "C" DLLEXPORT bool V8RecordReplayFeatureEnabled(const char* feature, const char* subfeature) {
-  return recordreplay::FeatureEnabled(feature);
+  return recordreplay::FeatureEnabled(feature, subfeature);
 }
 
 bool recordreplay::HasDisabledFeatures() {
