@@ -11110,7 +11110,7 @@ bool recordreplay::FeatureEnabled(const char* feature, const char* subfeature) {
 }
 
 extern "C" DLLEXPORT bool V8RecordReplayFeatureEnabled(const char* feature, const char* subfeature) {
-  return recordreplay::FeatureEnabled(feature);
+  return recordreplay::FeatureEnabled(feature, subfeature);
 }
 
 bool recordreplay::HasDisabledFeatures() {
@@ -12063,8 +12063,14 @@ extern "C" DLLEXPORT bool V8IsMainThread() {
 
 static size_t gInReplayCode;
 
-extern "C" DLLEXPORT bool V8RecordReplayIsInReplayCode() {
-  return IsMainThread() && gInReplayCode;
+bool recordreplay::IsInReplayCode(const char* why) {
+  return V8IsRecordingOrReplaying("replay-code", why) && 
+        IsMainThread() &&
+        gInReplayCode;
+}
+
+extern "C" DLLEXPORT bool V8RecordReplayIsInReplayCode(const char* why) {
+  return recordreplay::IsInReplayCode(why);
 }
 
 extern "C" DLLEXPORT void V8RecordReplayEnterReplayCode() {
