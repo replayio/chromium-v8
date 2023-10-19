@@ -10940,6 +10940,8 @@ void RecordReplayOnTargetProgressReached() {
       os << " stack=";
       isolate->PrintCurrentStackTrace(os);
 
+      V8RecordReplayPrintCurrentJSStack();
+
       recordreplay::Warning("OnProgressReached %s", os.str().c_str());
     }
     return;
