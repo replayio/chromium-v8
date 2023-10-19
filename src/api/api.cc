@@ -10927,6 +10927,8 @@ void RecordReplayTriggerProgressInterrupt() {
 
 extern std::string GetScriptLocationString(int script_id, int start_position);
 
+extern "C" DLLEXPORT void V8RecordReplayPrintCurrentJSStack();
+
 void RecordReplayOnTargetProgressReached() {
   CHECK(IsMainThread());
   if (recordreplay::AreEventsDisallowed()) {
