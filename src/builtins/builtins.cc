@@ -282,6 +282,12 @@ void Builtins::PrintBuiltinSize() {
 // static
 Address Builtins::CppEntryOf(Builtin builtin) {
   DCHECK(Builtins::IsCpp(builtin));
+  if (!builtin_metadata[ToInt(builtin)].data.cpp_entry) {
+    const char* builtin_name = name(builtin);
+    const char* kind = KindNameOf(builtin);
+    PrintF(stderr, "%s Builtin %s has cpp_entry == NULL", kind, builtin_name);
+    V8_Fatal("bad builtin?");
+  }
   return builtin_metadata[ToInt(builtin)].data.cpp_entry;
 }
 
