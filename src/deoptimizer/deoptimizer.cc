@@ -97,7 +97,7 @@ class FrameWriter {
     Object obj = iterator->GetRawValue();
     PushRawObject(obj, debug_hint);
     if (trace_scope_ != nullptr) {
-      PrintF(trace_scope_->file(), " (input #%d)\n", iterator.input_index());
+      fprintf(stderr, " (input #%d)\n", iterator.input_index());
     }
     deoptimizer_->QueueValueForMaterialization(output_address(top_offset_), obj,
                                                iterator);
@@ -134,7 +134,7 @@ class FrameWriter {
 
   void DebugPrintOutputValue(intptr_t value, const char* debug_hint = "") {
     if (trace_scope_ != nullptr) {
-      PrintF(trace_scope_->file(),
+      fprintf(stderr,
              "    " V8PRIxPTR_FMT ": [top + %3d] <- " V8PRIxPTR_FMT " ;  %s",
              output_address(top_offset_), top_offset_, value, debug_hint);
     }
@@ -143,7 +143,7 @@ class FrameWriter {
   void DebugPrintOutputPc(intptr_t value, const char* debug_hint = "") {
 #ifdef V8_ENABLE_CONTROL_FLOW_INTEGRITY
     if (trace_scope_ != nullptr) {
-      PrintF(trace_scope_->file(),
+      fprintf(stderr,
              "    " V8PRIxPTR_FMT ": [top + %3d] <- " V8PRIxPTR_FMT
              " (signed) " V8PRIxPTR_FMT " (unsigned) ;  %s",
              output_address(top_offset_), top_offset_, value,
@@ -157,15 +157,15 @@ class FrameWriter {
   void DebugPrintOutputObject(Object obj, unsigned output_offset,
                               const char* debug_hint = "") {
     if (trace_scope_ != nullptr) {
-      PrintF(trace_scope_->file(), "    " V8PRIxPTR_FMT ": [top + %3d] <- ",
+      fprintf(stderr, "    " V8PRIxPTR_FMT ": [top + %3d] <- ",
              output_address(output_offset), output_offset);
       if (obj.IsSmi()) {
-        PrintF(trace_scope_->file(), V8PRIxPTR_FMT " <Smi %d>", obj.ptr(),
+        fprintf(stderr, V8PRIxPTR_FMT " <Smi %d>", obj.ptr(),
                Smi::cast(obj).value());
       } else {
         obj.ShortPrint(trace_scope_->file());
       }
-      PrintF(trace_scope_->file(), " ;  %s", debug_hint);
+      fprintf(stderr, " ;  %s", debug_hint);
     }
   }
 
@@ -1053,7 +1053,7 @@ void Deoptimizer::DoComputeUnoptimizedFrame(TranslatedFrame* translated_frame,
 
   if (verbose_tracing_enabled() && is_bottommost &&
       actual_argument_count_ > parameters_count) {
-    PrintF(trace_scope_->file(),
+    fprintf(stderr,
            "    -- %d extra argument(s) already in the stack --\n",
            actual_argument_count_ - parameters_count);
   }
@@ -1294,7 +1294,7 @@ void Deoptimizer::DoComputeInlinedExtraArguments(
   const int output_frame_size =
       (std::max(0, extra_argument_count) + padding) * kSystemPointerSize;
   if (verbose_tracing_enabled()) {
-    PrintF(trace_scope_->file(),
+    fprintf(stderr,
            "  translating arguments adaptor => variable_size=%d\n",
            output_frame_size);
   }
