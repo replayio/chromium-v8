@@ -11270,11 +11270,34 @@ void recordreplay::Trace(const char* format, ...) {
 }
 
 extern "C" DLLEXPORT void V8RecordReplayTrace(const char* format,
-                                                va_list args) {
+                                              va_list args) {
   if (recordreplay::IsRecordingOrReplaying()) {
     gRecordReplayTrace(format, args);
   }
 }
+
+extern "C" void V8RecordReplayCrash(const char* format, va_list args) {
+  DCHECK(recordreplay::IsRecordingOrReplaying());
+
+  char str[4096];
+  va_list arguments;
+  va_start(arguments, format);
+  vsnprintf(str, sizeof(str), format, arguments);
+  str[sizeof(str) - 1] = 0;
+  va_end(arguments);
+
+  V8_Fatal("%s", str);
+}
+
+void recordreplay::Crash(const char* format, ...) {
+  if (IsRecordingOrReplaying()) {
+    va_list args;
+    va_start(args, format);
+    V8RecordReplayCrash(format, args);
+    va_end(args);
+  }
+}
+
 
 bool recordreplay::HadMismatch() {
   if (IsRecordingOrReplaying()) {
