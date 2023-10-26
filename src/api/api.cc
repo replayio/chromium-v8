@@ -12029,6 +12029,11 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
                                         i::RecordReplayCallbackAssertDescribeData);
   }
 
+  // enable deopt tracing when replaying
+  if (IsReplaying()) {
+    i::v8_flags.trace_deopt_verbose = true;
+  }
+
   // Disable wasm background compilation.
   if (V8RecordReplayFeatureEnabled("disable-wasm-compilation-tasks", nullptr)) {
     i::FLAG_wasm_num_compilation_tasks = 0;
