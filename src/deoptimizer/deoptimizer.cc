@@ -724,7 +724,7 @@ void Deoptimizer::TraceMarkForDeoptimization(Code code, const char* reason) {
     code.ShortPrint(stderr);
     fprintf(stderr, " (");
     deopt_data.SharedFunctionInfo().ShortPrint(stderr);
-    PrintF(") (opt id %d) for deoptimization, reason: %s]\n",
+    fprintf(stderr, ") (opt id %d) for deoptimization, reason: %s]\n",
            deopt_data.OptimizationId().value(), reason);
   }
   if (!v8_flags.log_deopt) return;
