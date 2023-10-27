@@ -159,11 +159,13 @@ void Heap_GenerationalBarrierForCodeSlow(Code host, RelocInfo* rinfo,
 void Heap::SetConstructStubCreateDeoptPCOffset(int pc_offset) {
   DCHECK_EQ(Smi::zero(), construct_stub_create_deopt_pc_offset());
   set_construct_stub_create_deopt_pc_offset(Smi::FromInt(pc_offset));
+  fprintf(stderr, "Heap::SetConstructStubCreateDeoptPCOffset %d", pc_offset);
 }
 
 void Heap::SetConstructStubInvokeDeoptPCOffset(int pc_offset) {
   DCHECK_EQ(Smi::zero(), construct_stub_invoke_deopt_pc_offset());
   set_construct_stub_invoke_deopt_pc_offset(Smi::FromInt(pc_offset));
+  fprintf(stderr, "Heap::SetConstructStubInvokeDeoptPCOffset %d", pc_offset);
 }
 
 void Heap::SetInterpreterEntryReturnPCOffset(int pc_offset) {

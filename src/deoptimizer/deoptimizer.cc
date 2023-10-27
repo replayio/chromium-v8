@@ -1471,6 +1471,10 @@ void Deoptimizer::DoComputeConstructStubFrame(TranslatedFrame* translated_frame,
     output_frame->SetPc(pc_value);
   }
 
+  fprintf(stderr, "construct stub start: " V8PRIxPTR_FMT "\n", start);
+  fprintf(stderr, "construct stub pc_offset: %d\n", pc_offset);
+  fprintf(stderr, "construct stub pc_value: " V8PRIxPTR_FMT "\n", pc_value);
+
   // Update constant pool.
   if (V8_EMBEDDED_CONSTANT_POOL_BOOL) {
     intptr_t constant_pool_value =
