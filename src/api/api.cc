@@ -11280,11 +11280,8 @@ extern "C" void V8RecordReplayCrash(const char* format, va_list args) {
   DCHECK(recordreplay::IsRecordingOrReplaying());
 
   char str[4096];
-  va_list arguments;
-  va_start(arguments, format);
-  vsnprintf(str, sizeof(str), format, arguments);
+  vsnprintf(str, sizeof(str), format, args);
   str[sizeof(str) - 1] = 0;
-  va_end(arguments);
 
   V8_Fatal("%s", str);
 }
