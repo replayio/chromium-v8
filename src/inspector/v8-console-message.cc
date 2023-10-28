@@ -379,6 +379,7 @@ void V8ConsoleMessage::reportToFrontend(protocol::Runtime::Frontend* frontend,
           break;
       }
     }
+
     frontend->consoleAPICalled(
         consoleAPITypeValue(m_type), std::move(arguments), m_contextId,
         m_timestamp, std::move(stackTrace), std::move(consoleContext));

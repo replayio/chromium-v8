@@ -20,8 +20,9 @@
 namespace v8 {
 namespace internal {
 
-extern bool RecordReplayHasRegisteredScript(Script script);
+extern bool RecordReplayHasRegisteredScript(const SharedFunctionInfo& shared);
 extern bool RecordReplayIsDivergentUserJSWithoutPause(const SharedFunctionInfo& shared);
+extern std::string GetScriptLocationString(int script_id, int start_position);
 extern uint64_t* gProgressCounter;
 
 namespace {
@@ -307,6 +308,18 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
   }
 #endif
 
+  // if (params.target->IsJSFunction()) {
+  //   Handle<JSFunction> function = Handle<JSFunction>::cast(params.target);
+  //   if (RecordReplayHasRegisteredScript(function->shared())) {
+  //     Handle<Script> script = Handle<Script>(Script::cast(function->shared().script()), isolate);
+      recordreplay::Trace("DDBG Invoke START: %d %s",
+        // GetScriptLocationString(script->id(), function->shared().StartPosition()).c_str()
+        params.IsScript(),
+        ""
+      );
+  //   }
+  // }
+
   // api callbacks can be called directly, unless we want to take the detour
   // through JS to set up a frame for break-at-entry.
   if (params.target->IsJSFunction()) {
@@ -478,6 +491,18 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
                                      params.microtask_queue));
     }
   }
+  
+  // if (params.target->IsJSFunction()) {
+  //   Handle<JSFunction> function = Handle<JSFunction>::cast(params.target);
+  //   if (RecordReplayHasRegisteredScript(function->shared())) {
+  //     Handle<Script> script = Handle<Script>(Script::cast(function->shared().script()), isolate);
+      recordreplay::Print("DDBG Invoke END: %d %s%s",
+        // GetScriptLocationString(script->id(), function->shared().StartPosition()).c_str(),
+        params.IsScript(),
+        "",
+        value.IsException(isolate) ? " THROWN" : "");
+  //   }
+  // }
 
 #ifdef VERIFY_HEAP
   if (v8_flags.verify_heap) {

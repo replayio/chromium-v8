@@ -5648,6 +5648,8 @@ Handle<Object> JSPromise::TriggerPromiseReactions(Isolate* isolate,
                                                   Handle<Object> argument,
                                                   PromiseReaction::Type type) {
   CHECK(reactions->IsSmi() || reactions->IsPromiseReaction());
+  
+  recordreplay::Print("DDBG JSPromise::TriggerPromiseReactions");
 
   // We need to reverse the {reactions} here, since we record them
   // on the JSPromise in the reverse order.

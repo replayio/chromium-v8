@@ -159,6 +159,31 @@ void ConsoleCall(
   Handle<String> context_name = context_name_obj->IsString()
                                     ? Handle<String>::cast(context_name_obj)
                                     : isolate->factory()->anonymous_string();
+
+
+  if (v8::recordreplay::IsRecordingOrReplaying("ConsoleCall") && getenv("RECORD_REPLAY_VERBOSE")) {    
+    // Log all console messages in real time.
+    std::string firstArg;
+    bool hasFirstArg = false;
+    if (wrapper.Length()) {
+      v8::Local<v8::Value> firstArgValue = wrapper[0];
+      if (firstArgValue->IsString()) {
+        v8::String::Utf8Value firstArgString(
+          reinterpret_cast<v8::Isolate*>(isolate), 
+          firstArgValue
+        );
+        firstArg = *firstArgString;
+        hasFirstArg = true;
+      }
+    }
+
+    v8::recordreplay::Print("DDBG CONSOLE%s%s (+ %d)",
+      hasFirstArg ? " " : "",
+      hasFirstArg ? firstArg.c_str() : "",
+      hasFirstArg ? (wrapper.Length() - 1) : (int)wrapper.Length()
+    );
+  }
+  
   (isolate->console_delegate()->*func)(
       wrapper,
       v8::debug::ConsoleContext(context_id, Utils::ToLocal(context_name)));

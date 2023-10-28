@@ -105,6 +105,8 @@ void MicrotaskQueue::EnqueueMicrotask(Microtask microtask) {
     ResizeBuffer(new_capacity);
   }
 
+  recordreplay::Print("DDBG MicrotaskQueue::EnqueueMicrotask");
+
   DCHECK_LT(size_, capacity_);
   ring_buffer_[(start_ + size_) % capacity_] = microtask.ptr();
   ++size_;
@@ -152,6 +154,9 @@ int MicrotaskQueue::RunMicrotasks(Isolate* isolate) {
     OnCompleted(isolate);
     return 0;
   }
+
+
+  recordreplay::Print("DDBG MicrotaskQueue::RunMicrotasks");
 
   intptr_t base_count = finished_microtask_count_;
 
@@ -229,6 +234,7 @@ void MicrotaskQueue::AddMicrotasksCompletedCallback(
       std::find(microtasks_completed_callbacks_.begin(),
                 microtasks_completed_callbacks_.end(), callback_with_data);
   if (pos != microtasks_completed_callbacks_.end()) return;
+  recordreplay::Print("DDBG MicrotaskQueue::AddMicrotasksCompletedCallback");
   microtasks_completed_callbacks_.push_back(callback_with_data);
 }
 
@@ -251,6 +257,7 @@ void MicrotaskQueue::OnCompleted(Isolate* isolate) const {
 
 Microtask MicrotaskQueue::get(intptr_t index) const {
   DCHECK_LT(index, size_);
+  recordreplay::Print("DDBG MicrotaskQueue::get %d", (int)index);
   Object microtask(ring_buffer_[(index + start_) % capacity_]);
   return Microtask::cast(microtask);
 }
