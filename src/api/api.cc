@@ -7852,6 +7852,7 @@ Local<Array> Set::AsArray(const v8::KeyIterationParams* params) const {
 }
 
 MaybeLocal<Promise::Resolver> Promise::Resolver::New(Local<Context> context) {
+  recordreplay::Print("DDBG Promise::Resolver::New");
   PREPARE_FOR_EXECUTION(context, Promise_Resolver, New, Resolver);
   Local<Promise::Resolver> result;
   has_pending_exception = !ToLocal<Promise::Resolver>(
@@ -7867,6 +7868,7 @@ Local<Promise> Promise::Resolver::GetPromise() {
 
 Maybe<bool> Promise::Resolver::Resolve(Local<Context> context,
                                        Local<Value> value) {
+  recordreplay::Print("DDBG Promise::Resolver::Resolve");
   auto i_isolate = reinterpret_cast<i::Isolate*>(context->GetIsolate());
   ENTER_V8(i_isolate, context, Promise_Resolver, Resolve, Nothing<bool>(),
            i::HandleScope);

@@ -312,7 +312,7 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
   //   Handle<JSFunction> function = Handle<JSFunction>::cast(params.target);
   //   if (RecordReplayHasRegisteredScript(function->shared())) {
   //     Handle<Script> script = Handle<Script>(Script::cast(function->shared().script()), isolate);
-      recordreplay::Trace("DDBG Invoke START: %d %s",
+      recordreplay::Print("DDBG Invoke START: %d %s",
         // GetScriptLocationString(script->id(), function->shared().StartPosition()).c_str()
         params.IsScript(),
         ""

@@ -7116,6 +7116,9 @@ void BytecodeGenerator::BuildGeneratorObjectVariableInitialization() {
        IsAsyncModule(info()->literal()->kind()))
           ? Runtime::kInlineAsyncFunctionEnter
           : Runtime::kInlineCreateJSGeneratorObject;
+  recordreplay::Print("DDBG xxBytecodeGenerator::BuildGeneratorObjectVariableInitialization %d %d",
+    (int)function_id,
+    (int)Runtime::kInlineAsyncFunctionEnter);
   builder()
       ->MoveRegister(Register::function_closure(), args[0])
       .MoveRegister(builder()->Receiver(), args[1])

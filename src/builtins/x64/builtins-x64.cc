@@ -2192,6 +2192,8 @@ void Builtins::Generate_CallFunction(MacroAssembler* masm,
   //  -- rdi : the function to call (checked to be a JSFunction)
   // -----------------------------------
 
+  recordreplay::Print("DDBG Builtins::Generate_CallFunction");
+
   StackArgumentsAccessor args(rax);
   __ AssertCallableFunction(rdi);
 

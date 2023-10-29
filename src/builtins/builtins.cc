@@ -122,6 +122,7 @@ const char* Builtins::Lookup(Address pc) {
 }
 
 Handle<CodeT> Builtins::CallFunction(ConvertReceiverMode mode) {
+  recordreplay::Print("DDBG Builtins::CallFunction");
   switch (mode) {
     case ConvertReceiverMode::kNullOrUndefined:
       return code_handle(Builtin::kCallFunction_ReceiverIsNullOrUndefined);

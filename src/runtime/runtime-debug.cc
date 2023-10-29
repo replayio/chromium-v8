@@ -1108,6 +1108,8 @@ extern bool RecordReplayIsDivergentUserJSWithoutPause(
 static bool gHasPrintedStack = false;
 
 RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
+  recordreplay::Print("DDBG Runtime_RecordReplayAssertExecutionProgress %llu", 
+    *gProgressCounter + 1);
   if (++*gProgressCounter == gTargetProgress) {
     RecordReplayOnTargetProgressReached();
   }
