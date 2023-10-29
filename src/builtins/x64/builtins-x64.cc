@@ -520,6 +520,8 @@ void Builtins::Generate_JSRunMicrotasksEntry(MacroAssembler* masm) {
 
 static void Generate_JSEntryTrampolineHelper(MacroAssembler* masm,
                                              bool is_construct) {
+                                              
+  recordreplay::Print("DDBG Builtins::Generate_JSEntryTrampolineHelper");
   // Expects six C++ function parameters.
   // - Address root_register_value
   // - Address new_target (tagged Object pointer)
@@ -643,6 +645,7 @@ void Builtins::Generate_JSConstructEntryTrampoline(MacroAssembler* masm) {
 
 void Builtins::Generate_RunMicrotasksTrampoline(MacroAssembler* masm) {
   // arg_reg_2: microtask_queue
+  recordreplay::Print("DDBG Builtins::Generate_RunMicrotasksTrampoline");
   __ movq(RunMicrotasksDescriptor::MicrotaskQueueRegister(), arg_reg_2);
   __ Jump(BUILTIN_CODE(masm->isolate(), RunMicrotasks), RelocInfo::CODE_TARGET);
 }

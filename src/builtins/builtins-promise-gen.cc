@@ -22,6 +22,7 @@ namespace internal {
 
 void PromiseBuiltinsAssembler::ZeroOutEmbedderOffsets(
     TNode<JSPromise> promise) {
+  recordreplay::Print("DDBG PromiseBuiltinsAssembler::ZeroOutEmbedderOffsets");
   for (int offset = JSPromise::kHeaderSize;
        offset < JSPromise::kSizeWithEmbedderFields; offset += kTaggedSize) {
     StoreObjectFieldNoWriteBarrier(promise, offset, SmiConstant(Smi::zero()));
@@ -30,6 +31,7 @@ void PromiseBuiltinsAssembler::ZeroOutEmbedderOffsets(
 
 TNode<HeapObject> PromiseBuiltinsAssembler::AllocateJSPromise(
     TNode<Context> context) {
+  recordreplay::Print("DDBG PromiseBuiltinsAssembler::AllocateJSPromise");
   return Allocate(JSPromise::kSizeWithEmbedderFields);
 }
 

@@ -120,6 +120,8 @@ void MicrotaskQueueBuiltinsAssembler::RunSingleMicrotask(
   CSA_DCHECK(this, TaggedIsNotSmi(microtask));
   CSA_DCHECK(this, Word32BinaryNot(IsExecutionTerminating()));
 
+  recordreplay::Print("DDBG MicrotaskQueueBuiltinsAssembler::RunSingleMicrotask");
+
   StoreRoot(RootIndex::kCurrentMicrotask, microtask);
   TNode<IntPtrT> saved_entered_context_count = GetEnteredContextCount();
   TNode<Map> microtask_map = LoadMap(microtask);
@@ -543,6 +545,8 @@ TF_BUILTIN(EnqueueMicrotask, MicrotaskQueueBuiltinsAssembler) {
   auto context = Parameter<Context>(Descriptor::kContext);
   TNode<NativeContext> native_context = LoadNativeContext(context);
   TNode<RawPtrT> microtask_queue = GetMicrotaskQueue(native_context);
+  
+  recordreplay::Print("DDBG MicrotaskQueueBuiltinsAssembler::EnqueueMicrotask");
 
   // Do not store the microtask if MicrotaskQueue is not available, that may
   // happen when the context shutdown.
