@@ -1331,6 +1331,11 @@ void Deoptimizer::DoComputeInlinedExtraArguments(
   }
 }
 
+extern const uint8_t* DefaultEmbeddedBlobCode();
+extern uint32_t DefaultEmbeddedBlobCodeSize();
+extern const uint8_t* DefaultEmbeddedBlobData();
+extern uint32_t DefaultEmbeddedBlobDataSize();
+
 void Deoptimizer::DoComputeConstructStubFrame(TranslatedFrame* translated_frame,
                                               int frame_index) {
   TranslatedFrame::iterator value_iterator = translated_frame->begin();
@@ -1472,8 +1477,22 @@ void Deoptimizer::DoComputeConstructStubFrame(TranslatedFrame* translated_frame,
   }
 
   fprintf(stderr, "construct stub start: " V8PRIxPTR_FMT "\n", start);
-  fprintf(stderr, "construct stub pc_offset: %d\n", pc_offset);
-  fprintf(stderr, "construct stub pc_value: " V8PRIxPTR_FMT "\n", pc_value);
+  fprintf(stderr, "construct stub create pc_offset: %d\n", isolate_->heap()->construct_stub_create_deopt_pc_offset().value());
+  fprintf(stderr, "construct stub invoke pc_offset: %d\n", isolate_->heap()->construct_stub_invoke_deopt_pc_offset().value());
+  fprintf(stderr, "pc_offset in use: %d\n", pc_offset);
+  fprintf(stderr, "pc_value: " V8PRIxPTR_FMT "\n", pc_value);
+
+  fprintf(stderr, "embedded data:\n");
+  fprintf(stderr, "default embedded blob_data: %p\n", DefaultEmbeddedBlobData());
+  fprintf(stderr, "default embedded blob_data_size: %u\n", DefaultEmbeddedBlobDataSize());
+  fprintf(stderr, "current embedded blob_data: %p\n", isolate()->CurrentEmbeddedBlobData());
+  fprintf(stderr, "current embedded blob_data_size: %u\n", isolate()->CurrentEmbeddedBlobDataSize());
+
+  fprintf(stderr, "embedded code:\n");
+  fprintf(stderr, "default embedded blob_code: %p\n", DefaultEmbeddedBlobCode());
+  fprintf(stderr, "default embedded blob_code_size: %u\n", DefaultEmbeddedBlobCodeSize());
+  fprintf(stderr, "current embedded blob_code: %p\n", isolate()->CurrentEmbeddedBlobCode());
+  fprintf(stderr, "current embedded blob_code_size: %u\n", isolate()->CurrentEmbeddedBlobCodeSize());
 
   // Update constant pool.
   if (V8_EMBEDDED_CONSTANT_POOL_BOOL) {
