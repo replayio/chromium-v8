@@ -1609,8 +1609,7 @@ static void SetRecordReplayIgnore(UnoptimizedCompileFlags& flags) {
 
   if (!IsMainThread() ||
       !RecordReplayHasDefaultContext() ||
-      recordreplay::AreEventsDisallowed("CompileFlags") ||
-      recordreplay::IsInReplayCode("CompileFlags")) {
+      recordreplay::AreEventsDisallowed()) {
     flags.set_record_replay_ignore(true);
     return;
   }

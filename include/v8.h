@@ -107,7 +107,6 @@ static void CommandDiagnostic(const char* format, ...);
 static void CommandDiagnosticTrace(const char* format, ...);
 static void Warning(const char* format, ...);
 static void Trace(const char* format, ...);
-static void Crash(const char* format, ...);
 static bool HadMismatch();
 static void Assert(const char* format, ...);
 static void AssertMaybeEventsDisallowed(const char* format, ...);
