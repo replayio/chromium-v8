@@ -58,6 +58,7 @@ namespace v8 {
   namespace internal {
     extern int RecordReplayObjectId(v8::Isolate* isolate, Local<v8::Context> cx,
                                     v8::Local<v8::Value> object, bool allow_create);
+    extern int (*gGetAPIObjectIdCallback)(v8::Local<v8::Object> object);
   }
 }
 
@@ -1148,9 +1149,13 @@ Response InjectedScript::bindRemoteObjectIfNeeded(
     // Persistent IDs are not tracked when recording by default, so they are only
     // provided when the CDP is being used to inspect state while replaying and
     // diverged from the recording.
-    if (v8::recordreplay::HasDivergedFromRecording()) {
+    if (v8::recordreplay::HasDivergedFromRecording() && value->IsObject()) {
+      // TODO: [RUN-2812] Clean this up.
       int persistentId = v8::internal::RecordReplayObjectId(isolate, context, value,
                                                             /* allow_create */ false);
+      if (!persistentId) {
+        persistentId = v8::internal::gGetAPIObjectIdCallback(value.As<v8::Object>());
+      }
       if (persistentId) {
         auto persistentIdString = String16::fromInteger64(static_cast<int64_t>(persistentId));
         remoteObject->setPersistentId(persistentIdString);

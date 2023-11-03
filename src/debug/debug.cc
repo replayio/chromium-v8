@@ -4088,7 +4088,7 @@ inline int HashBytes(const void* aPtr, size_t aSize) {
   return hash;
 }
 
-static int (*gGetAPIObjectIdCallback)(v8::Local<v8::Object> object);
+int (*gGetAPIObjectIdCallback)(v8::Local<v8::Object> object);
 
 extern "C" void V8RecordReplaySetAPIObjectIdCallback(int (*callback)(v8::Local<v8::Object>)) {
   gGetAPIObjectIdCallback = callback;
