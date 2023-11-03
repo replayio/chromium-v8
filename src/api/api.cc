@@ -11276,7 +11276,7 @@ extern "C" DLLEXPORT void V8RecordReplayTrace(const char* format,
   }
 }
 
-extern "C" void V8RecordReplayCrash(const char* format, va_list args) {
+extern "C" DLLEXPORT void V8RecordReplayCrash(const char* format, va_list args) {
   DCHECK(recordreplay::IsRecordingOrReplaying());
 
   char str[4096];
