@@ -58,7 +58,6 @@ namespace v8 {
   namespace internal {
     extern int RecordReplayObjectId(v8::Isolate* isolate, Local<v8::Context> cx,
                                     v8::Local<v8::Value> object, bool allow_create);
-    extern int (*gGetAPIObjectIdCallback)(v8::Local<v8::Object> object);
   }
 }
 
@@ -1138,24 +1137,20 @@ Response InjectedScript::bindRemoteObjectIfNeeded(
         inspectedContext ? inspectedContext->getInjectedScript(sessionId)
                          : nullptr;
     if (!injectedScript) {
-      // TODO: RUN-2499
-      v8::recordreplay::Warning(
+      if (v8::recordreplay::IsInReplayCode("InjectedScript::bindRemoteObjectIfNeeded")) {
+        v8::recordreplay::Warning(
           "[RUN-2486-2498] Cannot find context with specified id A %d %d %d",
           sessionId, InspectedContext::contextId(context), !!inspectedContext);
+      }
       return Response::ServerError("Cannot find context with specified id");
     }
     remoteObject->setObjectId(injectedScript->bindObject(value, groupName));
 
-    // Persistent IDs are not tracked when recording by default, so they are only
-    // provided when the CDP is being used to inspect state while replaying and
-    // diverged from the recording.
-    if (v8::recordreplay::HasDivergedFromRecording() && value->IsObject()) {
-      // TODO: [RUN-2812] Clean this up.
+    // Persistent IDs should not be provided unless the caller is Replay-internal code.
+    if (v8::recordreplay::IsInReplayCode("InjectedScript::bindRemoteObjectIfNeeded") &&
+        value->IsObject()) {
       int persistentId = v8::internal::RecordReplayObjectId(isolate, context, value,
                                                             /* allow_create */ false);
-      if (!persistentId) {
-        persistentId = v8::internal::gGetAPIObjectIdCallback(value.As<v8::Object>());
-      }
       if (persistentId) {
         auto persistentIdString = String16::fromInteger64(static_cast<int64_t>(persistentId));
         remoteObject->setPersistentId(persistentIdString);
