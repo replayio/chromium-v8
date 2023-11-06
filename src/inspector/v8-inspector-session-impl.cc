@@ -255,10 +255,11 @@ Response V8InspectorSessionImpl::findInjectedScript(
   InspectedContext* context =
       m_inspector->getContext(m_contextGroupId, contextId);
   if (!context) {
-    // TODO: RUN-2499
-    v8::recordreplay::Warning(
+    if (v8::recordreplay::IsInReplayCode("InjectedScript::bindRemoteObjectIfNeeded")) {
+      v8::recordreplay::Warning(
         "[RUN-2486-2498] Cannot find context with specified id B %d %d",
         m_contextGroupId, contextId);
+    }
     return Response::ServerError("Cannot find context with specified id");
   }
   injectedScript = context->getInjectedScript(m_sessionId);
@@ -273,10 +274,11 @@ Response V8InspectorSessionImpl::findInjectedScript(
 Response V8InspectorSessionImpl::findInjectedScript(
     RemoteObjectIdBase* objectId, InjectedScript*& injectedScript) {
   if (objectId->isolateId() != m_inspector->isolateId()) {
-    // TODO: RUN-2499
-    v8::recordreplay::Warning(
+    if (v8::recordreplay::IsInReplayCode("InjectedScript::bindRemoteObjectIfNeeded")) {
+      v8::recordreplay::Warning(
         "[RUN-2486-2498] Cannot find context with specified id C %llu %llu",
         objectId->isolateId(), m_inspector->isolateId());
+    }
     return Response::ServerError("Cannot find context with specified id");
   }
   return findInjectedScript(objectId->contextId(), injectedScript);

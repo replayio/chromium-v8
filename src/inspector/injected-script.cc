@@ -1137,18 +1137,18 @@ Response InjectedScript::bindRemoteObjectIfNeeded(
         inspectedContext ? inspectedContext->getInjectedScript(sessionId)
                          : nullptr;
     if (!injectedScript) {
-      // TODO: RUN-2499
-      v8::recordreplay::Warning(
+      if (v8::recordreplay::IsInReplayCode("InjectedScript::bindRemoteObjectIfNeeded")) {
+        v8::recordreplay::Warning(
           "[RUN-2486-2498] Cannot find context with specified id A %d %d %d",
           sessionId, InspectedContext::contextId(context), !!inspectedContext);
+      }
       return Response::ServerError("Cannot find context with specified id");
     }
     remoteObject->setObjectId(injectedScript->bindObject(value, groupName));
 
-    // Persistent IDs are not tracked when recording by default, so they are only
-    // provided when the CDP is being used to inspect state while replaying and
-    // diverged from the recording.
-    if (v8::recordreplay::HasDivergedFromRecording()) {
+    // Persistent IDs should not be provided unless the caller is Replay-internal code.
+    if (v8::recordreplay::IsInReplayCode("InjectedScript::bindRemoteObjectIfNeeded") &&
+        value->IsObject()) {
       int persistentId = v8::internal::RecordReplayObjectId(isolate, context, value,
                                                             /* allow_create */ false);
       if (persistentId) {

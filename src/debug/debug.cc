@@ -3986,6 +3986,7 @@ static Local<v8::Value> GetObjectIdMapForContext(v8::Isolate* v8_isolate, Local<
 }
 
 extern bool gRecordReplayAssertTrackedObjects;
+extern int (*gGetAPIObjectIdCallback)(v8::Local<v8::Object> object);
 
 static int gNextObjectId = 1;
 
@@ -3995,6 +3996,14 @@ int RecordReplayObjectId(v8::Isolate* v8_isolate, v8::Local<v8::Context> cx,
 
   if (!v8_object->IsObject()) {
     return 0;
+  }
+
+  if (gGetAPIObjectIdCallback) {
+    // Check for Blink objects.
+    int api_id = gGetAPIObjectIdCallback(v8_object.As<v8::Object>());
+    if (api_id) {
+      return api_id;
+    }
   }
 
   Isolate* isolate = (Isolate*)v8_isolate;
@@ -4012,7 +4021,9 @@ int RecordReplayObjectId(v8::Isolate* v8_isolate, v8::Local<v8::Context> cx,
         v8::Local<v8::Value> id_value = v8::Utils::ToLocal(existing);
         if (id_value->IsInt32()) {
           int id = id_value.As<v8::Int32>()->Value();
-          if (gRecordReplayAssertTrackedObjects) {
+          if (gRecordReplayAssertTrackedObjects && (
+              !recordreplay::IsInReplayCode("RecordReplayObjectId")
+          )) {
             recordreplay::Assert("JS ReuseObjectId %d", id);
           }
           return id;
@@ -4027,7 +4038,9 @@ int RecordReplayObjectId(v8::Isolate* v8_isolate, v8::Local<v8::Context> cx,
 
   int id = gNextObjectId++;
 
-  if (gRecordReplayAssertTrackedObjects) {
+  if (gRecordReplayAssertTrackedObjects && (
+      !recordreplay::IsInReplayCode("RecordReplayObjectId")
+  )) {
     recordreplay::Assert("JS NewObjectId %d", id);
   }
 
@@ -4088,7 +4101,7 @@ inline int HashBytes(const void* aPtr, size_t aSize) {
   return hash;
 }
 
-static int (*gGetAPIObjectIdCallback)(v8::Local<v8::Object> object);
+int (*gGetAPIObjectIdCallback)(v8::Local<v8::Object> object);
 
 extern "C" void V8RecordReplaySetAPIObjectIdCallback(int (*callback)(v8::Local<v8::Object>)) {
   gGetAPIObjectIdCallback = callback;
@@ -4167,13 +4180,6 @@ std::string RecordReplayBasicValueContents(Handle<Object> value) {
       size_t written = tarr->CopyContents(buf, sizeof(buf));
       int hash = HashBytes(buf, written);
       return StringPrintf("TypedArray %d %lu %d", object_id, tarr->ByteLength(), hash);
-    }
-    if (!strcmp(typeStr, "JS_API_OBJECT_TYPE")) {
-      v8::Local<v8::Value> obj = v8::Utils::ToLocal(value);
-      if (gGetAPIObjectIdCallback) {
-        int api_id = gGetAPIObjectIdCallback(obj.As<v8::Object>());
-        return StringPrintf("APIObject %d %d", object_id, api_id);
-      }
     }
     return StringPrintf("Object %d %s", object_id, typeStr);
   }
