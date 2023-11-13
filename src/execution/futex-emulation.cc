@@ -107,6 +107,20 @@ namespace {
 // condition variable of such nodes.
 base::LazyMutex g_mutex = LAZY_MUTEX_INITIALIZER;
 base::LazyInstance<FutexWaitList>::type g_wait_list = LAZY_INSTANCE_INITIALIZER;
+
+// FutexEmulation has shared data structures which might be accessed from both,
+// ordered and unordered threads.
+// Since FutexEmulation itself does not need to touch the recording stream,
+// let's just keep things unordered, but enforce ordering in the one case
+// where it matters: `Wait` (or `WaitAsync`) on an ordered thread.
+static std::atomic<int> g_record_replay_wait_lock = 0;
+static int GetRecordReplayWaitOrderedLock() {
+  if (!g_record_replay_wait_lock) {
+    g_record_replay_wait_lock = (int)recordreplay::CreateOrderedLock("FutexEmulation::Wait");
+  }
+  return g_record_replay_wait_lock;
+}
+
 }  // namespace
 
 FutexWaitListNode::~FutexWaitListNode() {
@@ -125,6 +139,9 @@ bool FutexWaitListNode::CancelTimeoutTask() {
 
 void FutexWaitListNode::NotifyWake() {
   DCHECK(!IsAsync());
+
+  recordreplay::AutoDisallowEvents disallow("FutexWaitListNode::NotifyWake");
+
   // Lock the FutexEmulation mutex before notifying. We know that the mutex
   // will have been unlocked if we are currently waiting on the condition
   // variable. The mutex will not be locked if FutexEmulation::Wait hasn't
@@ -247,6 +264,7 @@ void AtomicsWaitWakeHandle::Wake() {
   // The split lock by itself isn’t an issue, as long as the caller properly
   // synchronizes this with the closing `AtomicsWaitCallback`.
   {
+    recordreplay::AutoDisallowEvents disallow("AtomicsWaitWakeHandle::Wake");
     NoGarbageCollectionMutexGuard lock_guard(g_mutex.Pointer());
     stopped_ = true;
   }
@@ -330,6 +348,13 @@ Object FutexEmulation::Wait(Isolate* isolate, WaitMode mode,
       rel_timeout_ns = static_cast<int64_t>(timeout_ns);
     }
   }
+
+  // Fence after `Wait` on ordered threads.
+  int id = GetRecordReplayWaitOrderedLock();
+  base::Optional<recordreplay::AutoOrderedLock> ordered;
+  if (!recordreplay::AreEventsDisallowed()) {
+    ordered.emplace(id);
+  }
   return Wait(isolate, mode, array_buffer, addr, value, use_timeout,
               rel_timeout_ns);
 }
@@ -362,10 +387,6 @@ Object FutexEmulation::WaitSync(Isolate* isolate,
                                 Handle<JSArrayBuffer> array_buffer, size_t addr,
                                 T value, bool use_timeout,
                                 int64_t rel_timeout_ns, CallType call_type) {
-
-  recordreplay::Assert("[RUN-2378-2418] FutexEmulation::WaitSync BEGIN use_timeout=%d",
-    (int) use_timeout);
-
   VMState<ATOMICS_WAIT> state(isolate);
   base::TimeDelta rel_timeout =
       base::TimeDelta::FromNanoseconds(rel_timeout_ns);
@@ -385,9 +406,8 @@ Object FutexEmulation::WaitSync(Isolate* isolate,
   Handle<Object> result;
   AtomicsWaitEvent callback_result = AtomicsWaitEvent::kWokenUp;
 
-  recordreplay::Assert("[RUN-2378-2418] FutexEmulation::WaitSync #100");
-
   do {  // Not really a loop, just makes it easier to break out early.
+    recordreplay::AutoDisallowEvents disallow("FutexEmulation::WaitSync");
     NoGarbageCollectionMutexGuard lock_guard(g_mutex.Pointer());
 
     std::shared_ptr<BackingStore> backing_store =
@@ -415,18 +435,11 @@ Object FutexEmulation::WaitSync(Isolate* isolate,
       loaded_value = ByteReverse(loaded_value);
     }
 #endif
-
-    recordreplay::Assert("[RUN-2378-2418] FutexEmulation::WaitSync #110: loaded=%llu val=%llu",
-      (long long) loaded_value,
-      (long long) value
-    );
     if (loaded_value != value) {
       result = handle(Smi::FromInt(WaitReturnValue::kNotEqual), isolate);
       callback_result = AtomicsWaitEvent::kNotEqual;
       break;
     }
-    recordreplay::Assert("[RUN-2378-2418] FutexEmulation::WaitSync #120 use_timeout=%d",
-      (int) use_timeout);
 
     base::TimeTicks timeout_time;
     base::TimeTicks current_time;
@@ -441,9 +454,6 @@ Object FutexEmulation::WaitSync(Isolate* isolate,
     while (true) {
       bool interrupted = node->interrupted_;
       node->interrupted_ = false;
-
-      recordreplay::Assert("[RUN-2378-2418] FutexEmulation::WaitSync #131 intr=%d",
-        (int) interrupted);
 
       // Unlock the mutex here to prevent deadlock from lock ordering between
       // mutex and mutexes locked by HandleInterrupts.
@@ -471,16 +481,12 @@ Object FutexEmulation::WaitSync(Isolate* isolate,
         }
       }
 
-      recordreplay::Assert("[RUN-2378-2418] FutexEmulation::WaitSync #132");
-
       lock_guard.Lock();
 
       if (node->interrupted_) {
         // An interrupt occurred while the mutex was unlocked. Don't wait yet.
         continue;
       }
-
-      recordreplay::Assert("[RUN-2378-2418] FutexEmulation::WaitSync #133");
 
       if (stop_handle.has_stopped()) {
         node->waiting_ = false;
@@ -492,21 +498,14 @@ Object FutexEmulation::WaitSync(Isolate* isolate,
         break;
       }
 
-      recordreplay::Assert("[RUN-2378-2418] FutexEmulation::WaitSync #134 use_timeout=%d",
-        (int) use_timeout);
-
       // No interrupts, now wait.
       if (use_timeout) {
         current_time = base::TimeTicks::Now();
-        recordreplay::Assert("[RUN-2378-2418] FutexEmulation::WaitSync #135a cur=%llu timeout=%llu",
-          (long long) current_time.ToInternalValue(), (long long) timeout_time.ToInternalValue());
         if (current_time >= timeout_time) {
           result = handle(Smi::FromInt(WaitReturnValue::kTimedOut), isolate);
           callback_result = AtomicsWaitEvent::kTimedOut;
           break;
         }
-
-        recordreplay::Assert("[RUN-2378-2418] FutexEmulation::WaitSync #135b");
 
         base::TimeDelta time_until_timeout = timeout_time - current_time;
         DCHECK_GE(time_until_timeout.InMicroseconds(), 0);
@@ -514,21 +513,14 @@ Object FutexEmulation::WaitSync(Isolate* isolate,
             node->cond_.WaitFor(g_mutex.Pointer(), time_until_timeout);
         USE(wait_for_result);
       } else {
-        recordreplay::Assert("[RUN-2378-2418] FutexEmulation::WaitSync #136a");
         node->cond_.Wait(g_mutex.Pointer());
       }
-
-      recordreplay::Assert("[RUN-2378-2418] FutexEmulation::WaitSync #137");
 
       // Spurious wakeup, interrupt or timeout.
     }
 
-    recordreplay::Assert("[RUN-2378-2418] FutexEmulation::WaitSync #140");
-
     g_wait_list.Pointer()->RemoveNode(node);
   } while (false);
-
-  recordreplay::Assert("[RUN-2378-2418] FutexEmulation::WaitSync #200");
 
   isolate->RunAtomicsWaitCallback(callback_result, array_buffer, addr, value,
                                   rel_timeout_ms, nullptr);
@@ -537,8 +529,6 @@ Object FutexEmulation::WaitSync(Isolate* isolate,
     CHECK_NE(callback_result, AtomicsWaitEvent::kTerminatedExecution);
     result = handle(isolate->PromoteScheduledException(), isolate);
   }
-
-  recordreplay::Assert("[RUN-2378-2418] FutexEmulation::WaitSync END");
 
   return *result;
 }
@@ -581,6 +571,7 @@ Object FutexEmulation::WaitAsync(Isolate* isolate,
   enum class ResultKind { kNotEqual, kTimedOut, kAsync };
   ResultKind result_kind;
   {
+    recordreplay::AutoDisallowEvents disallow("FutexEmulation::WaitAsync");
     // 16. Perform EnterCriticalSection(WL).
     NoGarbageCollectionMutexGuard lock_guard(g_mutex.Pointer());
 
@@ -697,6 +688,7 @@ Object FutexEmulation::Wake(Handle<JSArrayBuffer> array_buffer, size_t addr,
   std::shared_ptr<BackingStore> backing_store = array_buffer->GetBackingStore();
   auto wait_location = FutexWaitList::ToWaitLocation(backing_store.get(), addr);
 
+  recordreplay::AutoDisallowEvents disallow("FutexEmulation::Wake");
   NoGarbageCollectionMutexGuard lock_guard(g_mutex.Pointer());
 
   auto& location_lists = g_wait_list.Pointer()->location_lists_;
@@ -858,6 +850,7 @@ void FutexEmulation::ResolveAsyncWaiterPromises(Isolate* isolate) {
 
   FutexWaitListNode* node;
   {
+    recordreplay::AutoDisallowEvents disallow("FutexEmulation::ResolveAsyncWaiterPromises");
     NoGarbageCollectionMutexGuard lock_guard(g_mutex.Pointer());
 
     auto& isolate_map = g_wait_list.Pointer()->isolate_promises_to_resolve_;
@@ -891,6 +884,7 @@ void FutexEmulation::HandleAsyncWaiterTimeout(FutexWaitListNode* node) {
   DCHECK(node->IsAsync());
 
   {
+    recordreplay::AutoDisallowEvents disallow("FutexEmulation::HandleAsyncWaiterTimeout");
     NoGarbageCollectionMutexGuard lock_guard(g_mutex.Pointer());
 
     node->timeout_task_id_ = CancelableTaskManager::kInvalidTaskId;
@@ -912,6 +906,7 @@ void FutexEmulation::HandleAsyncWaiterTimeout(FutexWaitListNode* node) {
 }
 
 void FutexEmulation::IsolateDeinit(Isolate* isolate) {
+  recordreplay::AutoDisallowEvents disallow("FutexEmulation::IsolateDeinit");
   NoGarbageCollectionMutexGuard lock_guard(g_mutex.Pointer());
 
   // Iterate all locations to find nodes belonging to "isolate" and delete them.
@@ -957,6 +952,7 @@ Object FutexEmulation::NumWaitersForTesting(Handle<JSArrayBuffer> array_buffer,
   DCHECK_LT(addr, array_buffer->GetByteLength());
   std::shared_ptr<BackingStore> backing_store = array_buffer->GetBackingStore();
 
+  recordreplay::AutoDisallowEvents disallow("FutexEmulation::NumWaitersForTesting");
   NoGarbageCollectionMutexGuard lock_guard(g_mutex.Pointer());
 
   auto wait_location = FutexWaitList::ToWaitLocation(backing_store.get(), addr);
@@ -981,6 +977,7 @@ Object FutexEmulation::NumWaitersForTesting(Handle<JSArrayBuffer> array_buffer,
 }
 
 Object FutexEmulation::NumAsyncWaitersForTesting(Isolate* isolate) {
+  recordreplay::AutoDisallowEvents disallow("FutexEmulation::NumAsyncWaitersForTesting");
   NoGarbageCollectionMutexGuard lock_guard(g_mutex.Pointer());
 
   int waiters = 0;
@@ -1002,6 +999,7 @@ Object FutexEmulation::NumUnresolvedAsyncPromisesForTesting(
   DCHECK_LT(addr, array_buffer->GetByteLength());
   std::shared_ptr<BackingStore> backing_store = array_buffer->GetBackingStore();
 
+  recordreplay::AutoDisallowEvents disallow("FutexEmulation::NumUnresolvedAsyncPromisesForTesting");
   NoGarbageCollectionMutexGuard lock_guard(g_mutex.Pointer());
 
   int waiters = 0;

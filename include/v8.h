@@ -154,6 +154,12 @@ struct AutoDisallowEvents {
   ~AutoDisallowEvents() { EndDisallowEvents(); }
 };
 
+struct AutoOrderedLock {
+  AutoOrderedLock(int id) : id_(id) { OrderedLock(id_); }
+  ~AutoOrderedLock() { OrderedUnlock(id_); }
+  int id_;
+};
+
 static void RegisterPointer(const char* name, const void* ptr);
 static void UnregisterPointer(const void* ptr);
 static int PointerId(const void* ptr);
