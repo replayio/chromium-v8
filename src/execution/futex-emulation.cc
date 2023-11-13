@@ -334,7 +334,6 @@ Object FutexEmulation::Wait(Isolate* isolate, WaitMode mode,
       rel_timeout_ns = static_cast<int64_t>(timeout_ns);
     }
   }
-
   return Wait(isolate, mode, array_buffer, addr, value, use_timeout,
               rel_timeout_ns);
 }
@@ -375,7 +374,6 @@ Object FutexEmulation::WaitSync(Isolate* isolate,
   double rel_timeout_ms = WaitTimeoutInMs(static_cast<double>(rel_timeout_ns));
   AtomicsWaitWakeHandle stop_handle(isolate);
 
-
   isolate->RunAtomicsWaitCallback(AtomicsWaitEvent::kStartWait, array_buffer,
                                   addr, value, rel_timeout_ms, &stop_handle);
 
@@ -400,7 +398,6 @@ Object FutexEmulation::WaitSync(Isolate* isolate,
         FutexWaitList::ToWaitLocation(backing_store.get(), addr);
     node->wait_location_ = wait_location;
     node->waiting_ = true;
-
 
     // Reset node->waiting_ = false when leaving this scope (but while
     // still holding the lock).
