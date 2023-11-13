@@ -107,20 +107,6 @@ namespace {
 // condition variable of such nodes.
 base::LazyMutex g_mutex = LAZY_MUTEX_INITIALIZER;
 base::LazyInstance<FutexWaitList>::type g_wait_list = LAZY_INSTANCE_INITIALIZER;
-
-// FutexEmulation has shared data structures which might be accessed from both,
-// ordered and unordered threads.
-// Since FutexEmulation itself does not need to touch the recording stream,
-// let's just keep things unordered, but enforce ordering in the one case
-// where it matters: `Wait` (or `WaitAsync`) on an ordered thread.
-static std::atomic<int> g_record_replay_wait_lock = 0;
-static int GetRecordReplayWaitOrderedLock() {
-  if (!g_record_replay_wait_lock) {
-    g_record_replay_wait_lock = (int)recordreplay::CreateOrderedLock("FutexEmulation::Wait");
-  }
-  return g_record_replay_wait_lock;
-}
-
 }  // namespace
 
 FutexWaitListNode::~FutexWaitListNode() {
@@ -349,12 +335,6 @@ Object FutexEmulation::Wait(Isolate* isolate, WaitMode mode,
     }
   }
 
-  // Fence after `Wait` on ordered threads.
-  int id = GetRecordReplayWaitOrderedLock();
-  base::Optional<recordreplay::AutoOrderedLock> ordered;
-  if (!recordreplay::AreEventsDisallowed()) {
-    ordered.emplace(id);
-  }
   return Wait(isolate, mode, array_buffer, addr, value, use_timeout,
               rel_timeout_ns);
 }
