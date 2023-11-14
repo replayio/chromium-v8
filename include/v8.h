@@ -161,9 +161,9 @@ struct AutoOrderedLock {
   int id_;
 };
 
-struct AutoAssertMaybeDisallowed {
-  AutoAssertMaybeDisallowed(const char* format, ...);
-  ~AutoAssertMaybeDisallowed();
+struct AutoAssertMaybeEventsDisallowed {
+  AutoAssertMaybeEventsDisallowed(const char* format, ...);
+  ~AutoAssertMaybeEventsDisallowed();
   std::string msg_;
 };
 

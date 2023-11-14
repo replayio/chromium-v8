@@ -12104,7 +12104,7 @@ extern "C" DLLEXPORT void V8RecordReplayExitReplayCode() {
 }
 
 
-recordreplay::AutoAssertMaybeDisallowed::AutoAssertMaybeDisallowed(
+recordreplay::AutoAssertMaybeEventsDisallowed::AutoAssertMaybeEventsDisallowed(
     const char* format, ...) {
   base::EmbeddedVector<char, 1024> buf;
   va_list arguments;
@@ -12116,18 +12116,18 @@ recordreplay::AutoAssertMaybeDisallowed::AutoAssertMaybeDisallowed(
   if (!gAssertsDisabled &&
       IsRecordingOrReplaying() &&
       (
-        !AreEventsDisallowed("AutoAssertMaybeDisallowed")
+        !AreEventsDisallowed("AutoAssertMaybeEventsDisallowed")
       )
   ) {
     recordreplay::Assert("%s", msg_.c_str());
   }
 }
 
-recordreplay::AutoAssertMaybeDisallowed::~AutoAssertMaybeDisallowed() {
+recordreplay::AutoAssertMaybeEventsDisallowed::~AutoAssertMaybeEventsDisallowed() {
   if (!gAssertsDisabled &&
       IsRecordingOrReplaying() &&
       (
-        !AreEventsDisallowed("AutoAssertMaybeDisallowed")
+        !AreEventsDisallowed("AutoAssertMaybeEventsDisallowed")
       )
   ) {
     recordreplay::Assert("%s", msg_.c_str());
