@@ -12109,9 +12109,9 @@ recordreplay::AutoAssertMaybeDisallowed::AutoAssertMaybeDisallowed(
   base::EmbeddedVector<char, 1024> buf;
   va_list arguments;
   va_start(arguments, format);
-  int pos = base::VSNPrintF(buf, format, arguments);
+  base::VSNPrintF(buf, format, arguments);
   va_end(arguments);
-  msg_ = std::string(buf);
+  msg_ = std::string(buf.begin());
 
   if (!gAssertsDisabled &&
       IsRecordingOrReplaying() &&
