@@ -334,6 +334,9 @@ Object FutexEmulation::Wait(Isolate* isolate, WaitMode mode,
       rel_timeout_ns = static_cast<int64_t>(timeout_ns);
     }
   }
+
+  recordreplay::AutoAssertMaybeDisallowed assert(, "[RUN-2378] FutexEmulation::Wait");
+
   return Wait(isolate, mode, array_buffer, addr, value, use_timeout,
               rel_timeout_ns);
 }

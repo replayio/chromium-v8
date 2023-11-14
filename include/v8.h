@@ -17,6 +17,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <string>
 
 #include <memory>
 
@@ -158,6 +159,12 @@ struct AutoOrderedLock {
   AutoOrderedLock(int id) : id_(id) { OrderedLock(id_); }
   ~AutoOrderedLock() { OrderedUnlock(id_); }
   int id_;
+};
+
+struct AutoAssertMaybeDisallowed {
+  AutoAssertMaybeDisallowed(const char* format, ...);
+  ~AutoAssertMaybeDisallowed();
+  std::string msg_;
 };
 
 static void RegisterPointer(const char* name, const void* ptr);
