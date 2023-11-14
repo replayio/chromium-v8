@@ -17,6 +17,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <string>
 
 #include <memory>
 
@@ -152,6 +153,18 @@ struct AutoDisallowEvents {
   AutoDisallowEvents() { BeginDisallowEvents(); }
   AutoDisallowEvents(const char* label) { BeginDisallowEventsWithLabel(label); }
   ~AutoDisallowEvents() { EndDisallowEvents(); }
+};
+
+struct AutoOrderedLock {
+  AutoOrderedLock(int id) : id_(id) { OrderedLock(id_); }
+  ~AutoOrderedLock() { OrderedUnlock(id_); }
+  int id_;
+};
+
+struct AutoAssertMaybeEventsDisallowed {
+  AutoAssertMaybeEventsDisallowed(const char* format, ...);
+  ~AutoAssertMaybeEventsDisallowed();
+  std::string msg_;
 };
 
 static void RegisterPointer(const char* name, const void* ptr);

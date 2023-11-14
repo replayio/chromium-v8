@@ -35,6 +35,7 @@
 #include "src/base/platform/time.h"
 #include "src/base/safe_conversions.h"
 #include "src/base/utils/random-number-generator.h"
+#include "src/base/vector.h"
 #include "src/baseline/baseline-batch-compiler.h"
 #include "src/builtins/accessors.h"
 #include "src/builtins/builtins-utils.h"
@@ -12101,6 +12102,38 @@ extern "C" DLLEXPORT void V8RecordReplayEnterReplayCode() {
 extern "C" DLLEXPORT void V8RecordReplayExitReplayCode() {
   gInReplayCode--;
 }
+
+
+recordreplay::AutoAssertMaybeEventsDisallowed::AutoAssertMaybeEventsDisallowed(
+    const char* format, ...) {
+  base::EmbeddedVector<char, 1024> buf;
+  va_list arguments;
+  va_start(arguments, format);
+  base::VSNPrintF(buf, format, arguments);
+  va_end(arguments);
+  msg_ = std::string(buf.begin());
+
+  if (!gAssertsDisabled &&
+      IsRecordingOrReplaying() &&
+      (
+        !AreEventsDisallowed("AutoAssertMaybeEventsDisallowed")
+      )
+  ) {
+    recordreplay::Assert("%s", msg_.c_str());
+  }
+}
+
+recordreplay::AutoAssertMaybeEventsDisallowed::~AutoAssertMaybeEventsDisallowed() {
+  if (!gAssertsDisabled &&
+      IsRecordingOrReplaying() &&
+      (
+        !AreEventsDisallowed("AutoAssertMaybeEventsDisallowed")
+      )
+  ) {
+    recordreplay::Assert("%s", msg_.c_str());
+  }
+}
+
 
 namespace internal {
 
