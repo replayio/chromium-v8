@@ -10742,7 +10742,9 @@ typedef char* (CommandCallbackRaw)(const char* params);
   Macro(RecordReplayGetStack, (char* aStack, size_t aSize), bool, false)      \
   Macro(RecordReplayReadSystemFileContents,                                   \
         (bool aRelativeToApplication, const char* aPath, size_t *aLength),    \
-        char*, nullptr)
+        char*, nullptr)                                                       \
+  Macro(RecordReplayShouldReportPerformanceEvent,                             \
+        (uint32_t kind), bool, false)
 
 #define ForEachRecordReplaySymbolVoidShared(Macro)                            \
   Macro(RecordReplayDisableFeatures, (const char* json))                      \
@@ -10817,7 +10819,9 @@ typedef char* (CommandCallbackRaw)(const char* params);
   Macro(RecordReplaySetAssertDataCallbacks,                                   \
         (void (*aGetData)(void**, size_t*),                                   \
          char* (*aOnMismatch)(void*, size_t, void*, size_t),                  \
-         void (*aDescribeData)(void*, size_t)))
+         void (*aDescribeData)(void*, size_t)))                               \
+  Macro(RecordReplayPerformanceEvent,                                         \
+        (uint32_t kind, const void* Buf, uint32_t size))
 
 #if !V8_OS_WIN
 #define ForEachRecordReplaySymbolVoid(Macro)                                  \
@@ -10972,6 +10976,7 @@ extern void ClearPauseDataCallback();
 bool gRecordReplayAssertValues;
 bool gRecordReplayAssertProgress;
 bool gRecordReplayAssertTrackedObjects;
+bool gRecordReplayReportPerformanceEvents;
 
 // Enable various checks when advancing the progress counter. Set via the
 // environment, or when events are disallowed on the main thread.
@@ -11376,6 +11381,24 @@ extern "C" DLLEXPORT bool V8RecordReplayAreAssertsDisabled() {
   return recordreplay::AreAssertsDisabled();
 }
 
+bool recordreplay::ShouldReportPerformanceEvent(uint32_t kind) {
+  return IsRecordingOrReplaying() && gRecordReplayShouldReportPerformanceEvent(kind);
+}
+
+extern "C" DLLEXPORT bool V8RecordReplayShouldReportPerformanceEvent(uint32_t kind) {
+  return recordreplay::ShouldReportPerformanceEvent(kind);
+}
+
+void recordreplay::PerformanceEvent(uint32_t kind, const void* buf, uint32_t size) {
+  if (IsRecordingOrReplaying()) {
+    gRecordReplayPerformanceEvent(kind, buf, size);
+  }
+}
+
+extern "C" DLLEXPORT void V8RecordReplayPerformanceEvent(uint32_t kind, const void* Buf, uint32_t size) {
+  recordreplay::PerformanceEvent(kind, buf, size);
+}
+
 uintptr_t recordreplay::RecordReplayValue(const char* why, uintptr_t v) {
   if (IsRecordingOrReplaying("values", why)) {
     return gRecordReplayValue(why, v);
@@ -11487,6 +11510,9 @@ void recordreplay::NewCheckpoint() {
   if (IsRecordingOrReplaying() && IsMainThread() && internal::gDefaultContext) {
     internal::gRecordReplayHasCheckpoint = true;
     gRecordReplayNewCheckpoint();
+
+    gRecordReplayReportPerformanceEvents =
+      ShouldReportPerformanceEvent(/* ScriptAdvanceProgress */ 13);
   }
 }
 

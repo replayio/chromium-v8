@@ -946,6 +946,7 @@ extern uint64_t* gProgressCounter;
 extern uint64_t gTargetProgress;
 extern bool gRecordReplayAssertProgress;
 extern int gRecordReplayCheckProgress;
+extern bool gRecordReplayReportPerformanceEvents;
 
 // Define this to check preconditions for using record/replay opcodes.
 //#define RECORD_REPLAY_CHECK_OPCODES
@@ -1149,6 +1150,10 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
             stack.str().c_str());
       }
     }
+  }
+
+  if (gRecordReplayReportPerformanceEvents) {
+    recordreplay::PerformanceEvent(/* ScriptAdvanceProgress */ 13, nullptr, 0);
   }
 
   return ReadOnlyRoots(isolate).undefined_value();
