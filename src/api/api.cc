@@ -11395,7 +11395,7 @@ void recordreplay::PerformanceEvent(uint32_t kind, const void* buf, uint32_t siz
   }
 }
 
-extern "C" DLLEXPORT void V8RecordReplayPerformanceEvent(uint32_t kind, const void* Buf, uint32_t size) {
+extern "C" DLLEXPORT void V8RecordReplayPerformanceEvent(uint32_t kind, const void* buf, uint32_t size) {
   recordreplay::PerformanceEvent(kind, buf, size);
 }
 
@@ -11511,7 +11511,7 @@ void recordreplay::NewCheckpoint() {
     internal::gRecordReplayHasCheckpoint = true;
     gRecordReplayNewCheckpoint();
 
-    gRecordReplayReportPerformanceEvents =
+    internal::gRecordReplayReportPerformanceEvents =
       ShouldReportPerformanceEvent(/* ScriptAdvanceProgress */ 13);
   }
 }
