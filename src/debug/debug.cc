@@ -3501,14 +3501,21 @@ static Handle<Object> RecordReplayConvertFunctionOffsetToLocation(
   if (offset_raw->IsNumber()) {
     int bytecode_offset = offset_raw->Number();
 
+    recordreplay::Print("RecordReplayConvertFunctionOffsetToLocation #1 %s %d",
+                        function_id.c_str(), bytecode_offset);
+
     std::string key = BreakpointPositionKey(function_id, bytecode_offset);
     if (!gBreakpointPositions) {
       GenerateBreakpointInfo(isolate, script);
+
+      recordreplay::Print("RecordReplayConvertFunctionOffsetToLocation #2");
     }
     auto iter = gBreakpointPositions->find(key);
     if (iter == gBreakpointPositions->end()) {
       GenerateBreakpointInfo(isolate, script);
       iter = gBreakpointPositions->find(key);
+
+      recordreplay::Print("RecordReplayConvertFunctionOffsetToLocation #3");
     }
 
     if (iter != gBreakpointPositions->end()) {
@@ -3527,6 +3534,8 @@ static Handle<Object> RecordReplayConvertFunctionOffsetToLocation(
   if (!line) {
     Script::PositionInfo info;
     Script::GetPositionInfo(script, function_source_position, &info, Script::WITH_OFFSET);
+
+    recordreplay::Print("RecordReplayConvertFunctionOffsetToLocation #4");
 
     // Use 1-indexed lines instead of 0-indexed.
     line = info.line + 1;
