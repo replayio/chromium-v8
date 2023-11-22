@@ -3495,27 +3495,19 @@ static Handle<Object> RecordReplayConvertFunctionOffsetToLocation(
   Handle<Script> script = GetScript(isolate, script_id);
   Handle<Object> offset_raw = GetProperty(isolate, params, "offset");
 
-  // The offset may or may not be present. If the offset is present, use it as the
-  // instrumentation site to get the source position.
+  // The offset may or may not be present. If the offset is present and non-zero,
+  // use it as the instrumentation site to get the source position.
   int line = 0, column = 0;
-  if (offset_raw->IsNumber()) {
-    int bytecode_offset = offset_raw->Number();
-
-    recordreplay::Print("RecordReplayConvertFunctionOffsetToLocation #1 %s %d",
-                        function_id.c_str(), bytecode_offset);
-
+  int bytecode_offset = offset_raw->IsNumber() ? offset_raw->Number() : 0;
+  if (bytecode_offset) {
     std::string key = BreakpointPositionKey(function_id, bytecode_offset);
     if (!gBreakpointPositions) {
       GenerateBreakpointInfo(isolate, script);
-
-      recordreplay::Print("RecordReplayConvertFunctionOffsetToLocation #2");
     }
     auto iter = gBreakpointPositions->find(key);
     if (iter == gBreakpointPositions->end()) {
       GenerateBreakpointInfo(isolate, script);
       iter = gBreakpointPositions->find(key);
-
-      recordreplay::Print("RecordReplayConvertFunctionOffsetToLocation #3");
     }
 
     if (iter != gBreakpointPositions->end()) {
