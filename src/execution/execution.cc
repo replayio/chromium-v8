@@ -23,6 +23,7 @@ namespace internal {
 extern bool RecordReplayHasRegisteredScript(Script script);
 extern bool RecordReplayIsDivergentUserJSWithoutPause(const SharedFunctionInfo& shared);
 extern uint64_t* gProgressCounter;
+extern void RecordReplayOnScriptExecution();
 
 namespace {
 
@@ -372,6 +373,8 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
           info.column, stack.str().c_str());
       return isolate->factory()->undefined_value();
     }
+
+    RecordReplayOnScriptExecution();
 
     // Set up a ScriptContext when running scripts that need it.
     if (function->shared().needs_script_context()) {

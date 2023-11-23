@@ -11106,6 +11106,15 @@ void RecordReplayDescribeAssertData(const char* text) {
   gRecordReplayDescribeAssertData(text);
 }
 
+// Depth of BeginActivity performance events.
+static size_t gRecordReplayPerformanceEventActivityCount;
+
+bool RecordReplayOnScriptExecution() {
+  if (IsMainThread() && !gRecordReplayPerformanceEventActivityCount) {
+    recordreplay::Trace("ScriptExecutionWithoutPerformanceEvent");
+  }
+}
+
 } // namespace internal
 
 bool recordreplay::FeatureEnabled(const char* feature, const char* subfeature) {
@@ -11392,6 +11401,12 @@ extern "C" DLLEXPORT bool V8RecordReplayShouldReportPerformanceEvent(uint32_t ki
 void recordreplay::PerformanceEvent(uint32_t kind, const void* buf, uint32_t size) {
   if (IsRecordingOrReplaying()) {
     gRecordReplayPerformanceEvent(kind, buf, size);
+
+    if (kind == 1 /* BeginActivity */ && IsMainThread()) {
+      gRecordReplayPerformanceEventActivityCount++;
+    } else if (kind == 2 /* EndActivity */ && IsMainThread()) {
+      gRecordReplayPerformanceEventActivityCount--;
+    }
   }
 }
 
