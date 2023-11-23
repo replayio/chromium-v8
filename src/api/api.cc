@@ -11109,7 +11109,7 @@ void RecordReplayDescribeAssertData(const char* text) {
 // Depth of BeginActivity performance events.
 static size_t gRecordReplayPerformanceEventActivityCount;
 
-bool RecordReplayOnScriptExecution() {
+void RecordReplayOnScriptExecution() {
   if (IsMainThread() && !gRecordReplayPerformanceEventActivityCount) {
     recordreplay::Trace("ScriptExecutionWithoutPerformanceEvent");
   }
@@ -11403,9 +11403,9 @@ void recordreplay::PerformanceEvent(uint32_t kind, const void* buf, uint32_t siz
     gRecordReplayPerformanceEvent(kind, buf, size);
 
     if (kind == 1 /* BeginActivity */ && IsMainThread()) {
-      gRecordReplayPerformanceEventActivityCount++;
+      internal::gRecordReplayPerformanceEventActivityCount++;
     } else if (kind == 2 /* EndActivity */ && IsMainThread()) {
-      gRecordReplayPerformanceEventActivityCount--;
+      internal::gRecordReplayPerformanceEventActivityCount--;
     }
   }
 }
