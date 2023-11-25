@@ -284,6 +284,8 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
   DCHECK(!params.receiver->IsJSGlobalObject());
   DCHECK_LE(params.argc, FixedArray::kMaxLength);
 
+  RecordReplayOnScriptExecution();
+
 #if V8_ENABLE_WEBASSEMBLY
   // When executing JS code, there should be no {CodeSpaceWriteScope} open.
   DCHECK(!wasm::CodeSpaceWriteScope::IsInScope());
@@ -373,8 +375,6 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
           info.column, stack.str().c_str());
       return isolate->factory()->undefined_value();
     }
-
-    RecordReplayOnScriptExecution();
 
     // Set up a ScriptContext when running scripts that need it.
     if (function->shared().needs_script_context()) {
