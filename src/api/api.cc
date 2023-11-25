@@ -11110,7 +11110,9 @@ void RecordReplayDescribeAssertData(const char* text) {
 static size_t gRecordReplayPerformanceEventActivityCount;
 
 void RecordReplayOnScriptExecution() {
-  if (IsMainThread() && !gRecordReplayPerformanceEventActivityCount) {
+  if (IsMainThread() &&
+      !gRecordReplayPerformanceEventActivityCount &&
+      !recordreplay::IsInReplayCode()) {
     recordreplay::Trace("ScriptExecutionWithoutPerformanceEvent");
   }
 }
