@@ -3527,8 +3527,6 @@ static Handle<Object> RecordReplayConvertFunctionOffsetToLocation(
     Script::PositionInfo info;
     Script::GetPositionInfo(script, function_source_position, &info, Script::WITH_OFFSET);
 
-    recordreplay::Print("RecordReplayConvertFunctionOffsetToLocation #4");
-
     // Use 1-indexed lines instead of 0-indexed.
     line = info.line + 1;
     column = info.column;
