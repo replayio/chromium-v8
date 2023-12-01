@@ -57,7 +57,8 @@
 namespace v8 {
   namespace internal {
     extern int RecordReplayObjectId(v8::Isolate* isolate, Local<v8::Context> cx,
-                                    v8::Local<v8::Value> object, bool allow_create);
+                                    v8::Local<v8::Value> object, bool allow_create,
+                                    bool should_assert = true);
   }
 }
 

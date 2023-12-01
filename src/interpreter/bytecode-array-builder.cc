@@ -74,6 +74,7 @@ BytecodeArrayBuilder::BytecodeArrayBuilder(
         zone->New<RegisterTransferWriter>(this));
   }
 
+  // recordreplay::Trace("DDBG BytecodeArrayBuilder::BytecodeArrayBuilder %d", record_replay_ignore);
   if (recordreplay::IsRecordingOrReplaying("emit-opcodes") &&
       RecordReplayHasDefaultContext() &&
       !record_replay_ignore) {

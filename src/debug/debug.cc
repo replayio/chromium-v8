@@ -3990,7 +3990,8 @@ extern int (*gGetAPIObjectIdCallback)(v8::Local<v8::Object> object);
 static int gNextObjectId = 1;
 
 int RecordReplayObjectId(v8::Isolate* v8_isolate, v8::Local<v8::Context> cx,
-                         v8::Local<v8::Value> v8_object, bool allow_create) {
+                         v8::Local<v8::Value> v8_object, bool allow_create,
+                         bool should_assert = true) {
   CHECK(IsMainThread());
 
   if (!v8_object->IsObject()) {
@@ -4020,7 +4021,7 @@ int RecordReplayObjectId(v8::Isolate* v8_isolate, v8::Local<v8::Context> cx,
         v8::Local<v8::Value> id_value = v8::Utils::ToLocal(existing);
         if (id_value->IsInt32()) {
           int id = id_value.As<v8::Int32>()->Value();
-          if (gRecordReplayAssertTrackedObjects && (
+          if (gRecordReplayAssertTrackedObjects && should_assert && (
               !recordreplay::IsInReplayCode("RecordReplayObjectId")
           )) {
             recordreplay::Assert("JS ReuseObjectId %d", id);
@@ -4037,10 +4038,18 @@ int RecordReplayObjectId(v8::Isolate* v8_isolate, v8::Local<v8::Context> cx,
 
   int id = gNextObjectId++;
 
-  if (gRecordReplayAssertTrackedObjects && (
+  if (gRecordReplayAssertTrackedObjects && should_assert && (
       !recordreplay::IsInReplayCode("RecordReplayObjectId")
   )) {
-    recordreplay::Assert("JS NewObjectId %d", id);
+    // HandleScope scope(isolate);
+    // std::stringstream stack;
+    // isolate->PrintCurrentStackTrace(stack);
+    recordreplay::Assert(
+      "JS NewObjectId %d %llu",
+      id,
+      *gProgressCounter
+      // stack.str().c_str()
+    );
   }
 
   Local<Value> id_value = v8::Integer::New(v8_isolate, id);
@@ -4156,7 +4165,7 @@ std::string RecordReplayBasicValueContents(Handle<Object> value) {
     v8::Isolate* isolate = v8::Isolate::GetCurrent();
     v8::Local<v8::Context> cx = isolate->GetCurrentContext();
     int object_id = RecordReplayObjectId(isolate, cx, v8::Utils::ToLocal(value),
-                                         /* allow_create */ true);
+                                         /* allow_create */ true, false);
 
     InstanceType type = JSObject::cast(*value).map().instance_type();
     const char* typeStr;

@@ -1611,6 +1611,7 @@ static void SetRecordReplayIgnore(UnoptimizedCompileFlags& flags) {
       !RecordReplayHasDefaultContext() ||
       recordreplay::AreEventsDisallowed("CompileFlags") ||
       recordreplay::IsInReplayCode("CompileFlags")) {
+    // recordreplay::Print("DDBG SetRecordReplayIgnore");
     flags.set_record_replay_ignore(true);
     return;
   }
