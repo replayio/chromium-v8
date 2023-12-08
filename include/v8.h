@@ -115,9 +115,6 @@ static void AssertMaybeEventsDisallowed(const char* format, ...);
 static void AssertBytes(const char* why, const void* buf, size_t size);
 static bool AreAssertsDisabled();
 
-static bool ShouldReportPerformanceEvent(uint32_t kind);
-static void PerformanceEvent(uint32_t kind, const void* buf, uint32_t size);
-
 static uintptr_t RecordReplayValue(const char* why, uintptr_t v);
 static void RecordReplayBytes(const char* why, void* buf, size_t size);
 
