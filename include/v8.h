@@ -173,7 +173,7 @@ struct AutoAssertMaybeEventsDisallowed {
 struct AssertBufferAllocationState {
   size_t enabled = 0;
   std::string issueLabel = "";
-}
+};
 
 
 // RAII class to enable recording assertions on dynamic-length buffer 
