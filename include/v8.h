@@ -144,6 +144,9 @@ static bool IsInReplayCode(const char* why = nullptr);
 static bool HasDivergedFromRecording();
 static bool AllowSideEffects();
 
+static void BeginAssertBufferAllocations(const char* issueLabel = "");
+static void EndAssertBufferAllocations();
+
 struct AutoPassThroughEvents {
   AutoPassThroughEvents() { BeginPassThroughEvents(); }
   ~AutoPassThroughEvents() { EndPassThroughEvents(); }

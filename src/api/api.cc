@@ -12110,6 +12110,45 @@ extern "C" DLLEXPORT void V8RecordReplayExitReplayCode() {
 }
 
 
+extern "C" DLLEXPORT void V8RecordReplayBeginAssertBufferAllocations() {
+  if (!IsRecordingOrReplaying() || AreAssertsDisabled()) {
+    return;
+  }
+  size_t enabled = GetEnabled();
+  
+  if (!enabled) {
+    base::Thread::SetThreadLocal(gBufferAllocationsLabelLSKey, 
+      reinterpret_cast<void*>(const_cast<char*>(issueLabel))
+    );
+  }
+  ++enabled;
+  base::Thread::SetThreadLocal(gBufferAllocationsEnabledLSKey, 
+    reinterpret_cast<void*>(enabled)
+  );
+}
+
+extern "C" DLLEXPORT void V8RecordReplayEndAssertBufferAllocations() {
+  if (!IsRecordingOrReplaying() || AreAssertsDisabled()) {
+    return;
+  }
+  
+  size_t enabled = GetEnabled();
+  --enabled;
+  if (!enabled) {
+    const char* issueLabel = GetIssueLabel();
+    base::Thread::SetThreadLocal(gBufferAllocationsLabelLSKey, nullptr);
+    delete[] issueLabel;
+  }
+  base::Thread::SetThreadLocal(gBufferAllocationsEnabledLSKey, 
+    reinterpret_cast<void*>(enabled)
+  );
+}
+
+  CHECK(IsMainThread());
+  gInReplayCode++;
+}
+
+
 recordreplay::AutoAssertMaybeEventsDisallowed::AutoAssertMaybeEventsDisallowed(
     const char* format, ...) {
   base::EmbeddedVector<char, 1024> buf;
@@ -12155,37 +12194,11 @@ const char* recordreplay::AutoAssertBufferAllocations::GetIssueLabel() {
 }
 
 recordreplay::AutoAssertBufferAllocations::AutoAssertBufferAllocations(const char* issueLabel) {
-  if (!IsRecordingOrReplaying() || AreAssertsDisabled()) {
-    return;
-  }
-  size_t enabled = GetEnabled();
-  
-  if (!enabled) {
-    base::Thread::SetThreadLocal(gBufferAllocationsLabelLSKey, 
-      reinterpret_cast<void*>(const_cast<char*>(issueLabel))
-    );
-  }
-  ++enabled;
-  base::Thread::SetThreadLocal(gBufferAllocationsEnabledLSKey, 
-    reinterpret_cast<void*>(enabled)
-  );
+  V8RecordReplayBeginAssertBufferAllocations(issueLabel);
 }
 
 recordreplay::AutoAssertBufferAllocations::~AutoAssertBufferAllocations() {
-  if (!IsRecordingOrReplaying() || AreAssertsDisabled()) {
-    return;
-  }
-  
-  size_t enabled = GetEnabled();
-  --enabled;
-  if (!enabled) {
-    const char* issueLabel = GetIssueLabel();
-    base::Thread::SetThreadLocal(gBufferAllocationsLabelLSKey, nullptr);
-    delete[] issueLabel;
-  }
-  base::Thread::SetThreadLocal(gBufferAllocationsEnabledLSKey, 
-    reinterpret_cast<void*>(enabled)
-  );
+  V8RecordReplayEndAssertBufferAllocations();
 }
 
 
