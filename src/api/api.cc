@@ -12144,10 +12144,6 @@ extern "C" DLLEXPORT void V8RecordReplayEndAssertBufferAllocations() {
   );
 }
 
-  CHECK(IsMainThread());
-  gInReplayCode++;
-}
-
 
 recordreplay::AutoAssertMaybeEventsDisallowed::AutoAssertMaybeEventsDisallowed(
     const char* format, ...) {
