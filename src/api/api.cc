@@ -12110,11 +12110,11 @@ extern "C" DLLEXPORT void V8RecordReplayExitReplayCode() {
 }
 
 
-extern "C" DLLEXPORT void V8RecordReplayBeginAssertBufferAllocations() {
-  if (!IsRecordingOrReplaying() || AreAssertsDisabled()) {
+extern "C" DLLEXPORT void V8RecordReplayBeginAssertBufferAllocations(const char* issueLabel) {
+  if (!recordreplay::IsRecordingOrReplaying() || recordreplay::AreAssertsDisabled()) {
     return;
   }
-  size_t enabled = GetEnabled();
+  size_t enabled = recordreplay::AutoAssertBufferAllocations::GetEnabled();
   
   if (!enabled) {
     base::Thread::SetThreadLocal(gBufferAllocationsLabelLSKey, 
@@ -12132,10 +12132,10 @@ extern "C" DLLEXPORT void V8RecordReplayEndAssertBufferAllocations() {
     return;
   }
   
-  size_t enabled = GetEnabled();
+  size_t enabled = recordreplay::AutoAssertBufferAllocations::GetEnabled();
   --enabled;
   if (!enabled) {
-    const char* issueLabel = GetIssueLabel();
+    const char* issueLabel = recordreplay::AutoAssertBufferAllocations::GetIssueLabel();
     base::Thread::SetThreadLocal(gBufferAllocationsLabelLSKey, nullptr);
     delete[] issueLabel;
   }
