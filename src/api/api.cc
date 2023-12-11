@@ -12172,11 +12172,9 @@ recordreplay::AutoAssertMaybeEventsDisallowed::~AutoAssertMaybeEventsDisallowed(
 
 // static
 recordreplay::AssertBufferAllocationState* recordreplay::AutoAssertBufferAllocations::GetState() {
-  void* result = base::Thread::GetThreadLocal(gAssertBufferAllocationStateLSKey);
-  if (!result) {
-    return result;
-  }
-  return reinterpret_cast<recordreplay::AssertBufferAllocationState*>(result);
+  return reinterpret_cast<recordreplay::AssertBufferAllocationState*>(
+    base::Thread::GetThreadLocal(gAssertBufferAllocationStateLSKey)
+  );
 }
 
 recordreplay::AutoAssertBufferAllocations::AutoAssertBufferAllocations(const char* issueLabel) {
