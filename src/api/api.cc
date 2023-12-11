@@ -12117,12 +12117,12 @@ extern "C" DLLEXPORT void V8RecordReplayBeginAssertBufferAllocations(const char*
   
   if (!state) {
     state = new recordreplay::AssertBufferAllocationState;
-    state.issueLabel = issueLabel;
+    state->issueLabel = issueLabel;
     base::Thread::SetThreadLocal(gAssertBufferAllocationStateLSKey, 
       reinterpret_cast<void*>(state)
     );
   }
-  ++state.enabled;
+  ++state->enabled;
 }
 
 extern "C" DLLEXPORT void V8RecordReplayEndAssertBufferAllocations() {
@@ -12132,10 +12132,10 @@ extern "C" DLLEXPORT void V8RecordReplayEndAssertBufferAllocations() {
   
   recordreplay::AssertBufferAllocationState* state =
     recordreplay::AutoAssertBufferAllocations::GetState();
-  --state.enabled;
-  if (!state.enabled) {
+  --state->enabled;
+  if (!state->enabled) {
     delete state;
-    base::Thread::DeleteThreadLocal(gAssertBufferAllocationStateLSKey);
+    base::Thread::SetThreadLocal(gAssertBufferAllocationStateLSKey, nullptr);
   }
 }
 
