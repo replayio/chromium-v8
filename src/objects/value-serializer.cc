@@ -360,6 +360,11 @@ void ValueSerializer::WriteRawBytes(const void* source, size_t length) {
 }
 
 Maybe<uint8_t*> ValueSerializer::ReserveRawBytes(size_t bytes) {
+  if (recordreplay::AutoAssertBufferAllocations::GetEnabled()) {
+    recordreplay::Assert("[%s] ValueSerializer::ReserveRawBytes %zu",
+      recordreplay::AutoAssertBufferAllocations::GetIssueLabel(),
+      bytes);
+  }
   size_t old_size = buffer_size_;
   size_t new_size = old_size + bytes;
   if (V8_UNLIKELY(new_size > buffer_capacity_)) {
