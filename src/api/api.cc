@@ -11905,6 +11905,8 @@ static std::atomic<bool> gNeedFinishRecording;
 static std::atomic<void (*)(void*)> gUnblockMainThreadCallback;
 static std::atomic<void*> gUnblockMainThreadCallbackData;
 static int gFinishRecordingOrderedLockId;
+base::Thread::LocalStorageKey gBufferAllocationsEnabledLSKey;
+base::Thread::LocalStorageKey gBufferAllocationsLabelLSKey;
 
 extern "C" DLLEXPORT void V8RecordReplayMaybeTerminate(void (*callback)(void*), void* data) {
   recordreplay::Assert("V8RecordReplayMaybeTerminate");
@@ -11966,6 +11968,8 @@ bool IsMainThread() {
 }
 #endif
 
+// Set this process as recording or replaying.
+// Also serves to initializes Replay state.
 void recordreplay::SetRecordingOrReplaying(void* handle) {
 #define LoadRecordReplaySymbol(Name, Params, ReturnType, ReturnDefault)    \
   RecordReplayLoadSymbol(handle, #Name, g##Name);
@@ -11990,6 +11994,8 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
   gRecordReplaySetCrashReasonCallback(V8RecordReplayCrashReasonCallback);
 
   gFinishRecordingOrderedLockId = (int)CreateOrderedLock("FinishRecording");
+  gBufferAllocationsEnabledLSKey = base::Thread::CreateThreadLocalKey();
+  gBufferAllocationsLabelLSKey = base::Thread::CreateThreadLocalKey();
 
   i::gProgressCounter = gRecordReplayProgressCounter();
 
@@ -12132,6 +12138,54 @@ recordreplay::AutoAssertMaybeEventsDisallowed::~AutoAssertMaybeEventsDisallowed(
   ) {
     recordreplay::Assert("%s", msg_.c_str());
   }
+}
+
+// static
+size_t recordreplay::AutoAssertBufferAllocations::GetEnabled() {
+  return reinterpret_cast<size_t>(
+    base::Thread::GetThreadLocal(gBufferAllocationsEnabledLSKey)
+  );
+}
+
+// static
+const char* recordreplay::AutoAssertBufferAllocations::GetIssueLabel() {
+  return reinterpret_cast<const char*>(
+    base::Thread::GetThreadLocal(gBufferAllocationsLabelLSKey)
+  );
+}
+
+recordreplay::AutoAssertBufferAllocations::AutoAssertBufferAllocations(const char* issueLabel) {
+  if (!IsRecordingOrReplaying() || AreAssertsDisabled()) {
+    return;
+  }
+  size_t enabled = GetEnabled();
+  
+  if (!enabled) {
+    base::Thread::SetThreadLocal(gBufferAllocationsLabelLSKey, 
+      reinterpret_cast<void*>(const_cast<char*>(issueLabel))
+    );
+  }
+  ++enabled;
+  base::Thread::SetThreadLocal(gBufferAllocationsEnabledLSKey, 
+    reinterpret_cast<void*>(enabled)
+  );
+}
+
+recordreplay::AutoAssertBufferAllocations::~AutoAssertBufferAllocations() {
+  if (!IsRecordingOrReplaying() || AreAssertsDisabled()) {
+    return;
+  }
+  
+  size_t enabled = GetEnabled();
+  --enabled;
+  if (!enabled) {
+    const char* issueLabel = GetIssueLabel();
+    base::Thread::SetThreadLocal(gBufferAllocationsLabelLSKey, nullptr);
+    delete[] issueLabel;
+  }
+  base::Thread::SetThreadLocal(gBufferAllocationsEnabledLSKey, 
+    reinterpret_cast<void*>(enabled)
+  );
 }
 
 
