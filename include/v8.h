@@ -170,6 +170,11 @@ struct AutoAssertMaybeEventsDisallowed {
   std::string msg_;
 };
 
+struct AssertBufferAllocationState {
+  size_t enabled = 0;
+  std::string issueLabel = "";
+}
+
 
 // RAII class to enable recording assertions on dynamic-length buffer 
 // allocations. Used to track down the allocation causing mismatched message 
@@ -177,8 +182,7 @@ struct AutoAssertMaybeEventsDisallowed {
 // TODO: Merge this with the similar `AuxtoRecordReplayAssertBufferAllocations`
 // in mojo/public/cpp/bindings/lib/buffer.cc (for main-thread only).
 struct AutoAssertBufferAllocations {
-  static size_t GetEnabled();
-  static const char* GetIssueLabel();
+  static AssertBufferAllocationState* GetState();
 
   AutoAssertBufferAllocations(const char* issueLabel = "");
   ~AutoAssertBufferAllocations();
