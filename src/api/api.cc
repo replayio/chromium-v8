@@ -12128,7 +12128,7 @@ extern "C" DLLEXPORT void V8RecordReplayBeginAssertBufferAllocations(const char*
 }
 
 extern "C" DLLEXPORT void V8RecordReplayEndAssertBufferAllocations() {
-  if (!IsRecordingOrReplaying() || AreAssertsDisabled()) {
+  if (!recordreplay::IsRecordingOrReplaying() || recordreplay::AreAssertsDisabled()) {
     return;
   }
   
