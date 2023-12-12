@@ -11905,6 +11905,7 @@ static std::atomic<bool> gNeedFinishRecording;
 static std::atomic<void (*)(void*)> gUnblockMainThreadCallback;
 static std::atomic<void*> gUnblockMainThreadCallbackData;
 static int gFinishRecordingOrderedLockId;
+base::Thread::LocalStorageKey gAssertBufferAllocationStateLSKey;
 
 extern "C" DLLEXPORT void V8RecordReplayMaybeTerminate(void (*callback)(void*), void* data) {
   recordreplay::Assert("V8RecordReplayMaybeTerminate");
@@ -11966,6 +11967,8 @@ bool IsMainThread() {
 }
 #endif
 
+// Set this process as recording or replaying.
+// Also serves to initializes Replay state.
 void recordreplay::SetRecordingOrReplaying(void* handle) {
 #define LoadRecordReplaySymbol(Name, Params, ReturnType, ReturnDefault)    \
   RecordReplayLoadSymbol(handle, #Name, g##Name);
@@ -11990,6 +11993,7 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
   gRecordReplaySetCrashReasonCallback(V8RecordReplayCrashReasonCallback);
 
   gFinishRecordingOrderedLockId = (int)CreateOrderedLock("FinishRecording");
+  gAssertBufferAllocationStateLSKey = base::Thread::CreateThreadLocalKey();
 
   i::gProgressCounter = gRecordReplayProgressCounter();
 
@@ -12104,6 +12108,38 @@ extern "C" DLLEXPORT void V8RecordReplayExitReplayCode() {
 }
 
 
+extern "C" DLLEXPORT void V8RecordReplayBeginAssertBufferAllocations(const char* issueLabel) {
+  if (!recordreplay::IsRecordingOrReplaying() || recordreplay::AreAssertsDisabled()) {
+    return;
+  }
+  recordreplay::AssertBufferAllocationState* state =
+    recordreplay::AutoAssertBufferAllocations::GetState();
+  
+  if (!state) {
+    state = new recordreplay::AssertBufferAllocationState;
+    state->issueLabel = issueLabel;
+    base::Thread::SetThreadLocal(gAssertBufferAllocationStateLSKey, 
+      reinterpret_cast<void*>(state)
+    );
+  }
+  ++state->enabled;
+}
+
+extern "C" DLLEXPORT void V8RecordReplayEndAssertBufferAllocations() {
+  if (!recordreplay::IsRecordingOrReplaying() || recordreplay::AreAssertsDisabled()) {
+    return;
+  }
+  
+  recordreplay::AssertBufferAllocationState* state =
+    recordreplay::AutoAssertBufferAllocations::GetState();
+  --state->enabled;
+  if (!state->enabled) {
+    delete state;
+    base::Thread::SetThreadLocal(gAssertBufferAllocationStateLSKey, nullptr);
+  }
+}
+
+
 recordreplay::AutoAssertMaybeEventsDisallowed::AutoAssertMaybeEventsDisallowed(
     const char* format, ...) {
   base::EmbeddedVector<char, 1024> buf;
@@ -12132,6 +12168,21 @@ recordreplay::AutoAssertMaybeEventsDisallowed::~AutoAssertMaybeEventsDisallowed(
   ) {
     recordreplay::Assert("%s", msg_.c_str());
   }
+}
+
+// static
+recordreplay::AssertBufferAllocationState* recordreplay::AutoAssertBufferAllocations::GetState() {
+  return reinterpret_cast<recordreplay::AssertBufferAllocationState*>(
+    base::Thread::GetThreadLocal(gAssertBufferAllocationStateLSKey)
+  );
+}
+
+recordreplay::AutoAssertBufferAllocations::AutoAssertBufferAllocations(const char* issueLabel) {
+  V8RecordReplayBeginAssertBufferAllocations(issueLabel);
+}
+
+recordreplay::AutoAssertBufferAllocations::~AutoAssertBufferAllocations() {
+  V8RecordReplayEndAssertBufferAllocations();
 }
 
 

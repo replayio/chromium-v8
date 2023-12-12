@@ -144,6 +144,9 @@ static bool IsInReplayCode(const char* why = nullptr);
 static bool HasDivergedFromRecording();
 static bool AllowSideEffects();
 
+static void BeginAssertBufferAllocations(const char* issueLabel = "");
+static void EndAssertBufferAllocations();
+
 struct AutoPassThroughEvents {
   AutoPassThroughEvents() { BeginPassThroughEvents(); }
   ~AutoPassThroughEvents() { EndPassThroughEvents(); }
@@ -165,6 +168,24 @@ struct AutoAssertMaybeEventsDisallowed {
   AutoAssertMaybeEventsDisallowed(const char* format, ...);
   ~AutoAssertMaybeEventsDisallowed();
   std::string msg_;
+};
+
+struct AssertBufferAllocationState {
+  size_t enabled = 0;
+  std::string issueLabel = "";
+};
+
+
+// RAII class to enable recording assertions on dynamic-length buffer 
+// allocations. Used to track down the allocation causing mismatched message 
+// sizes when replaying.
+// TODO: Merge this with the similar `AuxtoRecordReplayAssertBufferAllocations`
+// in mojo/public/cpp/bindings/lib/buffer.cc (for main-thread only).
+struct AutoAssertBufferAllocations {
+  static AssertBufferAllocationState* GetState();
+
+  AutoAssertBufferAllocations(const char* issueLabel = "");
+  ~AutoAssertBufferAllocations();
 };
 
 static void RegisterPointer(const char* name, const void* ptr);
