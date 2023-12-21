@@ -11507,7 +11507,8 @@ static RecordReplayBrowserEventCallback gBrowserEventCallback = nullptr;
 
 // Browser events added before the callback was registered, which happens when
 // the first checkpoint is reached.
-static std::vector<std::pair<std::string, std::string>> gPendingBrowserEvents;
+typedef std::vector<std::pair<std::string, std::string>> BrowserEventsVector;
+static BrowserEventsVector* gPendingBrowserEvents;
 
 extern "C" DLLEXPORT void V8RecordReplayBrowserEvent(const char* name, const char* payload) {
   CHECK(recordreplay::IsRecordingOrReplaying());
@@ -11515,7 +11516,10 @@ extern "C" DLLEXPORT void V8RecordReplayBrowserEvent(const char* name, const cha
   if (gBrowserEventCallback) {
     gBrowserEventCallback(name, payload);
   } else {
-    gPendingBrowserEvents.emplace_back(name, payload);
+    if (!gPendingBrowserEvents) {
+      gPendingBrowserEvents = new BrowserEventsVector();
+    }
+    gPendingBrowserEvents->emplace_back(name, payload);
   }
 }
 
@@ -11526,10 +11530,13 @@ extern "C" void V8RecordReplayRegisterBrowserEventCallback(
   CHECK(!gBrowserEventCallback);
   gBrowserEventCallback = callback;
 
-  for (const auto& item : gPendingBrowserEvents) {
-    gBrowserEventCallback(item.first.c_str(), item.second.c_str());
+  if (gPendingBrowserEvents) {
+    for (const auto& item : *gPendingBrowserEvents) {
+      gBrowserEventCallback(item.first.c_str(), item.second.c_str());
+    }
+    delete gPendingBrowserEvents;
+    gPendingBrowserEvents = nullptr;
   }
-  gPendingBrowserEvents.clear();
 }
 
 size_t recordreplay::CreateOrderedLock(const char* name) {
