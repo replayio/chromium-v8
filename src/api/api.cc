@@ -11505,18 +11505,38 @@ extern "C" DLLEXPORT void V8RecordReplayNewCheckpoint() {
 typedef void (*RecordReplayBrowserEventCallback)(const char* name, const char* payload);
 static RecordReplayBrowserEventCallback gBrowserEventCallback = nullptr;
 
+// Browser events added before the callback was registered, which happens when
+// the first checkpoint is reached.
+typedef std::vector<std::pair<std::string, std::string>> BrowserEventsVector;
+static BrowserEventsVector* gPendingBrowserEvents;
+
 extern "C" DLLEXPORT void V8RecordReplayBrowserEvent(const char* name, const char* payload) {
   CHECK(recordreplay::IsRecordingOrReplaying());
+  CHECK(IsMainThread());
   if (gBrowserEventCallback) {
     gBrowserEventCallback(name, payload);
+  } else {
+    if (!gPendingBrowserEvents) {
+      gPendingBrowserEvents = new BrowserEventsVector();
+    }
+    gPendingBrowserEvents->emplace_back(name, payload);
   }
 }
 
 extern "C" void V8RecordReplayRegisterBrowserEventCallback(
     RecordReplayBrowserEventCallback callback) {
   CHECK(recordreplay::IsRecordingOrReplaying());
+  CHECK(IsMainThread());
   CHECK(!gBrowserEventCallback);
   gBrowserEventCallback = callback;
+
+  if (gPendingBrowserEvents) {
+    for (const auto& item : *gPendingBrowserEvents) {
+      gBrowserEventCallback(item.first.c_str(), item.second.c_str());
+    }
+    delete gPendingBrowserEvents;
+    gPendingBrowserEvents = nullptr;
+  }
 }
 
 size_t recordreplay::CreateOrderedLock(const char* name) {
