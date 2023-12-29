@@ -12056,12 +12056,13 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
   }
 
   // The optimizing JIT is used by default but can be disabled via a feature.
-  if (!V8RecordReplayFeatureEnabled("use-optimizing-jit", nullptr)) {
+  if (!V8RecordReplayFeatureEnabled("v8-optimizations-jit", nullptr)) {
     i::v8_flags.turbofan = false;
   }
 
   // Disable some GC settings while replaying for causing mysterious crashes.
-  if (IsReplaying()) {
+  // Can be toggled via feature flag.
+  if (IsReplaying() || !V8RecordReplayFeatureEnabled("v8-optimizations-gc", nullptr)) {
     i::FLAG_concurrent_marking = false;
     i::FLAG_concurrent_sweeping = false;
     i::FLAG_incremental_marking_task = false;
@@ -12074,7 +12075,8 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
   }
 
   // For now the compilation cache is only used when recording.
-  if (IsReplaying()) {
+  // Can be toggled via feature flag.
+  if (IsReplaying() || !V8RecordReplayFeatureEnabled("v8-optimizations-compilation-cache", nullptr)) {
     i::FLAG_compilation_cache = false;
   }
 
