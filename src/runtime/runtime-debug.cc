@@ -995,8 +995,7 @@ static inline std::string GetScriptName(Handle<Script> script) {
     : "(anonymous script)";
 }
 
-std::string GetScriptLocationString(int script_id, int start_position) {
-  Isolate* isolate = Isolate::Current();
+std::string GetScriptLocationString(Isolate* isolate, int script_id, int start_position) {
   Handle<Script> script = GetScript(isolate, script_id);
   std::string script_name = GetScriptName(script);
 
@@ -1008,11 +1007,17 @@ std::string GetScriptLocationString(int script_id, int start_position) {
   return os.str();
 }
 
+std::string GetScriptLocationString(Isolate* isolate, SharedFunctionInfo&& sharedFun) {
+  Handle<SharedFunctionInfo> shared(sharedFun, isolate);
+  Handle<Script> script(Script::cast(shared->script()), isolate);
+  return GetScriptLocationString(isolate, script->id(), shared->StartPosition());
+}
+
 static std::string GetScriptProgressEntryString(uint64_t v) {
   int script_id = static_cast<int>(v >> 32);
   int start_position = static_cast<int>(v);
 
-  return GetScriptLocationString(script_id, start_position);
+  return GetScriptLocationString(Isolate::Current(), script_id, start_position);
 }
 
 // Produce a string explaining a JS mismatch during an Assert call when a C++
@@ -1138,13 +1143,13 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
         gHasPrintedStack = true;
         HandleScope scope(isolate);
         std::stringstream stack;
-        isolate->PrintCurrentStackTrace(stack);
+        // isolate->PrintCurrentStackTrace(stack);
 
         recordreplay::Warning(
             "[RUN-1919] JS ExecutionProgress in non-deterministic user JS PC=%zu "
             "scriptId=%d @%s stack=%s",
             *gProgressCounter, script->id(),
-            GetScriptLocationString(script->id(), shared->StartPosition())
+            GetScriptLocationString(isolate, script->id(), shared->StartPosition())
                 .c_str(),
             stack.str().c_str());
       }
@@ -1289,7 +1294,7 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertValue) {
     if (!gHasPrintedStack) {  // Prevent flood.
       gHasPrintedStack = true;
       std::stringstream stack;
-      isolate->PrintCurrentStackTrace(stack);
+      // isolate->PrintCurrentStackTrace(stack);
 
       recordreplay::Warning(
           "JS-Stack %s%s PC=%zu scriptId=%d @%s stack=%s", site.desc_.c_str(),
