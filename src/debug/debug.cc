@@ -4198,7 +4198,6 @@ namespace i = internal;
 void FunctionCallbackRecordReplaySetCommandCallback(const FunctionCallbackInfo<Value>& callArgs) {
   CHECK(recordreplay::IsRecordingOrReplaying());
   CHECK(IsMainThread());
-  CHECK(!i::gCommandCallback);
 
   Isolate* v8isolate = callArgs.GetIsolate();
   i::gCommandCallback = new Eternal<Value>(v8isolate, callArgs[0]);
@@ -4207,7 +4206,6 @@ void FunctionCallbackRecordReplaySetCommandCallback(const FunctionCallbackInfo<V
 void FunctionCallbackRecordReplaySetClearPauseDataCallback(const FunctionCallbackInfo<Value>& callArgs) {
   CHECK(recordreplay::IsRecordingOrReplaying());
   CHECK(IsMainThread());
-  CHECK(!i::gClearPauseDataCallback);
 
   Isolate* v8isolate = callArgs.GetIsolate();
   i::gClearPauseDataCallback = new Eternal<Value>(v8isolate, callArgs[0]);
