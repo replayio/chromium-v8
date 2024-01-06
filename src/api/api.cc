@@ -11091,6 +11091,10 @@ extern "C" void V8RecordReplayGetDefaultContext(v8::Isolate* isolate, v8::Local<
   *cx = gDefaultContext->Get(isolate);
 }
 
+extern "C" int V8RecordReplayGetContextId(v8::Local<v8::Context> cx) {
+    return v8::debug::GetContextId(cx);
+}
+
 bool RecordReplayHasDefaultContext() {
   return !!gDefaultContext;
 }
