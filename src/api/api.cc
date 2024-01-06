@@ -11081,7 +11081,7 @@ void RecordReplayOnMainThreadIsolateCreated(Isolate* isolate) {
 static Eternal<v8::Context>* gDefaultContext;
 
 extern "C" void V8RecordReplaySetDefaultContext(v8::Isolate* isolate, v8::Local<v8::Context> cx) {
-  if (IsMainThread() && !gDefaultContext) {
+  if (IsMainThread()) {
     gDefaultContext = new Eternal<v8::Context>(isolate, cx);
   }
 }
