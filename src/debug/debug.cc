@@ -3869,22 +3869,23 @@ char* CommandCallback(const char* command, const char* params) {
 
   if (recordreplay::HasDivergedFromRecording()) {
     v8_inspector::V8Inspector* inspectorRaw = v8::debug::GetInspector((v8::Isolate*)isolate);
+    int currentGroupId;
     if (!inspectorRaw) {
-      recordreplay::Warning("[CommandCallback] NO_INSPECTOR %s", command);
+      currentGroupId = -1;
     } else {
       v8_inspector::V8InspectorImpl* inspector =
           static_cast<v8_inspector::V8InspectorImpl*>(inspectorRaw);
       int contextId = v8_inspector::InspectedContext::contextId(
         ((v8::Isolate*)isolate)->GetCurrentContext()
       );
-      int currentGroupId = inspector->contextGroupId(contextId);
-      if (!gPauseContextGroupId) {
-        gPauseContextGroupId = currentGroupId;
-      } else {
-        // [RUN-3123] Don't allow querying different context groups on the
-        // same pause.
-        CHECK(gPauseContextGroupId == currentGroupId);
-      }
+      currentGroupId = inspector->contextGroupId(contextId);
+    }
+    if (!gPauseContextGroupId) {
+      gPauseContextGroupId = currentGroupId;
+    } else {
+      // [RUN-3123] Don't allow querying different context groups on the
+      // same pause.
+      CHECK(gPauseContextGroupId == currentGroupId);
     }
   }
 
