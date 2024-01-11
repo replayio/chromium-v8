@@ -3867,6 +3867,8 @@ char* CommandCallback(const char* command, const char* params) {
   base::Optional<SaveAndSwitchContext> ssc;
   EnsureIsolateContext(isolate, ssc);
 
+  HandleScope scope(isolate);
+
   if (recordreplay::HasDivergedFromRecording()) {
     v8_inspector::V8Inspector* inspectorRaw = v8::debug::GetInspector((v8::Isolate*)isolate);
     int currentGroupId;
@@ -3889,7 +3891,6 @@ char* CommandCallback(const char* command, const char* params) {
     }
   }
 
-  HandleScope scope(isolate);
 
   Handle<Object> undefined = isolate->factory()->undefined_value();
   Handle<String> paramsStr = CStringToHandle(isolate, params);
