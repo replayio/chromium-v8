@@ -3843,6 +3843,7 @@ static Eternal<Value>* gCommandCallback;
 extern "C" void V8RecordReplayGetDefaultContext(v8::Isolate* isolate, v8::Local<v8::Context>* cx);
 extern uint64_t* gProgressCounter;
 extern int gRecordReplayCheckProgress;
+static int gPauseContextGroupId = 0;
 
 // Make sure that the isolate has a context by switching to the default
 // context if necessary.
@@ -3855,6 +3856,7 @@ static void EnsureIsolateContext(Isolate* isolate, base::Optional<SaveAndSwitchC
   }
 }
 
+
 char* CommandCallback(const char* command, const char* params) {
   CHECK(IsMainThread());
   AutoMarkReplayCode amrc;
@@ -3866,6 +3868,29 @@ char* CommandCallback(const char* command, const char* params) {
   EnsureIsolateContext(isolate, ssc);
 
   HandleScope scope(isolate);
+
+  if (recordreplay::HasDivergedFromRecording()) {
+    v8_inspector::V8Inspector* inspectorRaw = v8::debug::GetInspector((v8::Isolate*)isolate);
+    int currentGroupId;
+    if (!inspectorRaw) {
+      currentGroupId = -1;
+    } else {
+      v8_inspector::V8InspectorImpl* inspector =
+          static_cast<v8_inspector::V8InspectorImpl*>(inspectorRaw);
+      int contextId = v8_inspector::InspectedContext::contextId(
+        ((v8::Isolate*)isolate)->GetCurrentContext()
+      );
+      currentGroupId = inspector->contextGroupId(contextId);
+    }
+    if (!gPauseContextGroupId) {
+      gPauseContextGroupId = currentGroupId;
+    } else {
+      // [RUN-3123] Don't allow querying different context groups on the
+      // same pause.
+      CHECK(gPauseContextGroupId == currentGroupId);
+    }
+  }
+
 
   Handle<Object> undefined = isolate->factory()->undefined_value();
   Handle<String> paramsStr = CStringToHandle(isolate, params);
