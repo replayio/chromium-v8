@@ -101,7 +101,7 @@ static bool IsARMRecording();
 static bool FeatureEnabled(const char* feature, const char* subfeature = nullptr);
 static bool HasDisabledFeatures();
 
-static char* ReadSystemFileContents(bool relative, const char* path, size_t* size);
+static char* ReadRuntimeFileContents(const char* path, size_t* size);
 static void Print(const char* format, ...);
 static void Diagnostic(const char* format, ...);
 static void CommandDiagnostic(const char* format, ...);
