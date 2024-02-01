@@ -10740,7 +10740,7 @@ typedef char* (CommandCallbackRaw)(const char* params);
   Macro(RecordReplayJSONToString, (void*), char*, nullptr)                    \
   Macro(RecordReplayProgressCounter, (), uint64_t*, nullptr)                  \
   Macro(RecordReplayGetStack, (char* aStack, size_t aSize), bool, false)      \
-  Macro(RecordReplayReadReplayFileContents,                                   \
+  Macro(RecordReplayReadAssetFileContents,                                   \
         (const char* aPath, size_t *aLength),                                 \
         char*, nullptr)
 
@@ -11152,16 +11152,16 @@ extern "C" DLLEXPORT bool V8IsRecordingOrReplaying(const char* feature, const ch
   return recordreplay::IsRecordingOrReplaying(feature, subfeature);
 }
 
-char* recordreplay::ReadReplayFileContents(const char* aPath, size_t* aLength) {
+char* recordreplay::ReadAssetFileContents(const char* aPath, size_t* aLength) {
   if (IsReplaying()) {
-    return gRecordReplayReadReplayFileContents(aPath, aLength);
+    return gRecordReplayReadAssetFileContents(aPath, aLength);
   } else {
     return nullptr;
   }
 }
 
-extern "C" DLLEXPORT char* V8RecordReplayReadReplayFileContents(const char* aPath, size_t* aLength) {
-  return recordreplay::ReadReplayFileContents(aPath, aLength);
+extern "C" DLLEXPORT char* V8RecordReplayReadAssetFileContents(const char* aPath, size_t* aLength) {
+  return recordreplay::ReadAssetFileContents(aPath, aLength);
 }
 
 void recordreplay::Print(const char* format, ...) {
