@@ -10740,7 +10740,7 @@ typedef char* (CommandCallbackRaw)(const char* params);
   Macro(RecordReplayJSONToString, (void*), char*, nullptr)                    \
   Macro(RecordReplayProgressCounter, (), uint64_t*, nullptr)                  \
   Macro(RecordReplayGetStack, (char* aStack, size_t aSize), bool, false)      \
-  Macro(RecordReplayReadReplayFileContents,                                  \
+  Macro(RecordReplayReadReplayFileContents,                                   \
         (const char* aPath, size_t *aLength),                                 \
         char*, nullptr)
 
