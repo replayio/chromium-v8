@@ -215,6 +215,13 @@ std::unique_ptr<StringBuffer> V8InspectorSessionImpl::serializeForFrontend(
 
 void V8InspectorSessionImpl::SendProtocolResponse(
     int callId, std::unique_ptr<protocol::Serializable> message) {
+  if (recordreplay::IsRecordingOrReplaying()) {
+    std::vector<uint8_t> cbor = message->Serialize();
+    std::string json;
+    Status status = ConvertCBORToJSON(SpanFrom(cbor), &json);
+    DCHECK(status.ok());
+    recordreplay::Print("V8InspectorSessionImpl::SendProtocolResponse %d %s", callId, json.c_str());
+  }
   m_channel->sendResponse(callId, serializeForFrontend(std::move(message)));
 }
 
@@ -422,6 +429,12 @@ void V8InspectorSessionImpl::dispatchProtocolMessage(StringView message) {
       return;
     }
     cbor = SpanFrom(converted_cbor);
+  }
+  if (recordreplay::IsRecordingOrReplaying()) {
+    std::string json;
+    Status status = ConvertCBORToJSON(cbor, &json);
+    DCHECK(status.ok());
+    recordreplay::Print("V8InspectorSessionImpl::dispatchProtocolMessage %s", json.c_str());
   }
   v8_crdtp::Dispatchable dispatchable(cbor);
   if (!dispatchable.ok()) {
