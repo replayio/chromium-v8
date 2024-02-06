@@ -127,7 +127,7 @@ class V8InspectorSessionImpl : public V8InspectorSession,
   void FlushProtocolNotifications() override;
 
   void RecordReplayMessageAnnotation(const char* kind,
-                                     const std::function<span<uint8_t>()>& get_cbor);
+                                     const std::function<v8_crdtp::span<uint8_t>()>& get_cbor);
 
   std::unique_ptr<StringBuffer> serializeForFrontend(
       std::unique_ptr<protocol::Serializable> message);
