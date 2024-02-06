@@ -220,6 +220,7 @@ extern "C" void V8RecordReplayOnAnnotation(const char* kind, const char* content
 static void RecordReplayMessageAnnotation(const char* kind,
                                           const std::function<span<uint8_t>()>& get_cbor) {
   if (!v8::recordreplay::IsRecordingOrReplaying() ||
+      !v8::IsMainThread() ||
       v8::recordreplay::IsInReplayCode("RecordReplayMessageAnnotation")) {
     return;
   }
