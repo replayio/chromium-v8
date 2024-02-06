@@ -238,7 +238,7 @@ void V8InspectorSessionImpl::RecordReplayMessageAnnotation(const char* kind,
     USE(status);
 
     // Tack additional information about this inspector onto the annotation JSON.
-    if (json.length() && json[json.length - 1] == '}') {
+    if (json.length() && json[json.length() - 1] == '}') {
       json.resize(json.length() - 1);
 
       std::ostringstream oss;
