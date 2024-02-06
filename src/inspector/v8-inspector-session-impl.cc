@@ -217,10 +217,11 @@ extern "C" void V8RecordReplayOnAnnotation(const char* kind, const char* content
 
 // Add an annotation to the recording for a protocol message event.
 // The get_cbor callback will only be invoked when replaying.
-static void RecordReplayMessageAnnotation(const char* kind,
-                                          const std::function<span<uint8_t>()>& get_cbor) {
+void V8InspectorSessionImpl::RecordReplayMessageAnnotation(const char* kind,
+                                                           const std::function<span<uint8_t>()>& get_cbor) {
   if (!v8::recordreplay::IsRecordingOrReplaying() ||
       !v8::IsMainThread() ||
+      v8::recordreplay::AreEventsDisallowed("RecordReplayMessageAnnotation") ||
       v8::recordreplay::IsInReplayCode("RecordReplayMessageAnnotation")) {
     return;
   }
@@ -235,6 +236,18 @@ static void RecordReplayMessageAnnotation(const char* kind,
     Status status = ConvertCBORToJSON(cbor, &json);
     DCHECK(status.ok());
     USE(status);
+
+    // Tack additional information about this inspector onto the annotation JSON.
+    if (json.length() && json[json.length - 1] == '}') {
+      json.resize(json.length() - 1);
+
+      std::ostringstream oss;
+      oss << ",\"contextGroupId\":" << m_contextGroupId;
+      oss << ",\"sessionId\":" << m_sessionId;
+      oss << "}";
+
+      json += oss.str();
+    }
   }
   V8RecordReplayOnAnnotation(kind, json.c_str());
 }
