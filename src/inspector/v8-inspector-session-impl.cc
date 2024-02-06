@@ -213,21 +213,49 @@ std::unique_ptr<StringBuffer> V8InspectorSessionImpl::serializeForFrontend(
   return StringBufferFrom(std::move(string16));
 }
 
-void V8InspectorSessionImpl::SendProtocolResponse(
-    int callId, std::unique_ptr<protocol::Serializable> message) {
-  if (v8::recordreplay::IsRecordingOrReplaying()) {
-    std::vector<uint8_t> cbor = message->Serialize();
-    std::string json;
-    Status status = ConvertCBORToJSON(SpanFrom(cbor), &json);
+extern "C" void V8RecordReplayOnAnnotation(const char* kind, const char* contents);
+
+// Add an annotation to the recording for a protocol message event.
+// The get_cbor callback will only be invoked when replaying.
+static void RecordReplayMessageAnnotation(const char* kind,
+                                          const std::function<span<uint8_t>>& get_cbor) {
+  if (!v8::recordreplay::IsRecordingOrReplaying() ||
+      v8::recordreplay::IsInReplayCode("RecordReplayMessageAnnotation")) {
+    return;
+  }
+
+  // OnAnnotation calls must happen at the same point when recording vs. replaying,
+  // but the contents do not need to be consistent. Avoid serialization and
+  // conversion overhead when recording.
+  std::string json;
+  if (v8::recordreplay::IsReplaying()) {
+    v8::recordreplay::AutoDisallowEvents disallow("RecordReplayMessageAnnotation");
+    span<uint8_t> cbor = get_cbor();
+    Status status = ConvertCBORToJSON(cbor, &json);
     DCHECK(status.ok());
     USE(status);
-    v8::recordreplay::Print("V8InspectorSessionImpl::SendProtocolResponse %d %s", callId, json.c_str());
   }
+  V8RecordReplayOnAnnotation(kind, json.c_str());
+}
+
+void V8InspectorSessionImpl::SendProtocolResponse(
+    int callId, std::unique_ptr<protocol::Serializable> message) {
+  std::vector<uint8_t> cbor;
+  RecordReplayMessageAnnotation("inspector-protocol-response",
+                                [&]() {
+                                  cbor = message->Serialize();
+                                  return SpanFrom(cbor);
+                                });
   m_channel->sendResponse(callId, serializeForFrontend(std::move(message)));
 }
 
 void V8InspectorSessionImpl::SendProtocolNotification(
     std::unique_ptr<protocol::Serializable> message) {
+  RecordReplayMessageAnnotation("inspector-protocol-notification",
+                                [&]() {
+                                  cbor = message->Serialize();
+                                  return SpanFrom(cbor);
+                                });
   m_channel->sendNotification(serializeForFrontend(std::move(message)));
 }
 
@@ -431,13 +459,8 @@ void V8InspectorSessionImpl::dispatchProtocolMessage(StringView message) {
     }
     cbor = SpanFrom(converted_cbor);
   }
-  if (v8::recordreplay::IsRecordingOrReplaying()) {
-    std::string json;
-    Status status = ConvertCBORToJSON(cbor, &json);
-    DCHECK(status.ok());
-    USE(status);
-    v8::recordreplay::Print("V8InspectorSessionImpl::dispatchProtocolMessage %s", json.c_str());
-  }
+  RecordReplayMessageAnnotation("inspector-protocol-dispatch",
+                                [&]() { return cbor; });
   v8_crdtp::Dispatchable dispatchable(cbor);
   if (!dispatchable.ok()) {
     if (dispatchable.HasCallId()) {
