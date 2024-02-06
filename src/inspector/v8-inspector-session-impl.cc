@@ -220,6 +220,7 @@ void V8InspectorSessionImpl::SendProtocolResponse(
     std::string json;
     Status status = ConvertCBORToJSON(SpanFrom(cbor), &json);
     DCHECK(status.ok());
+    USE(status);
     v8::recordreplay::Print("V8InspectorSessionImpl::SendProtocolResponse %d %s", callId, json.c_str());
   }
   m_channel->sendResponse(callId, serializeForFrontend(std::move(message)));
@@ -434,6 +435,7 @@ void V8InspectorSessionImpl::dispatchProtocolMessage(StringView message) {
     std::string json;
     Status status = ConvertCBORToJSON(cbor, &json);
     DCHECK(status.ok());
+    USE(status);
     v8::recordreplay::Print("V8InspectorSessionImpl::dispatchProtocolMessage %s", json.c_str());
   }
   v8_crdtp::Dispatchable dispatchable(cbor);
