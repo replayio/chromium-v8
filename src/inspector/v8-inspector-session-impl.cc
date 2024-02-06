@@ -218,7 +218,7 @@ extern "C" void V8RecordReplayOnAnnotation(const char* kind, const char* content
 // Add an annotation to the recording for a protocol message event.
 // The get_cbor callback will only be invoked when replaying.
 static void RecordReplayMessageAnnotation(const char* kind,
-                                          const std::function<span<uint8_t>>& get_cbor) {
+                                          const std::function<span<uint8_t>()>& get_cbor) {
   if (!v8::recordreplay::IsRecordingOrReplaying() ||
       v8::recordreplay::IsInReplayCode("RecordReplayMessageAnnotation")) {
     return;
