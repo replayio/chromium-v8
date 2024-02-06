@@ -243,7 +243,7 @@ void V8InspectorSessionImpl::SendProtocolResponse(
   std::vector<uint8_t> cbor;
   RecordReplayMessageAnnotation("inspector-protocol-response",
                                 [&]() {
-                                  cbor = std::move(message->Serialize());
+                                  cbor = message->Serialize();
                                   return SpanFrom(cbor);
                                 });
   m_channel->sendResponse(callId, serializeForFrontend(std::move(message)));
@@ -254,7 +254,7 @@ void V8InspectorSessionImpl::SendProtocolNotification(
   std::vector<uint8_t> cbor;
   RecordReplayMessageAnnotation("inspector-protocol-notification",
                                 [&]() {
-                                  cbor = std::move(message->Serialize());
+                                  cbor = message->Serialize();
                                   return SpanFrom(cbor);
                                 });
   m_channel->sendNotification(serializeForFrontend(std::move(message)));
