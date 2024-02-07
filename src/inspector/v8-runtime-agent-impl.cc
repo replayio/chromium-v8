@@ -967,6 +967,11 @@ void V8RuntimeAgentImpl::reset() {
 
 void V8RuntimeAgentImpl::reportExecutionContextCreated(
     InspectedContext* context) {
+  // Don't interact with the recording if we are replaying only.
+  v8::base::Optional<v8::recordreplay::AutoDisallowEvents> disallow;
+  if (m_replayOnly)
+    disallow.emplace("V8RuntimeAgentImpl::reportExecutionContextCreated");
+
   if (!m_enabled) return;
   context->setReported(m_session->sessionId(), true);
   std::unique_ptr<protocol::Runtime::ExecutionContextDescription> description =
@@ -989,6 +994,11 @@ void V8RuntimeAgentImpl::reportExecutionContextCreated(
 
 void V8RuntimeAgentImpl::reportExecutionContextDestroyed(
     InspectedContext* context) {
+  // Don't interact with the recording if we are replaying only.
+  v8::base::Optional<v8::recordreplay::AutoDisallowEvents> disallow;
+  if (m_replayOnly)
+    disallow.emplace("V8RuntimeAgentImpl::reportExecutionContextDestroyed");
+
   if (m_enabled && context->isReported(m_session->sessionId())) {
     context->setReported(m_session->sessionId(), false);
     m_frontend.executionContextDestroyed(context->contextId());
