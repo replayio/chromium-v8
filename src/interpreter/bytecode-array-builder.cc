@@ -24,6 +24,7 @@ extern int RegisterInstrumentationSite(const char* kind, int source_position,
                                        int bytecode_offset);
 extern bool RecordReplayHasDefaultContext();
 extern bool gRecordReplayAssertValues;
+extern bool gRecordReplayAssertTrackedObjects;
 
 extern size_t NumRunningBackgroundCompileTasks();
 
@@ -1425,7 +1426,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayInstrumentationGenerator
     const char* kind, Register generator_object) {
   // Instrumentation opcodes aren't needed when recording, except when we are asserting
   // encountered values and need consistent IDs for these objects when recording.
-  if (emit_record_replay_opcodes_ && (recordreplay::IsReplaying() || gRecordReplayAssertValues)) {
+  if (emit_record_replay_opcodes_ && (recordreplay::IsReplaying() || gRecordReplayAssertTrackedObjects)) {
     int index =
         RecordReplayRegisterInstrumentationSite(kind, kNoSourcePosition);
     if (index >= 0) {
