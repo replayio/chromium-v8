@@ -981,11 +981,11 @@ static std::vector<uint64_t>* gProgressData;
 // Buffer holding data most recently reported to the recorder.
 static std::vector<uint64_t>* gReportedProgressData;
 
-// static inline uint64_t BuildScriptProgressEntry(Handle<JSFunction> fun) {
-//   int script_id = Script::cast(fun->shared().script()).id();
-//   int start_position = fun->shared().StartPosition();
-//   return (static_cast<uint64_t>(script_id) << 32) | static_cast<uint64_t>(start_position);
-// }
+static inline uint64_t BuildScriptProgressEntry(Handle<JSFunction> fun) {
+  int script_id = Script::cast(fun->shared().script()).id();
+  int start_position = fun->shared().StartPosition();
+  return (static_cast<uint64_t>(script_id) << 32) | static_cast<uint64_t>(start_position);
+}
 
 extern Handle<Script> GetScript(Isolate* isolate, int script_id);
 
@@ -1034,8 +1034,8 @@ static char* GetProgressMismatchMessage(size_t replayedIndex, uint64_t recordedE
      << "\", \"replayed\": \"" << replayed_text
      << "\", \"pc\": " << (*gProgressCounter - replayedIndex)
      << ", \"stack\": \"";
-  // Isolate* isolate = Isolate::Current();
-  // isolate->PrintCurrentStackTrace(os);
+  Isolate* isolate = Isolate::Current();
+  isolate->PrintCurrentStackTrace(os);
   os << "\" }";
   
   return strdup(os.str().c_str());
@@ -1115,14 +1115,16 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
   if (gRecordReplayAssertProgress) {
     Handle<JSFunction> function = args.at<JSFunction>(0);
 
-    // if (!gProgressData) {
-    //   gProgressData = new std::vector<uint64_t>();
-    // }
-    // gProgressData->push_back(BuildScriptProgressEntry(function));
+    if (!gProgressData) {
+      gProgressData = new std::vector<uint64_t>();
+    }
+    gProgressData->push_back(BuildScriptProgressEntry(function));
+
+    // TODO: Test the aggressive vs. not-so-aggressive version in comparison to object asserts
     int script_id = Script::cast(function->shared().script()).id();
     int start_position = function->shared().StartPosition();
     recordreplay::Assert(
-      "DDBG Runtime_RecordReplayAssertExecutionProgress PC=%llu scriptId=%d %s",
+      "Runtime_RecordReplayAssertExecutionProgress PC=%llu scriptId=%d %s",
       *gProgressCounter,
       script_id,
       GetScriptLocationString(script_id, start_position).c_str()

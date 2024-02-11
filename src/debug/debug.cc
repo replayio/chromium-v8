@@ -4067,15 +4067,7 @@ int RecordReplayObjectId(v8::Isolate* v8_isolate, v8::Local<v8::Context> cx,
   if (gRecordReplayAssertTrackedObjects && should_assert && (
       !recordreplay::IsInReplayCode("RecordReplayObjectId")
   )) {
-    // HandleScope scope(isolate);
-    // std::stringstream stack;
-    // isolate->PrintCurrentStackTrace(stack);
-    recordreplay::Assert(
-      "JS NewObjectId %d %llu",
-      id,
-      *gProgressCounter
-      // stack.str().c_str()
-    );
+    recordreplay::Assert("JS NewObjectId %d", id);
   }
 
   Local<Value> id_value = v8::Integer::New(v8_isolate, id);
@@ -4191,7 +4183,7 @@ std::string RecordReplayBasicValueContents(Handle<Object> value) {
     v8::Isolate* isolate = v8::Isolate::GetCurrent();
     v8::Local<v8::Context> cx = isolate->GetCurrentContext();
     int object_id = RecordReplayObjectId(isolate, cx, v8::Utils::ToLocal(value),
-                                         /* allow_create */ true, false);
+                                         /* allow_create */ true);
 
     InstanceType type = JSObject::cast(*value).map().instance_type();
     const char* typeStr;
