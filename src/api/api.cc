@@ -12039,23 +12039,23 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
   }
 
   // Disable wasm background compilation.
-  if (V8RecordReplayFeatureEnabled("disable-wasm-compilation-tasks", nullptr)) {
+  if (V8RecordReplayFeatureEnabled("disable-v8-flags-wasm-compilation-tasks", nullptr)) {
     i::FLAG_wasm_num_compilation_tasks = 0;
     i::FLAG_wasm_async_compilation = false;
   }
 
   // The baseline JIT's handling of some record/replay opcodes is buggy.
-  if (V8RecordReplayFeatureEnabled("disable-baseline-jit", nullptr)) {
+  if (V8RecordReplayFeatureEnabled("disable-v8-flags-baseline-jit", nullptr)) {
     i::v8_flags.sparkplug = false;
   }
 
   // The optimizing JIT is used by default but can be disabled via a feature.
-  if (!V8RecordReplayFeatureEnabled("use-optimizing-jit", nullptr)) {
+  if (!V8RecordReplayFeatureEnabled("v8-flags-optimizing-jit", nullptr)) {
     i::v8_flags.turbofan = false;
   }
 
   // Disable some GC settings while replaying for causing mysterious crashes.
-  if (IsReplaying()) {
+  if (recordreplay::IsReplaying() || !V8RecordReplayFeatureEnabled("v8-flags-gc", nullptr)) {
     i::FLAG_concurrent_marking = false;
     i::FLAG_concurrent_sweeping = false;
     i::FLAG_incremental_marking_task = false;
@@ -12068,7 +12068,7 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
   }
 
   // For now the compilation cache is only used when recording.
-  if (IsReplaying()) {
+  if (recordreplay::IsReplaying() || !V8RecordReplayFeatureEnabled("v8-flags-compilation-cache", nullptr)) {
     i::FLAG_compilation_cache = false;
   }
 
