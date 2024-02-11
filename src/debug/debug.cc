@@ -4016,8 +4016,7 @@ extern int (*gGetAPIObjectIdCallback)(v8::Local<v8::Object> object);
 static int gNextObjectId = 1;
 
 int RecordReplayObjectId(v8::Isolate* v8_isolate, v8::Local<v8::Context> cx,
-                         v8::Local<v8::Value> v8_object, bool allow_create,
-                         bool should_assert = true) {
+                         v8::Local<v8::Value> v8_object, bool allow_create) {
   CHECK(IsMainThread());
 
   if (!v8_object->IsObject()) {
@@ -4047,7 +4046,7 @@ int RecordReplayObjectId(v8::Isolate* v8_isolate, v8::Local<v8::Context> cx,
         v8::Local<v8::Value> id_value = v8::Utils::ToLocal(existing);
         if (id_value->IsInt32()) {
           int id = id_value.As<v8::Int32>()->Value();
-          if (gRecordReplayAssertTrackedObjects && should_assert && (
+          if (gRecordReplayAssertTrackedObjects && (
               !recordreplay::IsInReplayCode("RecordReplayObjectId")
           )) {
             recordreplay::Assert("JS ReuseObjectId %d", id);
@@ -4064,7 +4063,7 @@ int RecordReplayObjectId(v8::Isolate* v8_isolate, v8::Local<v8::Context> cx,
 
   int id = gNextObjectId++;
 
-  if (gRecordReplayAssertTrackedObjects && should_assert && (
+  if (gRecordReplayAssertTrackedObjects && (
       !recordreplay::IsInReplayCode("RecordReplayObjectId")
   )) {
     recordreplay::Assert("JS NewObjectId %d", id);
