@@ -1032,10 +1032,7 @@ static char* GetProgressMismatchMessage(size_t replayedIndex, uint64_t recordedE
   std::ostringstream os;
   os << "{ \"recorded\": \"" << recorded_text 
      << "\", \"replayed\": \"" << replayed_text
-     << "\", \"pc\": " << (*gProgressCounter - replayedIndex)
-     << ", \"stack\": \"";
-  Isolate* isolate = Isolate::Current();
-  isolate->PrintCurrentStackTrace(os);
+     << "\", \"pc\": " << (*gProgressCounter - replayedIndex);
   os << "\" }";
   
   return strdup(os.str().c_str());
@@ -1119,16 +1116,6 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
       gProgressData = new std::vector<uint64_t>();
     }
     gProgressData->push_back(BuildScriptProgressEntry(function));
-
-    // TODO: Test the aggressive vs. not-so-aggressive version in comparison to object asserts
-    int script_id = Script::cast(function->shared().script()).id();
-    int start_position = function->shared().StartPosition();
-    recordreplay::Assert(
-      "Runtime_RecordReplayAssertExecutionProgress PC=%llu scriptId=%d %s",
-      *gProgressCounter,
-      script_id,
-      GetScriptLocationString(script_id, start_position).c_str()
-    );
   }
 
   if (gRecordReplayCheckProgress) {
