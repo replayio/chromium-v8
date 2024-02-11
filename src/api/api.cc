@@ -10740,11 +10740,9 @@ typedef char* (CommandCallbackRaw)(const char* params);
   Macro(RecordReplayJSONToString, (void*), char*, nullptr)                    \
   Macro(RecordReplayProgressCounter, (), uint64_t*, nullptr)                  \
   Macro(RecordReplayGetStack, (char* aStack, size_t aSize), bool, false)      \
-  Macro(RecordReplayReadSystemFileContents,                                   \
-        (bool aRelativeToApplication, const char* aPath, size_t *aLength),    \
-        char*, nullptr)                                                       \
-  Macro(RecordReplayShouldReportPerformanceEvent,                             \
-        (uint32_t kind), bool, false)
+  Macro(RecordReplayReadAssetFileContents,                                   \
+        (const char* aPath, size_t *aLength),                                 \
+        char*, nullptr)
 
 #define ForEachRecordReplaySymbolVoidShared(Macro)                            \
   Macro(RecordReplayDisableFeatures, (const char* json))                      \
@@ -10819,9 +10817,7 @@ typedef char* (CommandCallbackRaw)(const char* params);
   Macro(RecordReplaySetAssertDataCallbacks,                                   \
         (void (*aGetData)(void**, size_t*),                                   \
          char* (*aOnMismatch)(void*, size_t, void*, size_t),                  \
-         void (*aDescribeData)(void*, size_t)))                               \
-  Macro(RecordReplayPerformanceEvent,                                         \
-        (uint32_t kind, const void* Buf, uint32_t size))
+         void (*aDescribeData)(void*, size_t)))
 
 #if !V8_OS_WIN
 #define ForEachRecordReplaySymbolVoid(Macro)                                  \
@@ -10976,7 +10972,6 @@ extern void ClearPauseDataCallback();
 bool gRecordReplayAssertValues;
 bool gRecordReplayAssertProgress;
 bool gRecordReplayAssertTrackedObjects;
-bool gRecordReplayReportPerformanceEvents;
 
 // Enable various checks when advancing the progress counter. Set via the
 // environment, or when events are disallowed on the main thread.
@@ -11086,7 +11081,7 @@ void RecordReplayOnMainThreadIsolateCreated(Isolate* isolate) {
 static Eternal<v8::Context>* gDefaultContext;
 
 extern "C" void V8RecordReplaySetDefaultContext(v8::Isolate* isolate, v8::Local<v8::Context> cx) {
-  if (IsMainThread() && !gDefaultContext) {
+  if (IsMainThread()) {
     gDefaultContext = new Eternal<v8::Context>(isolate, cx);
   }
 }
@@ -11104,17 +11099,6 @@ extern void RecordReplayInitInstrumentationState();
 
 void RecordReplayDescribeAssertData(const char* text) {
   gRecordReplayDescribeAssertData(text);
-}
-
-// Depth of BeginActivity performance events.
-static size_t gRecordReplayPerformanceEventActivityCount;
-
-void RecordReplayOnScriptExecution() {
-  if (IsMainThread() &&
-      !gRecordReplayPerformanceEventActivityCount &&
-      !recordreplay::IsInReplayCode()) {
-    recordreplay::Trace("ScriptExecutionWithoutPerformanceEvent");
-  }
 }
 
 } // namespace internal
@@ -11168,22 +11152,16 @@ extern "C" DLLEXPORT bool V8IsRecordingOrReplaying(const char* feature, const ch
   return recordreplay::IsRecordingOrReplaying(feature, subfeature);
 }
 
-char* recordreplay::ReadSystemFileContents(bool aRelativeToApplication,
-                                          const char* aPath, size_t* aLength) {
-  if (IsRecordingOrReplaying()) {
-    return gRecordReplayReadSystemFileContents(aRelativeToApplication, aPath, aLength);
+char* recordreplay::ReadAssetFileContents(const char* aPath, size_t* aLength) {
+  if (IsReplaying()) {
+    return gRecordReplayReadAssetFileContents(aPath, aLength);
   } else {
     return nullptr;
   }
 }
 
-extern "C" DLLEXPORT char* V8RecordReplayReadSystemFileContents(bool aRelativeToApplication,
-                                                                const char* aPath, size_t* aLength) {
-  if (recordreplay::IsRecordingOrReplaying()) {
-    return gRecordReplayReadSystemFileContents(aRelativeToApplication, aPath, aLength);
-  } else {
-    return nullptr;
-  }
+extern "C" DLLEXPORT char* V8RecordReplayReadAssetFileContents(const char* aPath, size_t* aLength) {
+  return recordreplay::ReadAssetFileContents(aPath, aLength);
 }
 
 void recordreplay::Print(const char* format, ...) {
@@ -11392,30 +11370,6 @@ extern "C" DLLEXPORT bool V8RecordReplayAreAssertsDisabled() {
   return recordreplay::AreAssertsDisabled();
 }
 
-bool recordreplay::ShouldReportPerformanceEvent(uint32_t kind) {
-  return IsRecordingOrReplaying() && gRecordReplayShouldReportPerformanceEvent(kind);
-}
-
-extern "C" DLLEXPORT bool V8RecordReplayShouldReportPerformanceEvent(uint32_t kind) {
-  return recordreplay::ShouldReportPerformanceEvent(kind);
-}
-
-void recordreplay::PerformanceEvent(uint32_t kind, const void* buf, uint32_t size) {
-  if (IsRecordingOrReplaying()) {
-    gRecordReplayPerformanceEvent(kind, buf, size);
-
-    if (kind == 1 /* BeginActivity */ && IsMainThread()) {
-      internal::gRecordReplayPerformanceEventActivityCount++;
-    } else if (kind == 2 /* EndActivity */ && IsMainThread()) {
-      internal::gRecordReplayPerformanceEventActivityCount--;
-    }
-  }
-}
-
-extern "C" DLLEXPORT void V8RecordReplayPerformanceEvent(uint32_t kind, const void* buf, uint32_t size) {
-  recordreplay::PerformanceEvent(kind, buf, size);
-}
-
 uintptr_t recordreplay::RecordReplayValue(const char* why, uintptr_t v) {
   if (IsRecordingOrReplaying("values", why)) {
     return gRecordReplayValue(why, v);
@@ -11527,9 +11481,6 @@ void recordreplay::NewCheckpoint() {
   if (IsRecordingOrReplaying() && IsMainThread() && internal::gDefaultContext) {
     internal::gRecordReplayHasCheckpoint = true;
     gRecordReplayNewCheckpoint();
-
-    internal::gRecordReplayReportPerformanceEvents =
-      ShouldReportPerformanceEvent(/* ScriptAdvanceProgress */ 13);
   }
 }
 
@@ -11548,18 +11499,38 @@ extern "C" DLLEXPORT void V8RecordReplayNewCheckpoint() {
 typedef void (*RecordReplayBrowserEventCallback)(const char* name, const char* payload);
 static RecordReplayBrowserEventCallback gBrowserEventCallback = nullptr;
 
+// Browser events added before the callback was registered, which happens when
+// the first checkpoint is reached.
+typedef std::vector<std::pair<std::string, std::string>> BrowserEventsVector;
+static BrowserEventsVector* gPendingBrowserEvents;
+
 extern "C" DLLEXPORT void V8RecordReplayBrowserEvent(const char* name, const char* payload) {
   CHECK(recordreplay::IsRecordingOrReplaying());
+  CHECK(IsMainThread());
   if (gBrowserEventCallback) {
     gBrowserEventCallback(name, payload);
+  } else {
+    if (!gPendingBrowserEvents) {
+      gPendingBrowserEvents = new BrowserEventsVector();
+    }
+    gPendingBrowserEvents->emplace_back(name, payload);
   }
 }
 
 extern "C" void V8RecordReplayRegisterBrowserEventCallback(
     RecordReplayBrowserEventCallback callback) {
   CHECK(recordreplay::IsRecordingOrReplaying());
+  CHECK(IsMainThread());
   CHECK(!gBrowserEventCallback);
   gBrowserEventCallback = callback;
+
+  if (gPendingBrowserEvents) {
+    for (const auto& item : *gPendingBrowserEvents) {
+      gBrowserEventCallback(item.first.c_str(), item.second.c_str());
+    }
+    delete gPendingBrowserEvents;
+    gPendingBrowserEvents = nullptr;
+  }
 }
 
 size_t recordreplay::CreateOrderedLock(const char* name) {
@@ -11948,6 +11919,7 @@ static std::atomic<bool> gNeedFinishRecording;
 static std::atomic<void (*)(void*)> gUnblockMainThreadCallback;
 static std::atomic<void*> gUnblockMainThreadCallbackData;
 static int gFinishRecordingOrderedLockId;
+base::Thread::LocalStorageKey gAssertBufferAllocationStateLSKey;
 
 extern "C" DLLEXPORT void V8RecordReplayMaybeTerminate(void (*callback)(void*), void* data) {
   recordreplay::Assert("V8RecordReplayMaybeTerminate");
@@ -12009,6 +11981,8 @@ bool IsMainThread() {
 }
 #endif
 
+// Set this process as recording or replaying.
+// Also serves to initializes Replay state.
 void recordreplay::SetRecordingOrReplaying(void* handle) {
 #define LoadRecordReplaySymbol(Name, Params, ReturnType, ReturnDefault)    \
   RecordReplayLoadSymbol(handle, #Name, g##Name);
@@ -12033,6 +12007,7 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
   gRecordReplaySetCrashReasonCallback(V8RecordReplayCrashReasonCallback);
 
   gFinishRecordingOrderedLockId = (int)CreateOrderedLock("FinishRecording");
+  gAssertBufferAllocationStateLSKey = base::Thread::CreateThreadLocalKey();
 
   i::gProgressCounter = gRecordReplayProgressCounter();
 
@@ -12147,6 +12122,38 @@ extern "C" DLLEXPORT void V8RecordReplayExitReplayCode() {
 }
 
 
+extern "C" DLLEXPORT void V8RecordReplayBeginAssertBufferAllocations(const char* issueLabel) {
+  if (!recordreplay::IsRecordingOrReplaying() || recordreplay::AreAssertsDisabled()) {
+    return;
+  }
+  recordreplay::AssertBufferAllocationState* state =
+    recordreplay::AutoAssertBufferAllocations::GetState();
+  
+  if (!state) {
+    state = new recordreplay::AssertBufferAllocationState;
+    state->issueLabel = issueLabel;
+    base::Thread::SetThreadLocal(gAssertBufferAllocationStateLSKey, 
+      reinterpret_cast<void*>(state)
+    );
+  }
+  ++state->enabled;
+}
+
+extern "C" DLLEXPORT void V8RecordReplayEndAssertBufferAllocations() {
+  if (!recordreplay::IsRecordingOrReplaying() || recordreplay::AreAssertsDisabled()) {
+    return;
+  }
+  
+  recordreplay::AssertBufferAllocationState* state =
+    recordreplay::AutoAssertBufferAllocations::GetState();
+  --state->enabled;
+  if (!state->enabled) {
+    delete state;
+    base::Thread::SetThreadLocal(gAssertBufferAllocationStateLSKey, nullptr);
+  }
+}
+
+
 recordreplay::AutoAssertMaybeEventsDisallowed::AutoAssertMaybeEventsDisallowed(
     const char* format, ...) {
   base::EmbeddedVector<char, 1024> buf;
@@ -12175,6 +12182,21 @@ recordreplay::AutoAssertMaybeEventsDisallowed::~AutoAssertMaybeEventsDisallowed(
   ) {
     recordreplay::Assert("%s", msg_.c_str());
   }
+}
+
+// static
+recordreplay::AssertBufferAllocationState* recordreplay::AutoAssertBufferAllocations::GetState() {
+  return reinterpret_cast<recordreplay::AssertBufferAllocationState*>(
+    base::Thread::GetThreadLocal(gAssertBufferAllocationStateLSKey)
+  );
+}
+
+recordreplay::AutoAssertBufferAllocations::AutoAssertBufferAllocations(const char* issueLabel) {
+  V8RecordReplayBeginAssertBufferAllocations(issueLabel);
+}
+
+recordreplay::AutoAssertBufferAllocations::~AutoAssertBufferAllocations() {
+  V8RecordReplayEndAssertBufferAllocations();
 }
 
 

@@ -101,7 +101,7 @@ static bool IsARMRecording();
 static bool FeatureEnabled(const char* feature, const char* subfeature = nullptr);
 static bool HasDisabledFeatures();
 
-static char* ReadSystemFileContents(bool relative, const char* path, size_t* size);
+static char* ReadAssetFileContents(const char* path, size_t* size);
 static void Print(const char* format, ...);
 static void Diagnostic(const char* format, ...);
 static void CommandDiagnostic(const char* format, ...);
@@ -114,9 +114,6 @@ static void Assert(const char* format, ...);
 static void AssertMaybeEventsDisallowed(const char* format, ...);
 static void AssertBytes(const char* why, const void* buf, size_t size);
 static bool AreAssertsDisabled();
-
-static bool ShouldReportPerformanceEvent(uint32_t kind);
-static void PerformanceEvent(uint32_t kind, const void* buf, uint32_t size);
 
 static uintptr_t RecordReplayValue(const char* why, uintptr_t v);
 static void RecordReplayBytes(const char* why, void* buf, size_t size);
@@ -147,6 +144,9 @@ static bool IsInReplayCode(const char* why = nullptr);
 static bool HasDivergedFromRecording();
 static bool AllowSideEffects();
 
+static void BeginAssertBufferAllocations(const char* issueLabel = "");
+static void EndAssertBufferAllocations();
+
 struct AutoPassThroughEvents {
   AutoPassThroughEvents() { BeginPassThroughEvents(); }
   ~AutoPassThroughEvents() { EndPassThroughEvents(); }
@@ -168,6 +168,24 @@ struct AutoAssertMaybeEventsDisallowed {
   AutoAssertMaybeEventsDisallowed(const char* format, ...);
   ~AutoAssertMaybeEventsDisallowed();
   std::string msg_;
+};
+
+struct AssertBufferAllocationState {
+  size_t enabled = 0;
+  std::string issueLabel = "";
+};
+
+
+// RAII class to enable recording assertions on dynamic-length buffer 
+// allocations. Used to track down the allocation causing mismatched message 
+// sizes when replaying.
+// TODO: Merge this with the similar `AuxtoRecordReplayAssertBufferAllocations`
+// in mojo/public/cpp/bindings/lib/buffer.cc (for main-thread only).
+struct AutoAssertBufferAllocations {
+  static AssertBufferAllocationState* GetState();
+
+  AutoAssertBufferAllocations(const char* issueLabel = "");
+  ~AutoAssertBufferAllocations();
 };
 
 static void RegisterPointer(const char* name, const void* ptr);

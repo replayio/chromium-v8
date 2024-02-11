@@ -23,7 +23,6 @@ namespace internal {
 extern bool RecordReplayHasRegisteredScript(Script script);
 extern bool RecordReplayIsDivergentUserJSWithoutPause(const SharedFunctionInfo& shared);
 extern uint64_t* gProgressCounter;
-extern void RecordReplayOnScriptExecution();
 
 namespace {
 
@@ -283,8 +282,6 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
   RCS_SCOPE(isolate, RuntimeCallCounterId::kInvoke);
   DCHECK(!params.receiver->IsJSGlobalObject());
   DCHECK_LE(params.argc, FixedArray::kMaxLength);
-
-  RecordReplayOnScriptExecution();
 
 #if V8_ENABLE_WEBASSEMBLY
   // When executing JS code, there should be no {CodeSpaceWriteScope} open.

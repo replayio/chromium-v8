@@ -3495,11 +3495,12 @@ static Handle<Object> RecordReplayConvertFunctionOffsetToLocation(
   Handle<Script> script = GetScript(isolate, script_id);
   Handle<Object> offset_raw = GetProperty(isolate, params, "offset");
 
-  // The offset may or may not be present. If the offset is present and non-zero,
-  // use it as the instrumentation site to get the source position.
+  // The offset may or may not be present. If the offset is present, use it as the
+  // instrumentation site to get the source position.
   int line = 0, column = 0;
-  int bytecode_offset = offset_raw->IsNumber() ? offset_raw->Number() : 0;
-  if (bytecode_offset) {
+  if (offset_raw->IsNumber()) {
+    int bytecode_offset = offset_raw->Number();
+
     std::string key = BreakpointPositionKey(function_id, bytecode_offset);
     if (!gBreakpointPositions) {
       GenerateBreakpointInfo(isolate, script);
@@ -3842,6 +3843,7 @@ static Eternal<Value>* gCommandCallback;
 extern "C" void V8RecordReplayGetDefaultContext(v8::Isolate* isolate, v8::Local<v8::Context>* cx);
 extern uint64_t* gProgressCounter;
 extern int gRecordReplayCheckProgress;
+static int gPauseContextGroupId = 0;
 
 // Make sure that the isolate has a context by switching to the default
 // context if necessary.
@@ -3854,6 +3856,7 @@ static void EnsureIsolateContext(Isolate* isolate, base::Optional<SaveAndSwitchC
   }
 }
 
+
 char* CommandCallback(const char* command, const char* params) {
   CHECK(IsMainThread());
   AutoMarkReplayCode amrc;
@@ -3865,6 +3868,29 @@ char* CommandCallback(const char* command, const char* params) {
   EnsureIsolateContext(isolate, ssc);
 
   HandleScope scope(isolate);
+
+  if (recordreplay::HasDivergedFromRecording()) {
+    v8_inspector::V8Inspector* inspectorRaw = v8::debug::GetInspector((v8::Isolate*)isolate);
+    int currentGroupId;
+    if (!inspectorRaw) {
+      currentGroupId = -1;
+    } else {
+      v8_inspector::V8InspectorImpl* inspector =
+          static_cast<v8_inspector::V8InspectorImpl*>(inspectorRaw);
+      int contextId = v8_inspector::InspectedContext::contextId(
+        ((v8::Isolate*)isolate)->GetCurrentContext()
+      );
+      currentGroupId = inspector->contextGroupId(contextId);
+    }
+    if (!gPauseContextGroupId) {
+      gPauseContextGroupId = currentGroupId;
+    } else {
+      // [RUN-3123] Don't allow querying different context groups on the
+      // same pause.
+      CHECK(gPauseContextGroupId == currentGroupId);
+    }
+  }
+
 
   Handle<Object> undefined = isolate->factory()->undefined_value();
   Handle<String> paramsStr = CStringToHandle(isolate, params);
@@ -4206,7 +4232,6 @@ namespace i = internal;
 void FunctionCallbackRecordReplaySetCommandCallback(const FunctionCallbackInfo<Value>& callArgs) {
   CHECK(recordreplay::IsRecordingOrReplaying());
   CHECK(IsMainThread());
-  CHECK(!i::gCommandCallback);
 
   Isolate* v8isolate = callArgs.GetIsolate();
   i::gCommandCallback = new Eternal<Value>(v8isolate, callArgs[0]);
@@ -4215,7 +4240,6 @@ void FunctionCallbackRecordReplaySetCommandCallback(const FunctionCallbackInfo<V
 void FunctionCallbackRecordReplaySetClearPauseDataCallback(const FunctionCallbackInfo<Value>& callArgs) {
   CHECK(recordreplay::IsRecordingOrReplaying());
   CHECK(IsMainThread());
-  CHECK(!i::gClearPauseDataCallback);
 
   Isolate* v8isolate = callArgs.GetIsolate();
   i::gClearPauseDataCallback = new Eternal<Value>(v8isolate, callArgs[0]);
