@@ -12055,7 +12055,7 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
   }
 
   // Disable some GC settings while replaying for causing mysterious crashes.
-  if (recordreplay::IsReplaying() || !V8RecordReplayFeatureEnabled("v8-flags-gc", nullptr)) {
+  if (IsReplaying() || !V8RecordReplayFeatureEnabled("v8-flags-gc", nullptr)) {
     i::FLAG_concurrent_marking = false;
     i::FLAG_concurrent_sweeping = false;
     i::FLAG_incremental_marking_task = false;
@@ -12068,7 +12068,7 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
   }
 
   // For now the compilation cache is only used when recording.
-  if (recordreplay::IsReplaying() || !V8RecordReplayFeatureEnabled("v8-flags-compilation-cache", nullptr)) {
+  if (IsReplaying() || !V8RecordReplayFeatureEnabled("v8-flags-compilation-cache", nullptr)) {
     i::FLAG_compilation_cache = false;
   }
 
