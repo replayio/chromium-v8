@@ -1023,7 +1023,6 @@ static std::string GetScriptProgressEntryString(uint64_t v) {
 // See https://linear.app/replay/issue/RUN-2096#comment-a334b15f
 static char* GetProgressMismatchMessage(size_t replayedIndex, uint64_t recordedEntry,
                                         uint64_t replayedEntry) {
-  Isolate* isolate = Isolate::Current();
   std::string recorded_text = recordedEntry
                                   ? GetScriptProgressEntryString(recordedEntry)
                                   : "<assertion>";
@@ -1033,9 +1032,7 @@ static char* GetProgressMismatchMessage(size_t replayedIndex, uint64_t recordedE
   std::ostringstream os;
   os << "{ \"recorded\": \"" << recorded_text 
      << "\", \"replayed\": \"" << replayed_text
-     << "\", \"pc\": " << (*gProgressCounter - replayedIndex)
-     << ", \"stack\": \"";
-  isolate->PrintCurrentStackTrace(os);
+     << "\", \"pc\": " << (*gProgressCounter - replayedIndex);
   os << "\" }";
   
   return strdup(os.str().c_str());

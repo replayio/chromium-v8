@@ -3600,7 +3600,7 @@ void BytecodeGenerator::BuildVariableLoad(Variable* variable,
         BuildThrowIfHole(variable);
       }
 
-      builder()->RecordReplayAssertValue("Parameter");
+      builder()->RecordReplayAssertValue("LoadContextSlot");
       break;
     }
     case VariableLocation::UNALLOCATED: {
