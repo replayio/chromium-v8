@@ -1731,6 +1731,18 @@ void BytecodeGenerator::VisitStatements(
   }
 }
 
+// [RUN-3317] Shift breakpoint from STMT to STMT->EXPR().
+void BytecodeGenerator::ReplayShiftedBreakpointPosition(Statement* stmt, Expression* expr) {
+  if (
+    recordreplay::IsRecordingOrReplaying("ReplayShiftedBreakpointPosition") &&
+    expr->position() >= 0 // Checks if expression node is not empty.
+  ) {
+    builder()->SetExpressionAsStatementPosition(expr);
+  } else {
+    builder()->SetStatementPosition(stmt);
+  }
+}
+
 void BytecodeGenerator::VisitExpressionStatement(ExpressionStatement* stmt) {
   builder()->SetStatementPosition(stmt);
   VisitForEffect(stmt->expression());
@@ -1788,20 +1800,9 @@ void BytecodeGenerator::VisitBreakStatement(BreakStatement* stmt) {
   execution_control()->Break(stmt->target());
 }
 
-// [RUN-3317] Shift breakpoint from STMT to STMT->EXPR().
-#define REPLAY_BERAKPOINT_SHIFT(STMT, EXPR) \
-  if ( \
-    recordreplay::IsRecordingOrReplaying("BreakpointShift") && \
-    STMT->EXPR()->position() >= 0 \
-  ) { \
-    builder()->SetExpressionAsStatementPosition(STMT->EXPR()); \
-  } else { \
-    builder()->SetStatementPosition(STMT); \
-  }
-
 void BytecodeGenerator::VisitReturnStatement(ReturnStatement* stmt) {
   AllocateBlockCoverageSlotIfEnabled(stmt, SourceRangeKind::kContinuation);
-  REPLAY_BERAKPOINT_SHIFT(stmt, expression);
+  ReplayShiftedBreakpointPosition(stmt, stmt->expression());
   VisitForAccumulatorValue(stmt->expression());
   int return_position = stmt->end_position();
   if (return_position == ReturnStatement::kFunctionLiteralReturnPosition) {
