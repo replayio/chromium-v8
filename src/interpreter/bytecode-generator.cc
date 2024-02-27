@@ -1731,7 +1731,6 @@ void BytecodeGenerator::VisitStatements(
   }
 }
 
-// [RUN-3317] Shift breakpoint from STMT to STMT->EXPR().
 void BytecodeGenerator::ReplayShiftedBreakpointPosition(Statement* stmt, Expression* expr) {
   if (
     recordreplay::IsRecordingOrReplaying("ReplayShiftedBreakpointPosition") &&
