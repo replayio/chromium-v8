@@ -1790,7 +1790,12 @@ void BytecodeGenerator::VisitBreakStatement(BreakStatement* stmt) {
 
 void BytecodeGenerator::VisitReturnStatement(ReturnStatement* stmt) {
   AllocateBlockCoverageSlotIfEnabled(stmt, SourceRangeKind::kContinuation);
-  builder()->SetStatementPosition(stmt);
+  recordreplay::Print("DDBG VisitReturnStatement %d", stmt->expression()->position());
+  if (stmt->expression()->position() >= 0) {
+    builder()->SetExpressionAsStatementPosition(stmt->expression());
+  } else {
+    builder()->SetStatementPosition(stmt);
+  }
   VisitForAccumulatorValue(stmt->expression());
   int return_position = stmt->end_position();
   if (return_position == ReturnStatement::kFunctionLiteralReturnPosition) {
