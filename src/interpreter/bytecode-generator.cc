@@ -1788,13 +1788,20 @@ void BytecodeGenerator::VisitBreakStatement(BreakStatement* stmt) {
   execution_control()->Break(stmt->target());
 }
 
+// [RUN-3317] Shift breakpoint from STMT to STMT->EXPR().
+#define REPLAY_BERAKPOINT_SHIFT(STMT, EXPR) \
+  if ( \
+    recordreplay::IsRecordingOrReplaying("BreakpointShift") && \
+    STMT->EXPR()->position() >= 0 \
+  ) { \
+    builder()->SetExpressionAsStatementPosition(STMT->EXPR()); \
+  } else { \
+    builder()->SetStatementPosition(STMT); \
+  }
+
 void BytecodeGenerator::VisitReturnStatement(ReturnStatement* stmt) {
   AllocateBlockCoverageSlotIfEnabled(stmt, SourceRangeKind::kContinuation);
-  if (stmt->expression()->position() >= 0) {
-    builder()->SetExpressionAsStatementPosition(stmt->expression());
-  } else {
-    builder()->SetStatementPosition(stmt);
-  }
+  REPLAY_BERAKPOINT_SHIFT(stmt, expression);
   VisitForAccumulatorValue(stmt->expression());
   int return_position = stmt->end_position();
   if (return_position == ReturnStatement::kFunctionLiteralReturnPosition) {
