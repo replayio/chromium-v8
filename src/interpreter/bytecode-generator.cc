@@ -1790,7 +1790,6 @@ void BytecodeGenerator::VisitBreakStatement(BreakStatement* stmt) {
 
 void BytecodeGenerator::VisitReturnStatement(ReturnStatement* stmt) {
   AllocateBlockCoverageSlotIfEnabled(stmt, SourceRangeKind::kContinuation);
-  recordreplay::Print("DDBG VisitReturnStatement %d", stmt->expression()->position());
   if (stmt->expression()->position() >= 0) {
     builder()->SetExpressionAsStatementPosition(stmt->expression());
   } else {
