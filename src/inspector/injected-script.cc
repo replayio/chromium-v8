@@ -402,15 +402,19 @@ InjectedScript::~InjectedScript() { discardEvaluateCallbacks(); }
 namespace {
 class PropertyAccumulator : public ValueMirror::PropertyAccumulator {
  public:
-  explicit PropertyAccumulator(std::vector<PropertyMirror>* mirrors)
-      : m_mirrors(mirrors) {}
+  explicit PropertyAccumulator(std::vector<PropertyMirror>* mirrors, const v8::KeyIterationParams* params)
+      : m_mirrors(mirrors), m_params(params) {}
   bool Add(PropertyMirror mirror) override {
     m_mirrors->push_back(std::move(mirror));
+    if (m_mirrors->size() > (size_t)m_params->PageSize((int)m_mirrors->size())) {
+      return false;
+    }
     return true;
   }
 
  private:
   std::vector<PropertyMirror>* m_mirrors;
+  const v8::KeyIterationParams* m_params;
 };
 }  // anonymous namespace
 
@@ -429,7 +433,9 @@ Response InjectedScript::getProperties(
 
   *properties = std::make_unique<Array<PropertyDescriptor>>();
   std::vector<PropertyMirror> mirrors;
-  PropertyAccumulator accumulator(&mirrors);
+  // [RUN-3149] pass params to the accumulator, which will stop us
+  // by returning false from .Add() after it's added enough properties.
+  PropertyAccumulator accumulator(&mirrors, params);
   if (!ValueMirror::getProperties(context, object, ownProperties,
                                   accessorPropertiesOnly,
                                   nonIndexedPropertiesOnly,

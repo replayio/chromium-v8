@@ -1434,7 +1434,13 @@ bool ValueMirror::getProperties(v8::Local<v8::Context> context,
   }
 
   auto iterator = v8::debug::PropertyIterator::Create(context, object,
-                                                      nonIndexedPropertiesOnly, params);
+                                                      nonIndexedPropertiesOnly
+                                                      // RUN-3149 instead of passing the params down here,
+                                                      // let v8 do whatever it needs to gather keys/value,
+                                                      // and shrink the array to the requested size.
+                                                      //
+                                                      //, params
+  );
   if (!iterator) {
     CHECK(tryCatch.HasCaught());
     return false;
