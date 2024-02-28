@@ -3447,6 +3447,11 @@ void RecordReplayGetPossibleBreakpointsCallback(const char* script_id_str) {
     int bytecode_offset = InstrumentationSiteBytecodeOffset(instrumentation_index);
 
     std::string function_id = GetRecordReplayFunctionId(shared);
+    recordreplay::Print(
+      "DDBG RecordReplayGetPossibleBreakpointsCallback fun=%s ins_index=%d %d:%d %d",
+      function_id.c_str(), instrumentation_index,
+      line, column, bytecode_offset
+    );
     RecordReplayAddPossibleBreakpoint(line, column, function_id.c_str(), bytecode_offset);
   });
 }
@@ -3787,6 +3792,11 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
                          : "scriptSource";
 
   recordreplay::Diagnostic("OnNewSource %s %s", id.get(), kind);
+  Handle<String> src(String::cast(script->source()), Isolate::Current());
+  recordreplay::Print(
+    "DDBG OnNewSource %s %s %s %s",
+    id.get(), kind, url.c_str(), src->ToCString().get()
+  );
 
   if (!gRegisteredScripts) {
     gRegisteredScripts = new ScriptIdSet;

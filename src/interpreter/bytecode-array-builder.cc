@@ -1414,6 +1414,10 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayInstrumentation(
   // Instrumentation opcodes aren't needed when recording.
   if (emit_record_replay_opcodes_ && recordreplay::IsReplaying()) {
     int index = RecordReplayRegisterInstrumentationSite(kind, source_position);
+    recordreplay::Trace(
+      "DDBG RecordReplayInstrumentation %s ins_index=%d source_position=%d",
+      kind, index, source_position
+    );
     if (index >= 0) {
       OutputRecordReplayInstrumentation(index);
     }
