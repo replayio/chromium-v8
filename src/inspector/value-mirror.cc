@@ -1433,14 +1433,20 @@ bool ValueMirror::getProperties(v8::Local<v8::Context> context,
     }
   }
 
+  const v8::KeyIterationParams *keyIterationParams;
+  if (*params) {
+    // [RUN-3149] we're only interested in a subset of the properties on this
+    // object. In order to make sure we get enough own properties to satisfy
+    // expected behavior for objects, always request 100k keys.  we will
+    // later prune returned properties down to the originally requested size.
+    keyIterationParams = new v8::KeyIterationParams(100000, 0);
+  } else {
+    // we're grabbing everything anyway, so just use the passed in params.
+    keyIterationParams = params;
+  }
   auto iterator = v8::debug::PropertyIterator::Create(context, object,
-                                                      nonIndexedPropertiesOnly
-                                                      // RUN-3149 instead of passing the params down here,
-                                                      // let v8 do whatever it needs to gather keys/value,
-                                                      // and shrink the array to the requested size.
-                                                      //
-                                                      //, params
-  );
+                                                      nonIndexedPropertiesOnly,
+                                                      keyIterationParams);
   if (!iterator) {
     CHECK(tryCatch.HasCaught());
     return false;
