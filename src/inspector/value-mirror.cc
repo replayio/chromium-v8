@@ -1435,9 +1435,12 @@ bool ValueMirror::getProperties(v8::Local<v8::Context> context,
 
   // [RUN-3149] we're only interested in a subset of the properties on this
   // object. In order to make sure we get enough own properties to satisfy
-  // expected behavior for objects, always request 100k keys.  we will
-  // later prune returned properties down to the originally requested size.
-  v8::KeyIterationParams subsetIterationParams(100000, 0);
+  // expected behavior for objects, always request a much larger set of keys
+  // we will later prune returned properties down to the originally requested
+  // size.
+  const int SubsetPageSize = 100000;
+
+  v8::KeyIterationParams subsetIterationParams(SubsetPageSize, 0);
   const v8::KeyIterationParams *keyIterationParams;
   if (*params) {
     // we're grabbing a subset.  use the larger subset params.
