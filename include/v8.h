@@ -144,6 +144,20 @@ static bool IsInReplayCode(const char* why = nullptr);
 static bool HasDivergedFromRecording();
 static bool AllowSideEffects();
 
+int NewDependencyGraphNode(const char* json);
+void AddDependencyGraphEdge(int source, int target, const char* json);
+void BeginDependencyExecution(int node);
+void EndDependencyExecution();
+
+struct AutoDependencyExecution {
+  AutoDependencyExecution(int node) {
+    BeginDependencyExecution(node);
+  }
+  ~AutoDependencyExecution() {
+    EndDependencyExecution();
+  }
+};
+
 static void BeginAssertBufferAllocations(const char* issueLabel = "");
 static void EndAssertBufferAllocations();
 
