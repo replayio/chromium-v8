@@ -10727,6 +10727,7 @@ typedef char* (CommandCallbackRaw)(const char* params);
   Macro(RecordReplayCreateOrderedLock, (const char* name), size_t, 0)         \
   Macro(RecordReplayIsReplaying, (), bool, false)                             \
   Macro(RecordReplayHasDivergedFromRecording, (), bool, false)                \
+  Macro(RecordReplayNewDependencyGraphNode, (const char* json), int, 0)       \
   Macro(RecordReplayAllowSideEffects, (), bool, true)                         \
   Macro(RecordReplayPointerId, (const void* ptr), int, 0)                     \
   Macro(RecordReplayIdPointer, (int id), void*, nullptr)                      \
@@ -10801,6 +10802,10 @@ typedef char* (CommandCallbackRaw)(const char* params);
         (const char* aKind, size_t aClientX, size_t aClientY))                \
   Macro(RecordReplayOnKeyEvent, (const char* aKind, const char* aKey))        \
   Macro(RecordReplayOnNavigationEvent, (const char* aKind, const char* aUrl)) \
+  Macro(RecordReplayAddDependencyGraphEdge,                                   \
+        (int source, int target, const char* json))                           \
+  Macro(RecordReplayBeginDependencyExecution, (int node))                     \
+  Macro(RecordReplayEndDependencyExecution, ())                               \
   Macro(RecordReplaySetDefaultCommandCallback,                                \
         (char* (*callback)(const char* command, const char* params)))         \
   Macro(RecordReplaySetClearPauseDataCallback, (void (*callback)()))          \
@@ -11636,6 +11641,47 @@ bool recordreplay::AllowSideEffects() {
 
 extern "C" DLLEXPORT bool V8RecordReplayAllowSideEffects() {
   return recordreplay::AllowSideEffects();
+}
+
+extern "C" DLLEXPORT int V8RecordReplayNewDependencyGraphNode(const char* json) {
+  if (recordreplay::IsRecordingOrReplaying()) {
+    return gRecordReplayNewDependencyGraphNode(json);
+  }
+  return 0;
+}
+
+int recordreplay::NewDependencyGraphNode(const char* json) {
+  return V8RecordReplayNewDependencyGraphNode(json);
+}
+
+extern "C" DLLEXPORT void V8RecordReplayAddDependencyGraphEdge(int source, int target, const char* json) {
+  if (recordreplay::IsRecordingOrReplaying()) {
+    gRecordReplayAddDependencyGraphEdge(source, target, json);
+  }
+}
+
+void recordreplay::AddDependencyGraphEdge(int source, int target, const char* json) {
+  V8RecordReplayAddDependencyGraphEdge(source, target, json);
+}
+
+extern "C" DLLEXPORT void V8RecordReplayBeginDependencyExecution(int node) {
+  if (recordreplay::IsRecordingOrReplaying()) {
+    gRecordReplayBeginDependencyExecution(node);
+  }
+}
+
+void recordreplay::BeginDependencyExecution(int node) {
+  V8RecordReplayBeginDependencyExecution(node);
+}
+
+extern "C" DLLEXPORT void V8RecordReplayEndDependencyExecution() {
+  if (recordreplay::IsRecordingOrReplaying()) {
+    gRecordReplayEndDependencyExecution();
+  }
+}
+
+void recordreplay::EndDependencyExecution() {
+  V8RecordReplayEndDependencyExecution();
 }
 
 void recordreplay::RegisterPointer(const char* name, const void* ptr) {
