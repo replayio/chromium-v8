@@ -3544,6 +3544,10 @@ Isolate::Isolate(std::unique_ptr<i::IsolateAllocator> isolate_allocator,
   if (recordreplay::IsRecordingOrReplaying() && IsMainThread()) {
     RecordReplayOnMainThreadIsolateCreated(this);
   }
+
+  if (recordreplay::IsReplaying()) {
+    PromiseHookStateUpdated();
+  }
 }
 
 void Isolate::CheckIsolateLayout() {
@@ -5026,7 +5030,7 @@ void Isolate::UpdatePromiseHookProtector() {
 void Isolate::PromiseHookStateUpdated() {
   promise_hook_flags_ =
     (promise_hook_flags_ & PromiseHookFields::HasContextPromiseHook::kMask) |
-    PromiseHookFields::HasIsolatePromiseHook::encode(promise_hook_) |
+    PromiseHookFields::HasIsolatePromiseHook::encode(promise_hook_ || recordreplay::IsReplaying()) |
     PromiseHookFields::HasAsyncEventDelegate::encode(async_event_delegate_) |
     PromiseHookFields::IsDebugActive::encode(debug()->is_active());
 
@@ -5387,6 +5391,10 @@ void Isolate::RunAllPromiseHooks(PromiseHookType type,
 void Isolate::RunPromiseHook(PromiseHookType type, Handle<JSPromise> promise,
                              Handle<Object> parent) {
   if (!HasIsolatePromiseHooks()) return;
+  if (recordreplay::IsReplaying()) {
+    recordreplay::Print("Isolate::RunPromiseHook %d %d", (int)type, parent->IsUndefined());
+    if (!promise_hook_) return;
+  }
   DCHECK(promise_hook_ != nullptr);
   promise_hook_(type, v8::Utils::PromiseToLocal(promise),
                 v8::Utils::ToLocal(parent));
