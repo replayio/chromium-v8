@@ -79,7 +79,12 @@ V8Debugger::V8Debugger(v8::Isolate* isolate, V8InspectorImpl* inspector)
       m_maxAsyncCallStackDepth(0),
       m_maxCallStackSizeToCapture(
           V8StackTraceImpl::kDefaultMaxCallStackSizeToCapture),
-      m_pauseOnExceptionsState(v8::debug::NoBreakOnException) {}
+      m_pauseOnExceptionsState(v8::debug::NoBreakOnException) {
+  // Ensure we get async event delegate notifications when replaying.
+  if (v8::recordreplay::IsReplaying()) {
+    v8::debug::SetAsyncEventDelegate(m_isolate, this);
+  }
+}
 
 V8Debugger::~V8Debugger() {
   m_isolate->RemoveCallCompletedCallback(
@@ -611,6 +616,9 @@ void V8Debugger::AsyncEventOccurred(v8::debug::DebugAsyncActionType type,
   // Async task events from Promises are given misaligned pointers to prevent
   // from overlapping with other Blink task identifiers.
   void* task = reinterpret_cast<void*>(id * 2 + 1);
+
+  v8::recordreplay::Print("V8Debugger::AsyncEventOccurred %d %d %d", (int)type, id, isBlackboxed);
+
   switch (type) {
     case v8::debug::kDebugPromiseThen:
       asyncTaskScheduledForStack(toStringView("Promise.then"), task, false);
@@ -857,6 +865,11 @@ void V8Debugger::setAsyncCallStackDepth(V8DebuggerAgentImpl* agent, int depth) {
   if (!maxAsyncCallStackDepth) allAsyncTasksCanceled();
   v8::debug::SetAsyncEventDelegate(m_isolate,
                                    maxAsyncCallStackDepth ? this : nullptr);
+
+  // Ensure we get async event delegate notifications when replaying.
+  if (v8::recordreplay::IsReplaying()) {
+    v8::debug::SetAsyncEventDelegate(m_isolate, this);
+  }
 }
 
 void V8Debugger::setMaxCallStackSizeToCapture(V8RuntimeAgentImpl* agent,
