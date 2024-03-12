@@ -4289,8 +4289,8 @@ void RecordReplayOnPromiseHook(Isolate* isolate, PromiseHookType type,
       break;
     }
     case PromiseHookType::kBefore: {
-      CHECK(data.settled_node_id);
-      recordreplay::BeginDependencyExecution(data.settled_node_id);
+      int node_id = data.settled_node_id ? data.settled_node_id : data.new_node_id;
+      recordreplay::BeginDependencyExecution(node_id);
       break;
     }
     case PromiseHookType::kAfter: {
