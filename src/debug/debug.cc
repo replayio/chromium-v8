@@ -4223,15 +4223,18 @@ struct PromiseDependencyGraphData {
 
   // Graph node ID for the point the promise was settled.
   int settled_node_id = 0;
-
-  // Object ID for the parent of the promise, if there is one.
-  int parent_promise_object_id = 0;
 };
 
 typedef std::unordered_map<int32_t, PromiseDependencyGraphData> PromiseDependencyGraphDataMap;
 static PromiseDependencyGraphDataMap* gPromiseDependencyGraphDataMap;
 
-static PromiseDependencyGraphData& GetOrCreatePromiseDependencyGraphData(int promise_object_id) {
+static PromiseDependencyGraphData&
+GetOrCreatePromiseDependencyGraphData(Isolate* isolate, Handle<Object> promise) {
+  v8::Isolate* v8_isolate = (v8::Isolate*) isolate;
+  int promise_object_id =
+    RecordReplayObjectId(v8_isolate, v8_isolate->GetCurrentContext(),
+                         v8::Utils::ToLocal(promise), /* allow_create */ true);
+
   CHECK(IsMainThread());
   if (!gPromiseDependencyGraphDataMap) {
     gPromiseDependencyGraphDataMap = new PromiseDependencyGraphDataMap();
@@ -4249,13 +4252,8 @@ void RecordReplayOnPromiseHook(Isolate* isolate, PromiseHookType type,
                                Handle<JSPromise> promise, Handle<Object> parent) {
   CHECK(recordreplay::IsReplaying());
 
-  v8::Isolate* v8_isolate = (v8::Isolate*) isolate;
-
-  int promise_object_id =
-    RecordReplayObjectId(v8_isolate, v8_isolate->GetCurrentContext(),
-                         v8::Utils::ToLocal(Handle<Object>::cast(promise)),
-                         /* allow_create */ type == PromiseHookType::kInit);
-  PromiseDependencyGraphData& data = GetOrCreatePromiseDependencyGraphData(promise_object_id);
+  PromiseDependencyGraphData& data =
+    GetOrCreatePromiseDependencyGraphData(isolate, promise);
 
   switch (type) {
     case PromiseHookType::kInit: {
@@ -4263,10 +4261,11 @@ void RecordReplayOnPromiseHook(Isolate* isolate, PromiseHookType type,
       CHECK(!data.parent_promise_object_id);
       data.new_node_id = recordreplay::NewDependencyGraphNode("{\"kind\":\"newPromise\"}");
       if (!parent->IsUndefined()) {
-        data.parent_promise_object_id =
-          RecordReplayObjectId(v8_isolate, v8_isolate->GetCurrentContext(),
-                               v8::Utils::ToLocal(parent),
-                               /* allow_create */ false);
+        PromiseDependencyGraphData& parent_data =
+          GetOrCreatePromiseDependencyGraphData(isolate, parent(;
+        if (parent_data.new_node_id) {
+          recordreplay::AddDependencyGraphEdge(parent_data.new_node_id, data.new_node_id,
+                                               "{\"kind\":\"parentPromise\"}");
       }
       break;
     }
@@ -4277,15 +4276,7 @@ void RecordReplayOnPromiseHook(Isolate* isolate, PromiseHookType type,
       data.settled_node_id =
         recordreplay::NewDependencyGraphNode("{\"kind\":\"promiseSettled\"}");
       recordreplay::AddDependencyGraphEdge(data.new_node_id, data.settled_node_id,
-                                           "{\"kind\":\"newPromise\"}");
-      if (data.parent_promise_object_id) {
-        PromiseDependencyGraphData& parent_data =
-          GetOrCreatePromiseDependencyGraphData(data.parent_promise_object_id);
-        if (parent_data.settled_node_id) {
-          recordreplay::AddDependencyGraphEdge(parent_data.settled_node_id, data.settled_node_id,
-                                               "{\"kind\":\"parentPromise\"}");
-        }
-      }
+                                           "{\"kind\":\"basePromise\"}");
       break;
     }
     case PromiseHookType::kBefore: {
