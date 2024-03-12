@@ -4258,7 +4258,6 @@ void RecordReplayOnPromiseHook(Isolate* isolate, PromiseHookType type,
   switch (type) {
     case PromiseHookType::kInit: {
       CHECK(!data.new_node_id);
-      CHECK(!data.parent_promise_object_id);
       data.new_node_id = recordreplay::NewDependencyGraphNode("{\"kind\":\"newPromise\"}");
       if (!parent->IsUndefined()) {
         PromiseDependencyGraphData& parent_data =
@@ -4266,6 +4265,7 @@ void RecordReplayOnPromiseHook(Isolate* isolate, PromiseHookType type,
         if (parent_data.new_node_id) {
           recordreplay::AddDependencyGraphEdge(parent_data.new_node_id, data.new_node_id,
                                                "{\"kind\":\"parentPromise\"}");
+        }
       }
       break;
     }
