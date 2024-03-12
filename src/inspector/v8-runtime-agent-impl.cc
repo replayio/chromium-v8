@@ -255,7 +255,10 @@ V8RuntimeAgentImpl::V8RuntimeAgentImpl(
       m_frontend(FrontendChannel),
       m_inspector(session->inspector()),
       m_enabled(false),
-      m_replayOnly(v8::recordreplay::IsReplaying() && v8::recordreplay::AreEventsDisallowed()) {}
+      m_replay_owned(
+          (!v8::recordreplay::FeatureEnabled("replay-only-command-handling") ||
+           v8::recordreplay::IsReplaying()) &&
+          v8::recordreplay::AreEventsDisallowed()) {}
 
 V8RuntimeAgentImpl::~V8RuntimeAgentImpl() = default;
 
@@ -881,8 +884,8 @@ struct RecordReplayAutoMaybeDisallowEvents {
 void V8RuntimeAgentImpl::bindingCalled(const String16& name,
                                        const String16& payload,
                                        int executionContextId) {
-  RecordReplayAutoMaybeDisallowEvents
-    disallow(m_replayOnly, "V8RuntimeAgentImpl::bindingCalled");
+  RecordReplayAutoMaybeDisallowEvents disallow(
+      m_replay_owned, "V8RuntimeAgentImpl::bindingCalled");
 
   if (!m_activeBindings.count(name)) return;
   m_frontend.bindingCalled(name, payload, executionContextId);
@@ -910,8 +913,8 @@ void V8RuntimeAgentImpl::addBindings(InspectedContext* context) {
 }
 
 void V8RuntimeAgentImpl::restore() {
-  RecordReplayAutoMaybeDisallowEvents
-    disallow(m_replayOnly, "V8RuntimeAgentImpl::restore");
+  RecordReplayAutoMaybeDisallowEvents disallow(m_replay_owned,
+                                               "V8RuntimeAgentImpl::restore");
 
   if (!m_state->booleanProperty(V8RuntimeAgentImplState::runtimeEnabled, false))
     return;
@@ -971,8 +974,8 @@ Response V8RuntimeAgentImpl::disable() {
 }
 
 void V8RuntimeAgentImpl::reset() {
-  RecordReplayAutoMaybeDisallowEvents
-    disallow(m_replayOnly, "V8RuntimeAgentImpl::reset");
+  RecordReplayAutoMaybeDisallowEvents disallow(m_replay_owned,
+                                               "V8RuntimeAgentImpl::reset");
 
   m_compiledScripts.clear();
   if (m_enabled) {
@@ -987,8 +990,8 @@ void V8RuntimeAgentImpl::reset() {
 
 void V8RuntimeAgentImpl::reportExecutionContextCreated(
     InspectedContext* context) {
-  RecordReplayAutoMaybeDisallowEvents
-    disallow(m_replayOnly, "V8RuntimeAgentImpl::reportExecutionContextCreated");
+  RecordReplayAutoMaybeDisallowEvents disallow(
+      m_replay_owned, "V8RuntimeAgentImpl::reportExecutionContextCreated");
 
   if (!m_enabled) return;
   context->setReported(m_session->sessionId(), true);
@@ -1012,8 +1015,8 @@ void V8RuntimeAgentImpl::reportExecutionContextCreated(
 
 void V8RuntimeAgentImpl::reportExecutionContextDestroyed(
     InspectedContext* context) {
-  RecordReplayAutoMaybeDisallowEvents
-    disallow(m_replayOnly, "V8RuntimeAgentImpl::reportExecutionContextDestroyed");
+  RecordReplayAutoMaybeDisallowEvents disallow(
+      m_replay_owned, "V8RuntimeAgentImpl::reportExecutionContextDestroyed");
 
   if (m_enabled && context->isReported(m_session->sessionId())) {
     context->setReported(m_session->sessionId(), false);
@@ -1024,8 +1027,8 @@ void V8RuntimeAgentImpl::reportExecutionContextDestroyed(
 void V8RuntimeAgentImpl::inspect(
     std::unique_ptr<protocol::Runtime::RemoteObject> objectToInspect,
     std::unique_ptr<protocol::DictionaryValue> hints, int executionContextId) {
-  RecordReplayAutoMaybeDisallowEvents
-    disallow(m_replayOnly, "V8RuntimeAgentImpl::inspect");
+  RecordReplayAutoMaybeDisallowEvents disallow(m_replay_owned,
+                                               "V8RuntimeAgentImpl::inspect");
 
   if (m_enabled)
     m_frontend.inspectRequested(std::move(objectToInspect), std::move(hints),
@@ -1038,8 +1041,8 @@ void V8RuntimeAgentImpl::messageAdded(V8ConsoleMessage* message) {
 
 bool V8RuntimeAgentImpl::reportMessage(V8ConsoleMessage* message,
                                        bool generatePreview) {
-  RecordReplayAutoMaybeDisallowEvents
-    disallow(m_replayOnly, "V8RuntimeAgentImpl::reportMessage");
+  RecordReplayAutoMaybeDisallowEvents disallow(
+      m_replay_owned, "V8RuntimeAgentImpl::reportMessage");
 
   message->reportToFrontend(&m_frontend, m_session, generatePreview);
   m_frontend.flush();

@@ -164,7 +164,7 @@ class V8RuntimeAgentImpl : public protocol::Runtime::Backend {
   std::unordered_map<String16, std::unordered_set<int>> m_activeBindings;
 
   // Whether this agent is replaying specific, and should not interact with the recording.
-  bool m_replayOnly;
+  bool m_replay_owned;
 };
 
 }  // namespace v8_inspector
