@@ -5396,7 +5396,7 @@ void Isolate::RunPromiseHook(PromiseHookType type, Handle<JSPromise> promise,
                              Handle<Object> parent) {
   if (!HasIsolatePromiseHooks()) return;
   if (recordreplay::IsReplaying()) {
-    RecordReplayOnPromiseHook(isolate, type, promise, parent);
+    RecordReplayOnPromiseHook(this, type, promise, parent);
     if (!promise_hook_) return;
   }
   DCHECK(promise_hook_ != nullptr);

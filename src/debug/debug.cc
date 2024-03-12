@@ -4253,7 +4253,7 @@ void RecordReplayOnPromiseHook(Isolate* isolate, PromiseHookType type,
 
   int promise_object_id =
     RecordReplayObjectId(v8_isolate, v8_isolate->GetCurrentContext(),
-                         v8::Utils::ToLocal(promise),
+                         v8::Utils::ToLocal(Handle<Object>::cast(promise)),
                          /* allow_create */ type == PromiseHookType::kInit);
   PromiseDependencyGraphData& data = GetOrCreatePromiseDependencyGraphData(promise_object_id);
 
