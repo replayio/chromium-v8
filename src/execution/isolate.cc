@@ -5032,7 +5032,7 @@ void Isolate::PromiseHookStateUpdated() {
     (promise_hook_flags_ & PromiseHookFields::HasContextPromiseHook::kMask) |
     PromiseHookFields::HasIsolatePromiseHook::encode(promise_hook_ || recordreplay::IsReplaying()) |
     PromiseHookFields::HasAsyncEventDelegate::encode(async_event_delegate_) |
-    PromiseHookFields::IsDebugActive::encode(debug()->is_active());
+    PromiseHookFields::IsDebugActive::encode(debug() && debug()->is_active());
 
   if (promise_hook_flags_ != 0) {
     UpdatePromiseHookProtector();
