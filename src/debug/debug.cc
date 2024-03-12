@@ -4216,6 +4216,90 @@ std::string RecordReplayBasicValueContents(Handle<Object> value) {
   return "Unknown";
 }
 
+// Information in the dependency graph for a JS promise.
+struct PromiseDependencyGraphData {
+  // Graph node ID for the point the promise was created.
+  int new_node_id = 0;
+
+  // Graph node ID for the point the promise was settled.
+  int settled_node_id = 0;
+
+  // Object ID for the parent of the promise, if there is one.
+  int parent_promise_object_id = 0;
+};
+
+typedef std::unordered_map<int32_t, PromiseDependencyGraphData> PromiseDependencyGraphDataMap;
+static PromiseDependencyGraphDataMap* gPromiseDependencyGraphDataMap;
+
+static PromiseDependencyGraphData& GetOrCreatePromiseDependencyGraphData(int promise_object_id) {
+  CHECK(IsMainThread());
+  if (!gPromiseDependencyGraphDataMap) {
+    gPromiseDependencyGraphDataMap = new PromiseDependencyGraphDataMap();
+  }
+  auto iter = gPromiseDependencyGraphDataMap->find(promise_object_id);
+  if (iter == gPromiseDependencyGraphDataMap->end()) {
+    (*gPromiseDependencyGraphDataMap)[promise_object_id] = PromiseDependencyGraphData();
+    iter = gPromiseDependencyGraphDataMap->find(promise_object_id);
+    CHECK(iter != gPromiseDependencyGraphDataMap->end());
+  }
+  return iter->second;
+}
+
+void RecordReplayOnPromiseHook(Isolate* isolate, PromiseHookType type,
+                               Handle<JSPromise> promise, Handle<Object> parent) {
+  CHECK(recordreplay::IsReplaying());
+
+  v8::Isolate* v8_isolate = (v8::Isolate*) isolate;
+
+  int promise_object_id =
+    RecordReplayObjectId(v8_isolate, v8_isolate->GetCurrentContext(),
+                         v8::Utils::ToLocal(promise),
+                         /* allow_create */ type == PromiseHookType::kInit);
+  PromiseDependencyGraphData& data = GetOrCreatePromiseDependencyGraphData(promise_object_id);
+
+  switch (type) {
+    case PromiseHookType::kInit: {
+      CHECK(!data.new_node_id);
+      CHECK(!data.parent_promise_object_id);
+      data.new_node_id = recordreplay::NewDependencyGraphNode("{\"kind\":\"newPromise\"}");
+      if (!parent->IsUndefined()) {
+        data.parent_promise_object_id =
+          RecordReplayObjectId(v8_isolate, v8_isolate->GetCurrentContext(),
+                               v8::Utils::ToLocal(parent),
+                               /* allow_create */ false);
+      }
+      break;
+    }
+    case PromiseHookType::kResolve: {
+      if (!data.new_node_id || data.settled_node_id) {
+        break;
+      }
+      data.settled_node_id =
+        recordreplay::NewDependencyGraphNode("{\"kind\":\"promiseSettled\"}");
+      recordreplay::AddDependencyGraphEdge(data.new_node_id, data.settled_node_id,
+                                           "{\"kind\":\"newPromise\"}");
+      if (data.parent_promise_object_id) {
+        PromiseDependencyGraphData& parent_data =
+          GetOrCreatePromiseDependencyGraphData(data.parent_promise_object_id);
+        if (parent_data.settled_node_id) {
+          recordreplay::AddDependencyGraphEdge(parent_data.settled_node_id, data.settled_node_id,
+                                               "{\"kind\":\"parentPromise\"}");
+        }
+      }
+      break;
+    }
+    case PromiseHookType::kBefore: {
+      CHECK(data.settled_node_id);
+      recordreplay::BeginDependencyExecution(data.settled_node_id);
+      break;
+    }
+    case PromiseHookType::kAfter: {
+      recordreplay::EndDependencyExecution();
+      break;
+    }
+  }
+}
+
 }  // namespace internal
 
 namespace i = internal;
