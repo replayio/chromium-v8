@@ -388,6 +388,7 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
 
     if (recordreplay::IsReplaying() &&
         IsMainThread() &&
+        !recordreplay::AreEventsDisallowed() &&
         RecordReplayDependencyGraphExecutionDepth() == 0) {
       static bool emit = getenv("RECORD_REPLAY_WARN_MISSING_DEPENDENCY_GRAPH");
       if (emit) {
