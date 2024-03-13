@@ -4252,6 +4252,10 @@ void RecordReplayOnPromiseHook(Isolate* isolate, PromiseHookType type,
                                Handle<JSPromise> promise, Handle<Object> parent) {
   CHECK(recordreplay::IsReplaying());
 
+  if (!IsMainThread()) {
+    return;
+  }
+
   PromiseDependencyGraphData& data =
     GetOrCreatePromiseDependencyGraphData(isolate, promise);
 
