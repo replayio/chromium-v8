@@ -296,7 +296,7 @@ static std::string GetFunctionLocationInfo(Isolate* isolate, Handle<JSFunction> 
     : "(anonymous script)";
 
   std::ostringstream os;
-  os << "scriptId=" << script.is_null() ? script->id() : -1;
+  os << "scriptId=" << (script.is_null() ? script->id() : -1);
   os << " @" << name << ":" << info.line + 1 << ":" << info.column;
   return os.str();
 }
@@ -376,7 +376,7 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
       // User JS should not get executed in divergent code paths,
       // unless we have paused.
       // → Print log and prevent execution.
-      std::string location = GetFunctionLocationInfo(function);
+      std::string location = GetFunctionLocationInfo(isolate, function);
       std::stringstream stack;
       isolate->PrintCurrentStackTrace(stack);
 
@@ -391,7 +391,7 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
         RecordReplayDependencyGraphExecutionDepth() == 0) {
       static bool emit = getenv("RECORD_REPLAY_WARN_MISSING_DEPENDENCY_GRAPH");
       if (emit) {
-        std::string location = GetFunctionLocationInfo(function);
+        std::string location = GetFunctionLocationInfo(isolate, function);
         recordreplay::Warning("Missing dependency graph execution: %s", location.c_str());
       }
     }
