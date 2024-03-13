@@ -18,9 +18,11 @@
 #endif  // V8_ENABLE_WEBASSEMBLY
 
 namespace v8 {
+
+extern uint32_t RecordReplayDependencyGraphExecutionDepth();
+
 namespace internal {
 
-extern bool RecordReplayHasRegisteredScript(Script script);
 extern bool RecordReplayIsDivergentUserJSWithoutPause(const SharedFunctionInfo& shared);
 extern uint64_t* gProgressCounter;
 
@@ -277,6 +279,28 @@ MaybeHandle<Context> NewScriptContext(Isolate* isolate,
   return result;
 }
 
+// Get a description of a function's location for logging etc.
+static std::string GetFunctionLocationInfo(Isolate* isolate, Handle<JSFunction> function) {
+  if (!function->shared().script().IsScript()) {
+    return "<not-script>";
+  }
+
+  Handle<Script> script(Script::cast(function->shared().script()), isolate);
+
+  Script::PositionInfo info;
+  Script::GetPositionInfo(script, function->shared().StartPosition(),
+                          &info, Script::WITH_OFFSET);
+
+  std::string name = script->name().IsString()
+    ? String::cast(script->name()).ToCString().get()
+    : "(anonymous script)";
+
+  std::ostringstream os;
+  os << "scriptId=" << script.is_null() ? script->id() : -1;
+  os << " @" << name << ":" << info.line + 1 << ":" << info.column;
+  return os.str();
+}
+
 V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
                                                  const InvokeParams& params) {
   RCS_SCOPE(isolate, RuntimeCallCounterId::kInvoke);
@@ -352,25 +376,24 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
       // User JS should not get executed in divergent code paths,
       // unless we have paused.
       // → Print log and prevent execution.
-      Script::PositionInfo info;
-      std::string name;
-      Handle<Script> script;
-      if (function->shared().script().IsScript()) {
-        script = Handle<Script>(Script::cast(function->shared().script()), isolate);
-        Script::GetPositionInfo(script, function->shared().StartPosition(),
-                                &info, Script::WITH_OFFSET);
-        name = script->name().IsString()
-                   ? String::cast(script->name()).ToCString().get()
-                   : "(anonymous script)";
-      }
+      std::string location = GetFunctionLocationInfo(function);
       std::stringstream stack;
       isolate->PrintCurrentStackTrace(stack);
 
       recordreplay::Warning(
-          "JS Invoke: Non-deterministic user JS PC=%zu scriptId=%d @%s:%d:%d stack=%s",
-          *gProgressCounter, script.is_null() ? script->id() : -1, name.c_str(), info.line + 1,
-          info.column, stack.str().c_str());
+          "JS Invoke: Non-deterministic user JS PC=%zu %s stack=%s",
+          *gProgressCounter, location.c_str(), stack.str().c_str());
       return isolate->factory()->undefined_value();
+    }
+
+    if (recordreplay::IsReplaying() &&
+        IsMainThread() &&
+        RecordReplayDependencyGraphExecutionDepth() == 0) {
+      static bool emit = getenv("RECORD_REPLAY_WARN_MISSING_DEPENDENCY_GRAPH");
+      if (emit) {
+        std::string location = GetFunctionLocationInfo(function);
+        recordreplay::Warning("Missing dependency graph execution: %s", location.c_str());
+      }
     }
 
     // Set up a ScriptContext when running scripts that need it.

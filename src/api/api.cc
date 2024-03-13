@@ -11664,8 +11664,15 @@ void recordreplay::AddDependencyGraphEdge(int source, int target, const char* js
   V8RecordReplayAddDependencyGraphEdge(source, target, json);
 }
 
+static uint32_t gDependencyGraphExecutionDepth = 0;
+
+uint32_t RecordReplayDependencyGraphExecutionDepth() {
+  return gDependencyGraphExecutionDepth;
+}
+
 extern "C" DLLEXPORT void V8RecordReplayBeginDependencyExecution(int node) {
   if (recordreplay::IsRecordingOrReplaying()) {
+    gDependencyGraphExecutionDepth++;
     gRecordReplayBeginDependencyExecution(node);
   }
 }
@@ -11676,6 +11683,7 @@ void recordreplay::BeginDependencyExecution(int node) {
 
 extern "C" DLLEXPORT void V8RecordReplayEndDependencyExecution() {
   if (recordreplay::IsRecordingOrReplaying()) {
+    gDependencyGraphExecutionDepth--;
     gRecordReplayEndDependencyExecution();
   }
 }
