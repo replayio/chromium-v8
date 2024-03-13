@@ -11644,7 +11644,7 @@ extern "C" DLLEXPORT bool V8RecordReplayAllowSideEffects() {
 }
 
 extern "C" DLLEXPORT int V8RecordReplayNewDependencyGraphNode(const char* json) {
-  if (recordreplay::IsRecordingOrReplaying()) {
+  if (recordreplay::IsRecordingOrReplaying() && IsMainThread()) {
     return gRecordReplayNewDependencyGraphNode(json);
   }
   return 0;
@@ -11655,7 +11655,7 @@ int recordreplay::NewDependencyGraphNode(const char* json) {
 }
 
 extern "C" DLLEXPORT void V8RecordReplayAddDependencyGraphEdge(int source, int target, const char* json) {
-  if (recordreplay::IsRecordingOrReplaying()) {
+  if (recordreplay::IsRecordingOrReplaying() && IsMainThread()) {
     gRecordReplayAddDependencyGraphEdge(source, target, json);
   }
 }
@@ -11671,7 +11671,7 @@ uint32_t RecordReplayDependencyGraphExecutionDepth() {
 }
 
 extern "C" DLLEXPORT void V8RecordReplayBeginDependencyExecution(int node) {
-  if (recordreplay::IsRecordingOrReplaying()) {
+  if (recordreplay::IsRecordingOrReplaying() && IsMainThread()) {
     gDependencyGraphExecutionDepth++;
     gRecordReplayBeginDependencyExecution(node);
   }
@@ -11682,7 +11682,7 @@ void recordreplay::BeginDependencyExecution(int node) {
 }
 
 extern "C" DLLEXPORT void V8RecordReplayEndDependencyExecution() {
-  if (recordreplay::IsRecordingOrReplaying()) {
+  if (recordreplay::IsRecordingOrReplaying() && IsMainThread()) {
     gDependencyGraphExecutionDepth--;
     gRecordReplayEndDependencyExecution();
   }
