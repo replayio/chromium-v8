@@ -393,7 +393,7 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
       static bool emit = getenv("RECORD_REPLAY_WARN_MISSING_DEPENDENCY_GRAPH");
       if (emit) {
         std::string location = GetFunctionLocationInfo(isolate, function);
-        recordreplay::Warning("Missing dependency graph execution: %s", location.c_str());
+        recordreplay::Warning("DependencyGraph missing execution: %s", location.c_str());
       }
     }
 

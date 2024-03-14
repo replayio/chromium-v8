@@ -4243,7 +4243,6 @@ GetOrCreatePromiseDependencyGraphData(Isolate* isolate, Handle<Object> promise) 
   if (iter == gPromiseDependencyGraphDataMap->end()) {
     (*gPromiseDependencyGraphDataMap)[promise_object_id] = PromiseDependencyGraphData();
     iter = gPromiseDependencyGraphDataMap->find(promise_object_id);
-    CHECK(iter != gPromiseDependencyGraphDataMap->end());
   }
   return iter->second;
 }
