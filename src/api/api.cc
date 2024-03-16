@@ -11648,7 +11648,7 @@ extern "C" DLLEXPORT bool V8RecordReplayAllowSideEffects() {
 
 extern "C" DLLEXPORT int V8RecordReplayNewDependencyGraphNode(const char* json) {
   if (recordreplay::IsRecordingOrReplaying() && IsMainThread() &&
-      gRecordReplayEnableDependencyGraph) {
+      i::gRecordReplayEnableDependencyGraph) {
     return gRecordReplayNewDependencyGraphNode(json);
   }
   return 0;
@@ -11660,7 +11660,7 @@ int recordreplay::NewDependencyGraphNode(const char* json) {
 
 extern "C" DLLEXPORT void V8RecordReplayAddDependencyGraphEdge(int source, int target, const char* json) {
   if (recordreplay::IsRecordingOrReplaying() && IsMainThread() &&
-      gRecordReplayEnableDependencyGraph) {
+      i::gRecordReplayEnableDependencyGraph) {
     gRecordReplayAddDependencyGraphEdge(source, target, json);
   }
 }
@@ -11677,7 +11677,7 @@ uint32_t RecordReplayDependencyGraphExecutionDepth() {
 
 extern "C" DLLEXPORT void V8RecordReplayBeginDependencyExecution(int node) {
   if (recordreplay::IsRecordingOrReplaying() && IsMainThread() &&
-      gRecordReplayEnableDependencyGraph) {
+      i::gRecordReplayEnableDependencyGraph) {
     gDependencyGraphExecutionDepth++;
     gRecordReplayBeginDependencyExecution(node);
   }
@@ -11689,7 +11689,7 @@ void recordreplay::BeginDependencyExecution(int node) {
 
 extern "C" DLLEXPORT void V8RecordReplayEndDependencyExecution() {
   if (recordreplay::IsRecordingOrReplaying() && IsMainThread() &&
-      gRecordReplayEnableDependencyGraph) {
+      i::gRecordReplayEnableDependencyGraph) {
     gDependencyGraphExecutionDepth--;
     gRecordReplayEndDependencyExecution();
   }
@@ -12092,13 +12092,16 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
       i::gRecordReplayAssertValues || !!getenv("RECORD_REPLAY_JS_PROGRESS_ASSERTS");
   i::gRecordReplayAssertTrackedObjects =
       i::gRecordReplayAssertValues || !!getenv("RECORD_REPLAY_JS_OBJECT_ASSERTS");
-  i::gRecordReplayEnableDependencyGraph = !!getenv("RECORD_REPLAY_DEPENDENCY_GRAPH");
 
   if (i::gRecordReplayAssertProgress) {
     gRecordReplaySetAssertDataCallbacks(i::RecordReplayCallbackAssertGetData,
                                         i::RecordReplayCallbackAssertOnDataMismatch,
                                         i::RecordReplayCallbackAssertDescribeData);
   }
+
+  // Currently the dependency graph is disabled by default.
+  i::gRecordReplayEnableDependencyGraph =
+    !V8RecordReplayFeatureEnabled("no-dependency-graph");
 
   // Disable wasm background compilation.
   if (V8RecordReplayFeatureEnabled("disable-v8-flags-wasm-compilation-tasks", nullptr)) {
