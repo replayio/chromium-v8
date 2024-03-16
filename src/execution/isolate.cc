@@ -3488,6 +3488,7 @@ v8::PageAllocator* Isolate::page_allocator() const {
 }
 
 extern void RecordReplayOnMainThreadIsolateCreated(Isolate* isolate);
+extern bool RecordReplayShouldCallOnPromiseHook();
 
 Isolate::Isolate(std::unique_ptr<i::IsolateAllocator> isolate_allocator,
                  bool is_shared)
@@ -3545,7 +3546,7 @@ Isolate::Isolate(std::unique_ptr<i::IsolateAllocator> isolate_allocator,
     RecordReplayOnMainThreadIsolateCreated(this);
   }
 
-  if (recordreplay::IsReplaying()) {
+  if (RecordReplayShouldCallOnPromiseHook()) {
     promise_hook_flags_ =
       PromiseHookFields::HasIsolatePromiseHook::encode(true);
   }
@@ -5031,7 +5032,7 @@ void Isolate::UpdatePromiseHookProtector() {
 void Isolate::PromiseHookStateUpdated() {
   promise_hook_flags_ =
     (promise_hook_flags_ & PromiseHookFields::HasContextPromiseHook::kMask) |
-    PromiseHookFields::HasIsolatePromiseHook::encode(promise_hook_ || recordreplay::IsReplaying()) |
+    PromiseHookFields::HasIsolatePromiseHook::encode(promise_hook_ || RecordReplayShouldCallOnPromiseHook()) |
     PromiseHookFields::HasAsyncEventDelegate::encode(async_event_delegate_) |
     PromiseHookFields::IsDebugActive::encode(debug()->is_active());
 
@@ -5395,7 +5396,7 @@ extern void RecordReplayOnPromiseHook(Isolate* isolate, PromiseHookType type,
 void Isolate::RunPromiseHook(PromiseHookType type, Handle<JSPromise> promise,
                              Handle<Object> parent) {
   if (!HasIsolatePromiseHooks()) return;
-  if (recordreplay::IsReplaying()) {
+  if (RecordReplayShouldCallOnPromiseHook()) {
     RecordReplayOnPromiseHook(this, type, promise, parent);
     if (!promise_hook_) return;
   }
