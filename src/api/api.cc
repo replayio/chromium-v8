@@ -10978,6 +10978,9 @@ bool gRecordReplayAssertValues;
 bool gRecordReplayAssertProgress;
 bool gRecordReplayAssertTrackedObjects;
 
+// Enable reporting the dependency graph while replaying.
+bool gRecordReplayEnableDependencyGraph;
+
 // Enable various checks when advancing the progress counter. Set via the
 // environment, or when events are disallowed on the main thread.
 int gRecordReplayCheckProgress;
@@ -11644,7 +11647,8 @@ extern "C" DLLEXPORT bool V8RecordReplayAllowSideEffects() {
 }
 
 extern "C" DLLEXPORT int V8RecordReplayNewDependencyGraphNode(const char* json) {
-  if (recordreplay::IsRecordingOrReplaying() && IsMainThread()) {
+  if (recordreplay::IsRecordingOrReplaying() && IsMainThread() &&
+      gRecordReplayEnableDependencyGraph) {
     return gRecordReplayNewDependencyGraphNode(json);
   }
   return 0;
@@ -11655,7 +11659,8 @@ int recordreplay::NewDependencyGraphNode(const char* json) {
 }
 
 extern "C" DLLEXPORT void V8RecordReplayAddDependencyGraphEdge(int source, int target, const char* json) {
-  if (recordreplay::IsRecordingOrReplaying() && IsMainThread()) {
+  if (recordreplay::IsRecordingOrReplaying() && IsMainThread() &&
+      gRecordReplayEnableDependencyGraph) {
     gRecordReplayAddDependencyGraphEdge(source, target, json);
   }
 }
@@ -11671,7 +11676,8 @@ uint32_t RecordReplayDependencyGraphExecutionDepth() {
 }
 
 extern "C" DLLEXPORT void V8RecordReplayBeginDependencyExecution(int node) {
-  if (recordreplay::IsRecordingOrReplaying() && IsMainThread()) {
+  if (recordreplay::IsRecordingOrReplaying() && IsMainThread() &&
+      gRecordReplayEnableDependencyGraph) {
     gDependencyGraphExecutionDepth++;
     gRecordReplayBeginDependencyExecution(node);
   }
@@ -11682,7 +11688,8 @@ void recordreplay::BeginDependencyExecution(int node) {
 }
 
 extern "C" DLLEXPORT void V8RecordReplayEndDependencyExecution() {
-  if (recordreplay::IsRecordingOrReplaying() && IsMainThread()) {
+  if (recordreplay::IsRecordingOrReplaying() && IsMainThread() &&
+      gRecordReplayEnableDependencyGraph) {
     gDependencyGraphExecutionDepth--;
     gRecordReplayEndDependencyExecution();
   }
@@ -12085,6 +12092,7 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
       i::gRecordReplayAssertValues || !!getenv("RECORD_REPLAY_JS_PROGRESS_ASSERTS");
   i::gRecordReplayAssertTrackedObjects =
       i::gRecordReplayAssertValues || !!getenv("RECORD_REPLAY_JS_OBJECT_ASSERTS");
+  i::gRecordReplayEnableDependencyGraph = !!getenv("RECORD_REPLAY_DEPENDENCY_GRAPH");
 
   if (i::gRecordReplayAssertProgress) {
     gRecordReplaySetAssertDataCallbacks(i::RecordReplayCallbackAssertGetData,

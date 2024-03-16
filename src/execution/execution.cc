@@ -25,6 +25,7 @@ namespace internal {
 
 extern bool RecordReplayIsDivergentUserJSWithoutPause(const SharedFunctionInfo& shared);
 extern uint64_t* gProgressCounter;
+extern bool gRecordReplayEnableDependencyGraph;
 
 namespace {
 
@@ -388,13 +389,11 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
 
     if (recordreplay::IsReplaying() &&
         IsMainThread() &&
+        gRecordReplayEnableDependencyGraph &&
         !recordreplay::AreEventsDisallowed() &&
         RecordReplayDependencyGraphExecutionDepth() == 0) {
-      static bool emit = getenv("RECORD_REPLAY_WARN_MISSING_DEPENDENCY_GRAPH");
-      if (emit) {
-        std::string location = GetFunctionLocationInfo(isolate, function);
-        recordreplay::Warning("DependencyGraph missing execution: %s", location.c_str());
-      }
+      std::string location = GetFunctionLocationInfo(isolate, function);
+      recordreplay::Warning("DependencyGraph missing execution: %s", location.c_str());
     }
 
     // Set up a ScriptContext when running scripts that need it.
