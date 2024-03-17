@@ -17,10 +17,9 @@
 #include "src/wasm/wasm-engine.h"
 #endif  // V8_ENABLE_WEBASSEMBLY
 
+extern "C" int V8RecordReplayDependencyGraphExecutionNode();
+
 namespace v8 {
-
-extern uint32_t RecordReplayDependencyGraphExecutionDepth();
-
 namespace internal {
 
 extern bool RecordReplayIsDivergentUserJSWithoutPause(const SharedFunctionInfo& shared);
@@ -391,7 +390,7 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
         IsMainThread() &&
         gRecordReplayEnableDependencyGraph &&
         !recordreplay::AreEventsDisallowed() &&
-        RecordReplayDependencyGraphExecutionDepth() == 0 &&
+        V8RecordReplayDependencyGraphExecutionNode() == 0 &&
         function->shared().script().IsScript()) {
       std::string location = GetFunctionLocationInfo(isolate, function);
       recordreplay::Warning("DependencyGraph missing execution: %s", location.c_str());

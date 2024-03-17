@@ -11669,16 +11669,22 @@ void recordreplay::AddDependencyGraphEdge(int source, int target, const char* js
   V8RecordReplayAddDependencyGraphEdge(source, target, json);
 }
 
-static uint32_t gDependencyGraphExecutionDepth = 0;
+static std::vector<int>* gDependencyGraphExecutionStack;
 
-uint32_t RecordReplayDependencyGraphExecutionDepth() {
-  return gDependencyGraphExecutionDepth;
+extern "C" int V8RecordReplayDependencyGraphExecutionNode() {
+  if (!IsMainThread() || !gDependencyGraphExecutionStack) {
+    return 0;
+  }
+  return gDependencyGraphExecutionStack->back();
 }
 
 extern "C" DLLEXPORT void V8RecordReplayBeginDependencyExecution(int node) {
   if (recordreplay::IsRecordingOrReplaying() && IsMainThread() &&
       i::gRecordReplayEnableDependencyGraph) {
-    gDependencyGraphExecutionDepth++;
+    if (!gDependencyGraphExecutionStack) {
+      gDependencyGraphExecutionStack = new std::vector<int>();
+    }
+    (*gDependencyGraphExecutionStack)->push_back(node);
     gRecordReplayBeginDependencyExecution(node);
   }
 }
@@ -11690,7 +11696,7 @@ void recordreplay::BeginDependencyExecution(int node) {
 extern "C" DLLEXPORT void V8RecordReplayEndDependencyExecution() {
   if (recordreplay::IsRecordingOrReplaying() && IsMainThread() &&
       i::gRecordReplayEnableDependencyGraph) {
-    gDependencyGraphExecutionDepth--;
+    (*gDependencyGraphExecutionStack)->pop_back();
     gRecordReplayEndDependencyExecution();
   }
 }
