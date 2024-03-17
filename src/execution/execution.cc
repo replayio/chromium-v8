@@ -392,7 +392,7 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
         gRecordReplayEnableDependencyGraph &&
         !recordreplay::AreEventsDisallowed() &&
         RecordReplayDependencyGraphExecutionDepth() == 0 &&
-        function->shared().is_script()) {
+        function->shared().script().IsScript()) {
       std::string location = GetFunctionLocationInfo(isolate, function);
       recordreplay::Warning("DependencyGraph missing execution: %s", location.c_str());
     }
