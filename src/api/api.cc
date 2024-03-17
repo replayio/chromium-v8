@@ -11672,7 +11672,9 @@ void recordreplay::AddDependencyGraphEdge(int source, int target, const char* js
 static std::vector<int>* gDependencyGraphExecutionStack;
 
 extern "C" int V8RecordReplayDependencyGraphExecutionNode() {
-  if (!IsMainThread() || !gDependencyGraphExecutionStack) {
+  if (!IsMainThread() ||
+      !gDependencyGraphExecutionStack ||
+      !gDependencyGraphExecutionStack->size()) {
     return 0;
   }
   return gDependencyGraphExecutionStack->back();
