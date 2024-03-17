@@ -11684,7 +11684,7 @@ extern "C" DLLEXPORT void V8RecordReplayBeginDependencyExecution(int node) {
     if (!gDependencyGraphExecutionStack) {
       gDependencyGraphExecutionStack = new std::vector<int>();
     }
-    (*gDependencyGraphExecutionStack)->push_back(node);
+    gDependencyGraphExecutionStack->push_back(node);
     gRecordReplayBeginDependencyExecution(node);
   }
 }
@@ -11696,7 +11696,7 @@ void recordreplay::BeginDependencyExecution(int node) {
 extern "C" DLLEXPORT void V8RecordReplayEndDependencyExecution() {
   if (recordreplay::IsRecordingOrReplaying() && IsMainThread() &&
       i::gRecordReplayEnableDependencyGraph) {
-    (*gDependencyGraphExecutionStack)->pop_back();
+    gDependencyGraphExecutionStack->pop_back();
     gRecordReplayEndDependencyExecution();
   }
 }
