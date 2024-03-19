@@ -11646,9 +11646,12 @@ extern "C" DLLEXPORT bool V8RecordReplayAllowSideEffects() {
   return recordreplay::AllowSideEffects();
 }
 
+static inline bool UpdateDependencyGraph() {
+  return i::gRecordReplayEnableDependencyGraph && IsMainThread();
+}
+
 extern "C" DLLEXPORT int V8RecordReplayNewDependencyGraphNode(const char* json) {
-  if (recordreplay::IsRecordingOrReplaying() && IsMainThread() &&
-      i::gRecordReplayEnableDependencyGraph) {
+  if (UpdateDependencyGraph()) {
     return gRecordReplayNewDependencyGraphNode(json);
   }
   return 0;
@@ -11659,8 +11662,7 @@ int recordreplay::NewDependencyGraphNode(const char* json) {
 }
 
 extern "C" DLLEXPORT void V8RecordReplayAddDependencyGraphEdge(int source, int target, const char* json) {
-  if (recordreplay::IsRecordingOrReplaying() && IsMainThread() &&
-      i::gRecordReplayEnableDependencyGraph) {
+  if (UpdateDependencyGraph()) {
     gRecordReplayAddDependencyGraphEdge(source, target, json);
   }
 }
@@ -11681,8 +11683,7 @@ extern "C" int V8RecordReplayDependencyGraphExecutionNode() {
 }
 
 extern "C" DLLEXPORT void V8RecordReplayBeginDependencyExecution(int node) {
-  if (recordreplay::IsRecordingOrReplaying() && IsMainThread() &&
-      i::gRecordReplayEnableDependencyGraph) {
+  if (UpdateDependencyGraph()) {
     if (!gDependencyGraphExecutionStack) {
       gDependencyGraphExecutionStack = new std::vector<int>();
     }
@@ -11696,8 +11697,7 @@ void recordreplay::BeginDependencyExecution(int node) {
 }
 
 extern "C" DLLEXPORT void V8RecordReplayEndDependencyExecution() {
-  if (recordreplay::IsRecordingOrReplaying() && IsMainThread() &&
-      i::gRecordReplayEnableDependencyGraph) {
+  if (UpdateDependencyGraph()) {
     gDependencyGraphExecutionStack->pop_back();
     gRecordReplayEndDependencyExecution();
   }
