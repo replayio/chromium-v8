@@ -10978,6 +10978,9 @@ bool gRecordReplayAssertValues;
 bool gRecordReplayAssertProgress;
 bool gRecordReplayAssertTrackedObjects;
 
+// Enable reporting the dependency graph while replaying.
+bool gRecordReplayEnableDependencyGraph;
+
 // Enable various checks when advancing the progress counter. Set via the
 // environment, or when events are disallowed on the main thread.
 int gRecordReplayCheckProgress;
@@ -11643,8 +11646,12 @@ extern "C" DLLEXPORT bool V8RecordReplayAllowSideEffects() {
   return recordreplay::AllowSideEffects();
 }
 
+static inline bool UpdateDependencyGraph() {
+  return i::gRecordReplayEnableDependencyGraph && IsMainThread();
+}
+
 extern "C" DLLEXPORT int V8RecordReplayNewDependencyGraphNode(const char* json) {
-  if (recordreplay::IsRecordingOrReplaying() && IsMainThread()) {
+  if (UpdateDependencyGraph()) {
     return gRecordReplayNewDependencyGraphNode(json);
   }
   return 0;
@@ -11655,7 +11662,7 @@ int recordreplay::NewDependencyGraphNode(const char* json) {
 }
 
 extern "C" DLLEXPORT void V8RecordReplayAddDependencyGraphEdge(int source, int target, const char* json) {
-  if (recordreplay::IsRecordingOrReplaying() && IsMainThread()) {
+  if (UpdateDependencyGraph()) {
     gRecordReplayAddDependencyGraphEdge(source, target, json);
   }
 }
@@ -11664,15 +11671,23 @@ void recordreplay::AddDependencyGraphEdge(int source, int target, const char* js
   V8RecordReplayAddDependencyGraphEdge(source, target, json);
 }
 
-static uint32_t gDependencyGraphExecutionDepth = 0;
+static std::vector<int>* gDependencyGraphExecutionStack;
 
-uint32_t RecordReplayDependencyGraphExecutionDepth() {
-  return gDependencyGraphExecutionDepth;
+extern "C" int V8RecordReplayDependencyGraphExecutionNode() {
+  if (!IsMainThread() ||
+      !gDependencyGraphExecutionStack ||
+      !gDependencyGraphExecutionStack->size()) {
+    return 0;
+  }
+  return gDependencyGraphExecutionStack->back();
 }
 
 extern "C" DLLEXPORT void V8RecordReplayBeginDependencyExecution(int node) {
-  if (recordreplay::IsRecordingOrReplaying() && IsMainThread()) {
-    gDependencyGraphExecutionDepth++;
+  if (UpdateDependencyGraph()) {
+    if (!gDependencyGraphExecutionStack) {
+      gDependencyGraphExecutionStack = new std::vector<int>();
+    }
+    gDependencyGraphExecutionStack->push_back(node);
     gRecordReplayBeginDependencyExecution(node);
   }
 }
@@ -11682,8 +11697,8 @@ void recordreplay::BeginDependencyExecution(int node) {
 }
 
 extern "C" DLLEXPORT void V8RecordReplayEndDependencyExecution() {
-  if (recordreplay::IsRecordingOrReplaying() && IsMainThread()) {
-    gDependencyGraphExecutionDepth--;
+  if (UpdateDependencyGraph()) {
+    gDependencyGraphExecutionStack->pop_back();
     gRecordReplayEndDependencyExecution();
   }
 }
@@ -12091,6 +12106,10 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
                                         i::RecordReplayCallbackAssertOnDataMismatch,
                                         i::RecordReplayCallbackAssertDescribeData);
   }
+
+  // Currently the dependency graph is disabled by default.
+  i::gRecordReplayEnableDependencyGraph =
+    !V8RecordReplayFeatureEnabled("no-dependency-graph", nullptr);
 
   // Disable wasm background compilation.
   if (V8RecordReplayFeatureEnabled("disable-v8-flags-wasm-compilation-tasks", nullptr)) {
