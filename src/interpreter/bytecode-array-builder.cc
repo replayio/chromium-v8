@@ -1405,8 +1405,8 @@ int BytecodeArrayBuilder::RecordReplayRegisterInstrumentationSite(
   }
   record_replay_instrumentation_site_locations_.insert(source_position);
 
-  int bytecode_offset = bytecode_array_writer_.size();
-  return RegisterInstrumentationSite(kind, source_position, bytecode_offset);
+  int rank = (int)record_replay_instrumentation_site_locations_.size();
+  return RegisterInstrumentationSite(kind, source_position, rank);
 }
 
 BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayInstrumentation(

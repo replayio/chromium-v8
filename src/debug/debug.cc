@@ -3216,7 +3216,7 @@ static std::string BreakpointPositionKey(std::string function_id,
 
 extern const char* InstrumentationSiteKind(int index);
 extern int InstrumentationSiteSourcePosition(int index);
-extern int InstrumentationSiteBytecodeOffset(int index);
+extern int InstrumentationSiteRank(int index);
 extern std::string GetRecordReplayFunctionId(Handle<SharedFunctionInfo> shared);
 
 static void GetInstrumentationSiteLocation(Handle<Script> script, int instrumentation_index,
@@ -3265,7 +3265,7 @@ static void ForEachInstrumentationOpInRange(
       return;
     }
 
-    int bytecode_offset = InstrumentationSiteBytecodeOffset(instrumentation_index);
+    int bytecode_offset = InstrumentationSiteRank(instrumentation_index);
 
     std::string function_id = GetRecordReplayFunctionId(shared);
     callback(script, bytecode_offset, function_id, line, column);
@@ -3286,7 +3286,7 @@ static void GenerateBreakpointInfo(Isolate* isolate, Handle<Script> script) {
     GetInstrumentationSiteLocation(script, instrumentation_index, &line, &column);
 
     std::string function_id = GetRecordReplayFunctionId(shared);
-    int bytecode_offset = InstrumentationSiteBytecodeOffset(instrumentation_index);
+    int bytecode_offset = InstrumentationSiteRank(instrumentation_index);
 
     std::string key = BreakpointKey(script->id(), line, column);
     BreakpointInfo value(function_id, bytecode_offset);
@@ -3444,10 +3444,10 @@ void RecordReplayGetPossibleBreakpointsCallback(const char* script_id_str) {
     int line, column;
     GetInstrumentationSiteLocation(script, instrumentation_index, &line, &column);
 
-    int bytecode_offset = InstrumentationSiteBytecodeOffset(instrumentation_index);
+    int rank = InstrumentationSiteRank(instrumentation_index);
 
     std::string function_id = GetRecordReplayFunctionId(shared);
-    RecordReplayAddPossibleBreakpoint(line, column, function_id.c_str(), bytecode_offset);
+    RecordReplayAddPossibleBreakpoint(line, column, function_id.c_str(), rank);
   });
 }
 

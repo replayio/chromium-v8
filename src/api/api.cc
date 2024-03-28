@@ -10796,7 +10796,7 @@ typedef char* (CommandCallbackRaw)(const char* params);
   Macro(RecordReplayJSONFree, (void*))                                        \
   Macro(RecordReplayOnAnnotation, (const char* kind, const char* contents))   \
   Macro(RecordReplayAddPossibleBreakpoint,                                    \
-        (int line, int column, const char* function_id, int offset))          \
+        (int line, int column, const char* function_id, int rank))          \
   Macro(RecordReplayOnEvent, (const char* aEvent, bool aBefore))              \
   Macro(RecordReplayOnMouseEvent,                                             \
         (const char* aKind, size_t aClientX, size_t aClientY))                \
@@ -11840,8 +11840,8 @@ extern "C" DLLEXPORT bool V8RecordReplayGetStack(char* aStack, size_t aSize) {
 
 namespace internal {
 
-void RecordReplayAddPossibleBreakpoint(int line, int column, const char* function_id, int offset) {
-  gRecordReplayAddPossibleBreakpoint(line, column, function_id, offset);
+void RecordReplayAddPossibleBreakpoint(int line, int column, const char* function_id, int rank) {
+  gRecordReplayAddPossibleBreakpoint(line, column, function_id, rank);
 }
 
 } // namespace internal
