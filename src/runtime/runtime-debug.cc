@@ -1305,7 +1305,7 @@ struct InstrumentationSite {
   const char* kind_ = nullptr;
   int source_position_ = 0;
   // The index of this site within its function.
-  int rank_ = 0;
+  int function_index_ = 0;
 
   // Set on the first use of the instrumentation site.
   std::string function_id_;
@@ -1333,11 +1333,11 @@ static void CopyMainThreadInstrumentationSites() {
 }
 
 int RegisterInstrumentationSite(const char* kind, int source_position,
-                                int rank) {
+                                int function_index) {
   InstrumentationSite site;
   site.kind_ = kind;
   site.source_position_ = source_position;
-  site.rank_ = rank;
+  site.function_index_ = function_index;
 
   base::MutexGuard lock(gInstrumentationSitesMutex);
 
@@ -1369,8 +1369,8 @@ int InstrumentationSiteSourcePosition(int index) {
   return GetInstrumentationSite("SourcePosition", index).source_position_;
 }
 
-int InstrumentationSiteRank(int index) {
-  return GetInstrumentationSite("Rank", index).rank_;
+int InstrumentationSiteFunctionIndex(int index) {
+  return GetInstrumentationSite("Rank", index).function_index_;
 }
 
 void RecordReplayInitInstrumentationState() {
@@ -1382,7 +1382,7 @@ void RecordReplayInitInstrumentationState() {
   gMainThreadInstrumentationSites = new InstrumentationSiteVector();
 }
 
-extern void RecordReplayInstrument(const char* kind, const char* function, int offset);
+extern void RecordReplayInstrument(const char* kind, const char* function, int function_index);
 
 // Enable to dump locations of each function to stderr.
 static bool gDumpFunctionLocations;
@@ -1435,7 +1435,7 @@ static inline void OnInstrumentation(Isolate* isolate,
   }
 
   RecordReplayInstrument(site.kind_, site.function_id_.c_str(),
-                         site.rank_);
+                         site.function_index_);
 }
 
 extern bool gRecordReplayInstrumentationEnabled;

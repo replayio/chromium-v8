@@ -10796,7 +10796,7 @@ typedef char* (CommandCallbackRaw)(const char* params);
   Macro(RecordReplayJSONFree, (void*))                                        \
   Macro(RecordReplayOnAnnotation, (const char* kind, const char* contents))   \
   Macro(RecordReplayAddPossibleBreakpoint,                                    \
-        (int line, int column, const char* function_id, int rank))          \
+        (int line, int column, const char* function_id, int function_index))  \
   Macro(RecordReplayOnEvent, (const char* aEvent, bool aBefore))              \
   Macro(RecordReplayOnMouseEvent,                                             \
         (const char* aKind, size_t aClientX, size_t aClientY))                \
@@ -10959,8 +10959,8 @@ static void RecordReplayProgressInterruptCallback() {
   isolate->RecordReplayInvokeApiInterruptCallbacksAtProgress();
 }
 
-void RecordReplayInstrument(const char* kind, const char* function, int offset) {
-  gRecordReplayOnInstrument(kind, function, offset);
+void RecordReplayInstrument(const char* kind, const char* function, int function_index) {
+  gRecordReplayOnInstrument(kind, function, function_index);
 }
 
 extern void TrackObjectsCallback(bool track_objects);
@@ -11840,8 +11840,8 @@ extern "C" DLLEXPORT bool V8RecordReplayGetStack(char* aStack, size_t aSize) {
 
 namespace internal {
 
-void RecordReplayAddPossibleBreakpoint(int line, int column, const char* function_id, int rank) {
-  gRecordReplayAddPossibleBreakpoint(line, column, function_id, rank);
+void RecordReplayAddPossibleBreakpoint(int line, int column, const char* function_id, int function_index) {
+  gRecordReplayAddPossibleBreakpoint(line, column, function_id, function_index);
 }
 
 } // namespace internal

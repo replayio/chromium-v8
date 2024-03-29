@@ -1405,8 +1405,8 @@ int BytecodeArrayBuilder::RecordReplayRegisterInstrumentationSite(
   }
   record_replay_instrumentation_site_locations_.insert(source_position);
 
-  int rank = (int)record_replay_instrumentation_site_locations_.size();
-  return RegisterInstrumentationSite(kind, source_position, rank);
+  int function_index = (int)record_replay_instrumentation_site_locations_.size();
+  return RegisterInstrumentationSite(kind, source_position, function_index);
 }
 
 BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayInstrumentation(
