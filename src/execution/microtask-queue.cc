@@ -150,12 +150,12 @@ class SetIsRunningMicrotasks {
 static int n = 0;
 static float ReplayRandomizedGcProbability = 0.05f;
 
-static void ReplayRandomizedGc() {
+static void ReplayRandomizedGc(Isolate* isolate) {
   // Randomized GC.
   recordreplay::AutoDisallowEvents disallow("Test-Random-GC");
   if (!n++) {
     // Init!
-    std::srand(std::time(0) + recordreplay::IsReplaying() * 256126771);
+    std::srand((unsigned int)std::time(0) + (unsigned int)(recordreplay::IsReplaying() * 256126771));
   }
   if ((std::rand() / (float)RAND_MAX) < ReplayRandomizedGcProbability) {
     // Hit it!
@@ -171,7 +171,7 @@ int MicrotaskQueue::RunMicrotasks(Isolate* isolate) {
     return 0;
   }
 
-  ReplayRandomizedGc();
+  ReplayRandomizedGc(isolate);
 
   intptr_t base_count = finished_microtask_count_;
 
