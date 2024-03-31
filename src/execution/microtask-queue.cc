@@ -147,11 +147,31 @@ class SetIsRunningMicrotasks {
 
 }  // namespace
 
+static int n = 0;
+static float ReplayRandomizedGcProbability = 0.05f;
+
+static void ReplayRandomizedGc() {
+  // Randomized GC.
+  recordreplay::AutoDisallowEvents disallow("Test-Random-GC");
+  if (!n++) {
+    // Init!
+    std::srand(std::time(0) + recordreplay::IsReplaying() * 256126771);
+  }
+  if ((std::rand() / (float)RAND_MAX) < ReplayRandomizedGcProbability) {
+    // Hit it!
+    recordreplay::Print("DDBG Test-Random-GC %d", n);
+    debug::ForceGarbageCollection(reinterpret_cast<v8::Isolate*>(isolate),
+                                  v8::StackState::kMayContainHeapPointers);
+  }
+}
+
 int MicrotaskQueue::RunMicrotasks(Isolate* isolate) {
   if (!size()) {
     OnCompleted(isolate);
     return 0;
   }
+
+  ReplayRandomizedGc();
 
   intptr_t base_count = finished_microtask_count_;
 
