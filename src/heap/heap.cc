@@ -3999,6 +3999,8 @@ void Heap::CheckMemoryPressure() {
 }
 
 void Heap::CollectGarbageOnMemoryPressure() {
+  recordreplay::AutoDisallowEvents disallow("Heap::CollectGarbageOnMemoryPressure");
+
   const int kGarbageThresholdInBytes = 8 * MB;
   const double kGarbageThresholdAsFractionOfTotalMemory = 0.1;
   // This constant is the maximum response time in RAIL performance model.
