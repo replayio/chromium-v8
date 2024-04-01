@@ -5534,11 +5534,19 @@ void Isolate::OnTerminationDuringRunMicrotasks() {
 
 void Isolate::SetPromiseRejectCallback(PromiseRejectCallback callback) {
   promise_reject_callback_ = callback;
+
+  recordreplay::Assert("[RUN-3408-18] Isolate::SetPromiseRejectCallback %d", 
+    !!promise_reject_callback_
+  );
 }
 
 void Isolate::ReportPromiseReject(Handle<JSPromise> promise,
                                   Handle<Object> value,
                                   v8::PromiseRejectEvent event) {
+  recordreplay::Assert("[RUN-3408-18] Isolate::ReportPromiseReject %d", 
+    !!promise_reject_callback_
+  );
+
   if (promise_reject_callback_ == nullptr) return;
   promise_reject_callback_(v8::PromiseRejectMessage(
       v8::Utils::PromiseToLocal(promise), event, v8::Utils::ToLocal(value)));
