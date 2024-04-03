@@ -5535,10 +5535,6 @@ Handle<Object> JSPromise::Reject(Handle<JSPromise> promise,
   // 6. Set promise.[[PromiseState]] to "rejected".
   promise->set_status(Promise::kRejected);
 
-  recordreplay::Assert("[RUN-3408-18] JSPromise::Reject %d", 
-    !!promise->has_handler()
-  );
-
   // 7. If promise.[[PromiseIsHandled]] is false, perform
   //    HostPromiseRejectionTracker(promise, "reject").
   if (!promise->has_handler()) {
