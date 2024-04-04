@@ -1032,7 +1032,7 @@ static char* GetProgressMismatchMessage(size_t replayedIndex, uint64_t recordedE
   std::ostringstream os;
   os << "{ \"recorded\": \"" << recorded_text 
      << "\", \"replayed\": \"" << replayed_text
-     << "\", \"pc\": " << (*gProgressCounter - replayedIndex);
+     << "\", \"progress\": " << (*gProgressCounter - replayedIndex);
   os << "\" }";
   
   return strdup(os.str().c_str());
@@ -1068,22 +1068,24 @@ char* RecordReplayCallbackAssertOnDataMismatch(void* recorded_buf, size_t record
       std::string text = GetScriptProgressEntryString(recorded[i]);
       RecordReplayDescribeAssertData(text.c_str());
     } else {
-      return GetProgressMismatchMessage(i, recorded[i], replayed[i]);
+      return GetProgressMismatchMessage(replayed_size - i - 1, recorded[i], replayed[i]);
     }
   }
 
   if (recorded_size < replayed_size) {
-    return GetProgressMismatchMessage(recorded_size, 0, replayed[recorded_size]);
+    // We are missing recorded entries. Report the first extra replayed entry.
+    return GetProgressMismatchMessage(
+      replayed_size - recorded_size - 1, 0, replayed[recorded_size]);
   }
 
   if (replayed_size < recorded_size) {
-    // We don't have a replayed entry. Report the last matching replayed entry instead.
-    return GetProgressMismatchMessage(replayed_size - 1,
-                                      recorded[replayed_size], 0);
+    // We are missing replayed entries. Report the first extra recorded entry.
+    return GetProgressMismatchMessage(
+      0, recorded[replayed_size], 0);
   }
 
-  // We shouldn't ever be able to get here.
-  return GetProgressMismatchMessage(replayed_size-1, 0, 0);
+  // Everything is equal.
+  return GetProgressMismatchMessage(0, 0, 0);
 }
 
 void RecordReplayCallbackAssertDescribeData(void* buf, size_t buf_size) {
