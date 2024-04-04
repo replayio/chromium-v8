@@ -7892,10 +7892,6 @@ Maybe<bool> Promise::Resolver::Reject(Local<Context> context,
   auto self = Utils::OpenHandle(this);
   auto promise = i::Handle<i::JSPromise>::cast(self);
 
-  recordreplay::Assert("[RUN-3408-18] Promise::Resolver::Reject %d", 
-    (int)promise->status()
-  );
-
   if (promise->status() != Promise::kPending) {
     return Just(true);
   }

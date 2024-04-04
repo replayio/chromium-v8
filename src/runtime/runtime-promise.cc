@@ -107,6 +107,13 @@ RUNTIME_FUNCTION(Runtime_PromiseStatus) {
 }
 
 RUNTIME_FUNCTION(Runtime_PromiseHookInit) {
+  // [TT-187] This is divergent if the recorder did not have hooks enabled.
+  v8::recordreplay::AutoMaybeDisallowEvents disallow(
+    IsMainThread() &&
+      !g_record_replay_recording_hooks_enabled,
+    "Runtime_PromiseHookInit"
+  );
+
   HandleScope scope(isolate);
   DCHECK_EQ(2, args.length());
   Handle<JSPromise> promise = args.at<JSPromise>(0);
@@ -116,6 +123,13 @@ RUNTIME_FUNCTION(Runtime_PromiseHookInit) {
 }
 
 RUNTIME_FUNCTION(Runtime_PromiseHookBefore) {
+  // [TT-187] This is divergent if the recorder did not have hooks enabled.
+  v8::recordreplay::AutoMaybeDisallowEvents disallow(
+    IsMainThread() &&
+      !g_record_replay_recording_hooks_enabled,
+    "Runtime_PromiseHookInit"
+  );
+
   HandleScope scope(isolate);
   DCHECK_EQ(1, args.length());
   Handle<JSReceiver> promise = args.at<JSReceiver>(0);
@@ -126,6 +140,13 @@ RUNTIME_FUNCTION(Runtime_PromiseHookBefore) {
 }
 
 RUNTIME_FUNCTION(Runtime_PromiseHookAfter) {
+  // [TT-187] This is divergent if the recorder did not have hooks enabled.
+  v8::recordreplay::AutoMaybeDisallowEvents disallow(
+    IsMainThread() &&
+      !g_record_replay_recording_hooks_enabled,
+    "Runtime_PromiseHookInit"
+  );
+
   HandleScope scope(isolate);
   DCHECK_EQ(1, args.length());
   Handle<JSReceiver> promise = args.at<JSReceiver>(0);
@@ -136,6 +157,17 @@ RUNTIME_FUNCTION(Runtime_PromiseHookAfter) {
 }
 
 RUNTIME_FUNCTION(Runtime_RejectPromise) {
+  // [TT-187] This diverges if promise has handler and neither hooks nor
+  // debugger were enabled during recording, as per
+  // promise-abstract-operations.tq.
+  v8::recordreplay::AutoMaybeDisallowEvents disallow(
+    is_main_thread_ &&
+      promise->HasHandler() &&
+      !g_record_replay_recording_debug_enabled &&
+      !g_record_replay_recording_hooks_enabled,
+    "Isolate::ReportPromiseReject"
+  );
+
   HandleScope scope(isolate);
   DCHECK_EQ(3, args.length());
   Handle<JSPromise> promise = args.at<JSPromise>(0);
