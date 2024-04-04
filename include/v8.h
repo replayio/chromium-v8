@@ -161,17 +161,6 @@ struct AutoDependencyExecution {
 static void BeginAssertBufferAllocations(const char* issueLabel = "");
 static void EndAssertBufferAllocations();
 
-struct AutoPassThroughEvents {
-  AutoPassThroughEvents() { BeginPassThroughEvents(); }
-  ~AutoPassThroughEvents() { EndPassThroughEvents(); }
-};
-
-struct AutoDisallowEvents {
-  AutoDisallowEvents() { BeginDisallowEvents(); }
-  AutoDisallowEvents(const char* label) { BeginDisallowEventsWithLabel(label); }
-  ~AutoDisallowEvents() { EndDisallowEvents(); }
-};
-
 struct AutoOrderedLock {
   AutoOrderedLock(int id) : id_(id) { OrderedLock(id_); }
   ~AutoOrderedLock() { OrderedUnlock(id_); }

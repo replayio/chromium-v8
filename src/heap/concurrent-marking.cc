@@ -953,7 +953,7 @@ void ConcurrentMarking::ScheduleJob(GarbageCollector garbage_collector,
   DCHECK(!heap_->IsTearingDown());
   DCHECK(IsStopped());
 
-  recordreplay::AutoDisallowEvents disallow("ConcurrentMarking::ScheduleJob");
+  replayio::AutoDisallowEvents disallow("ConcurrentMarking::ScheduleJob");
 
   garbage_collector_ = garbage_collector;
   if (garbage_collector == GarbageCollector::MARK_COMPACTOR) {

@@ -23,6 +23,8 @@
 #include "src/flags/flags.h"
 #include "src/init/v8.h"
 
+#include "replayio.h"
+
 namespace v8 {
 namespace internal {
 
@@ -50,7 +52,7 @@ V8_INLINE uint64_t xgetbv(unsigned int xcr) {
 bool OSHasAVXSupport() {
   // This function can be called at different points when recording vs. replaying,
   // depending on the features of the CPU used when recording vs. replaying.
-  recordreplay::AutoPassThroughEvents pt;
+  replayio::AutoPassThroughEvents pt;
 
   // All replaying happens on linux so skip macOS checks in that case which
   // interact with the system.

@@ -269,7 +269,7 @@ void LocalHeap::ParkSlowPath() {
 }
 
 void LocalHeap::UnparkSlowPath() {
-  recordreplay::AutoDisallowEvents disallow("LocalHeap::UnparkSlowPath");
+  replayio::AutoDisallowEvents disallow("LocalHeap::UnparkSlowPath");
 
   while (true) {
     ThreadState current_state = ThreadState::Parked();
@@ -331,7 +331,7 @@ void LocalHeap::EnsureParkedBeforeDestruction() {
 }
 
 void LocalHeap::SafepointSlowPath() {
-  recordreplay::AutoDisallowEvents disallow("LocalHeap::SafepointSlowPath");
+  replayio::AutoDisallowEvents disallow("LocalHeap::SafepointSlowPath");
 
   ThreadState current_state = state_.load_relaxed();
   DCHECK(current_state.IsRunning());
@@ -424,7 +424,7 @@ void LocalHeap::UnmarkSharedLinearAllocationArea() {
 Address LocalHeap::PerformCollectionAndAllocateAgain(
     int object_size, AllocationType type, AllocationOrigin origin,
     AllocationAlignment alignment) {
-  recordreplay::AutoDisallowEvents disallow("LocalHeap::PerformCollectionAndAllocateAgain");
+  replayio::AutoDisallowEvents disallow("LocalHeap::PerformCollectionAndAllocateAgain");
 
   CHECK(!allocation_failed_);
   CHECK(!main_thread_parked_);

@@ -908,7 +908,7 @@ bool PagedSpaceBase::RawRefillLabMain(int size_in_bytes,
   DCHECK_GE(size_in_bytes, 0);
   const int kMaxPagesToSweep = 1;
 
-  recordreplay::AutoDisallowEvents disallow("PagedSpaceBase::RawRefillLabMain");
+  replayio::AutoDisallowEvents disallow("PagedSpaceBase::RawRefillLabMain");
 
   if (TryAllocationFromFreeListMain(size_in_bytes, origin)) return true;
 
