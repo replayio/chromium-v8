@@ -106,6 +106,9 @@ RUNTIME_FUNCTION(Runtime_PromiseStatus) {
   return Smi::FromInt(promise->status());
 }
 
+extern int g_record_replay_recording_debug_enabled;
+extern int g_record_replay_recording_hooks_enabled;
+
 RUNTIME_FUNCTION(Runtime_PromiseHookInit) {
   // [TT-187] This is divergent if the recorder did not have hooks enabled.
   v8::recordreplay::AutoMaybeDisallowEvents disallow(
@@ -157,22 +160,23 @@ RUNTIME_FUNCTION(Runtime_PromiseHookAfter) {
 }
 
 RUNTIME_FUNCTION(Runtime_RejectPromise) {
-  // [TT-187] This diverges if promise has handler and neither hooks nor
-  // debugger were enabled during recording, as per
-  // promise-abstract-operations.tq.
-  v8::recordreplay::AutoMaybeDisallowEvents disallow(
-    is_main_thread_ &&
-      promise->HasHandler() &&
-      !g_record_replay_recording_debug_enabled &&
-      !g_record_replay_recording_hooks_enabled,
-    "Isolate::ReportPromiseReject"
-  );
-
   HandleScope scope(isolate);
   DCHECK_EQ(3, args.length());
   Handle<JSPromise> promise = args.at<JSPromise>(0);
   Handle<Object> reason = args.at(1);
   Handle<Oddball> debug_event = args.at<Oddball>(2);
+
+  // [TT-187] This diverges if promise has handler and neither hooks nor
+  // debugger were enabled during recording, as per
+  // promise-abstract-operations.tq.
+  v8::recordreplay::AutoMaybeDisallowEvents disallow(
+    IsMainThread() &&
+      promise->has_handler() &&
+      !g_record_replay_recording_debug_enabled &&
+      !g_record_replay_recording_hooks_enabled,
+    "Isolate::ReportPromiseReject"
+  );
+
   return *JSPromise::Reject(promise, reason,
                             debug_event->BooleanValue(isolate));
 }

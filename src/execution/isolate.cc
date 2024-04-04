@@ -5041,14 +5041,14 @@ void Isolate::PromiseHookStateUpdated() {
     PromiseHookFields::HasAsyncEventDelegate::encode(async_event_delegate_) |
     PromiseHookFields::IsDebugActive::encode(debug()->is_active());
 
-  if (is_main_thread_) {
-    record_replay_recording_debug_enabled = v8::recordreplay::RecordReplayValue(
+  if (IsMainThread()) {
+    g_record_replay_recording_debug_enabled = (int)v8::recordreplay::RecordReplayValue(
       "debug-enabled",
-      debug()->is_active()
+      (uintptr_t)debug()->is_active()
     );
-    record_replay_recording_hooks_enabled = v8::recordreplay::RecordReplayValue(
+    g_record_replay_recording_hooks_enabled = (int)v8::recordreplay::RecordReplayValue(
       "hooks-enabled",
-      promise_hook_
+      (uintptr_t)!!promise_hook_
     );
   }
 
@@ -5551,6 +5551,7 @@ void Isolate::OnTerminationDuringRunMicrotasks() {
 void Isolate::SetPromiseRejectCallback(PromiseRejectCallback callback) {
   promise_reject_callback_ = callback;
 
+  recordreplay::Print("DDBG SetPromiseRejectCallback %d", !!callback);
   recordreplay::Assert("[TT-187-819] Isolate::SetPromiseRejectCallback %d", 
     !!promise_reject_callback_
   );

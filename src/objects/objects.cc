@@ -5515,6 +5515,11 @@ Handle<Object> JSPromise::Reject(Handle<JSPromise> promise,
   DCHECK(
       !reinterpret_cast<v8::Isolate*>(isolate)->GetCurrentContext().IsEmpty());
 
+  v8::recordreplay::AssertMaybeEventsDisallowed(
+    "[TT-187-819] JSPromise::Reject %d", 
+    !!promise->has_handler()
+  );
+
   if (isolate->debug()->is_active()) MoveMessageToPromise(isolate, promise);
 
   if (debug_event) isolate->debug()->OnPromiseReject(promise, reason);
@@ -5534,11 +5539,6 @@ Handle<Object> JSPromise::Reject(Handle<JSPromise> promise,
 
   // 6. Set promise.[[PromiseState]] to "rejected".
   promise->set_status(Promise::kRejected);
-
-  v8::recordreplay::AssertMaybeEventsDisallowed(
-    "[TT-187-819] JSPromise::Reject %d", 
-    !!promise->has_handler()
-  );
 
   // 7. If promise.[[PromiseIsHandled]] is false, perform
   //    HostPromiseRejectionTracker(promise, "reject").
