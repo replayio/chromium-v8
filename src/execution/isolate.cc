@@ -5551,7 +5551,6 @@ void Isolate::OnTerminationDuringRunMicrotasks() {
 void Isolate::SetPromiseRejectCallback(PromiseRejectCallback callback) {
   promise_reject_callback_ = callback;
 
-  recordreplay::Print("DDBG SetPromiseRejectCallback %d", !!callback);
   recordreplay::Assert("[TT-187-819] Isolate::SetPromiseRejectCallback %d", 
     !!promise_reject_callback_
   );
