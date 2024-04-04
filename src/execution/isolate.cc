@@ -5565,7 +5565,6 @@ void Isolate::ReportPromiseReject(Handle<JSPromise> promise,
   );
 
   if (promise_reject_callback_ == nullptr) return;
-
   promise_reject_callback_(v8::PromiseRejectMessage(
       v8::Utils::PromiseToLocal(promise), event, v8::Utils::ToLocal(value)));
 }

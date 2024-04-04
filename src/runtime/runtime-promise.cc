@@ -166,7 +166,7 @@ RUNTIME_FUNCTION(Runtime_RejectPromise) {
   Handle<Object> reason = args.at(1);
   Handle<Oddball> debug_event = args.at<Oddball>(2);
 
-  // [TT-187] This diverges if promise has handler and neither hooks nor
+  // [TT-187] This is divergent if promise has handler and neither hooks nor
   // debugger were enabled during recording, as per
   // promise-abstract-operations.tq.
   v8::recordreplay::AutoMaybeDisallowEvents disallow(
