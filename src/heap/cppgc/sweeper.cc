@@ -26,7 +26,7 @@
 #include "src/heap/cppgc/stats-collector.h"
 #include "src/heap/cppgc/task-handle.h"
 
-#include "v8.h"
+#include "replayio.h"
 
 namespace cppgc::internal {
 
@@ -775,7 +775,7 @@ class Sweeper::SweeperImpl final {
   ~SweeperImpl() { CancelSweepers(); }
 
   void Start(SweepingConfig config, cppgc::Platform* platform) {
-    v8::recordreplay::AutoDisallowEvents disallow("SweeperImpl::Start");
+    v8::replayio::AutoDisallowEvents disallow("SweeperImpl::Start");
     StatsCollector::EnabledScope stats_scope(stats_collector_,
                                              StatsCollector::kAtomicSweep);
     is_in_progress_ = true;
@@ -810,7 +810,7 @@ class Sweeper::SweeperImpl final {
 
   bool SweepForAllocationIfRunning(NormalPageSpace* space, size_t size,
                                    v8::base::TimeDelta max_duration) {
-    v8::recordreplay::AutoDisallowEvents disallow("Sweeper::SweepForAllocationIfRunning");
+    v8::replayio::AutoDisallowEvents disallow("Sweeper::SweepForAllocationIfRunning");
 
     if (!is_in_progress_) return false;
 
@@ -867,7 +867,7 @@ class Sweeper::SweeperImpl final {
   }
 
   bool FinishIfRunning() {
-    v8::recordreplay::AutoDisallowEvents disallow("SweeperImpl::FinishIfRunning");
+    v8::replayio::AutoDisallowEvents disallow("SweeperImpl::FinishIfRunning");
 
     if (!is_in_progress_) return false;
 

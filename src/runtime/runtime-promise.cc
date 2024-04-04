@@ -8,6 +8,8 @@
 #include "src/execution/microtask-queue.h"
 #include "src/objects/js-promise-inl.h"
 
+#include "src/base/replayio.h"
+
 namespace v8 {
 namespace internal {
 
@@ -111,7 +113,7 @@ extern int g_record_replay_recording_hooks_enabled;
 
 RUNTIME_FUNCTION(Runtime_PromiseHookInit) {
   // [TT-187] This is divergent if the recorder did not have hooks enabled.
-  v8::recordreplay::AutoMaybeDisallowEvents disallow(
+  v8::base::replayio::AutoMaybeDisallowEvents disallow(
     IsMainThread() &&
       !g_record_replay_recording_hooks_enabled,
     "Runtime_PromiseHookInit"
@@ -127,10 +129,10 @@ RUNTIME_FUNCTION(Runtime_PromiseHookInit) {
 
 RUNTIME_FUNCTION(Runtime_PromiseHookBefore) {
   // [TT-187] This is divergent if the recorder did not have hooks enabled.
-  v8::recordreplay::AutoMaybeDisallowEvents disallow(
+  v8::base::replayio::AutoMaybeDisallowEvents disallow(
     IsMainThread() &&
       !g_record_replay_recording_hooks_enabled,
-    "Runtime_PromiseHookInit"
+    "Runtime_PromiseHookBefore"
   );
 
   HandleScope scope(isolate);
@@ -144,10 +146,10 @@ RUNTIME_FUNCTION(Runtime_PromiseHookBefore) {
 
 RUNTIME_FUNCTION(Runtime_PromiseHookAfter) {
   // [TT-187] This is divergent if the recorder did not have hooks enabled.
-  v8::recordreplay::AutoMaybeDisallowEvents disallow(
+  v8::base::replayio::AutoMaybeDisallowEvents disallow(
     IsMainThread() &&
       !g_record_replay_recording_hooks_enabled,
-    "Runtime_PromiseHookInit"
+    "Runtime_PromiseHookAfter"
   );
 
   HandleScope scope(isolate);
@@ -169,7 +171,7 @@ RUNTIME_FUNCTION(Runtime_RejectPromise) {
   // [TT-187] This is divergent if promise has handler and neither hooks nor
   // debugger were enabled during recording, as per
   // promise-abstract-operations.tq.
-  v8::recordreplay::AutoMaybeDisallowEvents disallow(
+  v8::base::replayio::AutoMaybeDisallowEvents disallow(
     IsMainThread() &&
       promise->has_handler() &&
       !g_record_replay_recording_debug_enabled &&
