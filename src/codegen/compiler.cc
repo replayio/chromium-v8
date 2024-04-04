@@ -2759,7 +2759,7 @@ void Compiler::CompileOptimized(Isolate* isolate, Handle<JSFunction> function,
                                 ConcurrencyMode mode, CodeKind code_kind) {
   // The point at which optimized compilations occur can vary between recording
   // and replaying.
-  recordreplay::AutoDisallowEvents disallow("Compiler::CompileOptimized");
+  replayio::AutoDisallowEvents disallow("Compiler::CompileOptimized");
 
   DCHECK(CodeKindIsOptimizedJSFunction(code_kind));
   DCHECK(AllowCompilation::IsAllowed(isolate));
@@ -3958,7 +3958,7 @@ MaybeHandle<CodeT> Compiler::CompileOptimizedOSR(Isolate* isolate,
                                                  ConcurrencyMode mode) {
   // The point at which optimized compilations occur can vary between recording
   // and replaying.
-  recordreplay::AutoDisallowEvents disallow("Compiler::CompileOptimizedOSR");
+  replayio::AutoDisallowEvents disallow("Compiler::CompileOptimizedOSR");
 
   DCHECK(IsOSR(osr_offset));
 
