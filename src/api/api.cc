@@ -11830,6 +11830,10 @@ extern "C" void V8RecordReplayNotifyActivity() {
   gRecordReplayNotifyActivity();
 }
 
+extern "C" void V8RecordReplayAddMetadata(const char* jsonString) {
+  gRecordReplayAddMetadata(jsonString);
+}
+
 extern "C" DLLEXPORT void V8RecordReplayOnAnnotation(const char* kind, const char* contents) {
   DCHECK(recordreplay::IsRecordingOrReplaying());
   if (internal::gRecordReplayHasCheckpoint) {
