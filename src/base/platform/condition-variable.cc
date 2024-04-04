@@ -10,6 +10,8 @@
 #include "v8.h"
 #include "src/base/platform/time.h"
 
+#include "replayio.h"
+
 #if V8_OS_WIN
 #include <windows.h>
 #endif
@@ -101,7 +103,7 @@ bool ConditionVariable::WaitFor(Mutex* mutex, const TimeDelta& rel_time) {
   // On Free/Net/OpenBSD and Linux with glibc we can change the time
   // source for pthread_cond_timedwait() to use the monotonic clock.
   {
-    v8::recordreplay::AutoPassThroughEvents pt;
+    v8::replayio::AutoPassThroughEvents pt;
     result = clock_gettime(CLOCK_MONOTONIC, &ts);
   }
   DCHECK_EQ(0, result);

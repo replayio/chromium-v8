@@ -5029,12 +5029,28 @@ void Isolate::UpdatePromiseHookProtector() {
   }
 }
 
+// Whether the main thread sees/saw the debugger being enabled when recording.
+int g_record_replay_recording_debug_enabled = 0;
+// Whether the main thread sees/saw Promise hooks enabled when recording.
+int g_record_replay_recording_hooks_enabled = 0;
+
 void Isolate::PromiseHookStateUpdated() {
   promise_hook_flags_ =
     (promise_hook_flags_ & PromiseHookFields::HasContextPromiseHook::kMask) |
     PromiseHookFields::HasIsolatePromiseHook::encode(promise_hook_ || RecordReplayShouldCallOnPromiseHook()) |
     PromiseHookFields::HasAsyncEventDelegate::encode(async_event_delegate_) |
     PromiseHookFields::IsDebugActive::encode(debug()->is_active());
+
+  if (IsMainThread()) {
+    g_record_replay_recording_debug_enabled = (int)v8::recordreplay::RecordReplayValue(
+      "debug-enabled",
+      (uintptr_t)debug()->is_active()
+    );
+    g_record_replay_recording_hooks_enabled = (int)v8::recordreplay::RecordReplayValue(
+      "hooks-enabled",
+      (uintptr_t)!!promise_hook_
+    );
+  }
 
   if (promise_hook_flags_ != 0) {
     UpdatePromiseHookProtector();
@@ -5535,7 +5551,7 @@ void Isolate::OnTerminationDuringRunMicrotasks() {
 void Isolate::SetPromiseRejectCallback(PromiseRejectCallback callback) {
   promise_reject_callback_ = callback;
 
-  recordreplay::Assert("[RUN-3408-18] Isolate::SetPromiseRejectCallback %d", 
+  recordreplay::Assert("[TT-187-819] Isolate::SetPromiseRejectCallback %d", 
     !!promise_reject_callback_
   );
 }
@@ -5543,7 +5559,8 @@ void Isolate::SetPromiseRejectCallback(PromiseRejectCallback callback) {
 void Isolate::ReportPromiseReject(Handle<JSPromise> promise,
                                   Handle<Object> value,
                                   v8::PromiseRejectEvent event) {
-  recordreplay::Assert("[RUN-3408-18] Isolate::ReportPromiseReject %d", 
+  v8::recordreplay::AssertMaybeEventsDisallowed(
+    "[TT-187-819] Isolate::ReportPromiseReject %d",
     !!promise_reject_callback_
   );
 

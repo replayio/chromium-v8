@@ -13,7 +13,7 @@
 #include "src/base/platform/time.h"
 #include "src/heap/cppgc/metric-recorder.h"
 
-#include "v8.h"
+#include "replayio.h"
 
 namespace cppgc {
 namespace internal {
@@ -72,7 +72,7 @@ void StatsCollector::NotifySafePointForTesting() {
 }
 
 void StatsCollector::AllocatedObjectSizeSafepointImpl() {
-  v8::recordreplay::AutoDisallowEvents disallow("StatsCollector::AllocatedObjectSizeSafepointImpl");
+  v8::replayio::AutoDisallowEvents disallow("StatsCollector::AllocatedObjectSizeSafepointImpl");
 
   allocated_bytes_since_end_of_marking_ +=
       static_cast<int64_t>(allocated_bytes_since_safepoint_) -

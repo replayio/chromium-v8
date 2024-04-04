@@ -1466,7 +1466,7 @@ void ReportDuplicates(int size, std::vector<HeapObject>* objects) {
 }  // anonymous namespace
 
 void Heap::CollectAllAvailableGarbage(GarbageCollectionReason gc_reason) {
-  recordreplay::AutoDisallowEvents disallow("Heap::CollectAllAvailableGarbage");
+  replayio::AutoDisallowEvents disallow("Heap::CollectAllAvailableGarbage");
   // Since we are ignoring the return value, the exact choice of space does
   // not matter, so long as we do not specify NEW_SPACE, which would not
   // cause a full GC.
@@ -1536,7 +1536,7 @@ void Heap::PreciseCollectAllGarbage(int flags,
 }
 
 void Heap::ReportExternalMemoryPressure() {
-  recordreplay::AutoDisallowEvents disallow("Heap::ReportExternalMemoryPressure");
+  replayio::AutoDisallowEvents disallow("Heap::ReportExternalMemoryPressure");
 
   const GCCallbackFlags kGCCallbackFlagsForExternalMemory =
       static_cast<GCCallbackFlags>(
@@ -1593,7 +1593,7 @@ Heap::DevToolsTraceEventScope::~DevToolsTraceEventScope() {
 bool Heap::CollectGarbage(AllocationSpace space,
                           GarbageCollectionReason gc_reason,
                           const v8::GCCallbackFlags gc_callback_flags) {
-  recordreplay::AutoDisallowEvents disallow("Heap::CollectGarbage");
+  replayio::AutoDisallowEvents disallow("Heap::CollectGarbage");
   if (V8_UNLIKELY(!deserialization_complete_)) {
     // During isolate initialization heap always grows. GC is only requested
     // if a new page allocation fails. In such a case we should crash with
@@ -1837,7 +1837,7 @@ void Heap::StartIncrementalMarking(int gc_flags,
                                    GarbageCollector collector) {
   DCHECK(incremental_marking()->IsStopped());
 
-  recordreplay::AutoDisallowEvents disallow("Heap::StartIncrementalMarking");
+  replayio::AutoDisallowEvents disallow("Heap::StartIncrementalMarking");
 
   if (IsYoungGenerationCollector(collector)) {
     CompleteSweepingYoung(collector);
@@ -1890,7 +1890,7 @@ void Heap::CompleteSweepingFull() {
 
 void Heap::StartIncrementalMarkingIfAllocationLimitIsReached(
     int gc_flags, const GCCallbackFlags gc_callback_flags) {
-  recordreplay::AutoDisallowEvents disallow("Heap::StartIncrementalMarkingIfAllocationLimitIsReached");
+  replayio::AutoDisallowEvents disallow("Heap::StartIncrementalMarkingIfAllocationLimitIsReached");
   if (v8_flags.separate_gc_phases && gc_callbacks_depth_ > 0) {
     // Do not start incremental marking while invoking GC callbacks.
     // Heap::CollectGarbage already decided which GC is going to be invoked. In
@@ -2396,7 +2396,7 @@ void Heap::CompleteSweepingYoung(GarbageCollector collector) {
 }
 
 void Heap::EnsureSweepingCompletedForObject(HeapObject object) {
-  recordreplay::AutoDisallowEvents disallow("Heap::EnsureSweepingCompletedForObject");
+  replayio::AutoDisallowEvents disallow("Heap::EnsureSweepingCompletedForObject");
 
   if (!sweeping_in_progress()) return;
 
@@ -3723,7 +3723,7 @@ void Heap::ActivateMemoryReducerIfNeeded() {
   const int kMinCommittedMemory = 7 * Page::kPageSize;
   if (ms_count_ == 0 && CommittedMemory() > kMinCommittedMemory &&
       isolate()->IsIsolateInBackground()) {
-    recordreplay::AutoDisallowEvents disallow("Heap::ActivateMemoryReducerIfNeeded");
+    replayio::AutoDisallowEvents disallow("Heap::ActivateMemoryReducerIfNeeded");
     MemoryReducer::Event event;
     event.type = MemoryReducer::kPossibleGarbage;
     event.time_ms = MonotonicallyIncreasingTimeInMs();
@@ -3999,7 +3999,7 @@ void Heap::CheckMemoryPressure() {
 }
 
 void Heap::CollectGarbageOnMemoryPressure() {
-  recordreplay::AutoDisallowEvents disallow("Heap::CollectGarbageOnMemoryPressure");
+  replayio::AutoDisallowEvents disallow("Heap::CollectGarbageOnMemoryPressure");
 
   const int kGarbageThresholdInBytes = 8 * MB;
   const double kGarbageThresholdAsFractionOfTotalMemory = 0.1;
@@ -4038,7 +4038,7 @@ void Heap::CollectGarbageOnMemoryPressure() {
 
 void Heap::MemoryPressureNotification(MemoryPressureLevel level,
                                       bool is_isolate_locked) {
-  recordreplay::AutoDisallowEvents disallow("Heap::MemoryPressureNotification");
+  replayio::AutoDisallowEvents disallow("Heap::MemoryPressureNotification");
 
   TRACE_EVENT1("devtools.timeline,v8", "V8.MemoryPressureNotification", "level",
                static_cast<int>(level));
@@ -5082,7 +5082,7 @@ bool Heap::ShouldOptimizeForLoadTime() {
 // - either we need to optimize for memory usage,
 // - or the incremental marking is not in progress and we cannot start it.
 bool Heap::ShouldExpandOldGenerationOnSlowAllocation(LocalHeap* local_heap) {
-  recordreplay::AutoDisallowEvents disallow("Heap::ShouldExpandOldGenerationOnSlowAllocation");
+  replayio::AutoDisallowEvents disallow("Heap::ShouldExpandOldGenerationOnSlowAllocation");
 
   // Always allow background threads to allocate while replaying without triggering GC.
   // Waiting on a main thread GC can introduce deadlocks if the main thread
@@ -5679,7 +5679,7 @@ void Heap::NotifyBootstrapComplete() {
 
 void Heap::NotifyOldGenerationExpansion(AllocationSpace space,
                                         MemoryChunk* chunk) {
-  recordreplay::AutoDisallowEvents disallow("Heap::NotifyOldGenerationExpansion");
+  replayio::AutoDisallowEvents disallow("Heap::NotifyOldGenerationExpansion");
 
   // Pages created during bootstrapping may contain immortal immovable objects.
   if (!deserialization_complete()) {
@@ -5773,7 +5773,7 @@ void Heap::RegisterExternallyReferencedObject(Address* location) {
 }
 
 void Heap::StartTearDown() {
-  recordreplay::AutoDisallowEvents disallow("Heap::StartTearDown");
+  replayio::AutoDisallowEvents disallow("Heap::StartTearDown");
 
   // Finish any ongoing sweeping to avoid stray background tasks still accessing
   // the heap during teardown.
@@ -7323,7 +7323,7 @@ void Heap::FinishSweepingIfOutOfWork() {
 }
 
 void Heap::EnsureSweepingCompleted(SweepingForcedFinalizationMode mode) {
-  recordreplay::AutoDisallowEvents disallow("Heap::EnsureSweepingCompleted");
+  replayio::AutoDisallowEvents disallow("Heap::EnsureSweepingCompleted");
 
   if (sweeper()->sweeping_in_progress()) {
     TRACE_GC_EPOCH(tracer(), GCTracer::Scope::MC_COMPLETE_SWEEPING,

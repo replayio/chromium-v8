@@ -26,7 +26,7 @@
 #include "src/inspector/v8-runtime-agent-impl.h"
 #include "src/inspector/v8-schema-agent-impl.h"
 
-#include "v8.h"
+#include "replayio.h"
 
 namespace v8_inspector {
 namespace {
@@ -231,7 +231,7 @@ void V8InspectorSessionImpl::RecordReplayMessageAnnotation(const char* kind,
   // conversion overhead when recording.
   std::string json;
   if (v8::recordreplay::IsReplaying()) {
-    v8::recordreplay::AutoDisallowEvents disallow("RecordReplayMessageAnnotation");
+    v8::replayio::AutoDisallowEvents disallow("RecordReplayMessageAnnotation");
     span<uint8_t> cbor = get_cbor();
     Status status = ConvertCBORToJSON(cbor, &json);
     DCHECK(status.ok());
