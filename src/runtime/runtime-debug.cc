@@ -1507,12 +1507,14 @@ RUNTIME_FUNCTION(Runtime_RecordReplayTrackObjectId) {
                                 v8::Utils::ToLocal(value),
                                 /* allow_create */ true);
 
-  if (id == g_record_replay_track_object_kind_generic) {
+  if (kind == g_record_replay_track_object_kind_generic) {
     // Nothing
-  } else if (id == g_record_replay_track_object_kind_react_push_effect) {
+  } else if (kind == g_record_replay_track_object_kind_react_push_effect) {
     NewTrackedObjectDependencyGraphNode(isolate, id, "PushEffect");
-  } else if (id == g_record_replay_track_object_kind_react_use_effect) {
+  } else if (kind == g_record_replay_track_object_kind_react_use_effect) {
     NewTrackedObjectDependencyGraphNode(isolate, id, "UseEffect");
+  } else {
+    CHECK(0);
   }
 
   return ReadOnlyRoots(isolate).undefined_value();
