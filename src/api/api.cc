@@ -12111,9 +12111,8 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
                                         i::RecordReplayCallbackAssertDescribeData);
   }
 
-  // Currently the dependency graph is disabled by default.
   i::gRecordReplayEnableDependencyGraph =
-    !V8RecordReplayFeatureEnabled("no-dependency-graph", nullptr);
+    V8RecordReplayFeatureEnabled("dependency-graph", nullptr);
 
   // Disable wasm background compilation.
   if (V8RecordReplayFeatureEnabled("disable-v8-flags-wasm-compilation-tasks", nullptr)) {
