@@ -40,7 +40,7 @@ namespace v8 {
 namespace internal {
 
 extern bool gRecordReplayAssertValues;
-extern bool RecordReplayTrackThisObjectAssignment(const std::string& property);
+extern bool RecordReplayTrackObjectAssignment(bool is_this, const std::string& property);
 
 namespace interpreter {
 
@@ -3922,12 +3922,16 @@ void BytecodeGenerator::BuildLoadNamedProperty(const Expression* object_expr,
 void BytecodeGenerator::BuildSetNamedProperty(const Expression* object_expr,
                                               Register object,
                                               const AstRawString* name) {
-  if (recordreplay::IsRecordingOrReplaying("emit-opcodes") &&
-      !record_replay_has_track_this_ &&
-      object_expr->IsThisExpression() &&
-      RecordReplayTrackThisObjectAssignment(name->to_string())) {
-    builder()->RecordReplayTrackObjectId(object);
-    record_replay_has_track_this_ = true;
+  if (recordreplay::IsRecordingOrReplaying("emit-opcodes")) {
+    if (object_expr->IsThisExpression()) {
+      if (RecordReplayTrackObjectAssignment(true, name->to_string()) &&
+          !record_replay_has_track_this_) {
+        builder()->RecordReplayTrackObjectId(object);
+        record_replay_has_track_this_ = true;
+      }
+    } else if (RecordReplayTrackObjectAssignment(false, name->to_string())) {
+      builder()->RecordReplayTrackObjectId(object);
+    }
   }
 
   Register value;

@@ -4090,18 +4090,23 @@ void TrackObjectsCallback(bool track_objects) {
   gTrackObjects = track_objects;
 }
 
-// Whether to keep track of 'this' objects being assigned a property.
-bool RecordReplayTrackThisObjectAssignment(const std::string& property) {
+// Whether to keep track of objects being assigned particular properties.
+bool RecordReplayTrackObjectAssignment(bool is_this, const std::string& property) {
   // If we've been told to track objects then all 'this' objects which are
   // assigned a property will be tracked.
-  if (gRecordReplayAssertTrackedObjects || gTrackObjects) {
+  if (is_this && (gRecordReplayAssertTrackedObjects || gTrackObjects)) {
     return true;
   }
 
-  // By default we only track objects which might be React fibers. These will
+  // By default we track objects which might be React fibers. These will
   // have an "alternate" property assigned to in the constructor. Tracking objects
   // is only needed when replaying.
   if (recordreplay::IsReplaying() && property == "alternate") {
+    return true;
+  }
+
+  // Track "next" assignments which could be linked list of effects in React.
+  if (recordreplay::IsReplaying() && property == "next") {
     return true;
   }
 
