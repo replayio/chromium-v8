@@ -4091,8 +4091,10 @@ void NewTrackedObjectDependencyGraphNode(Isolate* isolate, int id, const char* w
   SetProperty(isolate, obj, "kind", "trackedObject");
   SetProperty(isolate, obj, "objectId", id);
   SetProperty(isolate, obj, "why", why);
+
+  Handle<Object> undefined = isolate->factory()->undefined_value();
   Handle<Object> jsonStr = JsonStringify(isolate, obj, undefined, undefined).ToHandleChecked();
-  std::unique_ptr<char[]> jsonCStr = String::cast(*rvStr).ToCString();
+  std::unique_ptr<char[]> jsonCStr = String::cast(*jsonStr).ToCString();
 
   recordreplay::NewDependencyGraphNode(jsonCStr.get());
 }
