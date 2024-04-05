@@ -3934,7 +3934,7 @@ void BytecodeGenerator::BuildLoadNamedProperty(const Expression* object_expr,
                                                const AstRawString* name) {
   // Recognize loading a "create" property as potentially using a React effect.
   if (name->to_string() == "create") {
-    builder()->RecordReplayTrackObjectId(literal, g_record_replay_track_object_kind_react_use_effect);
+    builder()->RecordReplayTrackObjectId(object, g_record_replay_track_object_kind_react_use_effect);
   }
 
   FeedbackSlot slot = GetCachedLoadICSlot(object_expr, name);
