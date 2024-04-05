@@ -3140,6 +3140,8 @@ void BytecodeGenerator::VisitObjectLiteral(ObjectLiteral* expr) {
     BuildCreateObjectLiteral(literal, flags, entry);
   }
 
+  bool record_replay_push_effect = false;
+
   // Store computed values into the literal.
   AccessorTable<ObjectLiteral::Property> accessor_table(zone());
   for (; property_index < expr->properties()->length(); property_index++) {
@@ -3157,6 +3159,13 @@ void BytecodeGenerator::VisitObjectLiteral(ObjectLiteral* expr) {
         DCHECK(clone_object_spread || !property->value()->IsCompileTimeValue());
         V8_FALLTHROUGH;
       case ObjectLiteral::Property::COMPUTED: {
+        // Recognize using a "create" property in an object literal as
+        // potentially creating a new React effect.
+        if (property->key()->IsStringLiteral() &&
+            property->key()->AsLiteral()->AsRawString()->to_string() == "create") {
+          record_replay_push_effect = true;
+        }
+
         // It is safe to use [[Put]] here because the boilerplate already
         // contains computed properties with an uninitialized value.
         Register key_reg;
@@ -3230,8 +3239,6 @@ void BytecodeGenerator::VisitObjectLiteral(ObjectLiteral* expr) {
           .CallRuntime(Runtime::kDefineAccessorPropertyUnchecked, args);
     }
 
-  bool record_replay_push_effect = false;
-
   // Object literals have two parts. The "static" part on the left contains no
   // computed property names, and so we can compute its map ahead of time; see
   // Runtime_CreateObjectLiteralBoilerplate. The second "dynamic" part starts
@@ -3269,13 +3276,6 @@ void BytecodeGenerator::VisitObjectLiteral(ObjectLiteral* expr) {
       case ObjectLiteral::Property::CONSTANT:
       case ObjectLiteral::Property::COMPUTED:
       case ObjectLiteral::Property::MATERIALIZED_LITERAL: {
-        // Recognize using a "create" property in an object literal as
-        // potentially creating a new React effect.
-        if (property->key()->IsStringLiteral() &&
-            property->key()->AsLiteral()->AsRawString()->to_string() == "create") {
-          record_replay_push_effect = true;
-        }
-
         // Computed property keys don't belong to the object literal scope (even
         // if they're syntactically inside it).
         if (property->is_computed_name()) {
