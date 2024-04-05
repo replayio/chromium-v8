@@ -443,7 +443,8 @@ namespace interpreter {
     OperandType::kIdx, OperandType::kReg)                                      \
   V(RecordReplayAssertValue, ImplicitRegisterUse::kReadWriteAccumulator,       \
     OperandType::kIdx)                                                         \
-  V(RecordReplayTrackObjectId, ImplicitRegisterUse::kNone, OperandType::kReg)  \
+  V(RecordReplayTrackObjectId, ImplicitRegisterUse::kNone, OperandType::kReg,  \
+    OperandType::kIdx)                                                         \
                                                                                \
   /* Execution Abort (internal error) */                                       \
   V(Abort, ImplicitRegisterUse::kNone, OperandType::kIdx)

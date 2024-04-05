@@ -3413,7 +3413,8 @@ void MaglevGraphBuilder::VisitRecordReplayAssertValue() {
 
 void MaglevGraphBuilder::VisitRecordReplayTrackObjectId() {
   ValueNode* object = LoadRegisterTagged(0);
-  BuildCallRuntime(Runtime::kRecordReplayTrackObjectId, {object});
+  ValueNode* kind = GetSmiConstant(iterator_.GetIndexOperand(1));
+  BuildCallRuntime(Runtime::kRecordReplayTrackObjectId, {object, kind});
 }
 
 void MaglevGraphBuilder::VisitAbort() {

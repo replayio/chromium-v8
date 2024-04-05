@@ -1435,9 +1435,9 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayInstrumentationGenerator
   return *this;
 }
 
-BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayTrackObjectId(Register object) {
+BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayTrackObjectId(Register object, int kind) {
   if (emit_record_replay_opcodes_) {
-    OutputRecordReplayTrackObjectId(object);
+    OutputRecordReplayTrackObjectId(object, kind);
   }
   return *this;
 }

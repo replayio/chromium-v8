@@ -4080,6 +4080,23 @@ int RecordReplayObjectId(v8::Isolate* v8_isolate, v8::Local<v8::Context> cx,
   return id;
 }
 
+extern bool gRecordReplayEnableDependencyGraph;
+
+void NewTrackedObjectDependencyGraphNode(Isolate* isolate, int id, const char* why) {
+  if (!recordreplay::IsReplaying() || !gRecordReplayEnableDependencyGraph) {
+    return;
+  }
+
+  Handle<JSObject> obj = NewPlainObject(isolate);
+  SetProperty(isolate, obj, "kind", "trackedObject");
+  SetProperty(isolate, obj, "objectId", id);
+  SetProperty(isolate, obj, "why", why);
+  Handle<Object> jsonStr = JsonStringify(isolate, obj, undefined, undefined).ToHandleChecked();
+  std::unique_ptr<char[]> jsonCStr = String::cast(*rvStr).ToCString();
+
+  recordreplay::NewDependencyGraphNode(jsonCStr.get());
+}
+
 static bool gTrackObjects = false;
 
 // Called by the recorder when we need to track persistent IDs for as many objects
@@ -4090,23 +4107,18 @@ void TrackObjectsCallback(bool track_objects) {
   gTrackObjects = track_objects;
 }
 
-// Whether to keep track of objects being assigned particular properties.
-bool RecordReplayTrackObjectAssignment(bool is_this, const std::string& property) {
+// Whether to keep track of 'this' objects being assigned a property.
+bool RecordReplayTrackThisObjectAssignment(const std::string& property) {
   // If we've been told to track objects then all 'this' objects which are
   // assigned a property will be tracked.
-  if (is_this && (gRecordReplayAssertTrackedObjects || gTrackObjects)) {
+  if (gRecordReplayAssertTrackedObjects || gTrackObjects) {
     return true;
   }
 
-  // By default we track objects which might be React fibers. These will
+  // By default we only track objects which might be React fibers. These will
   // have an "alternate" property assigned to in the constructor. Tracking objects
   // is only needed when replaying.
   if (recordreplay::IsReplaying() && property == "alternate") {
-    return true;
-  }
-
-  // Track "next" assignments which could be linked list of effects in React.
-  if (recordreplay::IsReplaying() && property == "next") {
     return true;
   }
 

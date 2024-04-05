@@ -3674,9 +3674,10 @@ void BytecodeGraphBuilder::VisitRecordReplayTrackObjectId() {
   PrepareEagerCheckpoint();
   Node* object = environment()->LookupRegister(
       bytecode_iterator().GetRegisterOperand(0));
+  Node* kind_slot = jsgraph()->Constant(bytecode_iterator().GetIndexOperand(1));
   const Operator* op = javascript()->CallRuntime(Runtime::kRecordReplayTrackObjectId);
 
-  Node* node = NewNode(op, object);
+  Node* node = NewNode(op, object, kind_slot);
   environment()->RecordAfterState(node, Environment::kAttachFrameState);
 }
 

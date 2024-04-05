@@ -472,7 +472,7 @@ class V8_EXPORT_PRIVATE BytecodeArrayBuilder final {
                                                     int source_position = kNoSourcePosition);
   BytecodeArrayBuilder& RecordReplayInstrumentationGenerator(const char* kind,
                                                              Register generator_object);
-  BytecodeArrayBuilder& RecordReplayTrackObjectId(Register object);
+  BytecodeArrayBuilder& RecordReplayTrackObjectId(Register object, int kind);
 
   // Complex flow control.
   BytecodeArrayBuilder& ForInEnumerate(Register receiver);

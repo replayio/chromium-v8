@@ -1491,14 +1491,29 @@ RUNTIME_FUNCTION(Runtime_RecordReplayInstrumentationGenerator) {
   return ReadOnlyRoots(isolate).undefined_value();
 }
 
+extern void NewTrackedObjectDependencyGraphNode(Isolate* isolate, int id, const char* why);
+
+int g_record_replay_track_object_kind_generic = 0;
+int g_record_replay_track_object_kind_react_push_effect = 1;
+int g_record_replay_track_object_kind_react_use_effect = 2;
+
 RUNTIME_FUNCTION(Runtime_RecordReplayTrackObjectId) {
-  DCHECK_EQ(1, args.length());
+  DCHECK_EQ(2, args.length());
   Handle<Object> value = args.at(0);
+  int32_t kind = NumberToInt32(args[1]);
 
   v8::Isolate* v8_isolate = (v8::Isolate*) isolate;
-  RecordReplayObjectId(v8_isolate, v8_isolate->GetCurrentContext(),
-                       v8::Utils::ToLocal(value),
-                       /* allow_create */ true);
+  int id = RecordReplayObjectId(v8_isolate, v8_isolate->GetCurrentContext(),
+                                v8::Utils::ToLocal(value),
+                                /* allow_create */ true);
+
+  if (id == g_record_replay_track_object_kind_generic) {
+    // Nothing
+  } else if (id == g_record_replay_track_object_kind_react_push_effect) {
+    NewTrackedObjectDependencyGraphNode(isolate, id, "PushEffect");
+  } else if (id == g_record_replay_track_object_kind_react_use_effect) {
+    NewTrackedObjectDependencyGraphNode(isolate, id, "UseEffect");
+  }
 
   return ReadOnlyRoots(isolate).undefined_value();
 }

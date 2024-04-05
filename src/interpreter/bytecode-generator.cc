@@ -40,7 +40,11 @@ namespace v8 {
 namespace internal {
 
 extern bool gRecordReplayAssertValues;
-extern bool RecordReplayTrackObjectAssignment(bool is_this, const std::string& property);
+extern bool RecordReplayTrackThisObjectAssignment(const std::string& property);
+
+extern int g_record_replay_track_object_kind_generic;
+extern int g_record_replay_track_object_kind_react_push_effect;
+extern int g_record_replay_track_object_kind_react_use_effect;
 
 namespace interpreter {
 
@@ -3226,6 +3230,8 @@ void BytecodeGenerator::VisitObjectLiteral(ObjectLiteral* expr) {
           .CallRuntime(Runtime::kDefineAccessorPropertyUnchecked, args);
     }
 
+  bool record_replay_push_effect = false;
+
   // Object literals have two parts. The "static" part on the left contains no
   // computed property names, and so we can compute its map ahead of time; see
   // Runtime_CreateObjectLiteralBoilerplate. The second "dynamic" part starts
@@ -3263,6 +3269,13 @@ void BytecodeGenerator::VisitObjectLiteral(ObjectLiteral* expr) {
       case ObjectLiteral::Property::CONSTANT:
       case ObjectLiteral::Property::COMPUTED:
       case ObjectLiteral::Property::MATERIALIZED_LITERAL: {
+        // Recognize using a "create" property in an object literal as
+        // potentially creating a new React effect.
+        if (property->key()->IsStringLiteral() &&
+            property->key()->AsLiteral()->AsRawString()->to_string() == "create") {
+          record_replay_push_effect = true;
+        }
+
         // Computed property keys don't belong to the object literal scope (even
         // if they're syntactically inside it).
         if (property->is_computed_name()) {
@@ -3341,6 +3354,10 @@ void BytecodeGenerator::VisitObjectLiteral(ObjectLiteral* expr) {
       case ObjectLiteral::Property::PROTOTYPE:
         UNREACHABLE();  // Handled specially above.
     }
+  }
+
+  if (record_replay_push_effect) {
+    builder()->RecordReplayTrackObjectId(literal, g_record_replay_track_object_kind_react_push_effect);
   }
 
   builder()->LoadAccumulatorWithRegister(literal);
@@ -3915,6 +3932,11 @@ void BytecodeGenerator::BuildVariableAssignment(
 void BytecodeGenerator::BuildLoadNamedProperty(const Expression* object_expr,
                                                Register object,
                                                const AstRawString* name) {
+  // Recognize loading a "create" property as potentially using a React effect.
+  if (name->to_string() == "create") {
+    builder()->RecordReplayTrackObjectId(literal, g_record_replay_track_object_kind_react_use_effect);
+  }
+
   FeedbackSlot slot = GetCachedLoadICSlot(object_expr, name);
   builder()->LoadNamedProperty(object, name, feedback_index(slot));
 }
@@ -3922,16 +3944,12 @@ void BytecodeGenerator::BuildLoadNamedProperty(const Expression* object_expr,
 void BytecodeGenerator::BuildSetNamedProperty(const Expression* object_expr,
                                               Register object,
                                               const AstRawString* name) {
-  if (recordreplay::IsRecordingOrReplaying("emit-opcodes")) {
-    if (object_expr->IsThisExpression()) {
-      if (RecordReplayTrackObjectAssignment(true, name->to_string()) &&
-          !record_replay_has_track_this_) {
-        builder()->RecordReplayTrackObjectId(object);
-        record_replay_has_track_this_ = true;
-      }
-    } else if (RecordReplayTrackObjectAssignment(false, name->to_string())) {
-      builder()->RecordReplayTrackObjectId(object);
-    }
+  if (recordreplay::IsRecordingOrReplaying("emit-opcodes") &&
+      !record_replay_has_track_this_ &&
+      object_expr->IsThisExpression() &&
+      RecordReplayTrackThisObjectAssignment(name->to_string())) {
+    builder()->RecordReplayTrackObjectId(object, g_record_replay_track_object_kind_generic);
+    record_replay_has_track_this_ = true;
   }
 
   Register value;

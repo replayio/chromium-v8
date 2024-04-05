@@ -2337,7 +2337,8 @@ void BaselineCompiler::VisitRecordReplayAssertValue() {
 
 void BaselineCompiler::VisitRecordReplayTrackObjectId() {
   SaveAccumulatorScope accumulator_scope(&basm_);
-  CallRuntime(Runtime::kRecordReplayTrackObjectId, RegisterOperand(0));
+  CallRuntime(Runtime::kRecordReplayTrackObjectId, RegisterOperand(0),
+              Smi::FromInt(Index(1)));
 }
 
 void BaselineCompiler::VisitAbort() {

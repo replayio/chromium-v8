@@ -2892,8 +2892,9 @@ IGNITION_HANDLER(RecordReplayAssertValue, InterpreterAssembler) {
 IGNITION_HANDLER(RecordReplayTrackObjectId, InterpreterAssembler) {
   TNode<Context> context = GetContext();
   TNode<Object> object = LoadRegisterAtOperandIndex(0);
+  TNode<Smi> index = BytecodeOperandIdxSmi(1);
   CallRuntime(Runtime::kRecordReplayTrackObjectId,
-              context, object);
+              context, object, index);
   Dispatch();
 }
 
