@@ -5048,7 +5048,11 @@ void Isolate::PromiseHookStateUpdated() {
     );
     g_record_replay_recording_hooks_enabled = (int)v8::recordreplay::RecordReplayValue(
       "hooks-enabled",
-      (uintptr_t)!!(promise_hook_ || RecordReplayShouldCallOnPromiseHook())
+      (uintptr_t)!!(promise_hook_flags_ & (
+        Isolate::PromiseHookFields::HasIsolatePromiseHook::kMask |
+        Isolate::PromiseHookFields::HasAsyncEventDelegate::kMask |
+        Isolate::PromiseHookFields::IsDebugActive::kMask
+      ))
     );
   }
 
