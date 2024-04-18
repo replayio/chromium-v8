@@ -5545,9 +5545,7 @@ Handle<Object> JSPromise::Reject(Handle<JSPromise> promise,
     (uintptr_t)!promise->has_handler()
   );
   bool replayReport = !promise->has_handler();
-  v8::replayio::AutoMaybeDisallowEvents disallow(recordreplay::IsReplaying() &&
-                                                 !recordReport &&
-                                                 recordReport != replayReport,
+  v8::replayio::AutoMaybeDisallowEvents disallow(!recordReport && replayReport,
                                                  "JSPromise::Reject");
 
   // 7. If promise.[[PromiseIsHandled]] is false, perform
