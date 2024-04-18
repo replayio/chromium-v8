@@ -849,6 +849,7 @@ RUNTIME_FUNCTION(Runtime_DebugAsyncFunctionSuspended) {
 
   // The Promise will be thrown away and not handled, but it
   // shouldn't trigger unhandled reject events as its work is done
+  recordreplay::Assert("[TT-187-935] Runtime_DebugAsyncFunctionSuspended");
   throwaway->set_has_handler(true);
 
   // Enable proper debug support for promises.

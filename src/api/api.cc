@@ -7979,6 +7979,8 @@ Promise::PromiseState Promise::State() {
 
 void Promise::MarkAsHandled() {
   i::Handle<i::JSPromise> js_promise = Utils::OpenHandle(this);
+
+  recordreplay::Assert("[TT-187-935] Promise::MarkAsHandled");
   js_promise->set_has_handler(true);
 }
 
