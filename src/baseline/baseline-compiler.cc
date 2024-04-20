@@ -2328,6 +2328,13 @@ void BaselineCompiler::VisitRecordReplayInstrumentationGenerator() {
               __ FunctionOperand(), Smi::FromInt(index), RegisterOperand(1));
 }
 
+void BaselineCompiler::VisitRecordReplayInstrumentationReturn() {
+  SaveAccumulatorScope accumulator_scope(&basm_);
+  uint32_t index = Index(0);
+  CallRuntime(Runtime::kRecordReplayInstrumentationReturn,
+              __ FunctionOperand(), Smi::FromInt(index), RegisterOperand(1));
+}
+
 void BaselineCompiler::VisitRecordReplayAssertValue() {
   SaveAccumulatorScope accumulator_scope(&basm_);
   CallRuntime(Runtime::kRecordReplayAssertValue,

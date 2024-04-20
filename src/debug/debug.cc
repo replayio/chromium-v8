@@ -3171,7 +3171,8 @@ static void ForEachInstrumentationOp(Isolate* isolate, Handle<Script> script,
            it.Advance()) {
         interpreter::Bytecode bytecode = it.current_bytecode();
         if (bytecode == interpreter::Bytecode::kRecordReplayInstrumentation ||
-            bytecode == interpreter::Bytecode::kRecordReplayInstrumentationGenerator) {
+            bytecode == interpreter::Bytecode::kRecordReplayInstrumentationGenerator ||
+            bytecode == interpreter::Bytecode::kRecordReplayInstrumentationReturn) {
           int index = it.GetIndexOperand(0);
           aCallback(candidate, index);
         }

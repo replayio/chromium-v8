@@ -1409,10 +1409,16 @@ int BytecodeArrayBuilder::RecordReplayRegisterInstrumentationSite(
   return RegisterInstrumentationSite(kind, source_position, function_index);
 }
 
+bool BytecodeArrayBuilder::EmitRecordReplayInstrumentationOpcodes(bool generator) const {
+  // Instrumentation opcodes aren't needed when recording, except when we are asserting
+  // encountered values and need consistent IDs for these objects when recording.
+  // Generator instrumentation will create persistent object IDs.
+  return emit_record_replay_opcodes_ && (recordreplay::IsReplaying() || gRecordReplayAssertTrackedObjects);
+}
+
 BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayInstrumentation(
     const char* kind, int source_position) {
-  // Instrumentation opcodes aren't needed when recording.
-  if (emit_record_replay_opcodes_ && recordreplay::IsReplaying()) {
+  if (EmitRecordReplayInstrumentationOpcodes()) {
     int index = RecordReplayRegisterInstrumentationSite(kind, source_position);
     if (index >= 0) {
       OutputRecordReplayInstrumentation(index);
@@ -1423,13 +1429,23 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayInstrumentation(
 
 BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayInstrumentationGenerator(
     const char* kind, Register generator_object) {
-  // Instrumentation opcodes aren't needed when recording, except when we are asserting
-  // encountered values and need consistent IDs for these objects when recording.
-  if (emit_record_replay_opcodes_ && (recordreplay::IsReplaying() || gRecordReplayAssertTrackedObjects)) {
+  if (EmitRecordReplayInstrumentationOpcodes()) {
     int index =
         RecordReplayRegisterInstrumentationSite(kind, kNoSourcePosition);
     if (index >= 0) {
       OutputRecordReplayInstrumentationGenerator(index, generator_object);
+    }
+  }
+  return *this;
+}
+
+BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayInstrumentationReturn(
+    const char* kind, Register return_value, int source_position) {
+  if (EmitRecordReplayInstrumentationOpcodes()) {
+    int index =
+        RecordReplayRegisterInstrumentationSite(kind, source_position);
+    if (index >= 0) {
+      OutputRecordReplayInstrumentationReturn(index, return_value);
     }
   }
   return *this;

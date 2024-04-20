@@ -1491,6 +1491,36 @@ RUNTIME_FUNCTION(Runtime_RecordReplayInstrumentationGenerator) {
   return ReadOnlyRoots(isolate).undefined_value();
 }
 
+static Handle<Object>* gCurrentReturnValue;
+
+RUNTIME_FUNCTION(Runtime_RecordReplayInstrumentationReturn) {
+  if (!gRecordReplayInstrumentationEnabled) {
+    return ReadOnlyRoots(isolate).undefined_value();
+  }
+
+  HandleScope scope(isolate);
+  DCHECK_EQ(3, args.length());
+  Handle<JSFunction> function = args.at<JSFunction>(0);
+  int32_t index = NumberToInt32(args[1]);
+  Handle<Object> return_value = args.at(2);
+
+  gCurrentReturnValue = &return_value;
+
+  OnInstrumentation(isolate, function, index);
+
+  gCurrentReturnValue = nullptr;
+
+  return ReadOnlyRoots(isolate).undefined_value();
+}
+
+extern "C" bool V8RecordReplayCurrentReturnValue(v8::Local<v8::Value>* object) {
+  if (gCurrentReturnValue) {
+    *object = v8::Utils::ToLocal(*gCurrentReturnValue);
+    return true;
+  }
+  return false;
+}
+
 RUNTIME_FUNCTION(Runtime_RecordReplayTrackObjectId) {
   DCHECK_EQ(1, args.length());
   Handle<Object> value = args.at(0);
