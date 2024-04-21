@@ -473,6 +473,7 @@ class V8_EXPORT_PRIVATE BytecodeArrayBuilder final {
   BytecodeArrayBuilder& RecordReplayInstrumentationGenerator(const char* kind,
                                                              Register generator_object);
   BytecodeArrayBuilder& RecordReplayInstrumentationReturn(const char* kind,
+                                                          Register return_value,
                                                           int source_position = kNoSourcePosition);
   BytecodeArrayBuilder& RecordReplayTrackObjectId(Register object);
 

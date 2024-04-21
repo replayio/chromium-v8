@@ -1409,7 +1409,7 @@ int BytecodeArrayBuilder::RecordReplayRegisterInstrumentationSite(
   return RegisterInstrumentationSite(kind, source_position, function_index);
 }
 
-bool BytecodeArrayBuilder::EmitRecordReplayInstrumentationOpcodes(bool generator) const {
+bool BytecodeArrayBuilder::EmitRecordReplayInstrumentationOpcodes() const {
   // Instrumentation opcodes aren't needed when recording, except when we are asserting
   // encountered values and need consistent IDs for these objects when recording.
   // Generator instrumentation will create persistent object IDs.
