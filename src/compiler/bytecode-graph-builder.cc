@@ -3659,7 +3659,7 @@ void BytecodeGraphBuilder::VisitRecordReplayInstrumentationGenerator() {
   environment()->RecordAfterState(node, Environment::kAttachFrameState);
 }
 
-void BytecodeGraphBuilder::VisitRecordReplayInstrumentationGenerator() {
+void BytecodeGraphBuilder::VisitRecordReplayInstrumentationReturn() {
   // Disabled if instrumentation is disabled, as in VisitRecordReplayInstrumentation.
   if (!gRecordReplayInstrumentationEnabled) {
     return;
