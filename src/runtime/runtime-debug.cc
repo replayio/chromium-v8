@@ -139,6 +139,7 @@ RUNTIME_FUNCTION(Runtime_DebugBreakAtEntry) {
   return ReadOnlyRoots(isolate).undefined_value();
 }
 
+extern int g_record_replay_recording_hooks_enabled;
 extern "C" void V8RecordReplayOnDebuggerStatement();
 
 RUNTIME_FUNCTION(Runtime_HandleDebuggerStatement) {
