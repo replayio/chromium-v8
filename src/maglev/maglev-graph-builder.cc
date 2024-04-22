@@ -3404,6 +3404,14 @@ void MaglevGraphBuilder::VisitRecordReplayInstrumentationGenerator() {
                    {closure, index, generator_object});
 }
 
+void MaglevGraphBuilder::VisitRecordReplayInstrumentationReturn() {
+  ValueNode* closure = GetClosure();
+  ValueNode* index = GetSmiConstant(iterator_.GetIndexOperand(0));
+  ValueNode* return_value = LoadRegisterTagged(1);
+  BuildCallRuntime(Runtime::kRecordReplayInstrumentationReturn,
+                   {closure, index, return_value});
+}
+
 void MaglevGraphBuilder::VisitRecordReplayAssertValue() {
   ValueNode* closure = GetClosure();
   ValueNode* index = GetSmiConstant(iterator_.GetIndexOperand(0));
