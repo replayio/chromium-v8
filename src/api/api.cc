@@ -11282,8 +11282,6 @@ extern "C" DLLEXPORT void V8RecordReplayTrace(const char* format,
 }
 
 extern "C" DLLEXPORT void V8RecordReplayCrash(const char* format, va_list args) {
-  DCHECK(recordreplay::IsRecordingOrReplaying());
-
   char str[4096];
   vsnprintf(str, sizeof(str), format, args);
   str[sizeof(str) - 1] = 0;
