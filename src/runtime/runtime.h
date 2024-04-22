@@ -154,6 +154,7 @@ namespace internal {
   F(RecordReplayAssertValue, 3, 1)              \
   F(RecordReplayInstrumentation, 2, 1)          \
   F(RecordReplayInstrumentationGenerator, 3, 1) \
+  F(RecordReplayInstrumentationReturn, 3, 1)    \
   F(RecordReplayTrackObjectId, 1, 1)
 
 #define FOR_EACH_INTRINSIC_FORIN(F, I) \
