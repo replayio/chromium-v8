@@ -34,6 +34,7 @@
 #endif
 
 #include "src/api/api-inl.h"
+#include "src/base/replayio.h"
 
 namespace v8 {
 namespace internal {
@@ -836,7 +837,7 @@ RUNTIME_FUNCTION(Runtime_IncBlockCounter) {
 RUNTIME_FUNCTION(Runtime_DebugAsyncFunctionSuspended) {
   DCHECK_EQ(5, args.length());
 
-  v8::base::replayio::AutoMaybeDisallowEvents disallow(
+  v8::replayio::AutoMaybeDisallowEvents disallow(
       IsMainThread() && !g_record_replay_recording_hooks_enabled,
       "Runtime_DebugAsyncFunctionSuspended");
 
