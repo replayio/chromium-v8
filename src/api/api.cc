@@ -7979,8 +7979,6 @@ Promise::PromiseState Promise::State() {
 
 void Promise::MarkAsHandled() {
   i::Handle<i::JSPromise> js_promise = Utils::OpenHandle(this);
-
-  recordreplay::Assert("[TT-187-935] Promise::MarkAsHandled");
   js_promise->set_has_handler(true);
 }
 
@@ -11282,8 +11280,6 @@ extern "C" DLLEXPORT void V8RecordReplayTrace(const char* format,
 }
 
 extern "C" DLLEXPORT void V8RecordReplayCrash(const char* format, va_list args) {
-  DCHECK(recordreplay::IsRecordingOrReplaying());
-
   char str[4096];
   vsnprintf(str, sizeof(str), format, args);
   str[sizeof(str) - 1] = 0;

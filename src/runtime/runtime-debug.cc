@@ -34,6 +34,7 @@
 #endif
 
 #include "src/api/api-inl.h"
+#include "src/base/replayio.h"
 
 namespace v8 {
 namespace internal {
@@ -139,6 +140,7 @@ RUNTIME_FUNCTION(Runtime_DebugBreakAtEntry) {
   return ReadOnlyRoots(isolate).undefined_value();
 }
 
+extern int g_record_replay_recording_hooks_enabled;
 extern "C" void V8RecordReplayOnDebuggerStatement();
 
 RUNTIME_FUNCTION(Runtime_HandleDebuggerStatement) {
@@ -834,6 +836,11 @@ RUNTIME_FUNCTION(Runtime_IncBlockCounter) {
 
 RUNTIME_FUNCTION(Runtime_DebugAsyncFunctionSuspended) {
   DCHECK_EQ(5, args.length());
+
+  v8::replayio::AutoMaybeDisallowEvents disallow(
+      IsMainThread() && !g_record_replay_recording_hooks_enabled,
+      "Runtime_DebugAsyncFunctionSuspended");
+
   HandleScope scope(isolate);
   Handle<JSPromise> promise = args.at<JSPromise>(0);
   Handle<JSPromise> outer_promise = args.at<JSPromise>(1);
@@ -847,9 +854,12 @@ RUNTIME_FUNCTION(Runtime_DebugAsyncFunctionSuspended) {
   Handle<JSPromise> throwaway = isolate->factory()->NewJSPromiseWithoutHook();
   isolate->OnAsyncFunctionSuspended(throwaway, promise);
 
+  if (IsMainThread()) {
+    recordreplay::AssertMaybeEventsDisallowed(
+        "[TT-187-935] Runtime_DebugAsyncFunctionSuspended");
+  }
   // The Promise will be thrown away and not handled, but it
   // shouldn't trigger unhandled reject events as its work is done
-  recordreplay::Assert("[TT-187-935] Runtime_DebugAsyncFunctionSuspended");
   throwaway->set_has_handler(true);
 
   // Enable proper debug support for promises.

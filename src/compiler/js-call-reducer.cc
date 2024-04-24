@@ -70,7 +70,6 @@ class JSCallReducerAssembler : public JSGraphAssembler {
     // Finish initializing the outermost catch scope.
     bool has_handler =
         NodeProperties::IsExceptionalCall(node, &outermost_handler_);
-    recordreplay::Assert("[TT-187-935] JSCallReducerAssembler %d", has_handler);
     outermost_catch_scope_.set_has_handler(has_handler);
     outermost_catch_scope_.set_gasm(this);
   }

@@ -14,7 +14,6 @@
 #include "src/base/optional.h"
 
 namespace v8 {
-namespace base {
 namespace replayio {
 
 struct AutoMaybeDisallowEvents {
@@ -29,7 +28,6 @@ private:
 };
 
 }  // namespace replayio
-}  // namespace base
 }  // namespace v8
 
 #endif  // V8_BASE_REPLAYIO_H

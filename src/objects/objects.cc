@@ -133,6 +133,8 @@
 #include "src/wasm/wasm-objects.h"
 #endif  // V8_ENABLE_WEBASSEMBLY
 
+#include "src/base/replayio.h"
+
 namespace v8 {
 namespace internal {
 
@@ -5515,11 +5517,6 @@ Handle<Object> JSPromise::Reject(Handle<JSPromise> promise,
   DCHECK(
       !reinterpret_cast<v8::Isolate*>(isolate)->GetCurrentContext().IsEmpty());
 
-  v8::recordreplay::AssertMaybeEventsDisallowed(
-    "[TT-187-819] JSPromise::Reject %d", 
-    !!promise->has_handler()
-  );
-
   if (isolate->debug()->is_active()) MoveMessageToPromise(isolate, promise);
 
   if (debug_event) isolate->debug()->OnPromiseReject(promise, reason);
@@ -5540,15 +5537,27 @@ Handle<Object> JSPromise::Reject(Handle<JSPromise> promise,
   // 6. Set promise.[[PromiseState]] to "rejected".
   promise->set_status(Promise::kRejected);
 
-  // 7. If promise.[[PromiseIsHandled]] is false, perform
-  //    HostPromiseRejectionTracker(promise, "reject").
-  if (!promise->has_handler()) {
-    isolate->ReportPromiseReject(promise, reason, kPromiseRejectWithNoHandler);
-  }
+  {
+    // [TT-187] Disallow events in ReportPromiseReject if we did not report
+    // when recording.
+    bool allowed = !recordreplay::AreEventsDisallowed();
+    bool recordReport = allowed && recordreplay::RecordReplayValue(
+        "JSPromise::Reject has_handler", (uintptr_t)!promise->has_handler());
+    bool replayReport = !promise->has_handler();
+    v8::replayio::AutoMaybeDisallowEvents disallow(
+        allowed && !recordReport && replayReport, "JSPromise::Reject");
 
-  // 8. Return TriggerPromiseReactions(reactions, reason).
-  return TriggerPromiseReactions(isolate, reactions, reason,
-                                 PromiseReaction::kReject);
+    // 7. If promise.[[PromiseIsHandled]] is false, perform
+    //    HostPromiseRejectionTracker(promise, "reject").
+    if (!promise->has_handler()) {
+      isolate->ReportPromiseReject(promise, reason,
+                                   kPromiseRejectWithNoHandler);
+    }
+
+    // 8. Return TriggerPromiseReactions(reactions, reason).
+    return TriggerPromiseReactions(isolate, reactions, reason,
+                                   PromiseReaction::kReject);
+  }
 }
 
 // https://tc39.es/ecma262/#sec-promise-resolve-functions
