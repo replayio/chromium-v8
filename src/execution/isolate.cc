@@ -5555,16 +5555,15 @@ void Isolate::OnTerminationDuringRunMicrotasks() {
 void Isolate::SetPromiseRejectCallback(PromiseRejectCallback callback) {
   promise_reject_callback_ = callback;
 
-  recordreplay::Assert("[TT-187-819] Isolate::SetPromiseRejectCallback %d", 
-    !!promise_reject_callback_
-  );
+  recordreplay::Assert("[TT-1029-1030] Isolate::SetPromiseRejectCallback %d",
+                       !!promise_reject_callback_);
 }
 
 void Isolate::ReportPromiseReject(Handle<JSPromise> promise,
                                   Handle<Object> value,
                                   v8::PromiseRejectEvent event) {
   v8::recordreplay::AssertMaybeEventsDisallowed(
-    "[TT-187-819] Isolate::ReportPromiseReject %d",
+    "[TT-1029-1030] Isolate::ReportPromiseReject %d",
     !!promise_reject_callback_
   );
 

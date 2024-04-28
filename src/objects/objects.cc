@@ -5538,8 +5538,8 @@ Handle<Object> JSPromise::Reject(Handle<JSPromise> promise,
   promise->set_status(Promise::kRejected);
 
   {
-    v8::replayio::AutoMaybeDisallowEvents disallow("JSPromise::Reject %d",
-                                                   promise->has_handler());
+    v8::replayio::AutoMaybeDisallowEvents disallow(promise->has_handler(),
+                                                   "[TT-1029-1030] JSPromise::Reject %d");
 
     // 7. If promise.[[PromiseIsHandled]] is false, perform
     //    HostPromiseRejectionTracker(promise, "reject").
