@@ -5538,14 +5538,8 @@ Handle<Object> JSPromise::Reject(Handle<JSPromise> promise,
   promise->set_status(Promise::kRejected);
 
   {
-    // [TT-187] Disallow events in ReportPromiseReject if we did not report
-    // when recording.
-    bool allowed = !recordreplay::AreEventsDisallowed();
-    bool recordReport = allowed && recordreplay::RecordReplayValue(
-        "JSPromise::Reject has_handler", (uintptr_t)!promise->has_handler());
-    bool replayReport = !promise->has_handler();
-    v8::replayio::AutoMaybeDisallowEvents disallow(
-        allowed && !recordReport && replayReport, "JSPromise::Reject");
+    v8::replayio::AutoMaybeDisallowEvents disallow(promise->has_handler(),
+                                                   "[TT-1029-1030] JSPromise::Reject %d");
 
     // 7. If promise.[[PromiseIsHandled]] is false, perform
     //    HostPromiseRejectionTracker(promise, "reject").
