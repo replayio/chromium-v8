@@ -4154,7 +4154,11 @@ std::string RecordReplayBasicValueContents(Handle<Object> value) {
     if (std::isnan(num)) {
       return "NaN";
     }
-    return StringPrintf("Number %d %llu", (int)num, *(uint64_t*)&num);
+    int num2 = num;
+    if (num2 != num) {
+      num2 = -1;
+    }
+    return StringPrintf("Number %d %llu", num2, *(uint64_t*)&num);
   }
 
   if (value->IsBoolean()) {
