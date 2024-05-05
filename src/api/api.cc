@@ -5191,15 +5191,35 @@ MaybeLocal<v8::Context> v8::Object::GetCreationContext() {
   return MaybeLocal<v8::Context>();
 }
 
+static Eternal<v8::Context>* gLastContext;
+
+extern "C" void V8RecordReplaySetDefaultContext(v8::Isolate* isolate, v8::Local<v8::Context> cx) {
+  if (IsMainThread()) {
+    gDefaultContext = new Eternal<v8::Context>(isolate, cx);
+  }
+}
+
+extern "C" void V8RecordReplayGetDefaultContext(v8::Isolate* isolate, v8::Local<v8::Context>* cx) {
+  CHECK(IsMainThread() && gDefaultContext);
+  *cx = gDefaultContext->Get(isolate);
+}
 extern "C" void V8RecordReplayGetDefaultContext(v8::Isolate* isolate, v8::Local<v8::Context>* cx);
 
 Local<v8::Context> v8::Object::GetCreationContextChecked() {
+  Isolate* isolate = Isolate::GetCurrent();
   Local<Context> context;
-  if (!GetCreationContext().ToLocal(&context)) {
-    if (recordreplay::IsRecordingOrReplaying()) {
+  if (GetCreationContext().ToLocal(&context)) {
+    if (recordreplay::IsRecordingOrReplaying() && IsMainThread()) {
+      if (gLastContext) {
+        gLastContext->Set(isolate, context);
+      } else {
+        gLastContext = new Eternal<v8::Context>(isolate, context);
+      }
+    }
+  } else {
+    if (recordreplay::IsRecordingOrReplaying() && IsMainThread()) {
       recordreplay::Print("Warning: GetCreationContextChecked missing context, substituting default context");
-      Isolate* isolate = Isolate::GetCurrent();
-      V8RecordReplayGetDefaultContext(isolate, &context);
+      context = gLastContext->Get(isolate);
     } else {
       CHECK(false);
     }
