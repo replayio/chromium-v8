@@ -4252,17 +4252,24 @@ GetOrCreatePromiseDependencyGraphData(Isolate* isolate, Handle<Object> promise) 
   return iter->second;
 }
 
+extern bool gRecordReplayEnableDependencyGraph;
+
 bool RecordReplayShouldCallOnPromiseHook() {
   // The promise hook is normally only used when replaying, but can assign
   // persistent IDs to objects so needs to be called while recording if we are
   // asserting on these.
-  return (recordreplay::IsReplaying() || gRecordReplayAssertTrackedObjects)
+  return gRecordReplayEnableDependencyGraph
+      && (recordreplay::IsReplaying() || gRecordReplayAssertTrackedObjects)
       && IsMainThread();
 }
 
 void RecordReplayOnPromiseHook(Isolate* isolate, PromiseHookType type,
                                Handle<JSPromise> promise, Handle<Object> parent) {
   CHECK(RecordReplayShouldCallOnPromiseHook());
+
+  if (!gRecordReplayEnableDependencyGraph) {
+    return;
+  }
 
   PromiseDependencyGraphData& data =
     GetOrCreatePromiseDependencyGraphData(isolate, promise);
