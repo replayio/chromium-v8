@@ -5193,18 +5193,6 @@ MaybeLocal<v8::Context> v8::Object::GetCreationContext() {
 
 static Eternal<v8::Context>* gLastContext;
 
-extern "C" void V8RecordReplaySetDefaultContext(v8::Isolate* isolate, v8::Local<v8::Context> cx) {
-  if (IsMainThread()) {
-    gDefaultContext = new Eternal<v8::Context>(isolate, cx);
-  }
-}
-
-extern "C" void V8RecordReplayGetDefaultContext(v8::Isolate* isolate, v8::Local<v8::Context>* cx) {
-  CHECK(IsMainThread() && gDefaultContext);
-  *cx = gDefaultContext->Get(isolate);
-}
-extern "C" void V8RecordReplayGetDefaultContext(v8::Isolate* isolate, v8::Local<v8::Context>* cx);
-
 Local<v8::Context> v8::Object::GetCreationContextChecked() {
   Isolate* isolate = Isolate::GetCurrent();
   Local<Context> context;
