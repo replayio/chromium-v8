@@ -5191,11 +5191,22 @@ MaybeLocal<v8::Context> v8::Object::GetCreationContext() {
   return MaybeLocal<v8::Context>();
 }
 
+extern "C" void V8RecordReplayGetDefaultContext(v8::Isolate* isolate, v8::Local<v8::Context>* cx);
+
 Local<v8::Context> v8::Object::GetCreationContextChecked() {
   Local<Context> context;
-  Utils::ApiCheck(GetCreationContext().ToLocal(&context),
-                  "v8::Object::GetCreationContextChecked",
-                  "No creation context available");
+  if (!GetCreationContext().ToLocal(&context)) {
+    if (recordreplay::IsRecordingOrReplaying()) {
+      recordreplay::Print("Warning: GetCreationContextChecked missing context, substituting default context");
+      Isolate* isolate = Isolate::Current();
+      V8RecordReplayGetDefaultContext(isolate, &context);
+    } else {
+      CHECK(false);
+    }
+  }
+  //Utils::ApiCheck(GetCreationContext().ToLocal(&context),
+  //                "v8::Object::GetCreationContextChecked",
+  //                "No creation context available");
   return context;
 }
 

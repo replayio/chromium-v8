@@ -39,7 +39,6 @@
 namespace v8 {
 namespace internal {
 
-extern bool gRecordReplayAssertValues;
 extern bool RecordReplayTrackThisObjectAssignment(const std::string& property);
 
 namespace interpreter {
