@@ -5198,7 +5198,7 @@ Local<v8::Context> v8::Object::GetCreationContextChecked() {
   if (!GetCreationContext().ToLocal(&context)) {
     if (recordreplay::IsRecordingOrReplaying()) {
       recordreplay::Print("Warning: GetCreationContextChecked missing context, substituting default context");
-      Isolate* isolate = Isolate::Current();
+      Isolate* isolate = Isolate::GetCurrent();
       V8RecordReplayGetDefaultContext(isolate, &context);
     } else {
       CHECK(false);
