@@ -3609,8 +3609,6 @@ void BytecodeGenerator::BuildVariableLoad(Variable* variable,
       if (hole_check_mode == HoleCheckMode::kRequired) {
         BuildThrowIfHole(variable);
       }
-
-      builder()->RecordReplayAssertValue("LoadContextSlot");
       break;
     }
     case VariableLocation::UNALLOCATED: {
