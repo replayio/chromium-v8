@@ -436,7 +436,7 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
     Handle<Context> context = isolate->native_context();
     if (!context->script_execution_callback().IsUndefined(isolate) &&
         // Ignore the script execution callback entirely when recording/replaying.
-        recordreplay::IsRecordingOrReplaying()) {
+        !recordreplay::IsRecordingOrReplaying()) {
       v8::Context::AbortScriptExecutionCallback callback =
           v8::ToCData<v8::Context::AbortScriptExecutionCallback>(
               context->script_execution_callback());
