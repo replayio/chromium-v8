@@ -1236,7 +1236,7 @@ struct AssertionSite {
   int source_position_;
   std::string location_;
 };
-typedef std::vector<AssertionSite> AssertionSiteVector;
+typedef std::vector<AssertionSite*> AssertionSiteVector;
 static AssertionSiteVector* gAssertionSites;
 static base::Mutex* gAssertionSitesMutex;
 
@@ -1244,8 +1244,18 @@ int RegisterAssertValueSite(const std::string& desc, int source_position) {
   base::MutexGuard lock(gAssertionSitesMutex);
 
   int index = (int)gAssertionSites->size();
-  gAssertionSites->push_back({ desc, source_position, "" });
+  gAssertionSites->push_back(new AssertionSite({ desc, source_position, "" }));
   return index + BytecodeSiteOffset;
+}
+
+static inline AssertionSite& GetAssertValueSite(int32_t index) {
+  index -= BytecodeSiteOffset;
+
+  base::MutexGuard lock(gAssertionSitesMutex);
+
+  CHECK(gAssertionSites && (size_t)index < gAssertionSites->size());
+  AssertionSite* site = (*gAssertionSites)[index];
+  return *site;
 }
 
 extern std::string RecordReplayBasicValueContents(Handle<Object> value);
@@ -1271,12 +1281,7 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertValue) {
   Handle<Script> script(Script::cast(function->shared().script()), isolate);
   CHECK(RecordReplayHasRegisteredScript(*script));
 
-  index -= BytecodeSiteOffset;
-
-  base::MutexGuard lock(gAssertionSitesMutex);
-
-  CHECK(gAssertionSites && (size_t)index < gAssertionSites->size());
-  AssertionSite& site = (*gAssertionSites)[index];
+  AssertionSite& site = GetAssertValueSite(index);
 
   if (!site.location_.length()) {
     Script::PositionInfo info;
