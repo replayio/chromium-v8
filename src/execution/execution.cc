@@ -436,6 +436,11 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
     Handle<Context> context = isolate->native_context();
     if (!context->script_execution_callback().IsUndefined(isolate) &&
         // Ignore the script execution callback entirely when recording/replaying.
+        // Non-deterministic behavior has been seen here for reasons not yet
+        // understood, and this callback is only used by chromium to prevent
+        // scripts from executing against windows in the backforward cache.
+        //
+        // See https://linear.app/replay/issue/TT-1029
         !recordreplay::IsRecordingOrReplaying()) {
       v8::Context::AbortScriptExecutionCallback callback =
           v8::ToCData<v8::Context::AbortScriptExecutionCallback>(
