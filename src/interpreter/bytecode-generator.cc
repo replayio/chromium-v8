@@ -39,7 +39,6 @@
 namespace v8 {
 namespace internal {
 
-extern bool gRecordReplayAssertValues;
 extern bool RecordReplayTrackThisObjectAssignment(const std::string& property);
 
 namespace interpreter {
@@ -3610,8 +3609,6 @@ void BytecodeGenerator::BuildVariableLoad(Variable* variable,
       if (hole_check_mode == HoleCheckMode::kRequired) {
         BuildThrowIfHole(variable);
       }
-
-      builder()->RecordReplayAssertValue("LoadContextSlot");
       break;
     }
     case VariableLocation::UNALLOCATED: {

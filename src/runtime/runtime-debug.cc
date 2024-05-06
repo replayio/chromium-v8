@@ -1236,7 +1236,7 @@ struct AssertionSite {
   int source_position_;
   std::string location_;
 };
-typedef std::vector<AssertionSite> AssertionSiteVector;
+typedef std::vector<AssertionSite*> AssertionSiteVector;
 static AssertionSiteVector* gAssertionSites;
 static base::Mutex* gAssertionSitesMutex;
 
@@ -1244,11 +1244,30 @@ int RegisterAssertValueSite(const std::string& desc, int source_position) {
   base::MutexGuard lock(gAssertionSitesMutex);
 
   int index = (int)gAssertionSites->size();
-  gAssertionSites->push_back({ desc, source_position, "" });
+  gAssertionSites->push_back(new AssertionSite({ desc, source_position, "" }));
   return index + BytecodeSiteOffset;
 }
 
+static inline AssertionSite& GetAssertValueSite(int32_t index) {
+  index -= BytecodeSiteOffset;
+
+  base::MutexGuard lock(gAssertionSitesMutex);
+
+  CHECK(gAssertionSites && (size_t)index < gAssertionSites->size());
+  AssertionSite* site = (*gAssertionSites)[index];
+  return *site;
+}
+
 extern std::string RecordReplayBasicValueContents(Handle<Object> value);
+
+static inline bool IgnoreAssertValueLocation(const std::string& location) {
+  static const char* pattern = getenv("RECORD_REPLAY_JS_ASSERTS_PATTERN");
+  if (!pattern) {
+    return false;
+  }
+  bool match = !!strstr(location.c_str(), pattern);
+  return !match;
+}
 
 RUNTIME_FUNCTION(Runtime_RecordReplayAssertValue) {
   CHECK(RecordReplayBytecodeAllowed());
@@ -1262,12 +1281,7 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertValue) {
   Handle<Script> script(Script::cast(function->shared().script()), isolate);
   CHECK(RecordReplayHasRegisteredScript(*script));
 
-  index -= BytecodeSiteOffset;
-
-  base::MutexGuard lock(gAssertionSitesMutex);
-
-  CHECK(gAssertionSites && (size_t)index < gAssertionSites->size());
-  AssertionSite& site = (*gAssertionSites)[index];
+  AssertionSite& site = GetAssertValueSite(index);
 
   if (!site.location_.length()) {
     Script::PositionInfo info;
@@ -1285,12 +1299,14 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertValue) {
     site.location_ = buf;
   }
 
-  std::string contents = RecordReplayBasicValueContents(value);
+  if (!IgnoreAssertValueLocation(site.location_)) {
+    std::string contents = RecordReplayBasicValueContents(value);
 
-  recordreplay::Assert(
-      "JS %s Value=%s PC=%zu scriptId=%d @%s", site.desc_.c_str(),
-      contents.c_str(), *gProgressCounter, script->id(),
-      site.location_.c_str());
+    recordreplay::Assert(
+        "JS %s Value=%s PC=%zu scriptId=%d @%s", site.desc_.c_str(),
+        contents.c_str(), *gProgressCounter, script->id(),
+        site.location_.c_str());
+  }
 
   if ((RecordReplayIsDivergentUserJSWithoutPause(function->shared())) ||
       (recordreplay::IsReplaying() && recordreplay::HadMismatch())) {

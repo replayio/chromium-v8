@@ -792,7 +792,6 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::LoadContextSlot(
     DCHECK_EQ(mutability, kMutableSlot);
     OutputLdaContextSlot(context, slot_index, depth);
   }
-  RecordReplayAssertValue("LoadContextSlot");
   return *this;
 }
 
