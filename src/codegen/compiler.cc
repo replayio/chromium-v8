@@ -1642,8 +1642,9 @@ BackgroundCompileTask::BackgroundCompileTask(
   DCHECK(!shared_info->is_toplevel());
 
   std::string url;
-  if (!shared_info->script().name().IsUndefined()) {
-    std::unique_ptr<char[]> name = String::cast(shared_info->script().name()).ToCString();
+  Handle<Script> script(Script::cast(shared_info->script()), isolate_);
+  if (!script->name().IsUndefined()) {
+    std::unique_ptr<char[]> name = String::cast(script->name()).ToCString();
     url = name.get();
   }
   SetRecordReplayFlags(flags_, url);
