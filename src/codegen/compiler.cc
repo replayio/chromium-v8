@@ -1642,7 +1642,7 @@ BackgroundCompileTask::BackgroundCompileTask(
   DCHECK(!shared_info->is_toplevel());
 
   std::string url;
-  Handle<Script> script(Script::cast(shared_info->script()), isolate_);
+  Handle<Script> script(Script::cast(shared_info->script()), isolate);
   if (!script->name().IsUndefined()) {
     std::unique_ptr<char[]> name = String::cast(script->name()).ToCString();
     url = name.get();
