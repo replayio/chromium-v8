@@ -1617,7 +1617,7 @@ static void SetRecordReplayFlags(UnoptimizedCompileFlags& flags, const std::stri
   }
 
   if (RecordReplayAssertValues(url)) {
-    set_record_replay_assert_values(true);
+    flags.set_record_replay_assert_values(true);
   }
 }
 
@@ -1642,8 +1642,8 @@ BackgroundCompileTask::BackgroundCompileTask(
   DCHECK(!shared_info->is_toplevel());
 
   std::string url;
-  if (!script->name().IsUndefined()) {
-    std::unique_ptr<char[]> name = String::cast(script->name()).ToCString();
+  if (!shared_info->script().name().IsUndefined()) {
+    std::unique_ptr<char[]> name = String::cast(shared_info->script().name()).ToCString();
     url = name.get();
   }
   SetRecordReplayFlags(flags_, url);

@@ -166,8 +166,8 @@ void UnoptimizedCompileFlags::SetFlagsForFunctionFromScript(Script script) {
     set_record_replay_ignore(true);
   } else if (recordreplay::IsRecordingOrReplaying()) {
     std::string url;
-    if (!script->name().IsUndefined()) {
-      std::unique_ptr<char[]> name = String::cast(script->name()).ToCString();
+    if (!script.name().IsUndefined()) {
+      std::unique_ptr<char[]> name = String::cast(script.name()).ToCString();
       url = name.get();
     }
     if (RecordReplayAssertValues(url)) {
