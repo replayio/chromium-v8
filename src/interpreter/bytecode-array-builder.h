@@ -677,6 +677,7 @@ class V8_EXPORT_PRIVATE BytecodeArrayBuilder final {
   BytecodeSourceInfo deferred_source_info_;
   int most_recent_source_position_ = -1;
   bool emit_record_replay_opcodes_ = false;
+  bool emit_record_replay_assert_values_ = false;
   std::unordered_set<int> record_replay_instrumentation_site_locations_;
 };
 

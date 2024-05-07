@@ -23,7 +23,6 @@ extern int RegisterAssertValueSite(const std::string& desc, int source_position)
 extern int RegisterInstrumentationSite(const char* kind, int source_position,
                                        int bytecode_offset);
 extern bool RecordReplayHasDefaultContext();
-extern bool gRecordReplayAssertValues;
 extern bool gRecordReplayAssertTrackedObjects;
 
 extern size_t NumRunningBackgroundCompileTasks();
@@ -53,6 +52,7 @@ class RegisterTransferWriter final
 BytecodeArrayBuilder::BytecodeArrayBuilder(
     Zone* zone, int parameter_count, int locals_count,
     bool record_replay_ignore,
+    bool record_replay_assert_values,
     FeedbackVectorSpec* feedback_vector_spec,
     SourcePositionTableBuilder::RecordingMode source_position_mode)
     : zone_(zone),
@@ -79,6 +79,7 @@ BytecodeArrayBuilder::BytecodeArrayBuilder(
       RecordReplayHasDefaultContext() &&
       !record_replay_ignore) {
     emit_record_replay_opcodes_ = true;
+    emit_record_replay_assert_values_ = record_replay_assert_values;
 
     // Record/replay opcodes can only be emitted for scripts that run on the
     // main thread. If we aren't on the main thread, this must have been
@@ -1387,7 +1388,8 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayOnProgress() {
 }
 
 BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayAssertValue(const std::string& desc) {
-  if (emit_record_replay_opcodes_ && gRecordReplayAssertValues) {
+  if (emit_record_replay_assert_values_) {
+    CHECK(emit_record_replay_opcodes_);
     int index = RegisterAssertValueSite(desc, most_recent_source_position_);
     OutputRecordReplayAssertValue(index);
   }

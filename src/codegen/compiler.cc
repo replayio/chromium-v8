@@ -1601,8 +1601,9 @@ BackgroundCompileTask::BackgroundCompileTask(
       function_literal_id_(kFunctionLiteralIdTopLevel) {}
 
 extern bool RecordReplayHasDefaultContext();
+extern bool RecordReplayAssertValues(const std::string& url);
 
-static void SetRecordReplayIgnore(UnoptimizedCompileFlags& flags) {
+static void SetRecordReplayFlags(UnoptimizedCompileFlags& flags, const std::string& url) {
   if (!recordreplay::IsRecordingOrReplaying()) {
     return;
   }
@@ -1613,6 +1614,10 @@ static void SetRecordReplayIgnore(UnoptimizedCompileFlags& flags) {
       recordreplay::IsInReplayCode("CompileFlags")) {
     flags.set_record_replay_ignore(true);
     return;
+  }
+
+  if (RecordReplayAssertValues(url)) {
+    set_record_replay_assert_values(true);
   }
 }
 
@@ -1636,7 +1641,12 @@ BackgroundCompileTask::BackgroundCompileTask(
       function_literal_id_(shared_info->function_literal_id()) {
   DCHECK(!shared_info->is_toplevel());
 
-  SetRecordReplayIgnore(flags_);
+  std::string url;
+  if (!script->name().IsUndefined()) {
+    std::unique_ptr<char[]> name = String::cast(script->name()).ToCString();
+    url = name.get();
+  }
+  SetRecordReplayFlags(flags_, url);
 
   character_stream_->Seek(start_position_);
 
@@ -2847,7 +2857,7 @@ MaybeHandle<JSFunction> Compiler::GetFunctionFromEval(
     DCHECK(!flags.is_module());
     flags.set_parse_restriction(restriction);
 
-    SetRecordReplayIgnore(flags);
+    SetRecordReplayFlags(flags, "");
 
     UnoptimizedCompileState compile_state;
     ReusableUnoptimizedCompileState reusable_state(isolate);
@@ -3316,7 +3326,13 @@ MaybeHandle<SharedFunctionInfo> CompileScriptOnMainThread(
     const ScriptDetails& script_details, NativesFlag natives,
     v8::Extension* extension, Isolate* isolate,
     MaybeHandle<Script> maybe_script, IsCompiledScope* is_compiled_scope) {
-  SetRecordReplayIgnore(flags);
+  std::string url;
+  Handle<Object> script_name;
+  if (script_details.name_obj.ToHandle(&script_name) && script_name->IsString()) {
+    std::unique_ptr<char[]> name = String::cast(*script_name).ToCString();
+    url = name.get();
+  }
+  SetRecordReplayFlags(flags, url);
 
   UnoptimizedCompileState compile_state;
   ReusableUnoptimizedCompileState reusable_state(isolate);
@@ -3768,7 +3784,13 @@ MaybeHandle<JSFunction> Compiler::GetWrappedFunction(
     flags.set_collect_source_positions(true);
     // flags.set_eager(compile_options == ScriptCompiler::kEagerCompile);
 
-    SetRecordReplayIgnore(flags);
+    std::string url;
+    Handle<Object> script_name;
+    if (script_details.name_obj.ToHandle(&script_name) && script_name->IsString()) {
+      std::unique_ptr<char[]> name = String::cast(*script_name).ToCString();
+      url = name.get();
+    }
+    SetRecordReplayFlags(flags, url);
 
     UnoptimizedCompileState compile_state;
     ReusableUnoptimizedCompileState reusable_state(isolate);

@@ -5531,7 +5531,9 @@ double JSDate::CurrentTimeValue(Isolate* isolate) {
   if (v8_flags.log_internal_timer_events) LOG(isolate, CurrentTimeEvent());
   if (v8_flags.correctness_fuzzer_suppressions) return 4.2;
 
-  recordreplay::Assert("[RUN-1675-1826] JSDate::CurrentTimeValue");
+  std::stringstream stack;
+  isolate->PrintCurrentStackTrace(stack);
+  recordreplay::Assert("[RUN-1675-1826] JSDate::CurrentTimeValue %s", stack.str().c_str());
 
   // According to ECMA-262, section 15.9.1, page 117, the precision of
   // the number in a Date object representing a particular instant in

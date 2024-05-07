@@ -1260,15 +1260,6 @@ static inline AssertionSite& GetAssertValueSite(int32_t index) {
 
 extern std::string RecordReplayBasicValueContents(Handle<Object> value);
 
-static inline bool IgnoreAssertValueLocation(const std::string& location) {
-  static const char* pattern = getenv("RECORD_REPLAY_JS_ASSERTS_PATTERN");
-  if (!pattern) {
-    return false;
-  }
-  bool match = !!strstr(location.c_str(), pattern);
-  return !match;
-}
-
 RUNTIME_FUNCTION(Runtime_RecordReplayAssertValue) {
   CHECK(RecordReplayBytecodeAllowed());
 
@@ -1299,14 +1290,12 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertValue) {
     site.location_ = buf;
   }
 
-  if (!IgnoreAssertValueLocation(site.location_)) {
-    std::string contents = RecordReplayBasicValueContents(value);
+  std::string contents = RecordReplayBasicValueContents(value);
 
-    recordreplay::Assert(
-        "JS %s Value=%s PC=%zu scriptId=%d @%s", site.desc_.c_str(),
-        contents.c_str(), *gProgressCounter, script->id(),
-        site.location_.c_str());
-  }
+  recordreplay::Assert(
+      "JS %s Value=%s PC=%zu scriptId=%d @%s", site.desc_.c_str(),
+      contents.c_str(), *gProgressCounter, script->id(),
+      site.location_.c_str());
 
   if ((RecordReplayIsDivergentUserJSWithoutPause(function->shared())) ||
       (recordreplay::IsReplaying() && recordreplay::HadMismatch())) {
