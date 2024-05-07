@@ -1188,6 +1188,9 @@ static std::string GetStackLocation(Isolate* isolate) {
     }
     std::vector<FrameSummary> frames;
     CommonFrame::cast(frame)->Summarize(&frames);
+    if (!frames.size()) {
+      continue;
+    }
     auto& summary = frames.back();
     CHECK(summary.IsJavaScript());
     auto const& js = summary.AsJavaScript();
