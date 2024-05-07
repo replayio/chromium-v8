@@ -88,9 +88,6 @@
 #endif  // V8_ENABLE_WEBASSEMBLY
 
 namespace v8 {
-
-extern std::string RecordReplayGetScriptedCaller();
-
 namespace internal {
 
 // static
@@ -5534,8 +5531,7 @@ double JSDate::CurrentTimeValue(Isolate* isolate) {
   if (v8_flags.log_internal_timer_events) LOG(isolate, CurrentTimeEvent());
   if (v8_flags.correctness_fuzzer_suppressions) return 4.2;
 
-  std::string caller = RecordReplayGetScriptedCaller();
-  recordreplay::Assert("[RUN-1675-1826] JSDate::CurrentTimeValue %s", caller.c_str());
+  recordreplay::Assert("[RUN-1675-1826] JSDate::CurrentTimeValue");
 
   // According to ECMA-262, section 15.9.1, page 117, the precision of
   // the number in a Date object representing a particular instant in
