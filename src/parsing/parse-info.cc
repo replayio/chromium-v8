@@ -22,6 +22,7 @@ namespace v8 {
 namespace internal {
 
 extern bool RecordReplayHasRegisteredScript(Script script);
+extern bool RecordReplayAssertValues(const std::string& url);
 
 UnoptimizedCompileFlags::UnoptimizedCompileFlags(Isolate* isolate,
                                                  int script_id)
@@ -163,6 +164,15 @@ void UnoptimizedCompileFlags::SetFlagsForFunctionFromScript(Script script) {
 
   if (!RecordReplayHasRegisteredScript(script)) {
     set_record_replay_ignore(true);
+  } else if (recordreplay::IsRecordingOrReplaying()) {
+    std::string url;
+    if (!script.name().IsUndefined()) {
+      std::unique_ptr<char[]> name = String::cast(script.name()).ToCString();
+      url = name.get();
+    }
+    if (RecordReplayAssertValues(url)) {
+      set_record_replay_assert_values(true);
+    }
   }
 }
 

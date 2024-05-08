@@ -10991,6 +10991,8 @@ extern char* CommandCallback(const char* command, const char* params);
 extern void ClearPauseDataCallback();
 
 bool gRecordReplayAssertValues;
+const char* gRecordReplayAssertValuesPattern;
+
 bool gRecordReplayAssertProgress;
 bool gRecordReplayAssertTrackedObjects;
 
@@ -11123,6 +11125,16 @@ extern void RecordReplayInitInstrumentationState();
 
 void RecordReplayDescribeAssertData(const char* text) {
   gRecordReplayDescribeAssertData(text);
+}
+
+bool RecordReplayAssertValues(const std::string& url) {
+  if (!gRecordReplayAssertValues) {
+    return false;
+  }
+  if (!gRecordReplayAssertValuesPattern) {
+    return true;
+  }
+  return url.length() && strstr(url.c_str(), gRecordReplayAssertValuesPattern);
 }
 
 } // namespace internal
@@ -12112,6 +12124,8 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
   gARMRecording = RecordReplayValue("ARMRecording", gARMRecording);
 
   i::gRecordReplayAssertValues = !!getenv("RECORD_REPLAY_JS_ASSERTS");
+  i::gRecordReplayAssertValuesPattern = getenv("RECORD_REPLAY_JS_ASSERTS_PATTERN");
+
   i::gRecordReplayCheckProgress =
       i::gRecordReplayAssertValues || !!getenv("RECORD_REPLAY_JS_PROGRESS_CHECKS");
   i::gRecordReplayAssertProgress =
