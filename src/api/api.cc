@@ -11073,7 +11073,9 @@ void RecordReplayAddInterestingSource(const char* url) {
 // Add metadata for the recording the first time an HTML page is parsed.
 void RecordReplayAddHTMLParse(const char* url) {
   // Ignore uninteresting URLs.
-  if (!url || !*url || !strncmp(url, "about:", 6) || !strncmp(url, "chrome", 6)) {
+  if (!url || !*url || !strncmp(url, "about:", 6) ||
+    // Ignore most Chrome URLs, but allow extensions!
+    (!strncmp(url, "chrome", 6) && strncmp(url, "chrome-extension", 16))) {
     return;
   }
 
