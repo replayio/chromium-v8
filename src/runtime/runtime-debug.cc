@@ -1007,6 +1007,13 @@ static inline std::string GetScriptName(Handle<Script> script) {
 }
 
 std::string GetScriptLocationString(int script_id, int start_position) {
+  if (!IsMainThread()) {
+    // We might sometimes call this from another thread, e.g. when
+    // dumping after a hang.
+    std::ostringstream os;
+    os << script_id << "@" << start_position;
+    return os.str();
+  }
   Isolate* isolate = Isolate::Current();
   Handle<Script> script = GetScript(isolate, script_id);
   std::string script_name = GetScriptName(script);
