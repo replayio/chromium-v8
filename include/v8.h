@@ -103,6 +103,7 @@ static bool HasDisabledFeatures();
 
 static char* ReadAssetFileContents(const char* path, size_t* size);
 static void Print(const char* format, ...);
+static void DebugLog(const char* label, const char* format, ...);
 static void Diagnostic(const char* format, ...);
 static void CommandDiagnostic(const char* format, ...);
 static void CommandDiagnosticTrace(const char* format, ...);

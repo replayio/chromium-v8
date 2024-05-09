@@ -10771,6 +10771,8 @@ typedef char* (CommandCallbackRaw)(const char* params);
   Macro(RecordReplaySetCommandCallback,                                       \
         (const char* method, CommandCallbackRaw callback))                    \
   Macro(RecordReplayPrint, (const char* format, va_list args))                \
+  Macro(RecordReplayDebugLog,                                                 \
+    (const char* label, const char* format, va_list args))                    \
   Macro(RecordReplayDiagnostic, (const char* format, va_list args))           \
   Macro(RecordReplayWarning, (const char* format, va_list args))              \
   Macro(RecordReplayTrace, (const char* format, va_list args))                \
@@ -11221,6 +11223,33 @@ extern "C" void V8RecordReplayPrint(const char* format, ...) {
 extern "C" DLLEXPORT void V8RecordReplayPrintVA(const char* format, va_list args) {
   if (recordreplay::IsRecordingOrReplaying()) {
     gRecordReplayPrint(format, args);
+  }
+}
+
+void recordreplay::DebugLog(const char* label, const char* format, ...) {
+  // TODO: Even more aggressively avoid calling this here.
+  if (IsRecordingOrReplaying()) {
+    va_list args;
+    va_start(args, format);
+    gRecordReplayDebugLog(label, format, args);
+    va_end(args);
+  }
+}
+
+extern "C" void V8RecordReplayDebugLog(const char* label, const char* format, ...) {
+  // TODO: Even more aggressively avoid calling this here.
+  if (recordreplay::IsRecordingOrReplaying()) {
+    va_list args;
+    va_start(args, format);
+    gRecordReplayDebugLog(label, format, args);
+    va_end(args);
+  }
+}
+
+extern "C" DLLEXPORT void V8RecordReplayDebugLogVA(const char* label, const char* format, va_list args) {
+  // TODO: Even more aggressively avoid calling this here.
+  if (recordreplay::IsRecordingOrReplaying()) {
+    gRecordReplayDebugLog(label, format, args);
   }
 }
 
