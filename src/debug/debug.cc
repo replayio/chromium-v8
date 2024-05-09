@@ -3712,8 +3712,9 @@ bool RecordReplayIsDivergentUserJSWithoutPause(
              Script::cast(shared.script()));
 }
 
-typedef std::vector<std::pair<Eternal<Value>*, bool>> NewScriptHandlerVector;
-static NewScriptHandlerVector* gNewScriptHandlers;
+typedef std::pair<Eternal<Value>*, bool> NewScriptHandlerPair;
+typedef std::unordered_map<std::string, NewScriptHandlerPair> NewScriptHandlerMap;
+static NewScriptHandlerMap* gNewScriptHandlers;
 
 extern "C" void V8RecordReplayEnterReplayCode();
 extern "C" void V8RecordReplayExitReplayCode();
@@ -3796,8 +3797,8 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
 
   if (gNewScriptHandlers) {
     for (auto entry : *gNewScriptHandlers) {
-      auto handlerEternalValue = entry.first;
-      auto disallowEvents = entry.second;
+      auto handlerEternalValue = entry.second.first;
+      auto disallowEvents = entry.second.second;
 
       AutoMarkReplayCode amrc;
       base::Optional<replayio::AutoDisallowEvents> disallow;
@@ -4336,12 +4337,16 @@ void FunctionCallbackRecordReplayAddNewScriptHandler(const FunctionCallbackInfo<
 
   Isolate* v8isolate = callArgs.GetIsolate();
   auto handler = new Eternal<Value>(v8isolate, callArgs[0]);
-  bool disallowEvents = callArgs.Length() >= 2 && callArgs[1]->IsTrue();
+  v8::String::Utf8Value scriptHandlerName(v8isolate, callArgs[1]);
+  bool disallowEvents = callArgs.Length() >= 3 && callArgs[2]->IsTrue();
 
   if (!i::gNewScriptHandlers) {
-    i::gNewScriptHandlers = new i::NewScriptHandlerVector();
+    i::gNewScriptHandlers = new i::NewScriptHandlerMap();
   }
-  i::gNewScriptHandlers->emplace_back(handler, disallowEvents);
+  i::gNewScriptHandlers->insert(std::make_pair<std::string, i::NewScriptHandlerPair>(
+    std::string(*scriptHandlerName),
+    i::NewScriptHandlerPair(handler, disallowEvents)
+  ));
 }
 
 void FunctionCallbackRecordReplayGetScriptSource(const FunctionCallbackInfo<Value>& callArgs) {
