@@ -4047,10 +4047,8 @@ int RecordReplayObjectId(v8::Isolate* v8_isolate, v8::Local<v8::Context> cx,
         v8::Local<v8::Value> id_value = v8::Utils::ToLocal(existing);
         if (id_value->IsInt32()) {
           int id = id_value.As<v8::Int32>()->Value();
-          if (gRecordReplayAssertTrackedObjects && (
-              !recordreplay::IsInReplayCode("RecordReplayObjectId")
-          )) {
-            recordreplay::Assert("JS ReuseObjectId %d", id);
+          if (gRecordReplayAssertTrackedObjects) {
+            recordreplay::AssertMaybeEventsDisallowed("JS ReuseObjectId %d", id);
           }
           return id;
         }
@@ -4064,10 +4062,8 @@ int RecordReplayObjectId(v8::Isolate* v8_isolate, v8::Local<v8::Context> cx,
 
   int id = gNextObjectId++;
 
-  if (gRecordReplayAssertTrackedObjects && (
-      !recordreplay::IsInReplayCode("RecordReplayObjectId")
-  )) {
-    recordreplay::Assert("JS NewObjectId %d", id);
+  if (gRecordReplayAssertTrackedObjects) {
+    recordreplay::AssertMaybeEventsDisallowed("JS NewObjectId %d", id);
   }
 
   Local<Value> id_value = v8::Integer::New(v8_isolate, id);
