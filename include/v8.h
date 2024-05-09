@@ -83,6 +83,9 @@ class Platform;
  * \example process.cc
  */
 
+/**
+ * @deprecated Use |recordreplay::IsMainThread| instead
+ */
 bool IsMainThread();
 
 // Static container class for record/replay methods.
@@ -144,6 +147,14 @@ static bool IsInReplayCode(const char* why = nullptr);
 static bool HasDivergedFromRecording();
 static bool AllowSideEffects();
 
+static void RegisterPointer(const char* name, const void* ptr);
+static void UnregisterPointer(const void* ptr);
+static int PointerId(const void* ptr);
+static void* IdPointer(int id);
+
+static bool IsMainThread();
+static size_t GetCurrentThreadId();
+
 static int NewDependencyGraphNode(const char* json);
 static void AddDependencyGraphEdge(int source, int target, const char* json);
 static void BeginDependencyExecution(int node);
@@ -190,11 +201,6 @@ struct AutoAssertBufferAllocations {
   AutoAssertBufferAllocations(const char* issueLabel = "");
   ~AutoAssertBufferAllocations();
 };
-
-static void RegisterPointer(const char* name, const void* ptr);
-static void UnregisterPointer(const void* ptr);
-static int PointerId(const void* ptr);
-static void* IdPointer(int id);
 
 }; // class recordreplay
 

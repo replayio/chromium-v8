@@ -10757,9 +10757,10 @@ typedef char* (CommandCallbackRaw)(const char* params);
   Macro(RecordReplayJSONToString, (void*), char*, nullptr)                    \
   Macro(RecordReplayProgressCounter, (), uint64_t*, nullptr)                  \
   Macro(RecordReplayGetStack, (char* aStack, size_t aSize), bool, false)      \
-  Macro(RecordReplayReadAssetFileContents,                                   \
+  Macro(RecordReplayReadAssetFileContents,                                    \
         (const char* aPath, size_t *aLength),                                 \
-        char*, nullptr)
+        char*, nullptr)                                                       \
+  Macro(RecordReplayGetCurrentThreadId, (), size_t, 0)
 
 #define ForEachRecordReplaySymbolVoidShared(Macro)                            \
   Macro(RecordReplayDisableFeatures, (const char* json))                      \
@@ -11200,6 +11201,30 @@ char* recordreplay::ReadAssetFileContents(const char* aPath, size_t* aLength) {
 
 extern "C" DLLEXPORT char* V8RecordReplayReadAssetFileContents(const char* aPath, size_t* aLength) {
   return recordreplay::ReadAssetFileContents(aPath, aLength);
+}
+
+static size_t gMainThread;
+static void InitMainThread() {
+  gMainThread = recordreplay::GetCurrentThreadId();
+}
+bool IsMainThread() {
+  return recordreplay::IsMainThread();
+}
+
+bool recordreplay::IsMainThread() {
+  return gMainThread == GetCurrentThreadId();
+}
+
+extern "C" DLLEXPORT bool V8IsMainThread() {
+  return recordreplay::IsMainThread();
+}
+
+size_t recordreplay::GetCurrentThreadId() {
+  return gRecordReplayGetCurrentThreadId();
+}
+
+extern "C" DLLEXPORT char* V8RecordReplayGetCurrentThreadId() {
+  return recordreplay::RecordReplayGetCurrentThreadId();
 }
 
 void recordreplay::Print(const char* format, ...) {
@@ -12064,24 +12089,6 @@ extern "C" DLLEXPORT void V8RecordReplayFinishRecording() {
   }
 }
 
-#if V8_OS_WIN
-static DWORD gMainThread;
-static void InitMainThread() {
-  gMainThread = GetCurrentThreadId();
-}
-bool IsMainThread() {
-  return gMainThread == GetCurrentThreadId();
-}
-#else
-static pthread_t gMainThread;
-static void InitMainThread() {
-  gMainThread = pthread_self();
-}
-bool IsMainThread() {
-  return gMainThread == pthread_self();
-}
-#endif
-
 // Set this process as recording or replaying.
 // Also serves to initializes Replay state.
 void recordreplay::SetRecordingOrReplaying(void* handle) {
@@ -12201,10 +12208,6 @@ extern "C" void V8InitializeNotRecordingOrReplaying() {
   // reasons. See https://linear.app/replay/issue/RUN-1071
   internal::v8_flags.sparkplug = false;
   internal::FLAG_incremental_marking_task = false;
-}
-
-extern "C" DLLEXPORT bool V8IsMainThread() {
-  return IsMainThread();
 }
 
 static size_t gInReplayCode;

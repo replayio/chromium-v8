@@ -1007,7 +1007,7 @@ static inline std::string GetScriptName(Handle<Script> script) {
 }
 
 std::string GetScriptLocationString(int script_id, int start_position) {
-  if (!IsMainThread()) {
+  if (!recordreplay::IsMainThread()) {
     // We might sometimes call this from another thread, e.g. when
     // dumping after a hang.
     std::ostringstream os;

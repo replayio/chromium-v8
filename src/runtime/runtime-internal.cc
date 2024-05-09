@@ -197,7 +197,7 @@ RUNTIME_FUNCTION(Runtime_UnwindAndFindExceptionHandler) {
   // frame unwind instead of an initial throw and we can ignore it.
   if (recordreplay::IsRecordingOrReplaying() &&
       !recordreplay::AreEventsDisallowed() &&
-      IsMainThread() &&
+      recordreplay::IsMainThread() &&
       *gProgressCounter != gLastExceptionUnwindProgress) {
     RecordReplayOnExceptionUnwind(isolate);
     gLastExceptionUnwindProgress = *gProgressCounter;
