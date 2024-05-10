@@ -3815,8 +3815,20 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
       callArgs[2] = Handle<Object>(script->source_mapping_url(), isolate);
 
       Handle<Object> undefined = isolate->factory()->undefined_value();
-      MaybeHandle<Object> rv = Execution::Call(isolate, handler, undefined, 3, callArgs);
-      CHECK(!rv.is_null());
+      
+      v8::TryCatch try_catch((v8::Isolate*)isolate);
+      MaybeHandle<Object> newScriptHandlerResult = Execution::Call(isolate, handler, undefined, 3, callArgs);
+      if (try_catch.HasCaught()) {
+        Local<Message> msg = try_catch.Message();
+        Local<v8::Context> context = ((v8::Isolate*)isolate)->GetCurrentContext();
+        v8::String::Utf8Value msgString((v8::Isolate*)isolate, msg->Get());
+        recordreplay::Crash("NewScriptHandler call failed (%d:%d): %s",
+                            msg->GetLineNumber(context).FromMaybe(-1),
+                            msg->GetStartColumn(context).FromJust(),
+                            *msgString
+        );
+      }
+      CHECK(!newScriptHandlerResult.is_null());
     }
   }
 
@@ -4332,8 +4344,8 @@ void FunctionCallbackRecordReplayAddNewScriptHandler(const FunctionCallbackInfo<
   CHECK(IsMainThread());
 
   Isolate* v8isolate = callArgs.GetIsolate();
-  auto handler = new Eternal<Value>(v8isolate, callArgs[0]);
-  v8::String::Utf8Value scriptHandlerName(v8isolate, callArgs[1]);
+  v8::String::Utf8Value scriptHandlerName(v8isolate, callArgs[0]);
+  auto handler = new Eternal<Value>(v8isolate, callArgs[1]);
   bool disallowEvents = callArgs.Length() >= 3 && callArgs[2]->IsTrue();
 
   if (!i::gNewScriptHandlers) {
