@@ -3712,9 +3712,13 @@ bool RecordReplayIsDivergentUserJSWithoutPause(
              Script::cast(shared.script()));
 }
 
-typedef std::pair<Eternal<Value>*, bool> NewScriptHandlerPair;
-typedef std::unordered_map<std::string, NewScriptHandlerPair> NewScriptHandlerMap;
-static NewScriptHandlerMap* gNewScriptHandlers;
+struct NewScriptHandlerEntry {
+  std::string kind;
+  Eternal<Function>* handler;
+  bool disallowEvents;
+};
+typedef std::vector<NewScriptHandlerEntry> NewScriptHandlers;
+static NewScriptHandlers* gNewScriptHandlers;
 
 extern "C" void V8RecordReplayEnterReplayCode();
 extern "C" void V8RecordReplayExitReplayCode();
@@ -3733,6 +3737,7 @@ struct AutoMarkReplayCode {
 } // anonymous namespace
 
 static void RecordReplayRegisterScript(Handle<Script> script) {
+  AutoMarkReplayCode amrc;
   CHECK(IsMainThread());
 
   if (!gRecordReplayScripts) {
@@ -3744,7 +3749,7 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
     return;
   }
 
-  Isolate* isolate = Isolate::Current();
+  i::Isolate* isolate = Isolate::Current();
 
   (*gRecordReplayScripts)[script->id()] =
     Eternal<Value>((v8::Isolate*)isolate, v8::Utils::ToLocal(script));
@@ -3797,30 +3802,40 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
 
   if (gNewScriptHandlers) {
     for (auto entry : *gNewScriptHandlers) {
-      auto handlerEternalValue = entry.second.first;
-      auto disallowEvents = entry.second.second;
+      auto handlerEternalValue = entry.handler;
+      auto disallowEvents = entry.disallowEvents;
 
-      AutoMarkReplayCode amrc;
       base::Optional<replayio::AutoDisallowEvents> disallow;
       if (disallowEvents) {
         disallow.emplace("RecordReplayRegisterScript");
       }
 
-      Local<v8::Value> handlerValue = handlerEternalValue->Get((v8::Isolate*)isolate);
-      Handle<Object> handler = Utils::OpenHandle(*handlerValue);
+      Local<v8::Object> handler_value = handlerEternalValue->Get((v8::Isolate*)isolate);
+      Handle<Object> handler = Utils::OpenHandle(*handler_value);
 
       Handle<Object> callArgs[3];
       callArgs[0] = idStr;
       callArgs[1] = Handle<Object>(script->GetNameOrSourceURL(), isolate);
       callArgs[2] = Handle<Object>(script->source_mapping_url(), isolate);
-
       Handle<Object> undefined = isolate->factory()->undefined_value();
       
       v8::TryCatch try_catch((v8::Isolate*)isolate);
+      Handle<JSFunction> function = Handle<JSFunction>::cast(handler);
+      // NOTE: This is the context that the function was called in.
+      i::Handle<i::Context> context_handle = i::Handle<i::Context>(
+        function->context().script_context(),
+        isolate
+      );
+      v8::MaybeLocal<v8::Context> receiver_context = handler_value->GetCreationContext();
+      if (receiver_context.IsEmpty()) {
+        recordreplay::Warning("DDBG NewScriptHandler's context is gone");
+        continue;
+      }
+
       MaybeHandle<Object> newScriptHandlerResult = Execution::Call(isolate, handler, undefined, 3, callArgs);
       if (try_catch.HasCaught()) {
+        Local<v8::Context> context = Utils::ToLocal(context_handle);
         Local<Message> msg = try_catch.Message();
-        Local<v8::Context> context = ((v8::Isolate*)isolate)->GetCurrentContext();
         v8::String::Utf8Value msgString((v8::Isolate*)isolate, msg->Get());
         recordreplay::Crash("NewScriptHandler call failed (%d:%d): %s",
                             msg->GetLineNumber(context).FromMaybe(-1),
@@ -3878,32 +3893,36 @@ char* CommandCallback(const char* command, const char* params) {
   replayio::AutoDisallowEvents disallow("CommandCallback");
 
   Isolate* isolate = Isolate::Current();
-  base::Optional<SaveAndSwitchContext> ssc;
-  EnsureIsolateContext(isolate, ssc);
+
+  // TODO: This won't work as expected, since Execution::Call always enters
+  //       the context of the compiled function.
+  //      → See |if (params.target->IsJSFunction())| in execution.cc.
+  // base::Optional<SaveAndSwitchContext> ssc;
+  // EnsureIsolateContext(isolate, ssc);
 
   HandleScope scope(isolate);
 
-  if (recordreplay::HasDivergedFromRecording()) {
-    v8_inspector::V8Inspector* inspectorRaw = v8::debug::GetInspector((v8::Isolate*)isolate);
-    int currentGroupId;
-    if (!inspectorRaw) {
-      currentGroupId = -1;
-    } else {
-      v8_inspector::V8InspectorImpl* inspector =
-          static_cast<v8_inspector::V8InspectorImpl*>(inspectorRaw);
-      int contextId = v8_inspector::InspectedContext::contextId(
-        ((v8::Isolate*)isolate)->GetCurrentContext()
-      );
-      currentGroupId = inspector->contextGroupId(contextId);
-    }
-    if (!gPauseContextGroupId) {
-      gPauseContextGroupId = currentGroupId;
-    } else {
-      // [RUN-3123] Don't allow querying different context groups on the
-      // same pause.
-      CHECK(gPauseContextGroupId == currentGroupId);
-    }
-  }
+  // if (recordreplay::HasDivergedFromRecording()) {
+  //   v8_inspector::V8Inspector* inspectorRaw = v8::debug::GetInspector((v8::Isolate*)isolate);
+  //   int currentGroupId;
+  //   if (!inspectorRaw) {
+  //     currentGroupId = -1;
+  //   } else {
+  //     v8_inspector::V8InspectorImpl* inspector =
+  //         static_cast<v8_inspector::V8InspectorImpl*>(inspectorRaw);
+  //     int contextId = v8_inspector::InspectedContext::contextId(
+  //       ((v8::Isolate*)isolate)->GetCurrentContext()
+  //     );
+  //     currentGroupId = inspector->contextGroupId(contextId);
+  //   }
+  //   if (!gPauseContextGroupId) {
+  //     gPauseContextGroupId = currentGroupId;
+  //   } else {
+  //     // [RUN-3123] Don't allow querying different context groups on the
+  //     // same pause.
+  //     CHECK(gPauseContextGroupId == currentGroupId);
+  //   }
+  // }
 
 
   Handle<Object> undefined = isolate->factory()->undefined_value();
@@ -3911,8 +3930,7 @@ char* CommandCallback(const char* command, const char* params) {
 
   MaybeHandle<Object> maybeParams = JsonParser<uint8_t>::Parse(isolate, paramsStr, undefined);
   if (maybeParams.is_null()) {
-    recordreplay::Diagnostic("Error: CommandCallback Parse %s failed", params);
-    IMMEDIATE_CRASH();
+    recordreplay::Crash("Error: CommandCallback Parse %s failed", params);
   }
   Handle<Object> paramsObj = maybeParams.ToHandleChecked();
 
@@ -3921,8 +3939,7 @@ char* CommandCallback(const char* command, const char* params) {
     if (!strcmp(cb.mCommand, command)) {
       rv = cb.mCallback(isolate, paramsObj);
       if (rv.is_null()) {
-        recordreplay::Diagnostic("Error: CommandCallback internal command %s failed", command);
-        IMMEDIATE_CRASH();
+        recordreplay::Crash("Error: CommandCallback internal command %s failed", command);
       }
     }
   }
@@ -3936,8 +3953,7 @@ char* CommandCallback(const char* command, const char* params) {
     callArgs[1] = paramsObj;
     rv = Execution::Call(isolate, callback, undefined, 2, callArgs);
     if (rv.is_null()) {
-      recordreplay::Diagnostic("Error: CommandCallback generic command %s failed", command);
-      IMMEDIATE_CRASH();
+      recordreplay::Crash("Error: CommandCallback generic command %s failed", command);
     }
   }
 
@@ -4342,19 +4358,33 @@ void FunctionCallbackRecordReplaySetClearPauseDataCallback(const FunctionCallbac
 void FunctionCallbackRecordReplayAddNewScriptHandler(const FunctionCallbackInfo<Value>& callArgs) {
   CHECK(recordreplay::IsRecordingOrReplaying());
   CHECK(IsMainThread());
+  CHECK(callArgs.Length() == 2 || (callArgs.Length() == 3 && callArgs[2]->IsBoolean()));
+  CHECK(callArgs[0]->IsString());
+  CHECK(callArgs[1]->IsFunction());
 
   Isolate* v8isolate = callArgs.GetIsolate();
-  v8::String::Utf8Value scriptHandlerName(v8isolate, callArgs[0]);
-  auto handler = new Eternal<Value>(v8isolate, callArgs[1]);
-  bool disallowEvents = callArgs.Length() >= 3 && callArgs[2]->IsTrue();
+  v8::String::Utf8Value kind(v8isolate, callArgs[0]);
+  Local<Value> handler_value = callArgs[1];
+  auto handler = new Eternal<Function>(v8isolate, handler_value.As<v8::Function>());
+  bool disallowEvents = callArgs.Length() == 3 && callArgs[2]->IsTrue();
+  
+  HandleScope scope(v8isolate);
+  i::Handle<i::Object> handler_handle = Utils::OpenHandle(*handler_value.As<v8::Object>());
+  // i::Handle<i::JSFunction> function = i::Handle<i::JSFunction>::cast(handler);
+  // i::Handle<i::Context> context_handle = i::Handle<i::Context>(
+  //   function->context().script_context(),
+  //   isolate
+  // );
+  CHECK(handler_handle->IsJSFunction());
 
   if (!i::gNewScriptHandlers) {
-    i::gNewScriptHandlers = new i::NewScriptHandlerMap();
+    i::gNewScriptHandlers = new i::NewScriptHandlers();
   }
-  i::gNewScriptHandlers->insert(std::make_pair<std::string, i::NewScriptHandlerPair>(
-    std::string(*scriptHandlerName),
-    i::NewScriptHandlerPair(handler, disallowEvents)
-  ));
+  i::gNewScriptHandlers->push_back(i::NewScriptHandlerEntry());
+  auto& entry = i::gNewScriptHandlers->at(i::gNewScriptHandlers->size() - 1);
+  entry.kind = *kind;
+  entry.handler = handler;
+  entry.disallowEvents = disallowEvents;
 }
 
 void FunctionCallbackRecordReplayGetScriptSource(const FunctionCallbackInfo<Value>& callArgs) {
@@ -4376,5 +4406,19 @@ void FunctionCallbackRecordReplayGetScriptSource(const FunctionCallbackInfo<Valu
   Local<Value> source_val = v8::Utils::ToLocal(source);
   callArgs.GetReturnValue().Set(source_val);
 }
+
+// void OnContextDetached() {
+//   if (gNewScriptHandlers) {
+//     for (auto entry : *gNewScriptHandlers) {
+//       Handle<Object> handler = Utils::OpenHandle(entry.handler);
+//       CHECK(handler->IsJSFunction());
+//       Handle<JSFunction> function = Handle<JSFunction>::cast(handler);
+//       Local<v8::Context> context = Utils::ToLocal(
+//         i::Handle<i::Context>(function->context().script_context(), isolate)
+//       );
+//       // TODO: remove if contexts match
+//     }
+//   }
+// }
 
 }  // namespace v8

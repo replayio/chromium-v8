@@ -249,6 +249,10 @@ void V8InspectorImpl::contextCollected(int groupId, int contextId) {
   if (storageIt != m_consoleStorageMap.end())
     storageIt->second->contextDestroyed(contextId);
 
+  v8::recordreplay::Trace(
+      "[RUN-2042-2109] V8InspectorImpl::contextCollected %d %d %zu", contextId,
+      groupId, m_sessions.size());
+
   InspectedContext* inspectedContext = getContext(groupId, contextId);
   if (!inspectedContext) return;
 
