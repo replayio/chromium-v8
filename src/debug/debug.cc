@@ -46,6 +46,7 @@
 #include "src/wasm/wasm-objects-inl.h"
 #endif  // V8_ENABLE_WEBASSEMBLY
 
+#include "src/base/replayio.h"
 #include "src/objects/js-collection-inl.h"
 
 namespace v8 {
@@ -3712,14 +3713,6 @@ bool RecordReplayIsDivergentUserJSWithoutPause(
              Script::cast(shared.script()));
 }
 
-struct NewScriptHandlerEntry {
-  std::string kind;
-  Eternal<Function>* handler;
-  bool disallowEvents;
-};
-typedef std::vector<NewScriptHandlerEntry> NewScriptHandlers;
-static NewScriptHandlers* gNewScriptHandlers;
-
 extern "C" void V8RecordReplayEnterReplayCode();
 extern "C" void V8RecordReplayExitReplayCode();
 
@@ -3821,14 +3814,15 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
       
       v8::TryCatch try_catch((v8::Isolate*)isolate);
       Handle<JSFunction> function = Handle<JSFunction>::cast(handler);
-      // NOTE: This is the context that the function was called in.
       i::Handle<i::Context> context_handle = i::Handle<i::Context>(
         function->context().script_context(),
         isolate
       );
       v8::MaybeLocal<v8::Context> receiver_context = handler_value->GetCreationContext();
       if (receiver_context.IsEmpty()) {
-        recordreplay::Warning("DDBG NewScriptHandler's context is gone");
+        // Make sure we never call a callback whose creation context is gone.
+        // TODO: Find out if function->context() and GetCreationContext() are always assured to have the same root?
+        recordreplay::Warning("[TT-1112] NewScriptHandler_context is gone");
         continue;
       }
 
@@ -3866,8 +3860,21 @@ static InternalCommandCallback gInternalCommandCallbacks[] = {
   { "Target.currentGeneratorId", RecordReplayCurrentGeneratorId },
 };
 
-// Function to invoke on command callbacks which we don't have a C++ implementation for.
-static Eternal<Value>* gCommandCallback;
+// TODO: Create a struct per live root frame to store below callbacks.
+
+// JS command handler callbacks.
+static Eternal<v8::Function>* gCommandCallback;
+// JS ClearPauseData callbacks.
+static Eternal<v8::Function>* gClearPauseDataCallback;
+
+struct NewScriptHandlerEntry {
+  std::string kind;
+  Eternal<Function>* handler;
+  bool disallowEvents;
+};
+typedef std::vector<NewScriptHandlerEntry> NewScriptHandlers;
+// JS event handlers for new scripts.
+static NewScriptHandlers* gNewScriptHandlers;
 
 extern "C" void V8RecordReplayGetDefaultContext(v8::Isolate* isolate, v8::Local<v8::Context>* cx);
 extern uint64_t* gProgressCounter;
@@ -3945,7 +3952,7 @@ char* CommandCallback(const char* command, const char* params) {
   }
   if (rv.is_null()) {
     CHECK(gCommandCallback);
-    Local<v8::Value> callbackValue = gCommandCallback->Get((v8::Isolate*)isolate);
+    Local<v8::Function> callbackValue = gCommandCallback->Get((v8::Isolate*)isolate);
     Handle<Object> callback = Utils::OpenHandle(*callbackValue);
 
     Handle<Object> callArgs[2];
@@ -3973,8 +3980,6 @@ char* CommandCallback(const char* command, const char* params) {
   return strdup(rvCStr.get());
 }
 
-static Eternal<Value>* gClearPauseDataCallback;
-
 void ClearPauseDataCallback() {
   CHECK(IsMainThread());
   AutoMarkReplayCode amrc;
@@ -3998,6 +4003,7 @@ void ClearPauseDataCallback() {
   CHECK(!rv.is_null());
 }
 
+// TODO: Use |SNPrintF| from src/base/strings.h instead.
 static std::string StringPrintf(const char* format, ...) {
   char buf[4096];
   buf[sizeof(buf) - 1] = 0;
@@ -4344,7 +4350,10 @@ void FunctionCallbackRecordReplaySetCommandCallback(const FunctionCallbackInfo<V
   CHECK(IsMainThread());
 
   Isolate* v8isolate = callArgs.GetIsolate();
-  i::gCommandCallback = new Eternal<Value>(v8isolate, callArgs[0]);
+  CHECK(callArgs.Length() == 1);
+  CHECKIsJSFunction(v8isolate, callArgs[0]);
+
+  i::gCommandCallback = new Eternal<Value>(v8isolate, callArgs[0].As<v8::Function>());
 }
 
 void FunctionCallbackRecordReplaySetClearPauseDataCallback(const FunctionCallbackInfo<Value>& callArgs) {
@@ -4352,7 +4361,10 @@ void FunctionCallbackRecordReplaySetClearPauseDataCallback(const FunctionCallbac
   CHECK(IsMainThread());
 
   Isolate* v8isolate = callArgs.GetIsolate();
-  i::gClearPauseDataCallback = new Eternal<Value>(v8isolate, callArgs[0]);
+  CHECK(callArgs.Length() == 1);
+  CHECKIsJSFunction(v8isolate, callArgs[0]);
+
+  i::gClearPauseDataCallback = new Eternal<Value>(v8isolate, callArgs[0].As<v8::Function>());
 }
 
 void FunctionCallbackRecordReplayAddNewScriptHandler(const FunctionCallbackInfo<Value>& callArgs) {
@@ -4367,15 +4379,8 @@ void FunctionCallbackRecordReplayAddNewScriptHandler(const FunctionCallbackInfo<
   Local<Value> handler_value = callArgs[1];
   auto handler = new Eternal<Function>(v8isolate, handler_value.As<v8::Function>());
   bool disallowEvents = callArgs.Length() == 3 && callArgs[2]->IsTrue();
-  
-  HandleScope scope(v8isolate);
-  i::Handle<i::Object> handler_handle = Utils::OpenHandle(*handler_value.As<v8::Object>());
-  // i::Handle<i::JSFunction> function = i::Handle<i::JSFunction>::cast(handler);
-  // i::Handle<i::Context> context_handle = i::Handle<i::Context>(
-  //   function->context().script_context(),
-  //   isolate
-  // );
-  CHECK(handler_handle->IsJSFunction());
+
+  CHECKIsJSFunction(v8isolate, handler_value);
 
   if (!i::gNewScriptHandlers) {
     i::gNewScriptHandlers = new i::NewScriptHandlers();

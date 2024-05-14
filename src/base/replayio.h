@@ -27,6 +27,12 @@ private:
   v8::base::Optional<v8::replayio::AutoDisallowEvents> disallow;
 };
 
+/** ###########################################################################
+ * Utilities.
+ * ##########################################################################*/
+
+void CHECKIsJSFunction();
+
 }  // namespace replayio
 }  // namespace v8
 
