@@ -46,7 +46,7 @@
 #include "src/wasm/wasm-objects-inl.h"
 #endif  // V8_ENABLE_WEBASSEMBLY
 
-#include "src/base/replayio.h"
+#include "src/replayio/replayio.h"
 #include "src/objects/js-collection-inl.h"
 
 namespace v8 {
@@ -3861,11 +3861,6 @@ static InternalCommandCallback gInternalCommandCallbacks[] = {
 };
 
 // TODO: Create a struct per live root frame to store below callbacks.
-
-// JS command handler callbacks.
-static Eternal<v8::Function>* gCommandCallback;
-// JS ClearPauseData callbacks.
-static Eternal<v8::Function>* gClearPauseDataCallback;
 
 struct NewScriptHandlerEntry {
   std::string kind;

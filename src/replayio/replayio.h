@@ -10,8 +10,8 @@
 #define V8_BASE_REPLAYIO_H
 
 #include "include/replayio.h"
-
 #include "src/base/optional.h"
+#include "src/handles/global-handles-inl.h"
 
 namespace v8 {
 namespace replayio {
@@ -25,6 +25,24 @@ struct AutoMaybeDisallowEvents {
   
 private:
   v8::base::Optional<v8::replayio::AutoDisallowEvents> disallow;
+};
+
+/** ###########################################################################
+ * ReplayRootContext
+ * ##########################################################################*/
+
+/**
+ * 
+ */
+struct ReplayRootContext {
+  Eternal<Context> context;
+  /**
+   * Internally used callback object that stores all important data
+   * to route JS calls to the right place.
+   */
+  Eternal<Object> callbackRegistry;
+
+  void CallCallback(std::string&& command, Handle<Object> paramsObj);
 };
 
 /** ###########################################################################
