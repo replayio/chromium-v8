@@ -133,7 +133,7 @@
 #include "src/wasm/wasm-objects.h"
 #endif  // V8_ENABLE_WEBASSEMBLY
 
-#include "src/base/replayio.h"
+#include "src/replayio/replayio-base.h"
 
 namespace v8 {
 namespace internal {

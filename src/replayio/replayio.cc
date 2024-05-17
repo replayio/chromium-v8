@@ -1,4 +1,6 @@
-#include "src/replayio/replayio.h"
+#include "include/replayio.h"
+#include "src/replayio/replayio-util.h"
+#include "src/execution/isolate-inl.h"
 
 namespace v8 {
 namespace i = internal;
@@ -15,63 +17,93 @@ v8::replayio::ReplayRootContext* gReplayRootContext;
  * ReplayRootContext
  * ##########################################################################*/
 
-bool ReplayRootContext::CallCallback(std::string&& callbackName,
-                                     Handle<Object> paramsObj) {
+v8::Local<v8::Function> ReplayRootContext::GetFunction(
+    v8::Local<v8::Object> object,
+    const std::string& propName
+  ) {
+  CHECK(IsMainThread());
+  i::Isolate* i_isolate = i::Isolate::Current();
+  Isolate* isolate = (v8::Isolate*)isolate;
+  Handle<Context> ctx = context.Get(isolate);
+  Local<String> propNameLocal = CStringToLocal(isolate, propName.c_str());
+  Local<Object> callbackValue = object->Get(ctx, propNameLocal).ToLocalChecked();
+  CHECK(callbackValue->IsFunction());
+
+  // Ensure that the function's context still exists.
+  callbackValue->GetCreationContextChecked();
+
+  return callbackValue.As<v8::Function>();
+}
+
+bool CallGlobalFunctionUnchecked(Local<v8::Function> callback,
+                                 i::Handle<i::Object> paramsObj) {
+  
+}
+
+i::Handle<i::Object> ReplayRootContext::CallGlobalFunction(const std::string& functionName,
+                                                           int argc,
+                                                           i::Handle<i::Object> argv[]) {
+  i::Isolate* i_isolate = i::Isolate::Current();
+  Isolate* isolate = (v8::Isolate*)isolate;
+  Local<Context> ctx = context.Get(isolate);
+
   // Get the callback.
-  i::Isolate* isolate = Isolate::Current();
-  Local<String> nameV8 = toV8String(isolate, callbackName.c_str());
-  Local<Value> callbackFunction;
-  if (!context->Global()->Get(info.context, nameV8).ToLocal(&callbackFunction) ||
-      !callbackFunction->IsFunction()) {
-    return false;
-  }
-  Local<v8::Function> callbackValue =
-      callbackFunction->Get((v8::Isolate*)isolate);
-  Handle<Object> callbackHandle = Utils::OpenHandle(*callbackValue);
-  Handle<Object> undefined = isolate->factory()->undefined_value();
-
-  // Prepare args.
-  constexpr int NCallArgs = 3;
-  Handle<Object> callArgs[NCallArgs];
-  callArgs[0] = callbackRegistry;
-  callArgs[1] = CStringToHandle(isolate, callbackName.c_str());
-  callArgs[2] = paramsObj;
-
+  Local<Function> fn = GetFunction(ctx->Global(), functionName);
+  
   // Make the call.
+  i::Handle<i::Object> fnHandle = Utils::OpenHandle(*fn);
+  i::Handle<i::Object> undefined = i_isolate->factory()->undefined_value();
   v8::TryCatch try_catch((v8::Isolate*)isolate);
-  MaybeHandle<Object> rv =
-      Execution::Call(isolate, callbackHandle, undefined, NCallArgs, callArgs);
+  i::MaybeHandle<i::Object> rv =
+      i::Execution::Call(i_isolate, fnHandle, undefined, argc, argv);
 
   // Handle result.
   if (try_catch.HasCaught()) {
-    Local<v8::Context> context = Utils::ToLocal(context_handle);
     Local<Message> msg = try_catch.Message();
     v8::String::Utf8Value msgString((v8::Isolate*)isolate, msg->Get());
-    recordreplay::Crash("CallCallback(%s) failed (%d:%d): %s",
-                        callbackName.c_str(),
-                        msg->GetLineNumber(context).FromMaybe(-1),
-                        msg->GetStartColumn(context).FromJust(), *msgString);
+    recordreplay::Crash("CallGlobalFunction(%s) failed (%d:%d): %s",
+                        functionName.c_str(),
+                        msg->GetLineNumber(ctx).FromMaybe(-1),
+                        msg->GetStartColumn(ctx).FromJust(), *msgString);
   }
   if (rv.is_null()) {
-    recordreplay::Crash("CallCallback(%s) failed", callbackName.c_str());
+    recordreplay::Crash("CallGlobalFunction(%s) failed without error", functionName.c_str());
   }
+  return rv.ToHandleChecked();
 }
 
-/** ###########################################################################
- * Utilities.
- * ##########################################################################*/
+i::Handle<i::Object> ReplayRootContext::CallRegisteredCallback(const std::string& callbackName,
+                                                               i::Handle<i::Object> paramsObj) {
+  i::Isolate* i_isolate = i::Isolate::Current();
+  Isolate* isolate = (v8::Isolate*)isolate;
+  Local<Context> ctx = context.Get(isolate);
 
-void CHECKIsJSFunction(v8::Isolate* isolate, Local<Value> value) {
-  HandleScope scope(isolate);
-  i::Handle<i::Object> value_handle =
-      Utils::OpenHandle(*value.As<v8::Object>());
-  // i::Handle<i::JSFunction> function =
-  // i::Handle<i::JSFunction>::cast(handler); i::Handle<i::Context>
-  // context_handle = i::Handle<i::Context>(
-  //   function->context().script_context(),
-  //   isolate
-  // );
-  CHECK(value_handle->IsJSFunction());
+  // Prepare args.
+  constexpr int NCallArgs = 3;
+  i::Handle<i::Object> callArgs[NCallArgs];
+  callArgs[0] = callbackRegistry;
+  callArgs[1] = CStringToHandle(i_isolate, callbackName.c_str());
+  callArgs[2] = paramsObj;
+  
+  return CallGlobalFunction(TODO);
+}
+
+ReplayRootContext* RecordReplayCreateRootContext(v8::Isolate* isolate, v8::Local<v8::Context> cx) {
+  CHECK(IsMainThread());
+  if (gReplayRootContext) {
+    delete gReplayRootContext;
+  }
+  gReplayRootContext = new ReplayRootContext();
+  gReplayRootContext->context = Eternal<v8::Context>(isolate, cx);
+}
+
+extern "C" void V8RecordReplayGetDefaultContext(v8::Isolate* isolate, v8::Local<v8::Context>* cx) {
+  CHECK(IsMainThread() && gReplayRootContext);
+  *cx = gReplayRootContext->context.Get(isolate);
+}
+
+bool RecordReplayHasDefaultContext() {
+  return !!gReplayRootContext;
 }
 
 }  // namespace replayio

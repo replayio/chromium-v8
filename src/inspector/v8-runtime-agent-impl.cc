@@ -53,7 +53,7 @@
 #include "src/tracing/trace-event.h"
 
 #include "replayio.h"
-#include "src/base/replayio.h"
+#include "src/replayio/replayio-base.h"
 
 namespace v8_inspector {
 

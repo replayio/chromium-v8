@@ -11090,24 +11090,6 @@ void RecordReplayOnMainThreadIsolateCreated(Isolate* isolate) {
   CHECK(!gMainThreadIsolate);
   gMainThreadIsolate = isolate;
 }
-
-static Eternal<v8::Context>* gDefaultContext;
-
-extern "C" void V8RecordReplaySetDefaultContext(v8::Isolate* isolate, v8::Local<v8::Context> cx) {
-  if (IsMainThread()) {
-    gDefaultContext = new Eternal<v8::Context>(isolate, cx);
-  }
-}
-
-extern "C" void V8RecordReplayGetDefaultContext(v8::Isolate* isolate, v8::Local<v8::Context>* cx) {
-  CHECK(IsMainThread() && gDefaultContext);
-  *cx = gDefaultContext->Get(isolate);
-}
-
-bool RecordReplayHasDefaultContext() {
-  return !!gDefaultContext;
-}
-
 extern void RecordReplayInitInstrumentationState();
 
 void RecordReplayDescribeAssertData(const char* text) {
