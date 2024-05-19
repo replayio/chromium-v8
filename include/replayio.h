@@ -10,7 +10,6 @@
 #define INCLUDE_RECORD_REPLAY_H_
 
 #include "v8.h"
-#include "src/handles/handles.h"
 
 namespace v8 {
 namespace replayio {
@@ -33,24 +32,34 @@ struct AutoDisallowEvents {
 /**
  * 
  */
-struct ReplayRootContext {
-  Eternal<Context> context;
+class ReplayRootContext {
+  static constexpr const char* FunctionCallRegisteredCallback = "CallRegisteredCallback";
+  // static constexpr const char* FunctionCallRegisteredCallback = "CallRegisteredCallback";
+
+  Eternal<Context> context_;
   /**
    * Internally used callback object we use for routing/registering JS callbacks.
    */
-  Eternal<Object> callbackRegistry;
-  
-  Local<v8::Function> ReplayRootContext::GetFunction(
+  Eternal<Object> callbackRegistry_;
+
+public:
+  Eternal<Context> Context();
+
+  Local<v8::Function> GetFunction(
     Local<Object> object,
     const std::string& propName
   );
 
-  i::Handle<i::Object> CallGlobalFunction(const std::string& functionName,
-                                          int argc = 0,
-                                          v8::internal::Handle<v8::internal::Object> argv[] = { });
+  Local<Value> CallFunction(Local<v8::Function> fn,
+                            int argc,
+                            Local<Value> argv[] = { });
 
-  i::Handle<i::Object> CallRegisteredCallback(const std::string& callbackName,
-                                              v8::internal::Handle<v8::internal::Object> paramsObj);
+  Local<Value> CallGlobalFunction(const std::string& functionName,
+                                  int argc,
+                                  Local<Value> argv[] = { });
+
+  Local<Value> CallRegisteredCallback(const std::string& callbackName,
+                                      Local<Object> param1);
 };
 
 ReplayRootContext* RecordReplayCreateRootContext(v8::Isolate* isolate, v8::Local<v8::Context> cx);

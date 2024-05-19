@@ -47,6 +47,7 @@
 #endif  // V8_ENABLE_WEBASSEMBLY
 
 #include "src/replayio/replayio-base.h"
+#include "src/replayio/replayio-util.h"
 #include "src/objects/js-collection-inl.h"
 
 namespace v8 {
@@ -4024,28 +4025,6 @@ void RecordReplayOnPromiseHook(Isolate* isolate, PromiseHookType type,
 }  // namespace internal
 
 namespace i = internal;
-
-void FunctionCallbackRecordReplaySetCommandCallback(const FunctionCallbackInfo<Value>& callArgs) {
-  CHECK(recordreplay::IsRecordingOrReplaying());
-  CHECK(IsMainThread());
-
-  Isolate* v8isolate = callArgs.GetIsolate();
-  CHECK(callArgs.Length() == 1);
-  CHECKIsJSFunction(v8isolate, callArgs[0]);
-
-  i::gCommandCallback = new Eternal<Value>(v8isolate, callArgs[0].As<v8::Function>());
-}
-
-void FunctionCallbackRecordReplaySetClearPauseDataCallback(const FunctionCallbackInfo<Value>& callArgs) {
-  CHECK(recordreplay::IsRecordingOrReplaying());
-  CHECK(IsMainThread());
-
-  Isolate* v8isolate = callArgs.GetIsolate();
-  CHECK(callArgs.Length() == 1);
-  CHECKIsJSFunction(v8isolate, callArgs[0]);
-
-  i::gClearPauseDataCallback = new Eternal<Value>(v8isolate, callArgs[0].As<v8::Function>());
-}
 
 void FunctionCallbackRecordReplayGetScriptSource(const FunctionCallbackInfo<Value>& callArgs) {
   CHECK(recordreplay::IsRecordingOrReplaying());

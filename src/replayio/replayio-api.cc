@@ -1,9 +1,12 @@
 #include "include/replayio.h"
-#include "src/execution/isolate-inl.h"
+#include "base/record_replay.h"
 
 namespace v8 {
 namespace i = internal;
 namespace replayio {
+
+extern "C" void V8RecordReplayEnterReplayCode();
+extern "C" void V8RecordReplayExitReplayCode();
   
 struct AutoMarkReplayCode {
   AutoMarkReplayCode() {
@@ -66,9 +69,6 @@ bool RecordReplayIsDivergentUserJSWithoutPause(
          RecordReplayHasRegisteredScript(
              Script::cast(shared.script()));
 }
-
-extern "C" void V8RecordReplayEnterReplayCode();
-extern "C" void V8RecordReplayExitReplayCode();
 
 static void RecordReplayRegisterScript(Handle<Script> script) {
   AutoMarkReplayCode amrc;
@@ -226,11 +226,8 @@ char* CommandCallback(const char* command, const char* params) {
 
   Isolate* isolate = Isolate::Current();
 
-  // TODO: This won't work as expected, since Execution::Call always enters
-  //       the context of the compiled function.
-  //      → See |if (params.target->IsJSFunction())| in execution.cc.
-  // base::Optional<SaveAndSwitchContext> ssc;
-  // EnsureIsolateContext(isolate, ssc);
+  base::Optional<SaveAndSwitchContext> ssc;
+  EnsureIsolateContext(isolate, ssc);
 
   HandleScope scope(isolate);
 
@@ -276,13 +273,19 @@ char* CommandCallback(const char* command, const char* params) {
     }
   }
   if (rv.is_null()) {
-    CHECK(gCommandCallback);
+    CHECK(gReplayRootContext);
+    Local<Contex> ctx = gReplayRootContext->Context()->Get(isolate);
+    Local<Object> callArgs = v8::Object::New(isolate);
+    // callArgs->Set(ctx, CStringToLocal(isolate, "name"), CStringToLocal(isolate, "command")).Check();
+    std::string callbackName = "command";
+    Local<Value> result = gReplayRootContext->CallRegisteredCallback(
+      callbackName,
+      Utils::ToLocal(paramsObj)
+    );
+
     Local<v8::Function> callbackValue = gCommandCallback->Get((v8::Isolate*)isolate);
     Handle<Object> callback = Utils::OpenHandle(*callbackValue);
 
-    Handle<Object> callArgs[2];
-    callArgs[0] = CStringToHandle(isolate, command);
-    callArgs[1] = paramsObj;
     rv = Execution::Call(isolate, callback, undefined, 2, callArgs);
     if (rv.is_null()) {
       recordreplay::Crash("Error: CommandCallback generic command %s failed", command);

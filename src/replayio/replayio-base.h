@@ -9,7 +9,6 @@
 
 #include "include/replayio.h"
 #include "src/base/optional.h"
-#include "src/handles/global-handles-inl.h"
 
 namespace v8 {
 namespace replayio {
