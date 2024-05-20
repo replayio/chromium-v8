@@ -1,8 +1,16 @@
 #include "include/replayio.h"
-#include "base/record_replay.h"
+#include "src/replayio/replayio-api.h"
+#include "src/replayio/replayio-util.h"
+#include "src/api/api-inl.h"
+#include "src/json/json-parser.h"
+#include "src/json/json-stringifier.h"
 
 namespace v8 {
 namespace i = internal;
+namespace internal {
+  extern void RecordReplayOnNewSource(Isolate* isolate, const char* id,
+                                      const char* kind, const char* url);
+}
 namespace replayio {
 
 extern "C" void V8RecordReplayEnterReplayCode();
@@ -22,22 +30,18 @@ void ClearPauseDataCallback() {
   AutoMarkReplayCode amrc;
   replayio::AutoDisallowEvents disallow("ClearPauseDataCallback");
 
-  if (!gClearPauseDataCallback) {
+  // TODO: Call this on all live root contexts.
+  replayio::ReplayRootContext* rootContext = RecordReplayGetRootContext();
+  if (!rootContext) {
     return;
   }
 
-  Isolate* isolate = Isolate::Current();
-  base::Optional<SaveAndSwitchContext> ssc;
+  i::Isolate* isolate = i::Isolate::Current();
+  base::Optional<i::SaveAndSwitchContext> ssc;
   EnsureIsolateContext(isolate, ssc);
 
-  HandleScope scope(isolate);
-
-  Local<v8::Value> callbackValue = gClearPauseDataCallback->Get((v8::Isolate*)isolate);
-  Handle<Object> callback = Utils::OpenHandle(*callbackValue);
-
-  Handle<Object> undefined = isolate->factory()->undefined_value();
-  MaybeHandle<Object> rv = Execution::Call(isolate, callback, undefined, 0, nullptr);
-  CHECK(!rv.is_null());
+  std::string callbackName = "clearPauseData";
+  rootContext->EmitReplayEvent(callbackName);
 }
 
 extern void RecordReplayAddInterestingSource(const char* url);
@@ -52,25 +56,51 @@ bool RecordReplayIsInternalScriptURL(const char* url) {
 
 extern bool RecordReplayHasDefaultContext();
 
-typedef std::unordered_set<int> ScriptIdSet;
-static ScriptIdSet* gRegisteredScripts;
+/** ###########################################################################
+ * Replay Script Registry.
+ * ##########################################################################*/
 
-bool RecordReplayHasRegisteredScript(Script script) {
+// Map ScriptId => Script. We keep all scripts around forever when recording/replaying.
+ScriptIdMap* gRecordReplayScripts;
+ScriptIdSet* gRegisteredScripts;
+
+bool RecordReplayHasRegisteredScript(i::Script script) {
   return IsMainThread() &&
     gRegisteredScripts &&
     gRegisteredScripts->find(script.id()) != gRegisteredScripts->end();
 }
 
 bool RecordReplayIsDivergentUserJSWithoutPause(
-    const SharedFunctionInfo& shared) {
+    const i::SharedFunctionInfo& shared) {
   return recordreplay::AreEventsDisallowed() &&
          !recordreplay::HasDivergedFromRecording() &&
          shared.script().IsScript() &&
          RecordReplayHasRegisteredScript(
-             Script::cast(shared.script()));
+             i::Script::cast(shared.script()));
 }
 
-static void RecordReplayRegisterScript(Handle<Script> script) {
+// Get the script from an ID.
+i::MaybeHandle<i::Script> MaybeGetScript(i::Isolate* isolate, int script_id) {
+  CHECK(gRecordReplayScripts);
+  auto iter = gRecordReplayScripts->find(script_id);
+  if (iter == gRecordReplayScripts->end()) {
+    return i::MaybeHandle<i::Script>();
+  }
+
+  Local<v8::Value> scriptValue = iter->second.Get((v8::Isolate*)isolate);
+  i::Handle<i::Object> scriptObj = Utils::OpenHandle(*scriptValue);
+  i::Handle<i::Script> script(i::Script::cast(*scriptObj), isolate);
+  CHECK(script->id() == script_id);
+  return script;
+};
+
+static i::Handle<i::String> GetProtocolSourceId(i::Isolate* isolate, i::Handle<i::Script> script) {
+  std::ostringstream os;
+  os << script->id();
+  return CStringToHandle(isolate, os.str().c_str());
+}
+
+static void RecordReplayRegisterScript(i::Handle<i::Script> script) {
   AutoMarkReplayCode amrc;
   CHECK(IsMainThread());
 
@@ -83,21 +113,24 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
     return;
   }
 
-  i::Isolate* isolate = Isolate::Current();
+  i::Isolate* isolate = i::Isolate::Current();
 
   (*gRecordReplayScripts)[script->id()] =
     Eternal<Value>((v8::Isolate*)isolate, v8::Utils::ToLocal(script));
 
+  // TODO: Pick the root from isolate->context()
   if (!RecordReplayHasDefaultContext()) {
     return;
   }
 
-  Handle<String> idStr = GetProtocolSourceId(isolate, script);
-  std::unique_ptr<char[]> id = String::cast(*idStr).ToCString();
+  i::Handle<i::String> idStr = GetProtocolSourceId(isolate, script);
+  std::unique_ptr<char[]> id = i::String::cast(*idStr).ToCString();
 
-  if (script->type() == Script::TYPE_WASM) {
+#if V8_ENABLE_WEBASSEMBLY
+  if (script->type() == i::Script::TYPE_WASM) {
     return;
   }
+#endif
 
   if (recordreplay::AreEventsDisallowed()) {
     return;
@@ -105,7 +138,7 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
 
   std::string url;
   if (!script->name().IsUndefined()) {
-    std::unique_ptr<char[]> name = String::cast(script->name()).ToCString();
+    std::unique_ptr<char[]> name = i::String::cast(script->name()).ToCString();
     url = name.get();
   }
 
@@ -117,8 +150,8 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
   // scripts loaded in other ways here. Use the initial position of the script
   // to distinguish these cases: if the starting position is anything other
   // than line zero / column zero, the script must be inlined into another file.
-  Script::PositionInfo start_info;
-  Script::GetPositionInfo(script, 0, &start_info, Script::WITH_OFFSET);
+  i::Script::PositionInfo start_info;
+  i::Script::GetPositionInfo(script, 0, &start_info, i::Script::WITH_OFFSET);
 
   // [RUN-2172] Blink-internal scripts sometimes might have line or column, but 
   // no URL. Since the backend requires inlineScripts to have a URL, don't flag 
@@ -145,16 +178,16 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
       }
 
       Local<v8::Object> handler_value = handlerEternalValue->Get((v8::Isolate*)isolate);
-      Handle<Object> handler = Utils::OpenHandle(*handler_value);
+      i::Handle<i::Object> handler = Utils::OpenHandle(*handler_value);
 
-      Handle<Object> callArgs[3];
+      i::Handle<i::Object> callArgs[3];
       callArgs[0] = idStr;
-      callArgs[1] = Handle<Object>(script->GetNameOrSourceURL(), isolate);
-      callArgs[2] = Handle<Object>(script->source_mapping_url(), isolate);
-      Handle<Object> undefined = isolate->factory()->undefined_value();
+      callArgs[1] = i::Handle<i::Object>(script->GetNameOrSourceURL(), isolate);
+      callArgs[2] = i::Handle<i::Object>(script->source_mapping_url(), isolate);
+      i::Handle<i::Object> undefined = isolate->factory()->undefined_value();
       
       v8::TryCatch try_catch((v8::Isolate*)isolate);
-      Handle<JSFunction> function = Handle<JSFunction>::cast(handler);
+      i::Handle<i::JSFunction> function = i::Handle<i::JSFunction>::cast(handler);
       i::Handle<i::Context> context_handle = i::Handle<i::Context>(
         function->context().script_context(),
         isolate
@@ -167,7 +200,7 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
         continue;
       }
 
-      MaybeHandle<Object> newScriptHandlerResult = Execution::Call(isolate, handler, undefined, 3, callArgs);
+      i::MaybeHandle<i::Object> newScriptHandlerResult = i::Execution::Call(isolate, handler, undefined, 3, callArgs);
       if (try_catch.HasCaught()) {
         Local<v8::Context> context = Utils::ToLocal(context_handle);
         Local<Message> msg = try_catch.Message();
@@ -182,13 +215,18 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
     }
   }
 
-  RecordReplayOnNewSource(isolate, id.get(), kind, url.length() ? url.c_str() : nullptr);
+  i::RecordReplayOnNewSource(isolate, id.get(), kind, url.length() ? url.c_str() : nullptr);
 }
+
+
+/** ###########################################################################
+ * CommandCallback
+ * ##########################################################################*/
 
 // Command callbacks which we handle directly.
 struct InternalCommandCallback {
   const char* mCommand;
-  Handle<Object> (*mCallback)(Isolate* isolate, Handle<Object> params);
+  i::Handle<i::Object> (*mCallback)(i::Isolate* isolate, i::Handle<i::Object> params);
 };
 static InternalCommandCallback gInternalCommandCallbacks[] = {
   { "Debugger.getSourceContents", RecordReplayGetSourceContents },
@@ -208,11 +246,13 @@ static int gPauseContextGroupId = 0;
 
 // Make sure that the isolate has a context by switching to the default
 // context if necessary.
-static void EnsureIsolateContext(Isolate* isolate, base::Optional<SaveAndSwitchContext>& ssc) {
+static void EnsureIsolateContext(i::Isolate* isolate, base::Optional<i::SaveAndSwitchContext>& ssc) {
+  // TODO: Get the correct root context based on the current context and the current situation!
+  // TODO: Check Isolate::has_pending_exception()
   if (isolate->context().is_null()) {
     Local<v8::Context> v8_context;
     V8RecordReplayGetDefaultContext((v8::Isolate*)isolate, &v8_context);
-    Handle<Context> context = Utils::OpenHandle(*v8_context);
+    i::Handle<i::Context> context = Utils::OpenHandle(*v8_context);
     ssc.emplace(isolate, *context);
   }
 }
@@ -224,12 +264,12 @@ char* CommandCallback(const char* command, const char* params) {
   uint64_t startProgressCounter = *gProgressCounter;
   replayio::AutoDisallowEvents disallow("CommandCallback");
 
-  Isolate* isolate = Isolate::Current();
+  i::Isolate* isolate = i::Isolate::Current();
 
-  base::Optional<SaveAndSwitchContext> ssc;
+  base::Optional<i::SaveAndSwitchContext> ssc;
   EnsureIsolateContext(isolate, ssc);
 
-  HandleScope scope(isolate);
+  i::HandleScope scope(isolate);
 
   // if (recordreplay::HasDivergedFromRecording()) {
   //   v8_inspector::V8Inspector* inspectorRaw = v8::debug::GetInspector((v8::Isolate*)isolate);
@@ -254,16 +294,16 @@ char* CommandCallback(const char* command, const char* params) {
   // }
 
 
-  Handle<Object> undefined = isolate->factory()->undefined_value();
-  Handle<String> paramsStr = CStringToHandle(isolate, params);
+  i::Handle<i::Object> undefined = isolate->factory()->undefined_value();
+  i::Handle<i::String> paramsStr = CStringToHandle(isolate, params);
 
-  MaybeHandle<Object> maybeParams = JsonParser<uint8_t>::Parse(isolate, paramsStr, undefined);
+  i::MaybeHandle<i::Object> maybeParams = i::JsonParser<uint8_t>::Parse(isolate, paramsStr, undefined);
   if (maybeParams.is_null()) {
     recordreplay::Crash("Error: CommandCallback Parse %s failed", params);
   }
-  Handle<Object> paramsObj = maybeParams.ToHandleChecked();
+  i::Handle<i::Object> paramsObj = maybeParams.ToHandleChecked();
 
-  MaybeHandle<Object> rv;
+  i::MaybeHandle<i::Object> rv;
   for (const InternalCommandCallback& cb : gInternalCommandCallbacks) {
     if (!strcmp(cb.mCommand, command)) {
       rv = cb.mCallback(isolate, paramsObj);
@@ -273,28 +313,21 @@ char* CommandCallback(const char* command, const char* params) {
     }
   }
   if (rv.is_null()) {
-    CHECK(gReplayRootContext);
-    Local<Contex> ctx = gReplayRootContext->Context()->Get(isolate);
-    Local<Object> callArgs = v8::Object::New(isolate);
-    // callArgs->Set(ctx, CStringToLocal(isolate, "name"), CStringToLocal(isolate, "command")).Check();
+    // Handle in with the JS command handler.
+    ReplayRootContext* root = RecordReplayGetRootContext();
+    CHECK(root);
+    Local<Context> cx = root->GetContext();
+    Local<Object> callArgs = v8::Object::New((v8::Isolate*)isolate);
     std::string callbackName = "command";
-    Local<Value> result = gReplayRootContext->CallRegisteredCallback(
+    Local<Value> result = root->EmitReplayEvent(
       callbackName,
       Utils::ToLocal(paramsObj)
     );
-
-    Local<v8::Function> callbackValue = gCommandCallback->Get((v8::Isolate*)isolate);
-    Handle<Object> callback = Utils::OpenHandle(*callbackValue);
-
-    rv = Execution::Call(isolate, callback, undefined, 2, callArgs);
-    if (rv.is_null()) {
-      recordreplay::Crash("Error: CommandCallback generic command %s failed", command);
-    }
   }
 
-  Handle<Object> result = rv.ToHandleChecked();
-  Handle<Object> rvStr = JsonStringify(isolate, result, undefined, undefined).ToHandleChecked();
-  std::unique_ptr<char[]> rvCStr = String::cast(*rvStr).ToCString();
+  i::Handle<i::Object> result = rv.ToHandleChecked();
+  i::Handle<i::Object> rvStr = i::JsonStringify(isolate, result, undefined, undefined).ToHandleChecked();
+  std::unique_ptr<char[]> rvCStr = i::String::cast(*rvStr).ToCString();
 
   if (startProgressCounter < *gProgressCounter && !recordreplay::HasDivergedFromRecording()) {
     // [RUN-1988] Our command handler incremented the PC by accidentally calling

@@ -177,6 +177,9 @@
 #include <dlfcn.h>
 #endif
 
+#include "src/replayio/replayio-base.h"
+#include "src/replayio/replayio-util.h"
+
 extern const char* gCrashReason;
 
 namespace v8 {
@@ -11481,7 +11484,7 @@ void recordreplay::InvalidateRecording(const char* why) {
 void recordreplay::NewCheckpoint() {
   // We can only create checkpoints if a context has been created. A context is
   // needed to process commands which we might get from the driver.
-  if (IsRecordingOrReplaying() && IsMainThread() && internal::gDefaultContext) {
+  if (IsRecordingOrReplaying() && IsMainThread() && replayio::gReplayRootContext) {
     internal::gRecordReplayHasCheckpoint = true;
     gRecordReplayNewCheckpoint();
   }

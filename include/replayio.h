@@ -33,36 +33,49 @@ struct AutoDisallowEvents {
  * 
  */
 class ReplayRootContext {
-  static constexpr const char* FunctionCallRegisteredCallback = "CallRegisteredCallback";
-  // static constexpr const char* FunctionCallRegisteredCallback = "CallRegisteredCallback";
-
-  Eternal<Context> context_;
+  Eternal<v8::Context> context_;
   /**
-   * Internally used callback object we use for routing/registering JS callbacks.
+   * We use this to emit events into JS.
    */
-  Eternal<Object> callbackRegistry_;
+  Eternal<Object> eventEmitter_;
 
 public:
-  Eternal<Context> Context();
+  ReplayRootContext(Eternal<v8::Context> context) : context_(context) {}
+
+  Eternal<Context> ContextEternal() const { return context_; }
+  Local<Context> GetContext() const;
+  Local<Object> GetEventEmitter() const;
 
   Local<v8::Function> GetFunction(
     Local<Object> object,
     const std::string& propName
-  );
+  ) const;
 
   Local<Value> CallFunction(Local<v8::Function> fn,
-                            int argc,
-                            Local<Value> argv[] = { });
+                            int argc = 0,
+                            Local<Value> argv[] = nullptr,
+                            MaybeLocal<Value> receiver = MaybeLocal<Value>()) const;
 
   Local<Value> CallGlobalFunction(const std::string& functionName,
-                                  int argc,
-                                  Local<Value> argv[] = { });
+                                  int argc = 0,
+                                  Local<Value> argv[] = nullptr) const;
 
-  Local<Value> CallRegisteredCallback(const std::string& callbackName,
-                                      Local<Object> param1);
+  Local<Value> EmitReplayEvent(const std::string& eventName,
+                               MaybeLocal<Object> param1 = MaybeLocal<Object>()) const;
 };
 
 ReplayRootContext* RecordReplayCreateRootContext(v8::Isolate* isolate, v8::Local<v8::Context> cx);
+
+/**
+ * @return The |ReplayRootContext| for the given |cx|.
+ */
+ReplayRootContext* RecordReplayGetRootContext(v8::Context cx);
+
+/**
+ * @deprecated There is no single "default context".
+ * @return The "default" |ReplayRootContext|.
+ */
+ReplayRootContext* RecordReplayGetRootContext();
 
 }  // namespace replayio
 }  // namespace v8

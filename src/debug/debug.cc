@@ -48,9 +48,13 @@
 
 #include "src/replayio/replayio-base.h"
 #include "src/replayio/replayio-util.h"
+#include "src/replayio/replayio-api.h"
 #include "src/objects/js-collection-inl.h"
 
 namespace v8 {
+namespace replayio {
+  extern i::MaybeHandle<i::Script> MaybeGetScript(i::Isolate* isolate, int script_id);
+}
 namespace internal {
 
 class Debug::TemporaryObjectsTracker : public HeapObjectAllocationTracker {
@@ -3009,9 +3013,6 @@ void Debug::PrepareRestartFrame(JavaScriptFrame* frame,
 // Helpers
 ////////////////////////////////////////////////////////////////////////////////
 
-extern void RecordReplayOnNewSource(Isolate* isolate, const char* id,
-                                    const char* kind, const char* url);
-
 static Handle<String> CStringToHandle(Isolate* isolate, const char* str) {
   return isolate->factory()->NewStringFromUtf8(base::CStrVector(str)).ToHandleChecked();
 }
@@ -3049,10 +3050,6 @@ static Handle<JSObject> NewPlainObject(Isolate* isolate) {
 // Script State
 ////////////////////////////////////////////////////////////////////////////////
 
-// Map ScriptId => Script. We keep all scripts around forever when recording/replaying.
-typedef std::unordered_map<int, Eternal<Value>> ScriptIdMap;
-static ScriptIdMap* gRecordReplayScripts;
-
 static int GetSourceIdProperty(Isolate* isolate, Handle<Object> obj) {
   Handle<Object> sourceIdStr = GetProperty(isolate, obj, "sourceId");
   std::unique_ptr<char[]> sourceIdText = String::cast(*sourceIdStr).ToCString();
@@ -3062,23 +3059,8 @@ static int GetSourceIdProperty(Isolate* isolate, Handle<Object> obj) {
 }
 
 // Get the script from an ID.
-MaybeHandle<Script> MaybeGetScript(Isolate* isolate, int script_id) {
-  CHECK(gRecordReplayScripts);
-  auto iter = gRecordReplayScripts->find(script_id);
-  if (iter == gRecordReplayScripts->end()) {
-    return MaybeHandle<Script>();
-  }
-
-  Local<v8::Value> scriptValue = iter->second.Get((v8::Isolate*)isolate);
-  Handle<Object> scriptObj = Utils::OpenHandle(*scriptValue);
-  Handle<Script> script(Script::cast(*scriptObj), isolate);
-  CHECK(script->id() == script_id);
-  return script;
-}
-
-// Get the script from an ID.
 Handle<Script> GetScript(Isolate* isolate, int script_id) {
-  MaybeHandle<Script> script = MaybeGetScript(isolate, script_id);
+  MaybeHandle<Script> script = v8::replayio::MaybeGetScript(isolate, script_id);
   if (script.is_null()) {
     recordreplay::Diagnostic("GetScript unknown script %d", script_id);
   }
@@ -3238,7 +3220,7 @@ static void ForEachInstrumentationOpInRange(
   const std::function<void(Handle<Script> script, int bytecode_offset,
                            const std::string& function_id, int line, int column)> callback) {
   int script_id = GetSourceIdProperty(isolate, params);
-  MaybeHandle<Script> maybe_script = MaybeGetScript(isolate, script_id);
+  MaybeHandle<Script> maybe_script = v8::replayio::MaybeGetScript(isolate, script_id);
 
   if (maybe_script.is_null()) {
     return;
@@ -3386,7 +3368,7 @@ v8::Local<v8::Object> RecordReplayGetBytecode(v8::Isolate* isolate_,
   Handle<Object> params = Utils::OpenHandle(*paramsObj);
   ParseRecordReplayFunctionIdFromParams(isolate, params, &function_id,
                                         &script_id, &function_source_position);
-  MaybeHandle<Script> maybe_script = MaybeGetScript(isolate, script_id);
+  MaybeHandle<Script> maybe_script = v8::replayio::MaybeGetScript(isolate, script_id);
   Handle<JSObject> rv = NewPlainObject(isolate);
 
   if (!maybe_script.is_null()) {
@@ -3430,7 +3412,7 @@ void RecordReplayGetPossibleBreakpointsCallback(const char* script_id_str) {
   HandleScope scope(isolate);
 
   int script_id = atoi(script_id_str);
-  MaybeHandle<Script> maybe_script = MaybeGetScript(isolate, script_id);
+  MaybeHandle<Script> maybe_script = v8::replayio::MaybeGetScript(isolate, script_id);
 
   if (maybe_script.is_null()) {
     return;
