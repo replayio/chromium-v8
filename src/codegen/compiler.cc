@@ -71,10 +71,14 @@
 #endif  // V8_ENABLE_MAGLEV
 
 namespace v8 {
+namespace replayio {
+extern bool RecordReplayHasDefaultContext();
+}  // namespace replayio
 namespace internal {
 
 extern MaybeHandle<Script> MaybeGetScript(Isolate* isolate, int script_id);
 extern Handle<Script> GetScript(Isolate* isolate, int script_id);
+extern bool RecordReplayAssertValues(const std::string& url);
 
 namespace {
 
@@ -1600,16 +1604,13 @@ BackgroundCompileTask::BackgroundCompileTask(
       end_position_(0),
       function_literal_id_(kFunctionLiteralIdTopLevel) {}
 
-extern bool RecordReplayHasDefaultContext();
-extern bool RecordReplayAssertValues(const std::string& url);
-
 static void SetRecordReplayFlags(UnoptimizedCompileFlags& flags, const std::string& url) {
   if (!recordreplay::IsRecordingOrReplaying()) {
     return;
   }
 
   if (!IsMainThread() ||
-      !RecordReplayHasDefaultContext() ||
+      !replayio::RecordReplayHasDefaultContext() ||
       recordreplay::AreEventsDisallowed("CompileFlags") ||
       recordreplay::IsInReplayCode("CompileFlags")) {
     flags.set_record_replay_ignore(true);

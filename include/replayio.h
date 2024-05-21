@@ -61,7 +61,10 @@ public:
                                   Local<Value> argv[] = nullptr) const;
 
   Local<Value> EmitReplayEvent(const std::string& eventName,
-                               MaybeLocal<Object> param1 = MaybeLocal<Object>()) const;
+                               Local<Value> param1) const;
+  Local<Value> EmitReplayEvent(const std::string& eventName,
+                               int argc = 0,
+                               Local<Value> argv[] = nullptr) const;
 };
 
 ReplayRootContext* RecordReplayCreateRootContext(v8::Isolate* isolate, v8::Local<v8::Context> cx);
@@ -69,13 +72,18 @@ ReplayRootContext* RecordReplayCreateRootContext(v8::Isolate* isolate, v8::Local
 /**
  * @return The |ReplayRootContext| for the given |cx|.
  */
-ReplayRootContext* RecordReplayGetRootContext(v8::Context cx);
+ReplayRootContext* RecordReplayGetRootContext(v8::Local<v8::Context> cx);
 
 /**
  * @deprecated There is no single "default context".
  * @return The "default" |ReplayRootContext|.
  */
 ReplayRootContext* RecordReplayGetRootContext();
+
+/**
+ * @return Whether any root context has been created yet.
+ */
+bool RecordReplayHasDefaultContext();
 
 }  // namespace replayio
 }  // namespace v8

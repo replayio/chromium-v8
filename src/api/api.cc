@@ -11484,7 +11484,7 @@ void recordreplay::InvalidateRecording(const char* why) {
 void recordreplay::NewCheckpoint() {
   // We can only create checkpoints if a context has been created. A context is
   // needed to process commands which we might get from the driver.
-  if (IsRecordingOrReplaying() && IsMainThread() && replayio::gReplayRootContext) {
+  if (IsRecordingOrReplaying() && IsMainThread() && replayio::RecordReplayHasDefaultContext()) {
     internal::gRecordReplayHasCheckpoint = true;
     gRecordReplayNewCheckpoint();
   }

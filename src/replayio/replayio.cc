@@ -94,7 +94,7 @@ Local<Value> ReplayRootContext::CallFunction(Local<v8::Function> fn,
 Local<Value> ReplayRootContext::CallGlobalFunction(const std::string& functionName,
                                                    int argc,
                                                    Local<Value> argv[]) const {
-  i::Isolate* i_isolate = i::Isolate::Current();
+  // i::Isolate* i_isolate = i::Isolate::Current();
   // Isolate* isolate = (v8::Isolate*)i_isolate;
   Local<v8::Context> cx = GetContext();
 
@@ -104,20 +104,32 @@ Local<Value> ReplayRootContext::CallGlobalFunction(const std::string& functionNa
 }
 
 Local<Value> ReplayRootContext::EmitReplayEvent(const std::string& eventName,
-                                                MaybeLocal<Object> param1) const {
-  i::Isolate* i_isolate = i::Isolate::Current();
-  Isolate* isolate = (v8::Isolate*)i_isolate;
-  // Local<v8::Context> cx = GetContext();
-
-  Local<Function> fn = GetFunction(GetEventEmitter(), eventName);
+                                                Local<Value> param1) const {
+  // i::Isolate* i_isolate = i::Isolate::Current();
+  // Isolate* isolate = (v8::Isolate*)i_isolate;
 
   // Prepare args.
   constexpr int NCallArgs = 1;
-  Local<Value> callArgs[NCallArgs] = {
-    param1.IsEmpty() ? Undefined(isolate).As<Value>() : param1.ToLocalChecked().As<Value>()
-  };
+  Local<Value> callArgs[NCallArgs] = { param1 };
   
-  return CallFunction(fn, NCallArgs, callArgs, GetEventEmitter());
+  return EmitReplayEvent(eventName, NCallArgs, callArgs);
+}
+
+Local<Value> ReplayRootContext::EmitReplayEvent(const std::string& eventName,
+                                                int eventArgc,
+                                                Local<Value> eventArgv[]) const {
+  i::Isolate* i_isolate = i::Isolate::Current();
+  Isolate* isolate = (v8::Isolate*)i_isolate;
+
+  Local<Function> fn = GetFunction(GetEventEmitter(), "emit");
+
+  // Inject the event name as first parameter.
+  const int argc = eventArgc + 1;
+  Local<Value>* argv = new Local<Value>[argc];
+  argv[0] = CStringToLocal(isolate, eventName.c_str());
+  std::copy(eventArgv, eventArgv + eventArgc, argv + 1);
+  
+  return CallFunction(fn, argc, argv, GetEventEmitter());
 }
 
 ReplayRootContext* RecordReplayCreateRootContext(v8::Isolate* isolate, v8::Local<v8::Context> cx) {
@@ -129,7 +141,7 @@ ReplayRootContext* RecordReplayCreateRootContext(v8::Isolate* isolate, v8::Local
   return gReplayRootContext = new ReplayRootContext(Eternal<v8::Context>(isolate, cx));
 }
 
-ReplayRootContext* RecordReplayGetRootContext(v8::Context cx) {
+ReplayRootContext* RecordReplayGetRootContext(v8::Local<v8::Context> cx) {
   CHECK(IsMainThread());
   // TODO: Implement this.
   return gReplayRootContext;

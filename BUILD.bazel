@@ -2213,7 +2213,8 @@ filegroup(
         "src/heap/third-party/heap-api-stub.cc",
 
         "src/replayio/replayio.cc",
-        "src/replayio/replayio-api.cc",
+        "src/replayio/replayio-commands.cc",
+        "src/replayio/replayio-commands.h",
         "src/replayio/replayio-base.h",
         "src/replayio/replayio-util.cc",
         "src/replayio/replayio-util.h",
