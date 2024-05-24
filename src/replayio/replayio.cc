@@ -69,6 +69,12 @@ Local<Value> ReplayRootContext::CallFunction(Local<v8::Function> fn,
   if (!maybeReceiver.ToLocal(&receiver)) {
     receiver = undefined;
   }
+  
+  recordreplay::Print("CallFunction(%d): %d", argc, cx->IsContext());
+  
+  // Sanity check: The function's creation context should still exist.
+  fn.As<Function>()->GetCreationContextChecked();
+  
   v8::TryCatch try_catch(isolate);
   MaybeLocal<v8::Value> rv = fn->Call(cx, receiver, argc, argv);
 
@@ -138,7 +144,11 @@ ReplayRootContext* RecordReplayCreateRootContext(v8::Isolate* isolate, v8::Local
     delete gReplayRootContext;
     // gReplayRootContext = nullptr;
   }
-  return gReplayRootContext = new ReplayRootContext(Eternal<v8::Context>(isolate, cx));
+  Local<v8::Object> eventEmitter = v8::Object::New(isolate);
+  return gReplayRootContext = new ReplayRootContext(
+    Eternal<v8::Context>(isolate, cx),
+    Eternal<v8::Object>(isolate, eventEmitter)
+  );
 }
 
 ReplayRootContext* RecordReplayGetRootContext(v8::Local<v8::Context> cx) {

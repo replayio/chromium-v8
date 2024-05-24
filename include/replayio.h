@@ -40,7 +40,10 @@ class ReplayRootContext {
   Eternal<Object> eventEmitter_;
 
 public:
-  ReplayRootContext(Eternal<v8::Context> context) : context_(context) {}
+  ReplayRootContext(Eternal<v8::Context> context, Eternal<Object> eventEmitter) :
+    context_(context),
+    eventEmitter_(eventEmitter)
+    {}
 
   Eternal<Context> ContextEternal() const { return context_; }
   Local<Context> GetContext() const;
