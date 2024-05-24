@@ -34,7 +34,7 @@ extern void RecordReplayAddInterestingSource(const char* url);
 // to be registered with the recorder so that breakpoints can be created.
 bool RecordReplayIsInternalScriptURL(const char* url) {
   return !strcmp(url, "record-replay-react-devtools") ||
-         !strcmp(url, "record-replay-internal") ||
+         !strncmp(url, "record-replay-internal://", 25) ||
          !strncmp(url, "extensions::", 12);
 }
 extern void RecordReplayAddPossibleBreakpoint(int line, int column, const char* function_id, int function_index);
