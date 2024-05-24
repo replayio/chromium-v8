@@ -170,6 +170,10 @@ void UnoptimizedCompileFlags::SetFlagsForFunctionFromScript(Script script) {
       std::unique_ptr<char[]> name = String::cast(script.name()).ToCString();
       url = name.get();
     }
+    if (replayio::RecordReplayIsReplayJsCode(url.c_str())) {
+      recordreplay::Print("DDBG RecordReplayIsReplayJsCode %s", url.c_str());
+      set_record_replay_ignore(true);
+    }
     if (RecordReplayAssertValues(url)) {
       set_record_replay_assert_values(true);
     }

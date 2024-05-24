@@ -34,7 +34,7 @@ extern void RecordReplayAddInterestingSource(const char* url);
 // to be registered with the recorder so that breakpoints can be created.
 bool RecordReplayIsInternalScriptURL(const char* url) {
   return !strcmp(url, "record-replay-react-devtools") ||
-         !strncmp(url, "record-replay-internal://", 25) ||
+         replayio::RecordReplayIsReplayJsCode(url) ||
          !strncmp(url, "extensions::", 12);
 }
 extern void RecordReplayAddPossibleBreakpoint(int line, int column, const char* function_id, int function_index);
@@ -1261,30 +1261,41 @@ char* CommandCallback(const char* command, const char* params) {
 
   i::MaybeHandle<i::Object> maybeParams = i::JsonParser<uint8_t>::Parse(isolate, paramsStr, undefined);
   if (maybeParams.is_null()) {
-    recordreplay::Crash("Error: CommandCallback Parse %s failed", params);
+    recordreplay::Crash("CommandCallback Parse %s failed", params);
   }
   i::Handle<i::Object> paramsObj = maybeParams.ToHandleChecked();
 
-  i::MaybeHandle<i::Object> rv;
+  i::Handle<i::Object> result;
   for (const InternalCommandCallback& cb : gInternalCommandCallbacks) {
     if (!strcmp(cb.mCommand, command)) {
-      rv = cb.mCallback(isolate, paramsObj);
+      i::MaybeHandle<i::Object> rv = cb.mCallback(isolate, paramsObj);
       if (rv.is_null()) {
-        recordreplay::Crash("Error: CommandCallback internal command %s failed", command);
+        recordreplay::Crash("CommandCallback internal command %s failed", command);
       }
+      
+      result = rv.ToHandleChecked();
     }
   }
-  if (rv.is_null()) {
-    // Handle in with the JS command handler.
+  if (result.is_null()) {
+    // Handle command with the JS command handler.
     replayio::ReplayRootContext* root = replayio::RecordReplayGetRootContext();
     CHECK(root);
-    root->EmitReplayEvent(
-      "command",
-      Utils::ToLocal(paramsObj)
-    );
-  }
 
-  i::Handle<i::Object> result = rv.ToHandleChecked();
+    constexpr int NCallArgs = 2;
+    Local<Value> callArgs[NCallArgs] = {
+      replayio::CStringToLocal((v8::Isolate*)isolate, command),
+      Utils::ToLocal(paramsObj)
+    };
+    Local<Value> local_result = root->EmitReplayEvent(
+      "command",
+      NCallArgs,
+      callArgs,
+      "emitWithResult"
+    );
+
+    result = Utils::OpenHandle(*local_result);
+  }
+  
   i::Handle<i::Object> rvStr = i::JsonStringify(isolate, result, undefined, undefined).ToHandleChecked();
   std::unique_ptr<char[]> rvCStr = i::String::cast(*rvStr).ToCString();
 

@@ -64,10 +64,21 @@ public:
                                   Local<Value> argv[] = nullptr) const;
 
   Local<Value> EmitReplayEvent(const std::string& eventName,
-                               Local<Value> param1) const;
+                               Local<Value> param1,
+                               const std::string& emitName = "emit") const;
   Local<Value> EmitReplayEvent(const std::string& eventName,
                                int argc = 0,
-                               Local<Value> argv[] = nullptr) const;
+                               Local<Value> argv[] = nullptr,
+                               const std::string& emitName = "emit") const;
+
+  /**
+   * Run the given script, give it the given name.
+   * If the script evaluates to a function value, call that function with
+   * GetEventEmitter() as the sole argument.
+   */
+  v8::Local<v8::Value> RunScriptAndCallBack(
+    const std::string& source, const std::string& filename
+  );
 };
 
 ReplayRootContext* RecordReplayCreateRootContext(v8::Isolate* isolate, v8::Local<v8::Context> cx);
@@ -87,6 +98,11 @@ ReplayRootContext* RecordReplayGetRootContext();
  * @return Whether any root context has been created yet.
  */
 bool RecordReplayHasDefaultContext();
+
+/**
+ * Whether the given url is our own JS code.
+ */
+bool RecordReplayIsReplayJsCode(const char* url);
 
 }  // namespace replayio
 }  // namespace v8

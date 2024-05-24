@@ -1134,15 +1134,14 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
 
   if (gRecordReplayCheckProgress) {
     Handle<JSFunction> function = args.at<JSFunction>(0);
-
     Handle<SharedFunctionInfo> shared(function->shared(), isolate);
     Handle<Script> script(Script::cast(shared->script()), isolate);
 
     CHECK(RecordReplayBytecodeAllowed());
-    CHECK(gRecordReplayHasCheckpoint);
     CHECK(RecordReplayHasRegisteredScript(*script));
 
-    if (recordreplay::AreEventsDisallowed() && !recordreplay::HasDivergedFromRecording()) {
+    if (!gRecordReplayHasCheckpoint ||
+      (recordreplay::AreEventsDisallowed() && !recordreplay::HasDivergedFromRecording())) {
       // Print JS stack if user JS was executed non-deterministically
       // and we were not paused.
       if (!gHasPrintedStack) {  // Prevent flood.
@@ -1152,8 +1151,9 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
         isolate->PrintCurrentStackTrace(stack);
 
         recordreplay::Warning(
-            "[RUN-1919] JS ExecutionProgress in non-deterministic user JS PC=%zu "
+            "[RUN-1919] JS ExecutionProgress in non-deterministic user JS has_checkpoint=%d PC=%zu "
             "scriptId=%d @%s stack=%s",
+            gRecordReplayHasCheckpoint,
             *gProgressCounter, script->id(),
             GetScriptLocationString(script->id(), shared->StartPosition())
                 .c_str(),

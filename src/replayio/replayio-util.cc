@@ -18,6 +18,11 @@ Local<String> CStringToLocal(Isolate* isolate, const char* str) {
                                  v8::NewStringType::kInternalized).ToLocalChecked();
 }
 
+std::string LocalToCString(Isolate* isolate, Local<String> str) {
+  v8::String::Utf8Value text(isolate, str);
+  return *text;
+}
+
 i::Handle<i::Object> GetProperty(i::Isolate* isolate,
                                  i::Handle<i::Object> obj, const char* property) {
   return i::Object::GetProperty(isolate, obj, CStringToHandle(isolate, property))
