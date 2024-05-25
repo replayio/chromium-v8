@@ -164,13 +164,15 @@ v8::Local<v8::Value> ReplayRootContext::RunScriptAndCallBack(
   v8::Local<v8::String> source = CStringToLocal(isolate, souce_raw.c_str());
   v8::Local<v8::Context> cx = GetContext();
 
+  recordreplay::Print("DDBG RunScriptAndCallback A %s", filename.c_str());
+
   auto maybe_script = v8::Script::Compile(cx, source, &origin);
   CrashOnError("RunScriptAndCallBack", filename.c_str(), cx, try_catch, maybe_script);
 
   v8::MaybeLocal<v8::Value> maybe_rv = maybe_script.ToLocalChecked()->Run(cx);
   Local<v8::Value> rv = CrashOnError("RunScriptAndCallBack", filename.c_str(), cx, try_catch, maybe_rv);
 
-  recordreplay::Print("DDBG RunScriptAndCallback %d", !!rv->IsFunction());
+  recordreplay::Print("DDBG RunScriptAndCallback B %d", !!rv->IsFunction());
   if (rv->IsFunction()) {
     constexpr int Argc = 1;
     v8::Local<v8::Value> argv[] = {
