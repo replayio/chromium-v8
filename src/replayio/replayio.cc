@@ -47,7 +47,12 @@ v8::Local<v8::Function> ReplayRootContext::GetFunction(
       propName.c_str()
     );
   }
-  CHECK(callbackValue->IsFunction());
+  if (!callbackValue->IsFunction()) {
+    recordreplay::Crash(
+      "ReplayRootContext::GetFunction: NOT_A_FUNCTION - Emitter prop is not function: %s",
+      propName.c_str()
+    );
+  }
 
   // Sanity check: The function's creation context should still exist.
   callbackValue.As<Function>()->GetCreationContextChecked();
