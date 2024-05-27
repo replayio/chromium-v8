@@ -12201,6 +12201,15 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
     }
   }
 
+  recordreplay::Assert("Replay-Init smi32=%d, endian=%s",
+    i::SmiValuesAre32Bits(),
+#if defined(V8_TARGET_LITTLE_ENDIAN)
+    "little"
+#else
+    "BIG"
+#endif
+    );
+
   i::RecordReplayInitInstrumentationState();
 }
 
