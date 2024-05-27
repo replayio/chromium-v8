@@ -63,6 +63,8 @@
 #include "v8-wasm.h"               // NOLINT(build/include_directory)
 #include "v8config.h"              // NOLINT(build/include_directory)
 
+#include "replayio-macros.h"
+
 // We reserve the V8_* prefix for macros defined in V8 public API and
 // assume there are no name conflicts with the embedder's code.
 
@@ -201,15 +203,5 @@ static void* IdPointer(int id);
 }; // class recordreplay
 
 }  // namespace v8
-
-#define REPLAY_ASSERT(format, ...) \
-  if (recordreplay::HasAsserts()) \
-    recordreplay::AssertRaw(format, ##__VA_ARGS__); \
-  static_assert(true, "require semicolon")
-
-#define REPLAY_ASSERT_MAYBE_EVENTS_DISALLOWED(format, ...) \
-  if (recordreplay::HasAsserts() && !recordreplay::AreEventsDisallowed()) \
-    recordreplay::AssertRaw(format, ##__VA_ARGS__); \
-  static_assert(true, "require semicolon")
 
 #endif  // INCLUDE_V8_H_
