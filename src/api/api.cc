@@ -3493,6 +3493,8 @@ void ValueSerializer::SetTreatArrayBufferViewsAsHostObjects(bool mode) {
 
 Maybe<bool> ValueSerializer::WriteValue(Local<Context> context,
                                         Local<Value> value) {
+  replayio::AutoDisallowEvents disallow("ValueSerializer::WriteValue");
+
   auto i_isolate = reinterpret_cast<i::Isolate*>(context->GetIsolate());
   ENTER_V8(i_isolate, context, ValueSerializer, WriteValue, Nothing<bool>(),
            i::HandleScope);
@@ -3619,6 +3621,7 @@ uint32_t ValueDeserializer::GetWireFormatVersion() const {
 }
 
 MaybeLocal<Value> ValueDeserializer::ReadValue(Local<Context> context) {
+  replayio::AutoDisallowEvents disallow("ValueDeserializer::ReadValue");
   PREPARE_FOR_EXECUTION(context, ValueDeserializer, ReadValue, Value);
   i::MaybeHandle<i::Object> result;
   if (GetWireFormatVersion() > 0) {
@@ -11345,8 +11348,19 @@ extern "C" DLLEXPORT bool V8RecordReplayHadMismatch() {
   return false;
 }
 
+bool recordreplay::HasAsserts() {
+  return !gAssertsDisabled && IsRecordingOrReplaying();
+}
+
+void recordreplay::AssertRaw(const char* format, ...) {
+  va_list ap;
+  va_start(ap, format);
+  gRecordReplayAssert(format, ap);
+  va_end(ap);
+}
+
 void recordreplay::Assert(const char* format, ...) {
-  if (!gAssertsDisabled && IsRecordingOrReplaying()) {
+  if (HasAsserts()) {
     va_list ap;
     va_start(ap, format);
     gRecordReplayAssert(format, ap);
@@ -11355,7 +11369,7 @@ void recordreplay::Assert(const char* format, ...) {
 }
 
 extern "C" void V8RecordReplayAssert(const char* format, ...) {
-  if (!gAssertsDisabled && recordreplay::IsRecordingOrReplaying()) {
+  if (recordreplay::HasAsserts()) {
     va_list ap;
     va_start(ap, format);
     gRecordReplayAssert(format, ap);
@@ -11364,14 +11378,13 @@ extern "C" void V8RecordReplayAssert(const char* format, ...) {
 }
 
 extern "C" DLLEXPORT void V8RecordReplayAssertVA(const char* format, va_list args) {
-  if (!gAssertsDisabled && recordreplay::IsRecordingOrReplaying()) {
+  if (recordreplay::HasAsserts()) {
     gRecordReplayAssert(format, args);
   }
 }
 
 void recordreplay::AssertMaybeEventsDisallowed(const char* format, ...) {
-  if (!gAssertsDisabled &&
-      IsRecordingOrReplaying() &&
+  if (HasAsserts() &&
       !AreEventsDisallowed("AssertMaybeEventsDisallowed")) {
     va_list ap;
     va_start(ap, format);
@@ -11381,15 +11394,14 @@ void recordreplay::AssertMaybeEventsDisallowed(const char* format, ...) {
 }
 
 extern "C" DLLEXPORT void V8RecordReplayAssertMaybeEventsDisallowedVA(const char* format, va_list args) {
-  if (!gAssertsDisabled &&
-      recordreplay::IsRecordingOrReplaying() &&
+  if (recordreplay::HasAsserts() &&
       !recordreplay::AreEventsDisallowed("AssertMaybeEventsDisallowed")) {
     gRecordReplayAssert(format, args);
   }
 }
 
 void recordreplay::AssertBytes(const char* why, const void* buf, size_t size) {
-  if (!gAssertsDisabled && IsRecordingOrReplaying()) {
+  if (HasAsserts()) {
     gRecordReplayAssertBytes(why, buf, size);
   }
 }

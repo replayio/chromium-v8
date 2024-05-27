@@ -1296,7 +1296,7 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertValue) {
 
   std::string contents = RecordReplayBasicValueContents(value);
 
-  recordreplay::Assert(
+  REPLAY_ASSERT(
       "JS %s Value=%s PC=%zu scriptId=%d @%s", site.desc_.c_str(),
       contents.c_str(), *gProgressCounter, script->id(),
       site.location_.c_str());

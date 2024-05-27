@@ -110,6 +110,8 @@ static void Warning(const char* format, ...);
 static void Trace(const char* format, ...);
 static void Crash(const char* format, ...);
 static bool HadMismatch();
+static bool HasAsserts();
+static void AssertRaw(const char* format, ...);
 static void Assert(const char* format, ...);
 static void AssertMaybeEventsDisallowed(const char* format, ...);
 static void AssertBytes(const char* why, const void* buf, size_t size);
@@ -199,5 +201,15 @@ static void* IdPointer(int id);
 }; // class recordreplay
 
 }  // namespace v8
+
+#define REPLAY_ASSERT(format, ...) \
+  if (recordreplay::HasAsserts()) \
+    recordreplay::AssertRaw(format, ##__VA_ARGS__); \
+  static_assert(true, "require semicolon")
+
+#define REPLAY_ASSERT_MAYBE_EVENTS_DISALLOWED(format, ...) \
+  if (recordreplay::HasAsserts() && !recordreplay::AreEventsDisallowed()) \
+    recordreplay::AssertRaw(format, ##__VA_ARGS__); \
+  static_assert(true, "require semicolon")
 
 #endif  // INCLUDE_V8_H_

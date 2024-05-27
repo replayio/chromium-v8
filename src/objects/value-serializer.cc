@@ -360,16 +360,6 @@ void ValueSerializer::WriteRawBytes(const void* source, size_t length) {
 }
 
 Maybe<uint8_t*> ValueSerializer::ReserveRawBytes(size_t bytes) {
-  if (recordreplay::IsRecordingOrReplaying() && !recordreplay::AreAssertsDisabled()) {
-    recordreplay::AssertBufferAllocationState* bufferAssertsState = 
-      recordreplay::AutoAssertBufferAllocations::GetState();
-    if (bufferAssertsState) {
-      recordreplay::Diagnostic("ValueSerializer::ReserveRawBytes");
-      recordreplay::Assert("[%s] ValueSerializer::ReserveRawBytes %zu",
-        bufferAssertsState->issueLabel.c_str(),
-        bytes);
-    }
-  }
   size_t old_size = buffer_size_;
   size_t new_size = old_size + bytes;
   if (V8_UNLIKELY(new_size > buffer_capacity_)) {
@@ -422,6 +412,16 @@ void ValueSerializer::WriteUint64(uint64_t value) {
 }
 
 std::pair<uint8_t*, size_t> ValueSerializer::Release() {
+  if (recordreplay::IsRecordingOrReplaying("ValueSerializer::Release")) {
+    size_t new_buffer_size = buffer_size;
+    buffer_size_ = (size_t)recordreplay::RecordReplayValue("ValueSerializer::Release size", (uintptr_t)buffer_size_);
+    if (buffer_size_ != new_buffer_size) {
+      uint8_t* new_buffer = new uint8_t[buffer_size];
+      delete[] buffer_;
+      buffer_ = new_buffer;
+      recordreplay::RecordReplayBytes("ValueSerializer::Release buffer", &buffer_, buffer_size_);
+    }
+  }
   auto result = std::make_pair(buffer_, buffer_size_);
   buffer_ = nullptr;
   buffer_size_ = 0;
@@ -533,24 +533,8 @@ void ValueSerializer::WriteString(Handle<String> string) {
   DCHECK(flat.IsFlat());
   if (flat.IsOneByte()) {
     base::Vector<const uint8_t> chars = flat.ToOneByteVector();
-
-    // Whether a string has a one or two byte representation can vary when
-    // replaying due to JIT and other VM behavior. Only write out strings
-    // as two bytes to ensure serialized buffers have a consistent size.
-    if (recordreplay::IsRecordingOrReplaying("values", "ValueSerializer::WriteString")) {
-      base::ScopedVector<base::uc16> new_chars(chars.length());
-      for (int i = 0; i < chars.length(); i++)
-        new_chars[i] = chars[i];
-      uint32_t byte_length = new_chars.length() * sizeof(base::uc16);
-      // The existing reading code expects 16-byte strings to be aligned.
-      if ((buffer_size_ + 1 + BytesNeededForVarint(byte_length)) & 1)
-        WriteTag(SerializationTag::kPadding);
-      WriteTag(SerializationTag::kTwoByteString);
-      WriteTwoByteString(new_chars);
-    } else {
-      WriteTag(SerializationTag::kOneByteString);
-      WriteOneByteString(chars);
-    }
+    WriteTag(SerializationTag::kOneByteString);
+    WriteOneByteString(chars);
   } else if (flat.IsTwoByte()) {
     base::Vector<const base::uc16> chars = flat.ToUC16Vector();
     uint32_t byte_length = chars.length() * sizeof(base::uc16);
@@ -734,19 +718,6 @@ Maybe<bool> ValueSerializer::WriteJSArray(Handle<JSArray> array) {
   // should be serialized).
   const bool should_serialize_densely =
       array->HasFastElements(cage_base) && !array->HasHoleyElements(cage_base);
-
-  
-  if (recordreplay::IsRecordingOrReplaying() && !recordreplay::AreAssertsDisabled()) {
-    recordreplay::AssertBufferAllocationState* bufferAssertsState = 
-      recordreplay::AutoAssertBufferAllocations::GetState();
-    if (bufferAssertsState) {
-      recordreplay::Assert("[%s] ValueSerializer::WriteJSArray %d %d",
-        bufferAssertsState->issueLabel.c_str(),
-        array->HasFastElements(cage_base),
-        array->HasHoleyElements(cage_base));
-    }
-  }
-
   if (should_serialize_densely) {
     DCHECK_LE(length, static_cast<uint32_t>(FixedArray::kMaxLength));
     WriteTag(SerializationTag::kBeginDenseJSArray);
@@ -1252,9 +1223,10 @@ ValueDeserializer::ValueDeserializer(Isolate* isolate,
       end_(data.end()),
       id_map_(isolate->global_handles()->Create(
           ReadOnlyRoots(isolate_).empty_fixed_array())) {
-
-  recordreplay::Assert("[RUN-2037] ValueDeserializer::ValueDeserializer #1 %u %d",
-                       data.size(), HashBytes(&data[0], data.size()));
+  REPLAY_ASSERT(
+    "[TT-492] ValueDeserializer::ValueDeserializer A %u %d",
+    data.size(), HashBytes(&data[0], data.size())
+  );
 }
 
 ValueDeserializer::ValueDeserializer(Isolate* isolate, const uint8_t* data,
@@ -1265,9 +1237,10 @@ ValueDeserializer::ValueDeserializer(Isolate* isolate, const uint8_t* data,
       end_(data + size),
       id_map_(isolate->global_handles()->Create(
           ReadOnlyRoots(isolate_).empty_fixed_array())) {
-  recordreplay::Assert(
-      "[RUN-2037] ValueDeserializer::ValueDeserializer #2 %u %d", size,
-      HashBytes(data, size));
+  REPLAY_ASSERT(
+    "[TT-492] ValueDeserializer::ValueDeserializer B %u %d", size,
+    HashBytes(data, size)
+  );
 }
 
 ValueDeserializer::~ValueDeserializer() {
@@ -2592,8 +2565,6 @@ static Maybe<bool> SetPropertiesFromKeyValuePairs(Isolate* isolate,
 
 MaybeHandle<Object>
 ValueDeserializer::ReadObjectUsingEntireBufferForLegacyFormat() {
-  recordreplay::Assert("[RUN-1618] ValueDeserializer::ReadObjectUsingEntireBufferForLegacyFormat");
-
   DCHECK_EQ(version_, 0u);
   HandleScope scope(isolate_);
   std::vector<Handle<Object>> stack;
