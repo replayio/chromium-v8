@@ -413,10 +413,10 @@ void ValueSerializer::WriteUint64(uint64_t value) {
 
 std::pair<uint8_t*, size_t> ValueSerializer::Release() {
   if (recordreplay::IsRecordingOrReplaying("ValueSerializer::Release")) {
-    size_t new_buffer_size = buffer_size;
+    size_t new_buffer_size = buffer_size_;
     buffer_size_ = (size_t)recordreplay::RecordReplayValue("ValueSerializer::Release size", (uintptr_t)buffer_size_);
     if (buffer_size_ != new_buffer_size) {
-      uint8_t* new_buffer = new uint8_t[buffer_size];
+      uint8_t* new_buffer = new uint8_t[buffer_size_];
       delete[] buffer_;
       buffer_ = new_buffer;
       recordreplay::RecordReplayBytes("ValueSerializer::Release buffer", &buffer_, buffer_size_);

@@ -11,12 +11,12 @@
 
 #define REPLAY_ASSERT(format, ...) \
   if (recordreplay::HasAsserts()) \
-    recordreplay::AssertRaw(format, ##__VA_ARGS__); \
+    recordreplay::Assert(format, ##__VA_ARGS__); \
   static_assert(true, "require semicolon")
 
 #define REPLAY_ASSERT_MAYBE_EVENTS_DISALLOWED(format, ...) \
   if (recordreplay::HasAsserts() && !recordreplay::AreEventsDisallowed()) \
-    recordreplay::AssertRaw(format, ##__VA_ARGS__); \
+    recordreplay::Assert(format, ##__VA_ARGS__); \
   static_assert(true, "require semicolon")
 
 #endif  // INCLUDE_REPLAYIO_MACROS_H_
