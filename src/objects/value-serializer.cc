@@ -419,8 +419,8 @@ std::pair<uint8_t*, size_t> ValueSerializer::Release() {
       uint8_t* new_buffer = new uint8_t[buffer_size_];
       delete[] buffer_;
       buffer_ = new_buffer;
-      recordreplay::RecordReplayBytes("ValueSerializer::Release buffer", &buffer_, buffer_size_);
     }
+    recordreplay::RecordReplayBytes("ValueSerializer::Release buffer", &buffer_, buffer_size_);
   }
   auto result = std::make_pair(buffer_, buffer_size_);
   buffer_ = nullptr;
