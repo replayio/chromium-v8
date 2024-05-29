@@ -219,15 +219,17 @@ void RecordReplayRegisterScript(i::Handle<i::Script> script) {
 
   recordreplay::Diagnostic("OnNewSource %s %s", id.get(), kind);
 
-  if (!gRegisteredScripts) {
-    gRegisteredScripts = new ScriptIdSet;
-  }
-  gRegisteredScripts->insert(script->id());
-
   if (!replayio::RecordReplayIsInternalReplayJs(url.c_str())) {
-    // The first "internal Replay JS" script initializes the event emitter.
-    // Since this runs beforehand, we have a chicken-and-egg problem.
-    // Resolve this by simply not emitting newScript events for internal
+    // Don't try to register (or add breakpoints) to "internal Replay JS"
+    // scripts.
+    if (!gRegisteredScripts) {
+      gRegisteredScripts = new ScriptIdSet;
+    }
+    gRegisteredScripts->insert(script->id());
+
+    // The first "internal Replay JS" script initializes the event emitter,
+    // which the EmitReplayEvent depends on.
+    // To resolve the depedency cycle: do not emit newScript events for internal
     // JS scripts for now.
     constexpr int argc = 3;
     Local<Value> callArgs[argc];
@@ -238,7 +240,7 @@ void RecordReplayRegisterScript(i::Handle<i::Script> script) {
     {
       root->EmitReplayEvent("newScript", argc, callArgs);
       
-      replayio::AutoDisallowEvents disallow("RecordReplayRegisterScript");
+      replayio::AutoDisallowEvents disallow("newScriptEventsDisallowed");
       root->EmitReplayEvent("newScriptEventsDisallowed", argc, callArgs);
     }
   }
