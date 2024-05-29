@@ -224,7 +224,7 @@ void RecordReplayRegisterScript(i::Handle<i::Script> script) {
   }
   gRegisteredScripts->insert(script->id());
 
-  if (!replayio::RecordReplayIsInternalReplayJs(url)) {
+  if (!replayio::RecordReplayIsInternalReplayJs(url.c_str())) {
     // The first "internal Replay JS" script initializes the event emitter.
     // Since this runs beforehand, we have a chicken-and-egg problem.
     // Resolve this by simply not emitting newScript events for internal
