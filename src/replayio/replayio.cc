@@ -220,7 +220,7 @@ bool RecordReplayHasDefaultContext() {
   return !!gReplayRootContext;
 }
 
-bool RecordReplayIsReplayJsCode(const char* url) {
+bool RecordReplayIsInternalReplayJs(const char* url) {
   return !strncmp(url, "record-replay-internal://", 25);
 }
 

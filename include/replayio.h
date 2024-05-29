@@ -100,9 +100,9 @@ ReplayRootContext* RecordReplayGetRootContext();
 bool RecordReplayHasDefaultContext();
 
 /**
- * Whether the given url is our own JS code.
+ * Whether the given url is our own internal JS code.
  */
-bool RecordReplayIsReplayJsCode(const char* url);
+bool RecordReplayIsInternalReplayJs(const char* url);
 
 }  // namespace replayio
 }  // namespace v8

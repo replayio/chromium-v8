@@ -34,7 +34,7 @@ extern void RecordReplayAddInterestingSource(const char* url);
 // to be registered with the recorder so that breakpoints can be created.
 bool RecordReplayIsInternalScriptURL(const char* url) {
   return !strcmp(url, "record-replay-react-devtools") ||
-         replayio::RecordReplayIsReplayJsCode(url) ||
+         replayio::RecordReplayIsInternalReplayJs(url) ||
          !strncmp(url, "extensions::", 12);
 }
 extern void RecordReplayAddPossibleBreakpoint(int line, int column, const char* function_id, int function_index);
@@ -224,17 +224,23 @@ void RecordReplayRegisterScript(i::Handle<i::Script> script) {
   }
   gRegisteredScripts->insert(script->id());
 
-  constexpr int argc = 3;
-  Local<Value> callArgs[argc];
-  callArgs[0] = Utils::ToLocal(idStr);
-  callArgs[1] = Utils::ToLocal(i::Handle<i::Object>(script->GetNameOrSourceURL(), isolate));
-  callArgs[2] = Utils::ToLocal(i::Handle<i::Object>(script->source_mapping_url(), isolate));
+  if (!recordreplay::RecordReplayIsInternalReplayJs(url)) {
+    // The first "internal Replay JS" script initializes the event emitter.
+    // Since this runs beforehand, we have a chicken-and-egg problem.
+    // Resolve this by simply not emitting newScript events for internal
+    // JS scripts for now.
+    constexpr int argc = 3;
+    Local<Value> callArgs[argc];
+    callArgs[0] = Utils::ToLocal(idStr);
+    callArgs[1] = Utils::ToLocal(i::Handle<i::Object>(script->GetNameOrSourceURL(), isolate));
+    callArgs[2] = Utils::ToLocal(i::Handle<i::Object>(script->source_mapping_url(), isolate));
 
-  {
-    root->EmitReplayEvent("newScript", argc, callArgs);
-    
-    replayio::AutoDisallowEvents disallow("RecordReplayRegisterScript");
-    root->EmitReplayEvent("newScriptEventsDisallowed", argc, callArgs);
+    {
+      root->EmitReplayEvent("newScript", argc, callArgs);
+      
+      replayio::AutoDisallowEvents disallow("RecordReplayRegisterScript");
+      root->EmitReplayEvent("newScriptEventsDisallowed", argc, callArgs);
+    }
   }
 
   i::RecordReplayOnNewSource(isolate, id.get(), kind, url.length() ? url.c_str() : nullptr);
