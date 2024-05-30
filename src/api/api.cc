@@ -5258,7 +5258,7 @@ MaybeLocal<Value> Object::CallAsFunction(Local<Context> context,
   auto recv_obj = Utils::OpenHandle(*recv);
   static_assert(sizeof(v8::Local<v8::Value>) == sizeof(i::Handle<i::Object>));
   i::Handle<i::Object>* args = reinterpret_cast<i::Handle<i::Object>*>(argv);
-  
+    
   // TODO: IsInReplayCode (RUN-1502)
   v8::recordreplay::AssertMaybeEventsDisallowed(
     "JS Object::CallAsFunction %d",
@@ -7721,7 +7721,7 @@ i::Handle<i::JSArray> MapAsArray(i::Isolate* i_isolate, i::Object table_obj,
   const bool collect_values =
       kind == MapAsArrayKind::kEntries || kind == MapAsArrayKind::kValues;
   int capacity = table->UsedCapacity();
-
+  
   auto page_size = params->PageSize(capacity - offset);
   int max_length = page_size * ((collect_keys && collect_values) ? 2 : 1);
 
