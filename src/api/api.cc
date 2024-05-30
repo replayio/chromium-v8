@@ -11896,7 +11896,7 @@ extern "C" DLLEXPORT void V8RecordReplayOnEvent(const char* aEvent, bool aBefore
   if (!internal::gRecordReplayHasCheckpoint) {
     return;
   }
-
+  
   gRecordReplayOnEvent(aEvent, aBefore);
 }
 
@@ -12248,7 +12248,7 @@ extern "C" DLLEXPORT void V8RecordReplayBeginAssertBufferAllocations(const char*
   }
   recordreplay::AssertBufferAllocationState* state =
     recordreplay::AutoAssertBufferAllocations::GetState();
-
+  
   if (!state) {
     state = new recordreplay::AssertBufferAllocationState;
     state->issueLabel = issueLabel;
@@ -12263,7 +12263,7 @@ extern "C" DLLEXPORT void V8RecordReplayEndAssertBufferAllocations() {
   if (!recordreplay::IsRecordingOrReplaying() || recordreplay::AreAssertsDisabled()) {
     return;
   }
-
+  
   recordreplay::AssertBufferAllocationState* state =
     recordreplay::AutoAssertBufferAllocations::GetState();
   --state->enabled;
