@@ -5258,7 +5258,7 @@ MaybeLocal<Value> Object::CallAsFunction(Local<Context> context,
   auto recv_obj = Utils::OpenHandle(*recv);
   static_assert(sizeof(v8::Local<v8::Value>) == sizeof(i::Handle<i::Object>));
   i::Handle<i::Object>* args = reinterpret_cast<i::Handle<i::Object>*>(argv);
-  
+
   // TODO: IsInReplayCode (RUN-1502)
   v8::recordreplay::AssertMaybeEventsDisallowed(
     "JS Object::CallAsFunction %d",
@@ -7830,7 +7830,7 @@ i::Handle<i::JSArray> SetAsArray(i::Isolate* i_isolate, i::Object table_obj,
   // Elements skipped by |offset| may already be deleted.
   int capacity = table->UsedCapacity();
   const bool collect_key_values = kind == SetAsArrayKind::kEntries;
-  
+
   auto page_size = params->PageSize(capacity - offset);
   int max_length = page_size * (collect_key_values ? 2 : 1);
 
@@ -7846,7 +7846,7 @@ i::Handle<i::JSArray> SetAsArray(i::Isolate* i_isolate, i::Object table_obj,
       if (key == the_hole) continue;
       result->set(result_index++, key);
       if (collect_key_values) result->set(result_index++, key);
-      
+
       if (result_index == max_length) break;
     }
   }
@@ -11349,6 +11349,10 @@ bool recordreplay::HasAsserts() {
   return !gAssertsDisabled && IsRecordingOrReplaying();
 }
 
+extern "C" DLLEXPORT bool V8RecordReplayHasAsserts() {
+  return recordreplay::HasAsserts();
+}
+
 void recordreplay::AssertRaw(const char* format, ...) {
   va_list ap;
   va_start(ap, format);
@@ -11892,7 +11896,7 @@ extern "C" DLLEXPORT void V8RecordReplayOnEvent(const char* aEvent, bool aBefore
   if (!internal::gRecordReplayHasCheckpoint) {
     return;
   }
-  
+
   gRecordReplayOnEvent(aEvent, aBefore);
 }
 
@@ -12219,7 +12223,7 @@ extern "C" DLLEXPORT bool V8IsMainThread() {
 static size_t gInReplayCode;
 
 bool recordreplay::IsInReplayCode(const char* why) {
-  return V8IsRecordingOrReplaying("replay-code", why) && 
+  return V8IsRecordingOrReplaying("replay-code", why) &&
         IsMainThread() &&
         gInReplayCode;
 }
@@ -12244,11 +12248,11 @@ extern "C" DLLEXPORT void V8RecordReplayBeginAssertBufferAllocations(const char*
   }
   recordreplay::AssertBufferAllocationState* state =
     recordreplay::AutoAssertBufferAllocations::GetState();
-  
+
   if (!state) {
     state = new recordreplay::AssertBufferAllocationState;
     state->issueLabel = issueLabel;
-    base::Thread::SetThreadLocal(gAssertBufferAllocationStateLSKey, 
+    base::Thread::SetThreadLocal(gAssertBufferAllocationStateLSKey,
       reinterpret_cast<void*>(state)
     );
   }
@@ -12259,7 +12263,7 @@ extern "C" DLLEXPORT void V8RecordReplayEndAssertBufferAllocations() {
   if (!recordreplay::IsRecordingOrReplaying() || recordreplay::AreAssertsDisabled()) {
     return;
   }
-  
+
   recordreplay::AssertBufferAllocationState* state =
     recordreplay::AutoAssertBufferAllocations::GetState();
   --state->enabled;
