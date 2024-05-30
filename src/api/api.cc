@@ -3493,8 +3493,6 @@ void ValueSerializer::SetTreatArrayBufferViewsAsHostObjects(bool mode) {
 
 Maybe<bool> ValueSerializer::WriteValue(Local<Context> context,
                                         Local<Value> value) {
-  replayio::AutoDisallowEvents disallow("ValueSerializer::WriteValue");
-
   auto i_isolate = reinterpret_cast<i::Isolate*>(context->GetIsolate());
   ENTER_V8(i_isolate, context, ValueSerializer, WriteValue, Nothing<bool>(),
            i::HandleScope);
@@ -3621,7 +3619,6 @@ uint32_t ValueDeserializer::GetWireFormatVersion() const {
 }
 
 MaybeLocal<Value> ValueDeserializer::ReadValue(Local<Context> context) {
-  replayio::AutoDisallowEvents disallow("ValueDeserializer::ReadValue");
   PREPARE_FOR_EXECUTION(context, ValueDeserializer, ReadValue, Value);
   i::MaybeHandle<i::Object> result;
   if (GetWireFormatVersion() > 0) {
@@ -12200,15 +12197,6 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
       fclose(file);
     }
   }
-
-  recordreplay::Assert("Replay-Init smi32=%d, endian=%s",
-    i::SmiValuesAre32Bits(),
-#if defined(V8_TARGET_LITTLE_ENDIAN)
-    "little"
-#else
-    "BIG"
-#endif
-    );
 
   i::RecordReplayInitInstrumentationState();
 }
