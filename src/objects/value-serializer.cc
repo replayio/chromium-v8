@@ -360,7 +360,7 @@ void ValueSerializer::WriteRawBytes(const void* source, size_t length) {
 }
 
 Maybe<uint8_t*> ValueSerializer::ReserveRawBytes(size_t bytes) {
-  if (recordreplay::IsRecordingOrReplaying() && !recordreplay::AreAssertsDisabled()) {
+  if (recordreplay::HasAsserts()) {
     recordreplay::AssertBufferAllocationState* bufferAssertsState = 
       recordreplay::AutoAssertBufferAllocations::GetState();
     if (bufferAssertsState) {
