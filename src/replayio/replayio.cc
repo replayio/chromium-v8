@@ -65,13 +65,29 @@ static Local<T> CrashOnError(const char* task, const char* target_name, Local<v8
   Isolate* isolate = v8::Isolate::GetCurrent();
   if (try_catch.HasCaught()) {
     Local<Message> msg = try_catch.Message();
-    v8::String::Utf8Value msgString(isolate, msg->Get());
-    recordreplay::Crash("%s(%s) failed (%d:%d): %s",
+    Local<Value> exception_obj = v8::Exception::Error(msg->Get());
+    v8::String::Utf8Value msg_source_string(isolate, msg->GetScriptResourceName());
+    Local<Value> local_stack_trace_strinxg;
+    std::string error_detail;
+    if (v8::TryCatch::StackTrace(cx, exception_obj)
+            .ToLocal(&local_stack_trace_strinxg) &&
+        local_stack_trace_strinxg->IsString()) {
+      v8::String::Utf8Value stack_trace(isolate, local_stack_trace_strinxg.As<String>());
+      error_detail = *stack_trace ? *stack_trace : "";
+    }
+    if (!error_detail.length()) {
+      v8::String::Utf8Value exception_string(isolate, exception_obj);
+      error_detail = *exception_string ? *exception_string : "";
+    }
+    recordreplay::Crash("%s(%s) failed (at %s:%d:%d) - %s",
                         task,
                         target_name,
+                        *msg_source_string ? *msg_source_string : "",
                         msg->GetLineNumber(cx).FromMaybe(-1),
                         msg->GetStartColumn(cx).FromJust(),
-                        msgString.length() ? *msgString : "");
+                        // stack.c_str()
+                        error_detail.c_str()
+                        );
   }
 
   Local<T> rv_real;
@@ -140,6 +156,7 @@ Local<Value> ReplayRootContext::EmitReplayEvent(const std::string& eventName,
                                                 const std::string& emitName) const {
   i::Isolate* i_isolate = i::Isolate::Current();
   Isolate* isolate = (v8::Isolate*)i_isolate;
+  HandleScope scope(isolate);
 
   Local<Function> fn = GetFunction(GetEventEmitter(), emitName);
 

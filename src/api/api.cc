@@ -11910,6 +11910,10 @@ extern "C" DLLEXPORT void V8RecordReplayGetCurrentJSStack(std::string* stackTrac
   *stackTrace = stack.str();
 }
 
+void recordreplay::GetCurrentJSStack(std::string* stackTrace) {
+  return V8RecordReplayGetCurrentJSStack(stackTrace);
+}
+
 template <typename Src, typename Dst>
 static inline void CastPointer(const Src src, Dst* dst) {
   static_assert(sizeof(Src) == sizeof(uintptr_t), "bad size");
