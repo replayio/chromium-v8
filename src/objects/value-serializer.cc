@@ -360,7 +360,7 @@ void ValueSerializer::WriteRawBytes(const void* source, size_t length) {
 }
 
 Maybe<uint8_t*> ValueSerializer::ReserveRawBytes(size_t bytes) {
-  if (recordreplay::IsRecordingOrReplaying() && !recordreplay::AreAssertsDisabled()) {
+  if (recordreplay::HasAsserts()) {
     recordreplay::AssertBufferAllocationState* bufferAssertsState = 
       recordreplay::AutoAssertBufferAllocations::GetState();
     if (bufferAssertsState) {
@@ -441,6 +441,17 @@ Maybe<bool> ValueSerializer::WriteObject(Handle<Object> object) {
   // memory. Bail immediately, as this likely implies that some write has
   // previously failed and so the buffer is corrupt.
   if (V8_UNLIKELY(out_of_memory_)) return ThrowIfOutOfMemory();
+  
+  if (recordreplay::HasAsserts()) {
+    recordreplay::AssertBufferAllocationState* bufferAssertsState = 
+      recordreplay::AutoAssertBufferAllocations::GetState();
+    if (bufferAssertsState) {
+      recordreplay::Assert("[%s] ValueSerializer::WriteObject %d",
+        bufferAssertsState->issueLabel.c_str(),
+        object->IsSmi()
+      );
+    }
+  }
 
   if (object->IsSmi()) {
     WriteSmi(Smi::cast(*object));
@@ -661,6 +672,17 @@ Maybe<bool> ValueSerializer::WriteJSObject(Handle<JSObject> object) {
   DCHECK(!object->map().IsCustomElementsReceiverMap());
   const bool can_serialize_fast =
       object->HasFastProperties(isolate_) && object->elements().length() == 0;
+  if (recordreplay::HasAsserts()) {
+    recordreplay::AssertBufferAllocationState* bufferAssertsState = 
+      recordreplay::AutoAssertBufferAllocations::GetState();
+    if (bufferAssertsState) {
+      recordreplay::Assert("[%s] ValueSerializer::WriteJSObject %d %d",
+        bufferAssertsState->issueLabel.c_str(),
+        can_serialize_fast,
+        object->elements().length() == 0
+      );
+    }
+  }
   if (!can_serialize_fast) return WriteJSObjectSlow(object);
 
   Handle<Map> map(object->map(), isolate_);
@@ -734,19 +756,18 @@ Maybe<bool> ValueSerializer::WriteJSArray(Handle<JSArray> array) {
   // should be serialized).
   const bool should_serialize_densely =
       array->HasFastElements(cage_base) && !array->HasHoleyElements(cage_base);
-
-  
-  if (recordreplay::IsRecordingOrReplaying() && !recordreplay::AreAssertsDisabled()) {
+  if (recordreplay::HasAsserts()) {
     recordreplay::AssertBufferAllocationState* bufferAssertsState = 
       recordreplay::AutoAssertBufferAllocations::GetState();
     if (bufferAssertsState) {
-      recordreplay::Assert("[%s] ValueSerializer::WriteJSArray %d %d",
+      recordreplay::Assert("[%s] ValueSerializer::WriteJSArray %d %d %d",
         bufferAssertsState->issueLabel.c_str(),
         array->HasFastElements(cage_base),
-        array->HasHoleyElements(cage_base));
+        array->HasHoleyElements(cage_base),
+        should_serialize_densely ? (int)array->GetElementsKind(cage_base) : -1
+      );
     }
   }
-
   if (should_serialize_densely) {
     DCHECK_LE(length, static_cast<uint32_t>(FixedArray::kMaxLength));
     WriteTag(SerializationTag::kBeginDenseJSArray);
@@ -1252,9 +1273,10 @@ ValueDeserializer::ValueDeserializer(Isolate* isolate,
       end_(data.end()),
       id_map_(isolate->global_handles()->Create(
           ReadOnlyRoots(isolate_).empty_fixed_array())) {
-
-  recordreplay::Assert("[RUN-2037] ValueDeserializer::ValueDeserializer #1 %u %d",
-                       data.size(), HashBytes(&data[0], data.size()));
+  REPLAY_ASSERT(
+    "[TT-492] ValueDeserializer::ValueDeserializer A %u %d",
+    data.size(), HashBytes(&data[0], data.size())
+  );
 }
 
 ValueDeserializer::ValueDeserializer(Isolate* isolate, const uint8_t* data,
@@ -1265,9 +1287,10 @@ ValueDeserializer::ValueDeserializer(Isolate* isolate, const uint8_t* data,
       end_(data + size),
       id_map_(isolate->global_handles()->Create(
           ReadOnlyRoots(isolate_).empty_fixed_array())) {
-  recordreplay::Assert(
-      "[RUN-2037] ValueDeserializer::ValueDeserializer #2 %u %d", size,
-      HashBytes(data, size));
+  REPLAY_ASSERT(
+    "[TT-492] ValueDeserializer::ValueDeserializer B %u %d", size,
+    HashBytes(data, size)
+  );
 }
 
 ValueDeserializer::~ValueDeserializer() {
@@ -2592,8 +2615,6 @@ static Maybe<bool> SetPropertiesFromKeyValuePairs(Isolate* isolate,
 
 MaybeHandle<Object>
 ValueDeserializer::ReadObjectUsingEntireBufferForLegacyFormat() {
-  recordreplay::Assert("[RUN-1618] ValueDeserializer::ReadObjectUsingEntireBufferForLegacyFormat");
-
   DCHECK_EQ(version_, 0u);
   HandleScope scope(isolate_);
   std::vector<Handle<Object>> stack;

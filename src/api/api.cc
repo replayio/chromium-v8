@@ -7709,7 +7709,7 @@ i::Handle<i::JSArray> MapAsArray(i::Isolate* i_isolate, i::Object table_obj,
   const bool collect_values =
       kind == MapAsArrayKind::kEntries || kind == MapAsArrayKind::kValues;
   int capacity = table->UsedCapacity();
-
+  
   auto page_size = params->PageSize(capacity - offset);
   int max_length = page_size * ((collect_keys && collect_values) ? 2 : 1);
 
@@ -11315,8 +11315,23 @@ extern "C" DLLEXPORT bool V8RecordReplayHadMismatch() {
   return false;
 }
 
+bool recordreplay::HasAsserts() {
+  return !gAssertsDisabled && IsRecordingOrReplaying();
+}
+
+extern "C" DLLEXPORT bool V8RecordReplayHasAsserts() {
+  return recordreplay::HasAsserts();
+}
+
+void recordreplay::AssertRaw(const char* format, ...) {
+  va_list ap;
+  va_start(ap, format);
+  gRecordReplayAssert(format, ap);
+  va_end(ap);
+}
+
 void recordreplay::Assert(const char* format, ...) {
-  if (!gAssertsDisabled && IsRecordingOrReplaying()) {
+  if (HasAsserts()) {
     va_list ap;
     va_start(ap, format);
     gRecordReplayAssert(format, ap);
@@ -11325,7 +11340,7 @@ void recordreplay::Assert(const char* format, ...) {
 }
 
 extern "C" void V8RecordReplayAssert(const char* format, ...) {
-  if (!gAssertsDisabled && recordreplay::IsRecordingOrReplaying()) {
+  if (recordreplay::HasAsserts()) {
     va_list ap;
     va_start(ap, format);
     gRecordReplayAssert(format, ap);
@@ -11334,14 +11349,13 @@ extern "C" void V8RecordReplayAssert(const char* format, ...) {
 }
 
 extern "C" DLLEXPORT void V8RecordReplayAssertVA(const char* format, va_list args) {
-  if (!gAssertsDisabled && recordreplay::IsRecordingOrReplaying()) {
+  if (recordreplay::HasAsserts()) {
     gRecordReplayAssert(format, args);
   }
 }
 
 void recordreplay::AssertMaybeEventsDisallowed(const char* format, ...) {
-  if (!gAssertsDisabled &&
-      IsRecordingOrReplaying() &&
+  if (HasAsserts() &&
       !AreEventsDisallowed("AssertMaybeEventsDisallowed")) {
     va_list ap;
     va_start(ap, format);
@@ -11351,15 +11365,14 @@ void recordreplay::AssertMaybeEventsDisallowed(const char* format, ...) {
 }
 
 extern "C" DLLEXPORT void V8RecordReplayAssertMaybeEventsDisallowedVA(const char* format, va_list args) {
-  if (!gAssertsDisabled &&
-      recordreplay::IsRecordingOrReplaying() &&
+  if (recordreplay::HasAsserts() &&
       !recordreplay::AreEventsDisallowed("AssertMaybeEventsDisallowed")) {
     gRecordReplayAssert(format, args);
   }
 }
 
 void recordreplay::AssertBytes(const char* why, const void* buf, size_t size) {
-  if (!gAssertsDisabled && IsRecordingOrReplaying()) {
+  if (HasAsserts()) {
     gRecordReplayAssertBytes(why, buf, size);
   }
 }
@@ -12180,7 +12193,7 @@ extern "C" DLLEXPORT bool V8IsMainThread() {
 static size_t gInReplayCode;
 
 bool recordreplay::IsInReplayCode(const char* why) {
-  return V8IsRecordingOrReplaying("replay-code", why) && 
+  return V8IsRecordingOrReplaying("replay-code", why) &&
         IsMainThread() &&
         gInReplayCode;
 }
@@ -12209,7 +12222,7 @@ extern "C" DLLEXPORT void V8RecordReplayBeginAssertBufferAllocations(const char*
   if (!state) {
     state = new recordreplay::AssertBufferAllocationState;
     state->issueLabel = issueLabel;
-    base::Thread::SetThreadLocal(gAssertBufferAllocationStateLSKey, 
+    base::Thread::SetThreadLocal(gAssertBufferAllocationStateLSKey,
       reinterpret_cast<void*>(state)
     );
   }

@@ -63,6 +63,8 @@
 #include "v8-wasm.h"               // NOLINT(build/include_directory)
 #include "v8config.h"              // NOLINT(build/include_directory)
 
+#include "replayio-macros.h"
+
 // We reserve the V8_* prefix for macros defined in V8 public API and
 // assume there are no name conflicts with the embedder's code.
 
@@ -110,6 +112,8 @@ static void Warning(const char* format, ...);
 static void Trace(const char* format, ...);
 static void Crash(const char* format, ...);
 static bool HadMismatch();
+static bool HasAsserts();
+static void AssertRaw(const char* format, ...);
 static void Assert(const char* format, ...);
 static void AssertMaybeEventsDisallowed(const char* format, ...);
 static void AssertBytes(const char* why, const void* buf, size_t size);
