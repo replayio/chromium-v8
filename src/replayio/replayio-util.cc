@@ -18,9 +18,13 @@ Local<String> CStringToLocal(Isolate* isolate, const char* str) {
                                  v8::NewStringType::kInternalized).ToLocalChecked();
 }
 
-std::string LocalToCString(Isolate* isolate, Local<String> str) {
+std::unique_ptr<char[]> LocalToCString(Isolate* isolate, Local<String> str) {
   v8::String::Utf8Value text(isolate, str);
-  return *text;
+  return std::unique_ptr<char[]>(*text);
+}
+
+std::unique_ptr<char[]> HandleToCString(i::Handle<i::String> str) {
+  return i::String::cast(*str).ToCString();
 }
 
 i::Handle<i::Object> GetProperty(i::Isolate* isolate,
@@ -63,6 +67,36 @@ void CHECKIsJSFunction(v8::Isolate* isolate, Local<Value> value) {
   //   isolate
   // );
   CHECK(value_handle->IsJSFunction());
+}
+
+void CrashOnError(const char* task, const char* target_name, Local<v8::Context> cx, const v8::TryCatch& try_catch) {
+  Isolate* isolate = v8::Isolate::GetCurrent();
+  if (try_catch.HasCaught()) {
+    Local<Message> msg = try_catch.Message();
+    Local<Value> exception_obj = v8::Exception::Error(msg->Get());
+    v8::String::Utf8Value msg_source_string(isolate, msg->GetScriptResourceName());
+    Local<Value> local_stack_trace_strinxg;
+    std::string error_detail;
+    if (v8::TryCatch::StackTrace(cx, exception_obj)
+          .ToLocal(&local_stack_trace_strinxg) &&
+        local_stack_trace_strinxg->IsString()) {
+      v8::String::Utf8Value stack_trace(isolate, local_stack_trace_strinxg.As<String>());
+      error_detail = *stack_trace ? *stack_trace : "";
+    }
+    if (!error_detail.length()) {
+      v8::String::Utf8Value exception_string(isolate, exception_obj);
+      error_detail = *exception_string ? *exception_string : "";
+    }
+    recordreplay::Crash("%s(%s) failed (at %s:%d:%d) - %s",
+                        task,
+                        target_name,
+                        *msg_source_string ? *msg_source_string : "",
+                        msg->GetLineNumber(cx).FromMaybe(-1),
+                        msg->GetStartColumn(cx).FromJust(),
+                        // stack.c_str()
+                        error_detail.c_str()
+                        );
+  }
 }
 
 }  // namespace replayio

@@ -1284,9 +1284,9 @@ char* CommandCallback(const char* command, const char* params) {
       result = rv.ToHandleChecked();
     }
   }
+  replayio::ReplayRootContext* root = replayio::RecordReplayGetRootContext();
   if (result.is_null()) {
     // Handle command with the JS command handler.
-    replayio::ReplayRootContext* root = replayio::RecordReplayGetRootContext();
     CHECK(root);
 
     constexpr int NCallArgs = 2;
@@ -1303,8 +1303,14 @@ char* CommandCallback(const char* command, const char* params) {
 
     result = Utils::OpenHandle(*local_result);
   }
+  CHECK(!result.is_null() && result->IsObject());
   
-  i::Handle<i::Object> rvStr = i::JsonStringify(isolate, result, undefined, undefined).ToHandleChecked();
+  i::Handle<i::Object> rvStr;
+  v8::TryCatch try_catch((v8::Isolate*)isolate);
+  if (!i::JsonStringify(isolate, result, undefined, undefined).ToHandle(&rvStr)) {
+    replayio::CrashOnError("CommandCallback-JSONStringify", command, root->GetContext(), try_catch);
+    recordreplay::Crash("[CommandCallback-JSONStringify-no-result] failed without exception");
+  }
   std::unique_ptr<char[]> rvCStr = i::String::cast(*rvStr).ToCString();
 
   if (startProgressCounter < *gProgressCounter && !recordreplay::HasDivergedFromRecording()) {
@@ -1337,7 +1343,7 @@ void ClearPauseDataCallback() {
   i::Isolate* isolate = i::Isolate::Current();
   base::Optional<i::SaveAndSwitchContext> ssc;
   EnsureIsolateContext(isolate, ssc);
-
+  HandleScope scope(isolate);
   rootContext->EmitReplayEvent("clearPauseData");
 }
 

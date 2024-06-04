@@ -266,7 +266,7 @@ class StackMemory;
 #define ASSIGN_RETURN_ON_EXCEPTION_VALUE(isolate, dst, call, value) \
   do {                                                              \
     if (!(call).ToHandle(&dst)) {                                   \
-      DCHECK((isolate)->has_pending_exception());                   \
+      CHECK((isolate)->has_pending_exception());                    \
       return value;                                                 \
     }                                                               \
   } while (false)

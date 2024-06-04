@@ -171,7 +171,6 @@ void UnoptimizedCompileFlags::SetFlagsForFunctionFromScript(Script script) {
       url = name.get();
     }
     if (replayio::RecordReplayIsInternalReplayJs(url.c_str())) {
-      recordreplay::Print("DDBG RecordReplayIsInternalReplayJs %s", url.c_str());
       set_record_replay_ignore(true);
     }
     if (RecordReplayAssertValues(url)) {

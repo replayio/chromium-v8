@@ -16,8 +16,12 @@ internal::Handle<internal::String> CStringToHandle(internal::Isolate* isolate, c
 
 Local<String> CStringToLocal(Isolate* isolate, const char* str);
 
-internal::Handle<Object> GetProperty(internal::Isolate* isolate,
-                                     internal::Handle<Object> obj, const char* property);
+std::unique_ptr<char[]> LocalToCString(Isolate* isolate, Local<String> str);
+
+std::unique_ptr<char[]> HandleToCString(i::Handle<i::String> str);
+
+internal::Handle<i::Object> GetProperty(i::Isolate* isolate,
+                                        i::Handle<i::Object> obj, const char* property);
 
 void SetProperty(internal::Isolate* isolate,
                  internal::Handle<Object> obj, const char* property,
@@ -34,6 +38,11 @@ void SetProperty(internal::Isolate* isolate,
 internal::Handle<internal::JSObject> NewPlainObject(internal::Isolate* isolate);
 
 void CHECKIsJSFunction();
+
+void CrashOnError(const char* task, const char* target_name, Local<v8::Context> cx, const v8::TryCatch& try_catch);
+
+template<class T>
+Local<T> CrashOnError(const char* task, const char* target_name, Local<v8::Context> cx, const v8::TryCatch& try_catch, MaybeLocal<T> rv);
 
 }  // namespace replayio
 }  // namespace v8

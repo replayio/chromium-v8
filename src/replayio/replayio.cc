@@ -60,45 +60,6 @@ v8::Local<v8::Function> ReplayRootContext::GetFunction(
   return callbackValue.As<v8::Function>();
 }
 
-template<class T>
-static Local<T> CrashOnError(const char* task, const char* target_name, Local<v8::Context> cx, const v8::TryCatch& try_catch, MaybeLocal<T> rv) {
-  Isolate* isolate = v8::Isolate::GetCurrent();
-  if (try_catch.HasCaught()) {
-    Local<Message> msg = try_catch.Message();
-    Local<Value> exception_obj = v8::Exception::Error(msg->Get());
-    v8::String::Utf8Value msg_source_string(isolate, msg->GetScriptResourceName());
-    Local<Value> local_stack_trace_strinxg;
-    std::string error_detail;
-    if (v8::TryCatch::StackTrace(cx, exception_obj)
-            .ToLocal(&local_stack_trace_strinxg) &&
-        local_stack_trace_strinxg->IsString()) {
-      v8::String::Utf8Value stack_trace(isolate, local_stack_trace_strinxg.As<String>());
-      error_detail = *stack_trace ? *stack_trace : "";
-    }
-    if (!error_detail.length()) {
-      v8::String::Utf8Value exception_string(isolate, exception_obj);
-      error_detail = *exception_string ? *exception_string : "";
-    }
-    recordreplay::Crash("%s(%s) failed (at %s:%d:%d) - %s",
-                        task,
-                        target_name,
-                        *msg_source_string ? *msg_source_string : "",
-                        msg->GetLineNumber(cx).FromMaybe(-1),
-                        msg->GetStartColumn(cx).FromJust(),
-                        // stack.c_str()
-                        error_detail.c_str()
-                        );
-  }
-
-  Local<T> rv_real;
-  if (!rv.ToLocal(&rv_real)) {
-    recordreplay::Crash("%s(%s) failed without error",
-      task,
-      target_name);
-  }
-  return rv_real;
-}
-
 Local<Value> ReplayRootContext::CallFunction(Local<v8::Function> fn,
                                              int argc,
                                              Local<Value> argv[],
@@ -117,12 +78,21 @@ Local<Value> ReplayRootContext::CallFunction(Local<v8::Function> fn,
   // Sanity check: The function's creation context should still exist.
   fn.As<Function>()->GetCreationContextChecked();
   
+  // Call the function.
   v8::TryCatch try_catch(isolate);
-  MaybeLocal<v8::Value> rv = fn->Call(cx, receiver, argc, argv);
+  auto fn_handle = Utils::OpenHandle(*fn);
+  i::Handle<i::Object> recv_obj = Utils::OpenHandle(*receiver);
+  static_assert(sizeof(v8::Local<v8::Value>) == sizeof(i::Handle<i::Object>));
+  i::Handle<i::Object>* arg_handles = reinterpret_cast<i::Handle<i::Object>*>(argv);
+
+  // NOTE: Call the internal function instead, because the Function::Call does a lot more side-effect-y work.
+  // MaybeLocal<v8::Value> rv = fn->Call(cx, receiver, argc, argv);
+  i::MaybeHandle<i::Object> rv_handle = i::Execution::Call(i_isolate, fn_handle, recv_obj, argc, arg_handles);
 
   v8::String::Utf8Value functionName(isolate, fn->GetName());
   const char* targetName = functionName.length() ? *functionName : "";
-  return CrashOnError("CallFunction", targetName, cx, try_catch, rv);
+  CrashOnError("CallFunction", targetName, cx, try_catch);
+  return Utils::ToLocal(rv_handle.ToHandleChecked());
 }
 
 Local<Value> ReplayRootContext::CallGlobalFunction(const std::string& functionName,
@@ -156,8 +126,6 @@ Local<Value> ReplayRootContext::EmitReplayEvent(const std::string& eventName,
                                                 const std::string& emitName) const {
   i::Isolate* i_isolate = i::Isolate::Current();
   Isolate* isolate = (v8::Isolate*)i_isolate;
-  HandleScope scope(isolate);
-
   Local<Function> fn = GetFunction(GetEventEmitter(), emitName);
 
   // Inject the event name as first parameter.
@@ -181,16 +149,15 @@ v8::Local<v8::Value> ReplayRootContext::RunScriptAndCallBack(
   v8::Local<v8::String> source = CStringToLocal(isolate, souce_raw.c_str());
   v8::Local<v8::Context> cx = GetContext();
 
-  recordreplay::Print("DDBG RunScriptAndCallback A %s", filename.c_str());
-
   auto maybe_script = v8::Script::Compile(cx, source, &origin);
-  CrashOnError("RunScriptAndCallBack", filename.c_str(), cx, try_catch, maybe_script);
+  CrashOnError("RunScriptAndCallBack", filename.c_str(), cx, try_catch);
 
   v8::MaybeLocal<v8::Value> maybe_rv = maybe_script.ToLocalChecked()->Run(cx);
-  Local<v8::Value> rv = CrashOnError("RunScriptAndCallBack", filename.c_str(), cx, try_catch, maybe_rv);
+  CrashOnError("RunScriptAndCallBack", filename.c_str(), cx, try_catch);
 
-  recordreplay::Print("DDBG RunScriptAndCallback B %d", !!rv->IsFunction());
+  Local<v8::Value> rv = maybe_rv.ToLocalChecked();
   if (rv->IsFunction()) {
+    // If the script returned a function, use it as a private initializer.
     constexpr int Argc = 1;
     v8::Local<v8::Value> argv[] = {
       GetEventEmitter()

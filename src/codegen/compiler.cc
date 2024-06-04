@@ -1608,9 +1608,6 @@ static void SetRecordReplayFlags(UnoptimizedCompileFlags& flags, const std::stri
   if (!recordreplay::IsRecordingOrReplaying()) {
     return;
   }
-
-  recordreplay::Trace("DDBG SetRecordReplayFlags %s", url.c_str());
-
   if (!IsMainThread() ||
       !replayio::RecordReplayHasDefaultContext() ||
       recordreplay::AreEventsDisallowed("CompileFlags") ||
