@@ -760,7 +760,7 @@ Maybe<bool> ValueSerializer::WriteJSArray(Handle<JSArray> array) {
 
   const bool should_serialize_densely =
     // [TT-492] slow path all serialization so we're guaranteed to always match
-    !recordreplay::IsRecordingOrReplaying("values", "ValueSerializer::WriteJSObject") &&
+    !recordreplay::IsRecordingOrReplaying("values", "ValueSerializer::WriteJSArray") &&
     array->HasFastElements(cage_base) && !array->HasHoleyElements(cage_base);
 
   if (recordreplay::HasAsserts()) {
