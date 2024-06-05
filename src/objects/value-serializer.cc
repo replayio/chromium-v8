@@ -670,10 +670,10 @@ Maybe<bool> ValueSerializer::WriteJSReceiver(Handle<JSReceiver> receiver) {
 
 Maybe<bool> ValueSerializer::WriteJSObject(Handle<JSObject> object) {
   DCHECK(!object->map().IsCustomElementsReceiverMap());
-  // [TT-492] slow path all serialization so we're guaranteed to always match
-  const bool can_serialize_fast = false;
-  // const bool can_serialize_fast =
-  //     object->HasFastProperties(isolate_) && object->elements().length() == 0;
+  const bool can_serialize_fast =
+    // [TT-492] slow path all serialization so we're guaranteed to always match
+    !recordreplay::IsRecordingOrReplaying("values", "ValueSerializer::WriteJSObject") &&
+    object->HasFastProperties(isolate_) && object->elements().length() == 0;
 
   if (recordreplay::HasAsserts()) {
     recordreplay::AssertBufferAllocationState* bufferAssertsState =
@@ -758,10 +758,10 @@ Maybe<bool> ValueSerializer::WriteJSArray(Handle<JSArray> array) {
   // existed (as only indices which were enumerable own properties at this point
   // should be serialized).
 
-  // [TT-492] slow path all serialization so we're guaranteed to always match
-  const bool should_serialize_densely = false;
-  // const bool should_serialize_densely =
-  //     array->HasFastElements(cage_base) && !array->HasHoleyElements(cage_base);
+  const bool should_serialize_densely =
+    // [TT-492] slow path all serialization so we're guaranteed to always match
+    !recordreplay::IsRecordingOrReplaying("values", "ValueSerializer::WriteJSObject") &&
+    array->HasFastElements(cage_base) && !array->HasHoleyElements(cage_base);
 
   if (recordreplay::HasAsserts()) {
     recordreplay::AssertBufferAllocationState* bufferAssertsState =
