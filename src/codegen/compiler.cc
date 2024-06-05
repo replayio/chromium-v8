@@ -3335,6 +3335,8 @@ MaybeHandle<SharedFunctionInfo> CompileScriptOnMainThread(
   }
   SetRecordReplayFlags(flags, url);
 
+  recordreplay::Print("CompileScriptOnMainThread %s", url.c_str());
+
   UnoptimizedCompileState compile_state;
   ReusableUnoptimizedCompileState reusable_state(isolate);
   ParseInfo parse_info(isolate, flags, &compile_state, &reusable_state);
