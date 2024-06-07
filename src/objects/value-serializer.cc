@@ -361,7 +361,7 @@ void ValueSerializer::WriteRawBytes(const void* source, size_t length) {
 
 Maybe<uint8_t*> ValueSerializer::ReserveRawBytes(size_t bytes) {
   if (recordreplay::HasAsserts()) {
-    recordreplay::AssertBufferAllocationState* bufferAssertsState = 
+    recordreplay::AssertBufferAllocationState* bufferAssertsState =
       recordreplay::AutoAssertBufferAllocations::GetState();
     if (bufferAssertsState) {
       recordreplay::Diagnostic("ValueSerializer::ReserveRawBytes");
@@ -441,9 +441,9 @@ Maybe<bool> ValueSerializer::WriteObject(Handle<Object> object) {
   // memory. Bail immediately, as this likely implies that some write has
   // previously failed and so the buffer is corrupt.
   if (V8_UNLIKELY(out_of_memory_)) return ThrowIfOutOfMemory();
-  
+
   if (recordreplay::HasAsserts()) {
-    recordreplay::AssertBufferAllocationState* bufferAssertsState = 
+    recordreplay::AssertBufferAllocationState* bufferAssertsState =
       recordreplay::AutoAssertBufferAllocations::GetState();
     if (bufferAssertsState) {
       recordreplay::Assert("[%s] ValueSerializer::WriteObject %d",
@@ -671,9 +671,12 @@ Maybe<bool> ValueSerializer::WriteJSReceiver(Handle<JSReceiver> receiver) {
 Maybe<bool> ValueSerializer::WriteJSObject(Handle<JSObject> object) {
   DCHECK(!object->map().IsCustomElementsReceiverMap());
   const bool can_serialize_fast =
-      object->HasFastProperties(isolate_) && object->elements().length() == 0;
+    // [TT-492] slow path all serialization so we're guaranteed to always match
+    !recordreplay::IsRecordingOrReplaying("values", "ValueSerializer::WriteJSObject") &&
+    object->HasFastProperties(isolate_) && object->elements().length() == 0;
+
   if (recordreplay::HasAsserts()) {
-    recordreplay::AssertBufferAllocationState* bufferAssertsState = 
+    recordreplay::AssertBufferAllocationState* bufferAssertsState =
       recordreplay::AutoAssertBufferAllocations::GetState();
     if (bufferAssertsState) {
       recordreplay::Assert("[%s] ValueSerializer::WriteJSObject %d %d",
@@ -754,10 +757,14 @@ Maybe<bool> ValueSerializer::WriteJSArray(Handle<JSArray> array) {
   // count the elements, but would need to take care to note which indices
   // existed (as only indices which were enumerable own properties at this point
   // should be serialized).
+
   const bool should_serialize_densely =
-      array->HasFastElements(cage_base) && !array->HasHoleyElements(cage_base);
+    // [TT-492] slow path all serialization so we're guaranteed to always match
+    !recordreplay::IsRecordingOrReplaying("values", "ValueSerializer::WriteJSArray") &&
+    array->HasFastElements(cage_base) && !array->HasHoleyElements(cage_base);
+
   if (recordreplay::HasAsserts()) {
-    recordreplay::AssertBufferAllocationState* bufferAssertsState = 
+    recordreplay::AssertBufferAllocationState* bufferAssertsState =
       recordreplay::AutoAssertBufferAllocations::GetState();
     if (bufferAssertsState) {
       recordreplay::Assert("[%s] ValueSerializer::WriteJSArray %d %d %d",
