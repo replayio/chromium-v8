@@ -10883,7 +10883,7 @@ extern "C" void V8RecordReplayOnConsoleMessage(size_t bookmark) {
   RecordReplayOnConsoleMessage(bookmark);
 }
 
-static Handle<Object>* gCurrentException;
+Handle<Object>* gCurrentException;
 
 extern "C" void V8RecordReplayGetCurrentException(MaybeLocal<Value>* exception) {
   CHECK(IsMainThread());
@@ -10912,12 +10912,22 @@ void RecordReplayOnExceptionUnwind(Isolate* isolate) {
   isolate->clear_pending_exception();
   Handle<Object> message(isolate->pending_message(), isolate);
   isolate->clear_pending_message();
+  Handle<Object> scheduledException;
+  if (isolate->has_scheduled_exception()) {
+    scheduledException = Handle<Object>(isolate->scheduled_exception(), isolate);
+    isolate->clear_scheduled_exception();
+  }
   gCurrentException = &exception;
+
   gRecordReplayOnExceptionUnwind();
+
   gCurrentException = nullptr;
   CHECK(!isolate->has_pending_exception());
   isolate->set_pending_exception(*exception);
   isolate->set_pending_message(*message);
+  if (!scheduledException.is_null()) {
+    isolate->set_scheduled_exception(*scheduledException);
+  }
 }
 
 uint64_t* gProgressCounter;
