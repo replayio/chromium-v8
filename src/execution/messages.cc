@@ -114,7 +114,7 @@ Handle<JSMessageObject> MessageHandler::MakeMessageObject(
     Handle<Object> scheduledException;
     if (isolate->has_scheduled_exception()) {
       scheduledException = Handle<Object>(isolate->scheduled_exception(), isolate);
-      // isolate->clear_scheduled_exception();
+      isolate->clear_scheduled_exception();
     }
 
     record_replay_bookmark = (int)V8RecordReplayNewBookmark();
