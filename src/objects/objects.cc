@@ -1779,6 +1779,12 @@ bool Object::IsCodeLike(Isolate* isolate) const {
 }
 
 void Object::ShortPrint(FILE* out) const {
+  if (recordreplay::AreEventsDisallowed()) {
+    std::ostringstream os;
+    os << Brief(*this);
+    recordreplay::Print("[Object::ShortPrint] %s", os.str().c_str());
+    return;
+  }
   OFStream os(out);
   os << Brief(*this);
 }
