@@ -11215,7 +11215,7 @@ extern "C" DLLEXPORT char* V8RecordReplayReadAssetFileContents(const char* aPath
 }
 
 static const char* RecordReplayReplaceSourceContents(const char* contents) {
-  if (IsReplaying()) {
+  if (recordreplay::IsReplaying()) {
     return gRecordReplayReplaceSourceContents(contents);
   }
   return nullptr;
