@@ -2569,8 +2569,10 @@ MaybeLocal<UnboundScript> ScriptCompiler::CompileUnboundInternal(
 
   if (recordreplay::IsReplaying()) {
     std::unique_ptr<char[]> contents = str->ToCString();
-    const char* new_contents = V8RecordReplayReplaceSourceContents(
-
+    const char* new_contents = RecordReplayReplaceSourceContents(contents.get());
+    if (new_contents) {
+      str = i_isolate->factory()->NewStringFromUtf8(base::CStrVector(new_contents)).ToHandleChecked();
+    }
   }
 
   i::Handle<i::SharedFunctionInfo> result;
