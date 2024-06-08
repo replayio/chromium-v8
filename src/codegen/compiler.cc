@@ -1649,8 +1649,6 @@ BackgroundCompileTask::BackgroundCompileTask(
   }
   SetRecordReplayFlags(flags_, url);
 
-  recordreplay::Print("BackgroundCompileTask %s", url.c_str());
-
   character_stream_->Seek(start_position_);
 
   // Get the script out of the outer ParseInfo and turn it into a persistent
@@ -3336,8 +3334,6 @@ MaybeHandle<SharedFunctionInfo> CompileScriptOnMainThread(
     url = name.get();
   }
   SetRecordReplayFlags(flags, url);
-
-  recordreplay::Print("CompileScriptOnMainThread %s", url.c_str());
 
   UnoptimizedCompileState compile_state;
   ReusableUnoptimizedCompileState reusable_state(isolate);

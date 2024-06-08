@@ -2554,6 +2554,8 @@ i::ScriptDetails GetScriptDetails(
 
 }  // namespace
 
+extern "C" DLLEXPORT const char* V8RecordReplayReplaceSourceContents(const char* contents);
+
 MaybeLocal<UnboundScript> ScriptCompiler::CompileUnboundInternal(
     Isolate* v8_isolate, Source* source, CompileOptions options,
     NoCacheReason no_cache_reason) {
@@ -2564,6 +2566,12 @@ MaybeLocal<UnboundScript> ScriptCompiler::CompileUnboundInternal(
                      InternalEscapableScope);
 
   i::Handle<i::String> str = Utils::OpenHandle(*(source->source_string));
+
+  if (recordreplay::IsReplaying()) {
+    std::unique_ptr<char[]> contents = str->ToCString();
+    const char* new_contents = V8RecordReplayReplaceSourceContents(
+
+  }
 
   i::Handle<i::SharedFunctionInfo> result;
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("v8.compile"), "V8.CompileScript");
@@ -10757,9 +10765,11 @@ typedef char* (CommandCallbackRaw)(const char* params);
   Macro(RecordReplayJSONToString, (void*), char*, nullptr)                    \
   Macro(RecordReplayProgressCounter, (), uint64_t*, nullptr)                  \
   Macro(RecordReplayGetStack, (char* aStack, size_t aSize), bool, false)      \
-  Macro(RecordReplayReadAssetFileContents,                                   \
+  Macro(RecordReplayReadAssetFileContents,                                    \
         (const char* aPath, size_t *aLength),                                 \
-        char*, nullptr)
+        char*, nullptr)                                                       \
+  Macro(RecordReplayReplaceSourceContents,                                    \
+        (const char* contents), const char*, nullptr)
 
 #define ForEachRecordReplaySymbolVoidShared(Macro)                            \
   Macro(RecordReplayDisableFeatures, (const char* json))                      \
@@ -11200,6 +11210,13 @@ char* recordreplay::ReadAssetFileContents(const char* aPath, size_t* aLength) {
 
 extern "C" DLLEXPORT char* V8RecordReplayReadAssetFileContents(const char* aPath, size_t* aLength) {
   return recordreplay::ReadAssetFileContents(aPath, aLength);
+}
+
+extern "C" DLLEXPORT const char* V8RecordReplayReplaceSourceContents(const char* contents) {
+  if (IsReplaying()) {
+    return gRecordReplayReplaceSourceContents(contents);
+  }
+  return nullptr;
 }
 
 void recordreplay::Print(const char* format, ...) {
