@@ -10934,6 +10934,10 @@ void RecordReplayOnExceptionUnwind(Isolate* isolate) {
 
 uint64_t* gProgressCounter;
 
+extern "C" uint64_t* V8RecordReplayGetProgressCounter() {
+  return gProgressCounter;
+}
+
 bool gRecordReplayInstrumentationEnabled;
 
 void RecordReplayChangeInstrument(bool enabled) {
