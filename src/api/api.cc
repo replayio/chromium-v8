@@ -2554,7 +2554,7 @@ i::ScriptDetails GetScriptDetails(
 
 }  // namespace
 
-extern "C" DLLEXPORT const char* V8RecordReplayReplaceSourceContents(const char* contents);
+static const char* RecordReplayReplaceSourceContents(const char* contents);
 
 MaybeLocal<UnboundScript> ScriptCompiler::CompileUnboundInternal(
     Isolate* v8_isolate, Source* source, CompileOptions options,
@@ -11212,7 +11212,7 @@ extern "C" DLLEXPORT char* V8RecordReplayReadAssetFileContents(const char* aPath
   return recordreplay::ReadAssetFileContents(aPath, aLength);
 }
 
-extern "C" DLLEXPORT const char* V8RecordReplayReplaceSourceContents(const char* contents) {
+static const char* RecordReplayReplaceSourceContents(const char* contents) {
   if (IsReplaying()) {
     return gRecordReplayReplaceSourceContents(contents);
   }
