@@ -2556,6 +2556,17 @@ i::ScriptDetails GetScriptDetails(
 
 static const char* RecordReplayReplaceSourceContents(const char* contents);
 
+static i::Handle<i::String> MaybeReplaceSourceContents(i::Isolate* isolate, i::Handle<i::String> source) {
+  if (recordreplay::IsReplaying()) {
+    std::unique_ptr<char[]> contents = source->ToCString();
+    const char* new_contents = RecordReplayReplaceSourceContents(contents.get());
+    if (new_contents) {
+      return isolate->factory()->NewStringFromUtf8(base::CStrVector(new_contents)).ToHandleChecked();
+    }
+  }
+  return source;
+}
+
 MaybeLocal<UnboundScript> ScriptCompiler::CompileUnboundInternal(
     Isolate* v8_isolate, Source* source, CompileOptions options,
     NoCacheReason no_cache_reason) {
@@ -2565,15 +2576,7 @@ MaybeLocal<UnboundScript> ScriptCompiler::CompileUnboundInternal(
                      CompileUnbound, MaybeLocal<UnboundScript>(),
                      InternalEscapableScope);
 
-  i::Handle<i::String> str = Utils::OpenHandle(*(source->source_string));
-
-  if (recordreplay::IsReplaying()) {
-    std::unique_ptr<char[]> contents = str->ToCString();
-    const char* new_contents = RecordReplayReplaceSourceContents(contents.get());
-    if (new_contents) {
-      str = i_isolate->factory()->NewStringFromUtf8(base::CStrVector(new_contents)).ToHandleChecked();
-    }
-  }
+  i::Handle<i::String> str = MaybeReplaceSourceContents(i_isolate, Utils::OpenHandle(*(source->source_string)));
 
   i::Handle<i::SharedFunctionInfo> result;
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("v8.compile"), "V8.CompileScript");
@@ -2847,7 +2850,7 @@ namespace {
 i::MaybeHandle<i::SharedFunctionInfo> CompileStreamedSource(
     i::Isolate* i_isolate, ScriptCompiler::StreamedSource* v8_source,
     Local<String> full_source_string, const ScriptOrigin& origin) {
-  i::Handle<i::String> str = Utils::OpenHandle(*(full_source_string));
+  i::Handle<i::String> str = MaybeReplaceSourceContents(i_isolate, Utils::OpenHandle(*(full_source_string)));
   i::ScriptDetails script_details =
       GetScriptDetails(i_isolate, origin.ResourceName(), origin.LineOffset(),
                        origin.ColumnOffset(), origin.SourceMapUrl(),
