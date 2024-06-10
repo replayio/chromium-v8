@@ -190,13 +190,12 @@ void PendingCompilationErrorHandler::ThrowPendingError(
     Script::PositionInfo position_info;
     Script::GetPositionInfo(script, location.start_pos(), &position_info, Script::WITH_OFFSET);
 
-    std::unique_ptr<char[]> arg0_str = arg0->ToCString();
-    std::unique_ptr<char[]> arg1_str = arg1->ToCString();
+    Handle<String> formatted = FormatErrorMessageForTest(isolate);
+    std::unique_ptr<char[]> formatted_str = formatted->ToCString();
 
-    recordreplay::Diagnostic("PendingCompilationErrorHandler::ThrowPendingError %s:%d:%d %s %s %s",
+    recordreplay::Diagnostic("PendingCompilationErrorHandler::ThrowPendingError %s:%d:%d %s",
                              url.c_str(), position_info.line + 1, position_info.column,
-                             MessageFormatter::TemplateString(error_details_.message()),
-                             arg0_str.get(), arg1_str.get());
+                             formatted_str.get());
   }
 
   Factory* factory = isolate->factory();
