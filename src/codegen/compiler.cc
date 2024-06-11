@@ -3220,6 +3220,7 @@ struct ScriptCompileTimerScope {
       case ScriptCompiler::kNoCacheBecauseCacheTooCold:
         return CacheBehaviour::kNoCacheBecauseCacheTooCold;
       case ScriptCompiler::kNoCacheNoReason:
+      case ScriptCompiler::kNoCacheBecauseReplayingReplacedSource:
         return CacheBehaviour::kNoCacheNoReason;
       case ScriptCompiler::kNoCacheBecauseNoResource:
         return CacheBehaviour::kNoCacheBecauseNoResource;
