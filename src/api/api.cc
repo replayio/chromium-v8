@@ -2563,7 +2563,7 @@ static i::Handle<i::String> ReplayingReplaceSourceContents(i::Isolate* isolate, 
   if (new_contents) {
     return isolate->factory()->NewStringFromUtf8(base::CStrVector(new_contents)).ToHandleChecked();
   }
-  return Handle<String>::null();
+  return i::Handle<i::String>::null();
 }
 
 MaybeLocal<UnboundScript> ScriptCompiler::CompileUnboundInternal(
@@ -2616,8 +2616,8 @@ MaybeLocal<UnboundScript> ScriptCompiler::CompileUnboundInternal(
   }
 
   if (recordreplay::IsReplaying()) {
-    i::Handle<i::String> new_str = ReplayingReplaceSourceContents(isolate, str);
-    if (new_str) {
+    i::Handle<i::String> new_str = ReplayingReplaceSourceContents(i_isolate, str);
+    if (!new_str.is_null()) {
       maybe_function_info = i::Compiler::GetSharedFunctionInfoForScript(
           i_isolate, new_str, script_details, options, no_cache_reason,
           i::NOT_NATIVES_CODE);
@@ -2868,10 +2868,12 @@ i::MaybeHandle<i::SharedFunctionInfo> CompileStreamedSource(
       i_isolate, str, script_details, data);
 
   if (recordreplay::IsReplaying()) {
-    i::Handle<i::String> new_str = ReplayingReplaceSourceContents(isolate, str);
-    if (new_str) {
+    i::Handle<i::String> new_str = ReplayingReplaceSourceContents(i_isolate, str);
+    if (!new_str.is_null()) {
       maybe_function_info = i::Compiler::GetSharedFunctionInfoForScript(
-          i_isolate, new_str, script_details, kNoCompileOptions, kNoCacheNoReason,
+          i_isolate, new_str, script_details,
+          ScriptCompiler::kNoCompileOptions,
+          ScriptCompiler::kNoCacheNoReason,
           i::NOT_NATIVES_CODE);
     }
   }
