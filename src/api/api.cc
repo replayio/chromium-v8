@@ -2619,7 +2619,8 @@ MaybeLocal<UnboundScript> ScriptCompiler::CompileUnboundInternal(
     i::Handle<i::String> new_str = ReplayingReplaceSourceContents(i_isolate, str);
     if (!new_str.is_null()) {
       maybe_function_info = i::Compiler::GetSharedFunctionInfoForScript(
-          i_isolate, new_str, script_details, options, no_cache_reason,
+          i_isolate, new_str, script_details, options,
+          ScriptCompiler::kNoCacheBecauseReplayingReplacedSource,
           i::NOT_NATIVES_CODE);
     }
   }
@@ -2873,7 +2874,7 @@ i::MaybeHandle<i::SharedFunctionInfo> CompileStreamedSource(
       maybe_function_info = i::Compiler::GetSharedFunctionInfoForScript(
           i_isolate, new_str, script_details,
           ScriptCompiler::kNoCompileOptions,
-          ScriptCompiler::kNoCacheNoReason,
+          ScriptCompiler::kNoCacheBecauseReplayingReplacedSource,
           i::NOT_NATIVES_CODE);
     }
   }

@@ -3565,7 +3565,8 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
     // same scripts are created at the same points. The SFI will need to be
     // recompiled when replaying but that's fine when the right script ID is used.
     if (recordreplay::IsRecordingOrReplaying("values") &&
-        !recordreplay::AreEventsDisallowed()) {
+        !recordreplay::AreEventsDisallowed() &&
+        no_cache_reason != ScriptCompiler::kNoCacheBecauseReplayingReplacedSource) {
       int script_id = v8::UnboundScript::kNoScriptId;
       if (Handle<Script> script;
           recordreplay::IsRecording() && maybe_script.ToHandle(&script)) {
