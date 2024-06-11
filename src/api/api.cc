@@ -2585,7 +2585,7 @@ ReplayingMaybeReplaceScript(i::Isolate* isolate,
   gReplaceSourceContentsScriptId = i::Script::cast(maybe_function_info.ToHandleChecked()->script()).id();
 
   maybe_function_info = i::Compiler::GetSharedFunctionInfoForScript(
-      i_isolate, new_source, script_details,
+      isolate, new_source, script_details,
       ScriptCompiler::kNoCompileOptions,
       ScriptCompiler::kNoCacheNoReason,
       i::NOT_NATIVES_CODE);
