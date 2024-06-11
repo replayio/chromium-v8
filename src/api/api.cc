@@ -2591,6 +2591,7 @@ ReplayingMaybeReplaceScript(i::Isolate* isolate,
       i::NOT_NATIVES_CODE);
 
   gReplaceSourceContentsScriptId = 0;
+  return maybe_function_info;
 }
 
 MaybeLocal<UnboundScript> ScriptCompiler::CompileUnboundInternal(
