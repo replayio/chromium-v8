@@ -71,6 +71,9 @@
 #endif  // V8_ENABLE_MAGLEV
 
 namespace v8 {
+
+extern int ReplayingGetReplacedScriptId();
+
 namespace internal {
 
 extern MaybeHandle<Script> MaybeGetScript(Isolate* isolate, int script_id);
@@ -3220,7 +3223,6 @@ struct ScriptCompileTimerScope {
       case ScriptCompiler::kNoCacheBecauseCacheTooCold:
         return CacheBehaviour::kNoCacheBecauseCacheTooCold;
       case ScriptCompiler::kNoCacheNoReason:
-      case ScriptCompiler::kNoCacheBecauseReplayingReplacedSource:
         return CacheBehaviour::kNoCacheNoReason;
       case ScriptCompiler::kNoCacheBecauseNoResource:
         return CacheBehaviour::kNoCacheBecauseNoResource;
@@ -3567,7 +3569,7 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
     // recompiled when replaying but that's fine when the right script ID is used.
     if (recordreplay::IsRecordingOrReplaying("values") &&
         !recordreplay::AreEventsDisallowed() &&
-        no_cache_reason != ScriptCompiler::kNoCacheBecauseReplayingReplacedSource) {
+        !ReplayingGetReplacedScriptId()) {
       int script_id = v8::UnboundScript::kNoScriptId;
       if (Handle<Script> script;
           recordreplay::IsRecording() && maybe_script.ToHandle(&script)) {
@@ -3658,6 +3660,9 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
       int script_id = UnboundScript::kNoScriptId;
       if (Handle<Script> script; maybe_script.ToHandle(&script)) {
         script_id = script->id();
+      }
+      if (ReplayingGetReplacedScriptId()) {
+        script_id = ReplayingGetReplacedScriptId();
       }
 
       UnoptimizedCompileFlags flags =
