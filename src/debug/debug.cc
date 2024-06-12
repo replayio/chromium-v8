@@ -3771,7 +3771,7 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
 
   if (!strcmp(url.c_str(), "record-replay-internal")) {
     // [TT-1390] Hackfix to not register the sourcemap handling script.
-    // We will have a better fix in the upcoming patch for TT-1111.
+    // We will have a better fix in the upcoming patch for TT-1112.
     return;
   }
 
