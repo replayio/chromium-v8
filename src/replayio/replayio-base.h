@@ -1,16 +1,13 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright (c) 2024 Record Replay Inc.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// This file is a clone of "base/optional.h" in chromium.
-// Keep in sync, especially when fixing bugs.
-// Copyright 2017 the V8 project authors. All rights reserved.
+// Use this header file to access 
 
-#ifndef V8_BASE_REPLAYIO_H
-#define V8_BASE_REPLAYIO_H
+#ifndef V8_REPLAY_REPLAYIO_BASE_H
+#define V8_REPLAY_REPLAYIO_BASE_H
 
 #include "include/replayio.h"
-
 #include "src/base/optional.h"
 
 namespace v8 {
@@ -30,4 +27,4 @@ private:
 }  // namespace replayio
 }  // namespace v8
 
-#endif  // V8_BASE_REPLAYIO_H
+#endif  // V8_REPLAY_REPLAYIO_BASE_H

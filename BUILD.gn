@@ -4727,6 +4727,13 @@ v8_source_set("v8_base_without_compiler") {
     "src/zone/type-stats.cc",
     "src/zone/zone-segment.cc",
     "src/zone/zone.cc",
+
+    "src/replayio/replayio.cc",
+    "src/replayio/replayio-commands.cc",
+    "src/replayio/replayio-commands.h",
+    "src/replayio/replayio-base.h",
+    "src/replayio/replayio-util.cc",
+    "src/replayio/replayio-util.h",
   ]
 
   if (v8_enable_snapshot_compression) {

@@ -17,12 +17,14 @@
 #include "src/objects/smi.h"
 
 namespace v8 {
+namespace replayio {
+extern bool RecordReplayHasDefaultContext();
+}  // namespace replayio
 namespace internal {
 
 extern int RegisterAssertValueSite(const std::string& desc, int source_position);
 extern int RegisterInstrumentationSite(const char* kind, int source_position,
                                        int bytecode_offset);
-extern bool RecordReplayHasDefaultContext();
 extern bool gRecordReplayAssertTrackedObjects;
 
 extern size_t NumRunningBackgroundCompileTasks();
@@ -76,7 +78,7 @@ BytecodeArrayBuilder::BytecodeArrayBuilder(
   }
 
   if (recordreplay::IsRecordingOrReplaying("emit-opcodes") &&
-      RecordReplayHasDefaultContext() &&
+      replayio::RecordReplayHasDefaultContext() &&
       !record_replay_ignore) {
     emit_record_replay_opcodes_ = true;
     emit_record_replay_assert_values_ = record_replay_assert_values;

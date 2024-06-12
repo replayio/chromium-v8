@@ -177,6 +177,9 @@
 #include <dlfcn.h>
 #endif
 
+#include "src/replayio/replayio-base.h"
+#include "src/replayio/replayio-util.h"
+
 extern const char* gCrashReason;
 
 namespace v8 {
@@ -5191,26 +5194,11 @@ MaybeLocal<v8::Context> v8::Object::GetCreationContext() {
   return MaybeLocal<v8::Context>();
 }
 
-extern "C" void V8RecordReplayGetDefaultContext(v8::Isolate* isolate, v8::Local<v8::Context>* cx);
-
 Local<v8::Context> v8::Object::GetCreationContextChecked() {
   Local<Context> context;
-  if (!GetCreationContext().ToLocal(&context)) {
-    // When recording/replaying we avoid crashing by falling back to the
-    // default context.
-    //
-    // See https://linear.app/replay/issue/TT-957
-    if (recordreplay::IsRecordingOrReplaying() && IsMainThread()) {
-      recordreplay::Print("Warning: GetCreationContextChecked missing context, substituting default context");
-      Isolate* isolate = Isolate::GetCurrent();
-      V8RecordReplayGetDefaultContext(isolate, &context);
-    } else {
-      CHECK(false);
-    }
-  }
-  //Utils::ApiCheck(GetCreationContext().ToLocal(&context),
-  //                "v8::Object::GetCreationContextChecked",
-  //                "No creation context available");
+  Utils::ApiCheck(GetCreationContext().ToLocal(&context),
+                  "v8::Object::GetCreationContextChecked",
+                  "No creation context available");
   return context;
 }
 
@@ -11115,24 +11103,6 @@ void RecordReplayOnMainThreadIsolateCreated(Isolate* isolate) {
   CHECK(!gMainThreadIsolate);
   gMainThreadIsolate = isolate;
 }
-
-static Eternal<v8::Context>* gDefaultContext;
-
-extern "C" void V8RecordReplaySetDefaultContext(v8::Isolate* isolate, v8::Local<v8::Context> cx) {
-  if (IsMainThread()) {
-    gDefaultContext = new Eternal<v8::Context>(isolate, cx);
-  }
-}
-
-extern "C" void V8RecordReplayGetDefaultContext(v8::Isolate* isolate, v8::Local<v8::Context>* cx) {
-  CHECK(IsMainThread() && gDefaultContext);
-  *cx = gDefaultContext->Get(isolate);
-}
-
-bool RecordReplayHasDefaultContext() {
-  return !!gDefaultContext;
-}
-
 extern void RecordReplayInitInstrumentationState();
 
 void RecordReplayDescribeAssertData(const char* text) {
@@ -11537,7 +11507,7 @@ void recordreplay::InvalidateRecording(const char* why) {
 void recordreplay::NewCheckpoint() {
   // We can only create checkpoints if a context has been created. A context is
   // needed to process commands which we might get from the driver.
-  if (IsRecordingOrReplaying() && IsMainThread() && internal::gDefaultContext) {
+  if (IsRecordingOrReplaying() && IsMainThread() && replayio::RecordReplayHasDefaultContext()) {
     internal::gRecordReplayHasCheckpoint = true;
     gRecordReplayNewCheckpoint();
   }
@@ -11948,6 +11918,10 @@ extern "C" DLLEXPORT void V8RecordReplayGetCurrentJSStack(std::string* stackTrac
   }
 
   *stackTrace = stack.str();
+}
+
+void recordreplay::GetCurrentJSStack(std::string* stackTrace) {
+  return V8RecordReplayGetCurrentJSStack(stackTrace);
 }
 
 template <typename Src, typename Dst>

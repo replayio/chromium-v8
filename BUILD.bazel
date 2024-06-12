@@ -2211,6 +2211,13 @@ filegroup(
         "src/execution/pointer-authentication-dummy.h",
         "src/heap/third-party/heap-api.h",
         "src/heap/third-party/heap-api-stub.cc",
+
+        "src/replayio/replayio.cc",
+        "src/replayio/replayio-commands.cc",
+        "src/replayio/replayio-commands.h",
+        "src/replayio/replayio-base.h",
+        "src/replayio/replayio-util.cc",
+        "src/replayio/replayio-util.h",
     ] + select({
         "@v8//bazel/config:v8_target_ia32": [
             "src/baseline/ia32/baseline-assembler-ia32-inl.h",

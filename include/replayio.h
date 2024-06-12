@@ -25,6 +25,85 @@ struct AutoDisallowEvents {
   ~AutoDisallowEvents() { v8::recordreplay::EndDisallowEvents(); }
 };
 
+/** ###########################################################################
+ * ReplayRootContext
+ * ##########################################################################*/
+
+/**
+ * 
+ */
+class ReplayRootContext {
+  Eternal<v8::Context> context_;
+  /**
+   * We use this to emit events into JS.
+   */
+  Eternal<Object> eventEmitter_;
+
+public:
+  ReplayRootContext(Eternal<v8::Context> context, Eternal<Object> eventEmitter) :
+    context_(context),
+    eventEmitter_(eventEmitter)
+    {}
+
+  Eternal<Context> ContextEternal() const { return context_; }
+  Local<Context> GetContext() const;
+  Local<Object> GetEventEmitter() const;
+
+  Local<v8::Function> GetFunction(
+    Local<Object> object,
+    const std::string& propName
+  ) const;
+
+  Local<Value> CallFunction(Local<v8::Function> fn,
+                            int argc = 0,
+                            Local<Value> argv[] = nullptr,
+                            MaybeLocal<Value> receiver = MaybeLocal<Value>()) const;
+
+  Local<Value> CallGlobalFunction(const std::string& functionName,
+                                  int argc = 0,
+                                  Local<Value> argv[] = nullptr) const;
+
+  Local<Value> EmitReplayEvent(const std::string& eventName,
+                               Local<Value> param1,
+                               const std::string& emitName = "emit") const;
+  Local<Value> EmitReplayEvent(const std::string& eventName,
+                               int argc = 0,
+                               Local<Value> argv[] = nullptr,
+                               const std::string& emitName = "emit") const;
+
+  /**
+   * Run the given script, give it the given name.
+   * If the script evaluates to a function value, call that function with
+   * GetEventEmitter() as the sole argument.
+   */
+  v8::Local<v8::Value> RunScriptAndCallBack(
+    const std::string& source, const std::string& filename
+  );
+};
+
+ReplayRootContext* RecordReplayCreateRootContext(v8::Isolate* isolate, v8::Local<v8::Context> cx);
+
+/**
+ * @return The |ReplayRootContext| for the given |cx|.
+ */
+ReplayRootContext* RecordReplayGetRootContext(v8::Local<v8::Context> cx);
+
+/**
+ * @deprecated There is no single "default context".
+ * @return The "default" |ReplayRootContext|.
+ */
+ReplayRootContext* RecordReplayGetRootContext();
+
+/**
+ * @return Whether any root context has been created yet.
+ */
+bool RecordReplayHasDefaultContext();
+
+/**
+ * Whether the given url is our own internal JS code.
+ */
+bool RecordReplayIsInternalReplayJs(const char* url);
+
 }  // namespace replayio
 }  // namespace v8
 
