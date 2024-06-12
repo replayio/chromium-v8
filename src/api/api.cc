@@ -2554,6 +2554,46 @@ i::ScriptDetails GetScriptDetails(
 
 }  // namespace
 
+static const char* RecordReplayReplaceSourceContents(const char* contents);
+
+static int gReplaceSourceContentsScriptId;
+
+// If we are compiling a script while replaying that replaces another one,
+// return the ID of the script being replaced.
+int ReplayingGetReplacedScriptId() {
+  return IsMainThread() ? gReplaceSourceContentsScriptId : 0;
+}
+
+static i::MaybeHandle<i::SharedFunctionInfo>
+ReplayingMaybeReplaceScript(i::Isolate* isolate,
+                            i::MaybeHandle<i::SharedFunctionInfo> maybe_function_info,
+                            const i::ScriptDetails& script_details,
+                            i::Handle<i::String> source) {
+  if (!recordreplay::IsReplaying() || !IsMainThread() || maybe_function_info.is_null()) {
+    return maybe_function_info;
+  }
+
+  std::unique_ptr<char[]> contents = source->ToCString();
+  const char* new_contents = RecordReplayReplaceSourceContents(contents.get());
+  if (!new_contents) {
+    return maybe_function_info;
+  }
+
+  i::Handle<i::String> new_source = isolate->factory()->NewStringFromUtf8(base::CStrVector(new_contents)).ToHandleChecked();
+
+  CHECK(!gReplaceSourceContentsScriptId);
+  gReplaceSourceContentsScriptId = i::Script::cast(maybe_function_info.ToHandleChecked()->script()).id();
+
+  maybe_function_info = i::Compiler::GetSharedFunctionInfoForScript(
+      isolate, new_source, script_details,
+      ScriptCompiler::kNoCompileOptions,
+      ScriptCompiler::kNoCacheNoReason,
+      i::NOT_NATIVES_CODE);
+
+  gReplaceSourceContentsScriptId = 0;
+  return maybe_function_info;
+}
+
 MaybeLocal<UnboundScript> ScriptCompiler::CompileUnboundInternal(
     Isolate* v8_isolate, Source* source, CompileOptions options,
     NoCacheReason no_cache_reason) {
@@ -2602,6 +2642,8 @@ MaybeLocal<UnboundScript> ScriptCompiler::CompileUnboundInternal(
         i_isolate, str, script_details, options, no_cache_reason,
         i::NOT_NATIVES_CODE);
   }
+
+  maybe_function_info = ReplayingMaybeReplaceScript(i_isolate, maybe_function_info, script_details, str);
 
   has_pending_exception = !maybe_function_info.ToHandle(&result);
   RETURN_ON_FAILED_EXECUTION(UnboundScript);
@@ -2843,8 +2885,10 @@ i::MaybeHandle<i::SharedFunctionInfo> CompileStreamedSource(
                        origin.ColumnOffset(), origin.SourceMapUrl(),
                        origin.GetHostDefinedOptions(), origin.Options());
   i::ScriptStreamingData* data = v8_source->impl();
-  return i::Compiler::GetSharedFunctionInfoForStreamedScript(
+  i::MaybeHandle<i::SharedFunctionInfo> maybe_function_info = i::Compiler::GetSharedFunctionInfoForStreamedScript(
       i_isolate, str, script_details, data);
+
+  return ReplayingMaybeReplaceScript(i_isolate, maybe_function_info, script_details, str);
 }
 
 }  // namespace
@@ -10757,9 +10801,11 @@ typedef char* (CommandCallbackRaw)(const char* params);
   Macro(RecordReplayJSONToString, (void*), char*, nullptr)                    \
   Macro(RecordReplayProgressCounter, (), uint64_t*, nullptr)                  \
   Macro(RecordReplayGetStack, (char* aStack, size_t aSize), bool, false)      \
-  Macro(RecordReplayReadAssetFileContents,                                   \
+  Macro(RecordReplayReadAssetFileContents,                                    \
         (const char* aPath, size_t *aLength),                                 \
-        char*, nullptr)
+        char*, nullptr)                                                       \
+  Macro(RecordReplayReplaceSourceContents,                                    \
+        (const char* contents), const char*, nullptr)
 
 #define ForEachRecordReplaySymbolVoidShared(Macro)                            \
   Macro(RecordReplayDisableFeatures, (const char* json))                      \
@@ -10956,6 +11002,10 @@ void RecordReplayOnExceptionUnwind(Isolate* isolate) {
 }
 
 uint64_t* gProgressCounter;
+
+extern "C" uint64_t* V8RecordReplayGetProgressCounter() {
+  return gProgressCounter;
+}
 
 bool gRecordReplayInstrumentationEnabled;
 
@@ -11235,6 +11285,13 @@ char* recordreplay::ReadAssetFileContents(const char* aPath, size_t* aLength) {
 
 extern "C" DLLEXPORT char* V8RecordReplayReadAssetFileContents(const char* aPath, size_t* aLength) {
   return recordreplay::ReadAssetFileContents(aPath, aLength);
+}
+
+static const char* RecordReplayReplaceSourceContents(const char* contents) {
+  if (recordreplay::IsReplaying()) {
+    return gRecordReplayReplaceSourceContents(contents);
+  }
+  return nullptr;
 }
 
 void recordreplay::Print(const char* format, ...) {
