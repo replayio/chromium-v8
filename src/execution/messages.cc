@@ -761,6 +761,7 @@ bool ComputeLocation(Isolate* isolate, MessageLocation* target) {
     // information to get canonical location information.
     std::vector<FrameSummary> frames;
     it.frame()->Summarize(&frames);
+    CHECK(frames.size()); // There might not always be a frame due to RUN-1920.
     auto& summary = frames.back().AsJavaScript();
     Handle<SharedFunctionInfo> shared(summary.function()->shared(), isolate);
     Handle<Object> script(shared->script(), isolate);
