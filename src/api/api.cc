@@ -7907,12 +7907,20 @@ Maybe<bool> Promise::Resolver::Reject(Local<Context> context,
   auto self = Utils::OpenHandle(this);
   auto promise = i::Handle<i::JSPromise>::cast(self);
 
+  recordreplay::Assert("[TT-1029-1030] Promise::Resolver::Reject");
+
   if (promise->status() != Promise::kPending) {
+    recordreplay::Assert("[TT-1029-1030] Promise::Resolver::Reject #1");
     return Just(true);
   }
 
+  recordreplay::Assert("[TT-1029-1030] Promise::Resolver::Reject #2");
+
   has_pending_exception =
       i::JSPromise::Reject(promise, Utils::OpenHandle(*value)).is_null();
+
+  recordreplay::Assert("[TT-1029-1030] Promise::Resolver::Reject #3");
+
   RETURN_ON_FAILED_EXECUTION_PRIMITIVE(bool);
   return Just(true);
 }
