@@ -10861,8 +10861,10 @@ typedef char* (CommandCallbackRaw)(const char* params);
         (int line, int column, const char* function_id, int function_index))  \
   Macro(RecordReplayOnEvent, (const char* aEvent, bool aBefore))              \
   Macro(RecordReplayOnMouseEvent,                                             \
-        (const char* aKind, size_t aClientX, size_t aClientY))                \
-  Macro(RecordReplayOnKeyEvent, (const char* aKind, const char* aKey))        \
+        (const char* aKind, size_t aClientX, size_t aClientY,                 \
+         bool synthetic))                                                     \
+  Macro(RecordReplayOnKeyEvent, (const char* aKind, const char* aKey,         \
+         bool synthetic))                                                     \
   Macro(RecordReplayOnNavigationEvent, (const char* aKind, const char* aUrl)) \
   Macro(RecordReplayAddDependencyGraphEdge,                                   \
         (int source, int target, const char* json))                           \
@@ -11995,20 +11997,20 @@ extern "C" DLLEXPORT void V8RecordReplayOnEvent(const char* aEvent, bool aBefore
 }
 
 extern "C" DLLEXPORT void V8RecordReplayOnMouseEvent(const char* kind, size_t clientX,
-                                                     size_t clientY) {
+                                                     size_t clientY, bool synthetic) {
   DCHECK(recordreplay::IsRecordingOrReplaying());
   if (!internal::gRecordReplayHasCheckpoint) {
     return;
   }
-  gRecordReplayOnMouseEvent(kind, clientX, clientY);
+  gRecordReplayOnMouseEvent(kind, clientX, clientY, synthetic);
 }
 
-extern "C" DLLEXPORT void V8RecordReplayOnKeyEvent(const char* kind, const char* key) {
+extern "C" DLLEXPORT void V8RecordReplayOnKeyEvent(const char* kind, const char* key, bool synthetic) {
   DCHECK(recordreplay::IsRecordingOrReplaying());
   if (!internal::gRecordReplayHasCheckpoint) {
     return;
   }
-  gRecordReplayOnKeyEvent(kind, key);
+  gRecordReplayOnKeyEvent(kind, key, synthetic);
 }
 
 extern "C" DLLEXPORT void V8RecordReplayOnNavigationEvent(const char* kind, const char* url) {
