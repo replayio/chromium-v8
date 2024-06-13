@@ -71,6 +71,9 @@
 #endif  // V8_ENABLE_MAGLEV
 
 namespace v8 {
+
+extern int ReplayingGetReplacedScriptId();
+
 namespace internal {
 
 extern MaybeHandle<Script> MaybeGetScript(Isolate* isolate, int script_id);
@@ -3565,7 +3568,8 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
     // same scripts are created at the same points. The SFI will need to be
     // recompiled when replaying but that's fine when the right script ID is used.
     if (recordreplay::IsRecordingOrReplaying("values") &&
-        !recordreplay::AreEventsDisallowed()) {
+        !recordreplay::AreEventsDisallowed() &&
+        !ReplayingGetReplacedScriptId()) {
       int script_id = v8::UnboundScript::kNoScriptId;
       if (Handle<Script> script;
           recordreplay::IsRecording() && maybe_script.ToHandle(&script)) {
@@ -3656,6 +3660,9 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
       int script_id = UnboundScript::kNoScriptId;
       if (Handle<Script> script; maybe_script.ToHandle(&script)) {
         script_id = script->id();
+      }
+      if (ReplayingGetReplacedScriptId()) {
+        script_id = ReplayingGetReplacedScriptId();
       }
 
       UnoptimizedCompileFlags flags =
