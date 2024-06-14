@@ -4251,20 +4251,26 @@ GetOrCreatePromiseDependencyGraphData(Isolate* isolate, Handle<Object> promise) 
 extern bool gRecordReplayEnableDependencyGraph;
 
 bool RecordReplayShouldCallOnPromiseHook() {
-  // The promise hook is normally only used when replaying, but can assign
-  // persistent IDs to objects so needs to be called while recording if we are
-  // asserting on these.
-  return gRecordReplayEnableDependencyGraph
-      && recordreplay::FeatureEnabled("call-on-promise-hook")
-      && (recordreplay::IsReplaying() || gRecordReplayAssertTrackedObjects)
-      && IsMainThread();
+  // Ideally we would be able to avoid calling the promise hook when recording
+  // and its results aren't needed, but the isolate state we set to ensure
+  // the hook gets called have effects on the state of certain promises that
+  // affect how the process behaves and are not fully understood.
+  //
+  // For now we workaround this problem by setting this state consistently and
+  // add a small amount of recording overhead.
+  return gRecordReplayEnableDependencyGraph && IsMainThread();
 }
 
 void RecordReplayOnPromiseHook(Isolate* isolate, PromiseHookType type,
                                Handle<JSPromise> promise, Handle<Object> parent) {
-  CHECK(RecordReplayShouldCallOnPromiseHook());
-
   if (!gRecordReplayEnableDependencyGraph) {
+    return;
+  }
+
+  // The promise hook is normally only needed when replaying, but can assign
+  // persistent IDs to objects so needs to be called while recording if we are
+  // asserting on these.
+  if (!IsReplaying() && !gRecordReplayAssertTrackedObjects) {
     return;
   }
 
