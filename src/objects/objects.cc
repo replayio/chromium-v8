@@ -5543,21 +5543,16 @@ Handle<Object> JSPromise::Reject(Handle<JSPromise> promise,
   // 6. Set promise.[[PromiseState]] to "rejected".
   promise->set_status(Promise::kRejected);
 
-  {
-    v8::replayio::AutoMaybeDisallowEvents disallow(promise->has_handler(),
-                                                   "[TT-1029-1030] JSPromise::Reject %d");
-
-    // 7. If promise.[[PromiseIsHandled]] is false, perform
-    //    HostPromiseRejectionTracker(promise, "reject").
-    if (!promise->has_handler()) {
-      isolate->ReportPromiseReject(promise, reason,
-                                   kPromiseRejectWithNoHandler);
-    }
-
-    // 8. Return TriggerPromiseReactions(reactions, reason).
-    return TriggerPromiseReactions(isolate, reactions, reason,
-                                   PromiseReaction::kReject);
+  // 7. If promise.[[PromiseIsHandled]] is false, perform
+  //    HostPromiseRejectionTracker(promise, "reject").
+  if (!promise->has_handler()) {
+    isolate->ReportPromiseReject(promise, reason,
+                                 kPromiseRejectWithNoHandler);
   }
+
+  // 8. Return TriggerPromiseReactions(reactions, reason).
+  return TriggerPromiseReactions(isolate, reactions, reason,
+                                 PromiseReaction::kReject);
 }
 
 // https://tc39.es/ecma262/#sec-promise-resolve-functions
