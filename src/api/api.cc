@@ -7907,7 +7907,7 @@ Maybe<bool> Promise::Resolver::Reject(Local<Context> context,
   auto self = Utils::OpenHandle(this);
   auto promise = i::Handle<i::JSPromise>::cast(self);
 
-  recordreplay::Assert("[TT-1361] Promise::Resolver::Reject %d", promise->has_handler());
+  recordreplay::Assert("[TT-1361] Promise::Resolver::Reject Start %d", promise->has_handler());
 
   if (promise->status() != Promise::kPending) {
     recordreplay::Assert("[TT-1361] Promise::Resolver::Reject #1");
