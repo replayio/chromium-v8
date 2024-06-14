@@ -4267,10 +4267,10 @@ void RecordReplayOnPromiseHook(Isolate* isolate, PromiseHookType type,
     return;
   }
 
-  // The promise hook is normally only needed when replaying, but can assign
-  // persistent IDs to objects so needs to be called while recording if we are
-  // asserting on these.
-  if (!IsReplaying() && !gRecordReplayAssertTrackedObjects) {
+  // The promise hook only needs to report nodes/edges while replaying,
+  // but can assign persistent IDs to objects so the calls below are needed
+  // while recording if we are asserting on those IDs.
+  if (!recordreplay::IsReplaying() && !gRecordReplayAssertTrackedObjects) {
     return;
   }
 
