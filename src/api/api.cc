@@ -7907,20 +7907,12 @@ Maybe<bool> Promise::Resolver::Reject(Local<Context> context,
   auto self = Utils::OpenHandle(this);
   auto promise = i::Handle<i::JSPromise>::cast(self);
 
-  recordreplay::Assert("[TT-1361] Promise::Resolver::Reject Start %d", promise->has_handler());
-
   if (promise->status() != Promise::kPending) {
-    recordreplay::Assert("[TT-1361] Promise::Resolver::Reject #1");
     return Just(true);
   }
 
-  recordreplay::Assert("[TT-1361] Promise::Resolver::Reject #2");
-
   has_pending_exception =
       i::JSPromise::Reject(promise, Utils::OpenHandle(*value)).is_null();
-
-  recordreplay::Assert("[TT-1361] Promise::Resolver::Reject #3");
-
   RETURN_ON_FAILED_EXECUTION_PRIMITIVE(bool);
   return Just(true);
 }
@@ -12174,7 +12166,7 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
 
   // Currently the dependency graph is disabled by default.
   i::gRecordReplayEnableDependencyGraph =
-    V8RecordReplayFeatureEnabled("v8-dependency-graph", nullptr);
+    V8RecordReplayFeatureEnabled("dependency-graph", "v8");
 
   // Disable wasm background compilation.
   if (V8RecordReplayFeatureEnabled("disable-v8-flags-wasm-compilation-tasks", nullptr)) {

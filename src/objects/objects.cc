@@ -5523,8 +5523,6 @@ Handle<Object> JSPromise::Reject(Handle<JSPromise> promise,
   DCHECK(
       !reinterpret_cast<v8::Isolate*>(isolate)->GetCurrentContext().IsEmpty());
 
-  recordreplay::Assert("[TT-1361] JSPromise::Reject %d", promise->has_handler());
-
   if (isolate->debug()->is_active()) MoveMessageToPromise(isolate, promise);
 
   if (debug_event) isolate->debug()->OnPromiseReject(promise, reason);

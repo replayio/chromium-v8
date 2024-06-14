@@ -4256,6 +4256,8 @@ bool RecordReplayShouldCallOnPromiseHook() {
   // the hook gets called have effects on the state of certain promises that
   // affect how the process behaves and are not fully understood.
   //
+  // See https://linear.app/replay/issue/TT-1361
+  //
   // For now we workaround this problem by setting this state consistently and
   // add a small amount of recording overhead.
   return gRecordReplayEnableDependencyGraph && IsMainThread();
