@@ -4255,6 +4255,7 @@ bool RecordReplayShouldCallOnPromiseHook() {
   // persistent IDs to objects so needs to be called while recording if we are
   // asserting on these.
   return gRecordReplayEnableDependencyGraph
+      && FeatureEnabled("call-on-promise-hook")
       && (recordreplay::IsReplaying() || gRecordReplayAssertTrackedObjects)
       && IsMainThread();
 }
