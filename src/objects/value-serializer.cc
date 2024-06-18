@@ -759,22 +759,10 @@ Maybe<bool> ValueSerializer::WriteJSArray(Handle<JSArray> array) {
   // should be serialized).
 
   const bool should_serialize_densely =
-    // [TT-492] slow path all serialization so we're guaranteed to always match
+    // [TT-492] Slow-path all serialization to avoid JIT- or GC-related divergences.
     !recordreplay::IsRecordingOrReplaying("values", "ValueSerializer::WriteJSArray") &&
     array->HasFastElements(cage_base) && !array->HasHoleyElements(cage_base);
 
-  if (recordreplay::HasAsserts()) {
-    recordreplay::AssertBufferAllocationState* bufferAssertsState =
-      recordreplay::AutoAssertBufferAllocations::GetState();
-    if (bufferAssertsState) {
-      recordreplay::Assert("[%s] ValueSerializer::WriteJSArray %d %d %d",
-        bufferAssertsState->issueLabel.c_str(),
-        array->HasFastElements(cage_base),
-        array->HasHoleyElements(cage_base),
-        should_serialize_densely ? (int)array->GetElementsKind(cage_base) : -1
-      );
-    }
-  }
   if (should_serialize_densely) {
     DCHECK_LE(length, static_cast<uint32_t>(FixedArray::kMaxLength));
     WriteTag(SerializationTag::kBeginDenseJSArray);

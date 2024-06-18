@@ -10,7 +10,7 @@
 #define INCLUDE_REPLAYIO_MACROS_H_
 
 // Use this to wrap Asserts on non-trivial data, to avoid the
-// overhead of reads when Asserts are disabled.
+// overhead of argument evaluation when Asserts are disabled.
 #define REPLAY_ASSERT(format, ...) \
   if (recordreplay::HasAsserts()) \
     recordreplay::Assert(format, ##__VA_ARGS__); \
