@@ -4018,6 +4018,7 @@ static Local<v8::Value> GetObjectIdMapForContext(v8::Isolate* v8_isolate, Local<
 }
 
 extern bool gRecordReplayAssertTrackedObjects;
+extern bool gRecordReplayAssertDependencyGraph;
 extern int (*gGetAPIObjectIdCallback)(v8::Local<v8::Object> object);
 
 static int gNextObjectId = 1;
@@ -4278,7 +4279,9 @@ void RecordReplayOnPromiseHook(Isolate* isolate, PromiseHookType type,
   // The promise hook only needs to report nodes/edges while replaying,
   // but can assign persistent IDs to objects so the calls below are needed
   // while recording if we are asserting on those IDs.
-  if (!recordreplay::IsReplaying() && !gRecordReplayAssertTrackedObjects) {
+  if (!recordreplay::IsReplaying() &&
+      !gRecordReplayAssertTrackedObjects &&
+      !gRecordReplayAssertDependencyGraph) {
     return;
   }
 

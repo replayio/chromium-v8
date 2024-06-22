@@ -11086,7 +11086,12 @@ bool gRecordReplayAssertProgress;
 bool gRecordReplayAssertTrackedObjects;
 
 // Enable reporting the dependency graph while replaying.
+// This is on by default.
 bool gRecordReplayEnableDependencyGraph;
+
+// Assert that dependency graph nodes / edges are created consistently.
+// This adds recording overhead and is off by default.
+bool gRecordReplayAssertDependencyGraph;
 
 // Enable various checks when advancing the progress counter. Set via the
 // environment, or when events are disallowed on the main thread.
@@ -11789,7 +11794,11 @@ static inline bool UpdateDependencyGraph() {
 
 extern "C" DLLEXPORT int V8RecordReplayNewDependencyGraphNode(const char* json) {
   if (UpdateDependencyGraph()) {
-    return gRecordReplayNewDependencyGraphNode(json);
+    int id = gRecordReplayNewDependencyGraphNode(json);
+    if (gRecordReplayAssertDependencyGraph) {
+      recordreplay::Assert("NewDependencyGraphNode id=%d %s", id, json ? json : "");
+    }
+    return id;
   }
   return 0;
 }
@@ -11800,6 +11809,9 @@ int recordreplay::NewDependencyGraphNode(const char* json) {
 
 extern "C" DLLEXPORT void V8RecordReplayAddDependencyGraphEdge(int source, int target, const char* json) {
   if (UpdateDependencyGraph()) {
+    if (gRecordReplayAssertDependencyGraph) {
+      recordreplay::Assert("NewDependencyGraphEdge source=%d target=%d %s", source, target, json ? json : "");
+    }
     gRecordReplayAddDependencyGraphEdge(source, target, json);
   }
 }
@@ -11826,6 +11838,9 @@ extern "C" DLLEXPORT void V8RecordReplayBeginDependencyExecution(int node) {
     }
     gDependencyGraphExecutionStack->push_back(node);
     gRecordReplayBeginDependencyExecution(node);
+    if (gRecordReplayAssertDependencyGraph) {
+      recordreplay::Assert("BeginDependencyExecution id=%d", node);
+    }
   }
 }
 
@@ -11837,6 +11852,9 @@ extern "C" DLLEXPORT void V8RecordReplayEndDependencyExecution() {
   if (UpdateDependencyGraph()) {
     gDependencyGraphExecutionStack->pop_back();
     gRecordReplayEndDependencyExecution();
+    if (gRecordReplayAssertDependencyGraph) {
+      recordreplay::Assert("EndDependencyExecution");
+    }
   }
 }
 
@@ -12250,9 +12268,11 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
                                         i::RecordReplayCallbackAssertDescribeData);
   }
 
-  // Currently the dependency graph is disabled by default.
+  // Currently the dependency graph is enabled by default.
   i::gRecordReplayEnableDependencyGraph =
     V8RecordReplayFeatureEnabled("dependency-graph", "v8");
+
+  i::gRecordReplayAssertDependencyGraph = !!getenv("RECORD_REPLAY_DEPENDENCY_GRAPH_ASSERTS");
 
   // Disable wasm background compilation.
   if (V8RecordReplayFeatureEnabled("disable-v8-flags-wasm-compilation-tasks", nullptr)) {
