@@ -108,17 +108,7 @@ RUNTIME_FUNCTION(Runtime_PromiseStatus) {
   return Smi::FromInt(promise->status());
 }
 
-extern int g_record_replay_recording_debug_enabled;
-extern int g_record_replay_recording_hooks_enabled;
-
 RUNTIME_FUNCTION(Runtime_PromiseHookInit) {
-  // [TT-187] This is divergent if the recorder did not have hooks enabled.
-  v8::replayio::AutoMaybeDisallowEvents disallow(
-    IsMainThread() &&
-      !g_record_replay_recording_hooks_enabled,
-    "Runtime_PromiseHookInit"
-  );
-
   HandleScope scope(isolate);
   DCHECK_EQ(2, args.length());
   Handle<JSPromise> promise = args.at<JSPromise>(0);
@@ -128,13 +118,6 @@ RUNTIME_FUNCTION(Runtime_PromiseHookInit) {
 }
 
 RUNTIME_FUNCTION(Runtime_PromiseHookBefore) {
-  // [TT-187] This is divergent if the recorder did not have hooks enabled.
-  v8::replayio::AutoMaybeDisallowEvents disallow(
-    IsMainThread() &&
-      !g_record_replay_recording_hooks_enabled,
-    "Runtime_PromiseHookBefore"
-  );
-
   HandleScope scope(isolate);
   DCHECK_EQ(1, args.length());
   Handle<JSReceiver> promise = args.at<JSReceiver>(0);
@@ -145,13 +128,6 @@ RUNTIME_FUNCTION(Runtime_PromiseHookBefore) {
 }
 
 RUNTIME_FUNCTION(Runtime_PromiseHookAfter) {
-  // [TT-187] This is divergent if the recorder did not have hooks enabled.
-  v8::replayio::AutoMaybeDisallowEvents disallow(
-    IsMainThread() &&
-      !g_record_replay_recording_hooks_enabled,
-    "Runtime_PromiseHookAfter"
-  );
-
   HandleScope scope(isolate);
   DCHECK_EQ(1, args.length());
   Handle<JSReceiver> promise = args.at<JSReceiver>(0);
@@ -167,17 +143,6 @@ RUNTIME_FUNCTION(Runtime_RejectPromise) {
   Handle<JSPromise> promise = args.at<JSPromise>(0);
   Handle<Object> reason = args.at(1);
   Handle<Oddball> debug_event = args.at<Oddball>(2);
-
-  // [TT-187] This is divergent if promise has handler and neither hooks nor
-  // debugger were enabled during recording, as per
-  // promise-abstract-operations.tq.
-  v8::replayio::AutoMaybeDisallowEvents disallow(
-    IsMainThread() &&
-      promise->has_handler() &&
-      !g_record_replay_recording_debug_enabled &&
-      !g_record_replay_recording_hooks_enabled,
-    "Isolate::ReportPromiseReject"
-  );
 
   return *JSPromise::Reject(promise, reason,
                             debug_event->BooleanValue(isolate));

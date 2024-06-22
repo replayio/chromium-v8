@@ -11798,7 +11798,7 @@ extern "C" DLLEXPORT int V8RecordReplayNewDependencyGraphNode(const char* json) 
   if (V8RecordReplayUpdateDependencyGraph()) {
     int id = gRecordReplayNewDependencyGraphNode(json);
     if (i::gRecordReplayAssertDependencyGraph) {
-      recordreplay::Assert("NewDependencyGraphNode id=%d %s", id, json ? json : "");
+      recordreplay::Assert("NewDependencyGraphNode %s", json ? json : "");
     }
     return id;
   }
@@ -11813,7 +11813,7 @@ extern "C" DLLEXPORT void V8RecordReplayAddDependencyGraphEdge(int source, int t
   if (V8RecordReplayUpdateDependencyGraph()) {
     gRecordReplayAddDependencyGraphEdge(source, target, json);
     if (i::gRecordReplayAssertDependencyGraph) {
-      recordreplay::Assert("NewDependencyGraphEdge source=%d target=%d %s", source, target, json ? json : "");
+      recordreplay::Assert("NewDependencyGraphEdge %s", json ? json : "");
     }
   }
 }
@@ -11841,7 +11841,7 @@ extern "C" DLLEXPORT void V8RecordReplayBeginDependencyExecution(int node) {
     gDependencyGraphExecutionStack->push_back(node);
     gRecordReplayBeginDependencyExecution(node);
     if (i::gRecordReplayAssertDependencyGraph) {
-      recordreplay::Assert("BeginDependencyExecution id=%d", node);
+      recordreplay::Assert("BeginDependencyExecution");
     }
   }
 }
