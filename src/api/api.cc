@@ -11788,12 +11788,14 @@ extern "C" DLLEXPORT bool V8RecordReplayAllowSideEffects() {
   return recordreplay::AllowSideEffects();
 }
 
-static inline bool UpdateDependencyGraph() {
-  return i::gRecordReplayEnableDependencyGraph && IsMainThread();
+extern "C" DLLEXPORT bool V8RecordReplayUpdateDependencyGraph() {
+  return i::gRecordReplayEnableDependencyGraph
+      && (recordreplay::IsReplaying() || i::gRecordReplayAssertDependencyGraph)
+      && IsMainThread();
 }
 
 extern "C" DLLEXPORT int V8RecordReplayNewDependencyGraphNode(const char* json) {
-  if (UpdateDependencyGraph()) {
+  if (V8RecordReplayUpdateDependencyGraph()) {
     int id = gRecordReplayNewDependencyGraphNode(json);
     if (gRecordReplayAssertDependencyGraph) {
       recordreplay::Assert("NewDependencyGraphNode id=%d %s", id, json ? json : "");
@@ -11808,11 +11810,11 @@ int recordreplay::NewDependencyGraphNode(const char* json) {
 }
 
 extern "C" DLLEXPORT void V8RecordReplayAddDependencyGraphEdge(int source, int target, const char* json) {
-  if (UpdateDependencyGraph()) {
+  if (V8RecordReplayUpdateDependencyGraph()) {
+    gRecordReplayAddDependencyGraphEdge(source, target, json);
     if (gRecordReplayAssertDependencyGraph) {
       recordreplay::Assert("NewDependencyGraphEdge source=%d target=%d %s", source, target, json ? json : "");
     }
-    gRecordReplayAddDependencyGraphEdge(source, target, json);
   }
 }
 
@@ -11832,7 +11834,7 @@ extern "C" int V8RecordReplayDependencyGraphExecutionNode() {
 }
 
 extern "C" DLLEXPORT void V8RecordReplayBeginDependencyExecution(int node) {
-  if (UpdateDependencyGraph()) {
+  if (V8RecordReplayUpdateDependencyGraph()) {
     if (!gDependencyGraphExecutionStack) {
       gDependencyGraphExecutionStack = new std::vector<int>();
     }
@@ -11849,7 +11851,7 @@ void recordreplay::BeginDependencyExecution(int node) {
 }
 
 extern "C" DLLEXPORT void V8RecordReplayEndDependencyExecution() {
-  if (UpdateDependencyGraph()) {
+  if (V8RecordReplayUpdateDependencyGraph()) {
     gDependencyGraphExecutionStack->pop_back();
     gRecordReplayEndDependencyExecution();
     if (gRecordReplayAssertDependencyGraph) {
