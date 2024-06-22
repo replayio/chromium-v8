@@ -2952,10 +2952,9 @@ MaybeHandle<JSFunction> Compiler::GetFunctionFromEval(
   DCHECK(is_compiled_scope.is_compiled());
 
   MaybeHandle<SharedFunctionInfo> new_shared_info =
-    ReplayingMaybeReplaceScript(isolate, shared_info, ScriptDetails(*script), source);
-  if (!new_function_info.is_null() && *new_shared_info != *shared_info) {
-    result = Factory::JSFunctionBuilder{isolate, new_shared_info, context}.Build();
-  }
+    ReplayingMaybeReplaceScript(isolate, shared_info, ScriptDetails(), source);
+  if (!new_shared_info.is_null())
+    result = Factory::JSFunctionBuilder{isolate, new_shared_info.ToHandleChecked(), context}.Build();
 
   return result;
 }
