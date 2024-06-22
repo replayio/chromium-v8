@@ -2556,6 +2556,8 @@ i::ScriptDetails GetScriptDetails(
 
 static const char* RecordReplayReplaceSourceContents(const char* contents);
 
+namespace internal {
+
 static int gReplaceSourceContentsScriptId;
 
 // If we are compiling a script while replaying that replaces another one,
@@ -2564,11 +2566,11 @@ int ReplayingGetReplacedScriptId() {
   return IsMainThread() ? gReplaceSourceContentsScriptId : 0;
 }
 
-static i::MaybeHandle<i::SharedFunctionInfo>
-ReplayingMaybeReplaceScript(i::Isolate* isolate,
-                            i::MaybeHandle<i::SharedFunctionInfo> maybe_function_info,
-                            const i::ScriptDetails& script_details,
-                            i::Handle<i::String> source) {
+MaybeHandle<SharedFunctionInfo>
+ReplayingMaybeReplaceScript(Isolate* isolate,
+                            MaybeHandle<SharedFunctionInfo> maybe_function_info,
+                            const ScriptDetails& script_details,
+                            Handle<String> source) {
   if (!recordreplay::IsReplaying() || !IsMainThread() || maybe_function_info.is_null()) {
     return maybe_function_info;
   }
@@ -2579,20 +2581,22 @@ ReplayingMaybeReplaceScript(i::Isolate* isolate,
     return maybe_function_info;
   }
 
-  i::Handle<i::String> new_source = isolate->factory()->NewStringFromUtf8(base::CStrVector(new_contents)).ToHandleChecked();
+  Handle<String> new_source = isolate->factory()->NewStringFromUtf8(base::CStrVector(new_contents)).ToHandleChecked();
 
   CHECK(!gReplaceSourceContentsScriptId);
-  gReplaceSourceContentsScriptId = i::Script::cast(maybe_function_info.ToHandleChecked()->script()).id();
+  gReplaceSourceContentsScriptId = Script::cast(maybe_function_info.ToHandleChecked()->script()).id();
 
-  maybe_function_info = i::Compiler::GetSharedFunctionInfoForScript(
+  maybe_function_info = Compiler::GetSharedFunctionInfoForScript(
       isolate, new_source, script_details,
       ScriptCompiler::kNoCompileOptions,
       ScriptCompiler::kNoCacheNoReason,
-      i::NOT_NATIVES_CODE);
+      NOT_NATIVES_CODE);
 
   gReplaceSourceContentsScriptId = 0;
   return maybe_function_info;
 }
+
+} // namespace internal
 
 MaybeLocal<UnboundScript> ScriptCompiler::CompileUnboundInternal(
     Isolate* v8_isolate, Source* source, CompileOptions options,

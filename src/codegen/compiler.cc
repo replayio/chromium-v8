@@ -71,13 +71,18 @@
 #endif  // V8_ENABLE_MAGLEV
 
 namespace v8 {
-
-extern int ReplayingGetReplacedScriptId();
-
 namespace internal {
 
 extern MaybeHandle<Script> MaybeGetScript(Isolate* isolate, int script_id);
 extern Handle<Script> GetScript(Isolate* isolate, int script_id);
+
+extern MaybeHandle<SharedFunctionInfo>
+ReplayingMaybeReplaceScript(Isolate* isolate,
+                            MaybeHandle<i::SharedFunctionInfo> maybe_function_info,
+                            const ScriptDetails& script_details,
+                            Handle<String> source);
+
+extern int ReplayingGetReplacedScriptId();
 
 namespace {
 
@@ -2945,6 +2950,12 @@ MaybeHandle<JSFunction> Compiler::GetFunctionFromEval(
     }
   }
   DCHECK(is_compiled_scope.is_compiled());
+
+  MaybeHandle<SharedFunctionInfo> new_shared_info =
+    ReplayingMaybeReplaceScript(isolate, shared_info, ScriptDetails(*script), source);
+  if (!new_function_info.is_null() && *new_shared_info != *shared_info) {
+    result = Factory::JSFunctionBuilder{isolate, new_shared_info, context}.Build();
+  }
 
   return result;
 }
