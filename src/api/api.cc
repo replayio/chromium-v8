@@ -12272,7 +12272,7 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
 
   // Currently the dependency graph is enabled by default.
   i::gRecordReplayEnableDependencyGraph =
-    V8RecordReplayFeatureEnabled("dependency-graph", "v8");
+    V8RecordReplayFeatureEnabled("dependency-graph");
 
   i::gRecordReplayAssertDependencyGraph = !!getenv("RECORD_REPLAY_DEPENDENCY_GRAPH_ASSERTS");
 
