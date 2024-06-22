@@ -11797,7 +11797,7 @@ extern "C" DLLEXPORT bool V8RecordReplayUpdateDependencyGraph() {
 extern "C" DLLEXPORT int V8RecordReplayNewDependencyGraphNode(const char* json) {
   if (V8RecordReplayUpdateDependencyGraph()) {
     int id = gRecordReplayNewDependencyGraphNode(json);
-    if (gRecordReplayAssertDependencyGraph) {
+    if (i::gRecordReplayAssertDependencyGraph) {
       recordreplay::Assert("NewDependencyGraphNode id=%d %s", id, json ? json : "");
     }
     return id;
@@ -11812,7 +11812,7 @@ int recordreplay::NewDependencyGraphNode(const char* json) {
 extern "C" DLLEXPORT void V8RecordReplayAddDependencyGraphEdge(int source, int target, const char* json) {
   if (V8RecordReplayUpdateDependencyGraph()) {
     gRecordReplayAddDependencyGraphEdge(source, target, json);
-    if (gRecordReplayAssertDependencyGraph) {
+    if (i::gRecordReplayAssertDependencyGraph) {
       recordreplay::Assert("NewDependencyGraphEdge source=%d target=%d %s", source, target, json ? json : "");
     }
   }
@@ -11840,7 +11840,7 @@ extern "C" DLLEXPORT void V8RecordReplayBeginDependencyExecution(int node) {
     }
     gDependencyGraphExecutionStack->push_back(node);
     gRecordReplayBeginDependencyExecution(node);
-    if (gRecordReplayAssertDependencyGraph) {
+    if (i::gRecordReplayAssertDependencyGraph) {
       recordreplay::Assert("BeginDependencyExecution id=%d", node);
     }
   }
@@ -11854,7 +11854,7 @@ extern "C" DLLEXPORT void V8RecordReplayEndDependencyExecution() {
   if (V8RecordReplayUpdateDependencyGraph()) {
     gDependencyGraphExecutionStack->pop_back();
     gRecordReplayEndDependencyExecution();
-    if (gRecordReplayAssertDependencyGraph) {
+    if (i::gRecordReplayAssertDependencyGraph) {
       recordreplay::Assert("EndDependencyExecution");
     }
   }
@@ -12272,7 +12272,7 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
 
   // Currently the dependency graph is enabled by default.
   i::gRecordReplayEnableDependencyGraph =
-    V8RecordReplayFeatureEnabled("dependency-graph");
+    V8RecordReplayFeatureEnabled("dependency-graph", nullptr);
 
   i::gRecordReplayAssertDependencyGraph = !!getenv("RECORD_REPLAY_DEPENDENCY_GRAPH_ASSERTS");
 
