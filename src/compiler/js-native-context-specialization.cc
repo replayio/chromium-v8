@@ -236,9 +236,11 @@ bool IsStringWithNonAccessibleContent(JSHeapBroker* broker, Node* node) {
 
 Reduction JSNativeContextSpecialization::ReduceJSAsyncFunctionEnter(
     Node* node) {
-  // FIXME
-  return NoChange();
-#if 0
+  if (recordreplay::IsRecordingOrReplaying(
+        "disable-v8-optimize-promises",
+        "JSNativeContextSpecialization::ReduceJSAsyncFunctionEnter"))
+    return NoChange();
+
   DCHECK_EQ(IrOpcode::kJSAsyncFunctionEnter, node->opcode());
   Node* closure = NodeProperties::GetValueInput(node, 0);
   Node* receiver = NodeProperties::GetValueInput(node, 1);
@@ -272,14 +274,15 @@ Reduction JSNativeContextSpecialization::ReduceJSAsyncFunctionEnter(
                        closure, receiver, promise, context, effect, control);
   ReplaceWithValue(node, value, effect, control);
   return Replace(value);
-#endif
 }
 
 Reduction JSNativeContextSpecialization::ReduceJSAsyncFunctionReject(
     Node* node) {
-  // FIXME
-  return NoChange();
-#if 0
+  if (recordreplay::IsRecordingOrReplaying(
+        "disable-v8-optimize-promises",
+        "JSNativeContextSpecialization::ReduceJSAsyncFunctionReject"))
+    return NoChange();
+
   DCHECK_EQ(IrOpcode::kJSAsyncFunctionReject, node->opcode());
   Node* async_function_object = NodeProperties::GetValueInput(node, 0);
   Node* reason = NodeProperties::GetValueInput(node, 1);
@@ -312,14 +315,15 @@ Reduction JSNativeContextSpecialization::ReduceJSAsyncFunctionReject(
                             debug_event, context, frame_state, effect, control);
   ReplaceWithValue(node, promise, effect, control);
   return Replace(promise);
-#endif
 }
 
 Reduction JSNativeContextSpecialization::ReduceJSAsyncFunctionResolve(
     Node* node) {
-  // FIXME
-  return NoChange();
-#if 0
+  if (recordreplay::IsRecordingOrReplaying(
+        "disable-v8-optimize-promises",
+        "JSNativeContextSpecialization::ReduceJSAsyncFunctionResolve"))
+    return NoChange();
+
   DCHECK_EQ(IrOpcode::kJSAsyncFunctionResolve, node->opcode());
   Node* async_function_object = NodeProperties::GetValueInput(node, 0);
   Node* value = NodeProperties::GetValueInput(node, 1);
@@ -349,7 +353,6 @@ Reduction JSNativeContextSpecialization::ReduceJSAsyncFunctionResolve(
                             context, frame_state, effect, control);
   ReplaceWithValue(node, promise, effect, control);
   return Replace(promise);
-#endif
 }
 
 // Concatenates {left} and {right}. The result is fairly similar to creating a
@@ -947,9 +950,11 @@ Reduction JSNativeContextSpecialization::ReduceJSOrdinaryHasInstance(
 
 // ES section #sec-promise-resolve
 Reduction JSNativeContextSpecialization::ReduceJSPromiseResolve(Node* node) {
-  // FIXME
-  return NoChange();
-#if 0
+  if (recordreplay::IsRecordingOrReplaying(
+        "disable-v8-optimize-promises",
+        "JSNativeContextSpecialization::ReduceJSPromiseResolve"))
+    return NoChange();
+
   DCHECK_EQ(IrOpcode::kJSPromiseResolve, node->opcode());
   Node* constructor = NodeProperties::GetValueInput(node, 0);
   Node* value = NodeProperties::GetValueInput(node, 1);
@@ -981,7 +986,6 @@ Reduction JSNativeContextSpecialization::ReduceJSPromiseResolve(Node* node) {
                             context, frame_state, effect, control);
   ReplaceWithValue(node, promise, effect, control);
   return Replace(promise);
-#endif
 }
 
 // ES section #sec-promise-resolve-functions

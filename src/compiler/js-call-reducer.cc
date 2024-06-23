@@ -7023,9 +7023,11 @@ Reduction JSCallReducer::ReduceStringPrototypeConcat(Node* node) {
 }
 
 Reduction JSCallReducer::ReducePromiseConstructor(Node* node) {
-  // FIXME
-  return NoChange();
-#if 0
+  if (recordreplay::IsRecordingOrReplaying(
+        "disable-v8-optimize-promises",
+        "JSCallReducer::ReducePromiseConstructor"))
+    return NoChange();
+
   PromiseBuiltinReducerAssembler a(this, node, broker());
 
   // We only inline when we have the executor.
@@ -7036,7 +7038,6 @@ Reduction JSCallReducer::ReducePromiseConstructor(Node* node) {
 
   TNode<Object> subgraph = a.ReducePromiseConstructor(native_context());
   return ReplaceWithSubgraph(&a, subgraph);
-#endif
 }
 
 bool JSCallReducer::DoPromiseChecks(MapInference* inference) {
@@ -7110,9 +7111,11 @@ Node* JSCallReducer::CreateClosureFromBuiltinSharedFunctionInfo(
 
 // ES section #sec-promise.prototype.finally
 Reduction JSCallReducer::ReducePromisePrototypeFinally(Node* node) {
-  // FIXME
-  return NoChange();
-#if 0
+  if (recordreplay::IsRecordingOrReplaying(
+        "disable-v8-optimize-promises",
+        "JSCallReducer::ReducePromisePrototypeFinally"))
+    return NoChange();
+
   JSCallNode n(node);
   CallParameters const& p = n.Parameters();
   int arity = p.arity_without_implicit_args();
@@ -7230,13 +7233,14 @@ Reduction JSCallReducer::ReducePromisePrototypeFinally(Node* node) {
                 ConvertReceiverMode::kNotNullOrUndefined, p.speculation_mode(),
                 CallFeedbackRelation::kUnrelated));
   return Changed(node).FollowedBy(ReducePromisePrototypeThen(node));
-#endif
 }
 
 Reduction JSCallReducer::ReducePromisePrototypeThen(Node* node) {
-  // FIXME
-  return NoChange();
-#if 0
+  if (recordreplay::IsRecordingOrReplaying(
+        "disable-v8-optimize-promises",
+        "JSCallReducer::ReducePromisePrototypeThen"))
+    return NoChange();
+
   JSCallNode n(node);
   CallParameters const& p = n.Parameters();
   if (p.speculation_mode() == SpeculationMode::kDisallowSpeculation) {
@@ -7298,7 +7302,6 @@ Reduction JSCallReducer::ReducePromisePrototypeThen(Node* node) {
 
   ReplaceWithValue(node, promise, effect, control);
   return Replace(promise);
-#endif
 }
 
 // ES section #sec-promise.resolve
