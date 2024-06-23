@@ -150,6 +150,9 @@ extern "C" const uint8_t v8_Default_embedded_blob_data_[];
 extern "C" uint32_t v8_Default_embedded_blob_data_size_;
 
 namespace v8 {
+
+extern std::string RecordReplayGetScriptedCaller();
+
 namespace internal {
 
 #ifdef DEBUG
@@ -1833,6 +1836,9 @@ Handle<JSMessageObject> Isolate::CreateMessageOrAbort(
 }
 
 Object Isolate::ThrowInternal(Object raw_exception, MessageLocation* location) {
+  std::string caller = RecordReplayGetScriptedCaller();
+  recordreplay::Diagnostic("Isolate::ThrowInternal caller=%s", caller.c_str());
+
   recordreplay::AssertMaybeEventsDisallowed("[RUN-885] Isolate::ThrowInternal");
 
   DCHECK(!has_pending_exception());
