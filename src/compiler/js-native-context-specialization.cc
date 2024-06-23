@@ -236,6 +236,9 @@ bool IsStringWithNonAccessibleContent(JSHeapBroker* broker, Node* node) {
 
 Reduction JSNativeContextSpecialization::ReduceJSAsyncFunctionEnter(
     Node* node) {
+  // FIXME
+  return NoChange();
+
   DCHECK_EQ(IrOpcode::kJSAsyncFunctionEnter, node->opcode());
   Node* closure = NodeProperties::GetValueInput(node, 0);
   Node* receiver = NodeProperties::GetValueInput(node, 1);
@@ -273,6 +276,9 @@ Reduction JSNativeContextSpecialization::ReduceJSAsyncFunctionEnter(
 
 Reduction JSNativeContextSpecialization::ReduceJSAsyncFunctionReject(
     Node* node) {
+  // FIXME
+  return NoChange();
+
   DCHECK_EQ(IrOpcode::kJSAsyncFunctionReject, node->opcode());
   Node* async_function_object = NodeProperties::GetValueInput(node, 0);
   Node* reason = NodeProperties::GetValueInput(node, 1);
@@ -309,6 +315,9 @@ Reduction JSNativeContextSpecialization::ReduceJSAsyncFunctionReject(
 
 Reduction JSNativeContextSpecialization::ReduceJSAsyncFunctionResolve(
     Node* node) {
+  // FIXME
+  return NoChange();
+
   DCHECK_EQ(IrOpcode::kJSAsyncFunctionResolve, node->opcode());
   Node* async_function_object = NodeProperties::GetValueInput(node, 0);
   Node* value = NodeProperties::GetValueInput(node, 1);
@@ -935,6 +944,9 @@ Reduction JSNativeContextSpecialization::ReduceJSOrdinaryHasInstance(
 
 // ES section #sec-promise-resolve
 Reduction JSNativeContextSpecialization::ReduceJSPromiseResolve(Node* node) {
+  // FIXME
+  return NoChange();
+
   DCHECK_EQ(IrOpcode::kJSPromiseResolve, node->opcode());
   Node* constructor = NodeProperties::GetValueInput(node, 0);
   Node* value = NodeProperties::GetValueInput(node, 1);

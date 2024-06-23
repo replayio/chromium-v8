@@ -5029,32 +5029,12 @@ void Isolate::UpdatePromiseHookProtector() {
   }
 }
 
-// Whether the main thread sees/saw the debugger being enabled when recording.
-int g_record_replay_recording_debug_enabled = 0;
-// Whether the main thread sees/saw Promise hooks enabled when recording.
-int g_record_replay_recording_hooks_enabled = 0;
-
 void Isolate::PromiseHookStateUpdated() {
   promise_hook_flags_ =
     (promise_hook_flags_ & PromiseHookFields::HasContextPromiseHook::kMask) |
     PromiseHookFields::HasIsolatePromiseHook::encode(promise_hook_ || RecordReplayShouldCallOnPromiseHook()) |
     PromiseHookFields::HasAsyncEventDelegate::encode(async_event_delegate_) |
     PromiseHookFields::IsDebugActive::encode(debug()->is_active());
-
-  if (IsMainThread()) {
-    g_record_replay_recording_debug_enabled = (int)v8::recordreplay::RecordReplayValue(
-      "debug-enabled",
-      (uintptr_t)debug()->is_active()
-    );
-    g_record_replay_recording_hooks_enabled = (int)v8::recordreplay::RecordReplayValue(
-      "hooks-enabled",
-      (uintptr_t)!!(promise_hook_flags_ & (
-        Isolate::PromiseHookFields::HasIsolatePromiseHook::kMask |
-        Isolate::PromiseHookFields::HasAsyncEventDelegate::kMask |
-        Isolate::PromiseHookFields::IsDebugActive::kMask
-      ))
-    );
-  }
 
   if (promise_hook_flags_ != 0) {
     UpdatePromiseHookProtector();
