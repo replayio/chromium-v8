@@ -2957,7 +2957,7 @@ MaybeHandle<JSFunction> Compiler::GetFunctionFromEval(
 
     UnoptimizedCompileFlags flags = UnoptimizedCompileFlags::ForToplevelCompile(
         isolate, true, language_mode, REPLMode::kNo, ScriptType::kClassic,
-        v8_flags.lazy_eval);
+        v8_flags.lazy_eval, script->id());
     flags.set_is_eval(true);
     flags.set_parsing_while_debugging(parsing_while_debugging);
     DCHECK(!flags.is_module());
@@ -2970,8 +2970,12 @@ MaybeHandle<JSFunction> Compiler::GetFunctionFromEval(
     ParseInfo parse_info(isolate, flags, &compile_state, &reusable_state);
     parse_info.set_parameters_end_pos(parameters_end_pos);
 
+    Handle<Script> new_script = parse_info.CreateScript(
+        isolate, new_source, kNullMaybeHandle,
+        OriginOptionsForEval(outer_info->script(), parsing_while_debugging));
+
     Handle<SharedFunctionInfo> new_shared_info =
-      v8::internal::CompileToplevel(&parse_info, script,
+      v8::internal::CompileToplevel(&parse_info, new_script,
                                     maybe_outer_scope_info, isolate,
                                     &is_compiled_scope)
         .ToHandleChecked();
