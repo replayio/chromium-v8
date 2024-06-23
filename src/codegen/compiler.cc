@@ -76,13 +76,10 @@ namespace internal {
 extern MaybeHandle<Script> MaybeGetScript(Isolate* isolate, int script_id);
 extern Handle<Script> GetScript(Isolate* isolate, int script_id);
 
-extern MaybeHandle<SharedFunctionInfo>
-ReplayingMaybeReplaceScript(Isolate* isolate,
-                            MaybeHandle<i::SharedFunctionInfo> maybe_function_info,
-                            const ScriptDetails& script_details,
-                            Handle<String> source);
+extern int gReplaceSourceContentsScriptId;
 
-extern int ReplayingGetReplacedScriptId();
+extern MaybeHandle<String>
+ReplayingReplaceScriptContents(Isolate* isolate, Handle<String> source);
 
 namespace {
 
@@ -2951,10 +2948,36 @@ MaybeHandle<JSFunction> Compiler::GetFunctionFromEval(
   }
   DCHECK(is_compiled_scope.is_compiled());
 
-  MaybeHandle<SharedFunctionInfo> new_shared_info =
-    ReplayingMaybeReplaceScript(isolate, shared_info, ScriptDetails(), source);
-  if (!new_shared_info.is_null())
-    result = Factory::JSFunctionBuilder{isolate, new_shared_info.ToHandleChecked(), context}.Build();
+  MaybeHandle<String> new_source = ReplayingReplaceScriptContents(isolate, source);
+  if (!new_source.is_null()) {
+    MaybeHandle<ScopeInfo> maybe_outer_scope_info;
+    if (!context->IsNativeContext()) {
+      maybe_outer_scope_info = handle(context->scope_info(), isolate);
+    }
+
+    UnoptimizedCompileFlags flags = UnoptimizedCompileFlags::ForToplevelCompile(
+        isolate, true, language_mode, REPLMode::kNo, ScriptType::kClassic,
+        v8_flags.lazy_eval);
+    flags.set_is_eval(true);
+    flags.set_parsing_while_debugging(parsing_while_debugging);
+    DCHECK(!flags.is_module());
+    flags.set_parse_restriction(restriction);
+
+    SetRecordReplayFlags(flags, "");
+
+    UnoptimizedCompileState compile_state;
+    ReusableUnoptimizedCompileState reusable_state(isolate);
+    ParseInfo parse_info(isolate, flags, &compile_state, &reusable_state);
+    parse_info.set_parameters_end_pos(parameters_end_pos);
+
+    Handle<SharedFunctionInfo> new_shared_info =
+      v8::internal::CompileToplevel(&parse_info, script,
+                                    maybe_outer_scope_info, isolate,
+                                    &is_compiled_scope)
+        .ToHandleChecked();
+
+    result = Factory::JSFunctionBuilder{isolate, new_shared_info, context}.Build();
+  }
 
   return result;
 }
@@ -3579,7 +3602,8 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
     // recompiled when replaying but that's fine when the right script ID is used.
     if (recordreplay::IsRecordingOrReplaying("values") &&
         !recordreplay::AreEventsDisallowed() &&
-        !ReplayingGetReplacedScriptId()) {
+        IsMainThread() &&
+        !gReplaceSourceContentsScriptId) {
       int script_id = v8::UnboundScript::kNoScriptId;
       if (Handle<Script> script;
           recordreplay::IsRecording() && maybe_script.ToHandle(&script)) {
@@ -3671,8 +3695,8 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
       if (Handle<Script> script; maybe_script.ToHandle(&script)) {
         script_id = script->id();
       }
-      if (ReplayingGetReplacedScriptId()) {
-        script_id = ReplayingGetReplacedScriptId();
+      if (gReplaceSourceContentsScriptId) {
+        script_id = gReplaceSourceContentsScriptId;
       }
 
       UnoptimizedCompileFlags flags =
