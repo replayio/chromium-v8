@@ -294,12 +294,6 @@ MaybeHandle<Object> IC::TypeError(MessageTemplate index, Handle<Object> object,
 }
 
 MaybeHandle<Object> IC::ReferenceError(Handle<Name> name) {
-  {
-    base::ScopedVector<char> name_buffer(100);
-    name->NameShortPrint(name_buffer);
-    recordreplay::Diagnostic("IC::ReferenceError %s", name_buffer.begin());
-  }
-
   HandleScope scope(isolate());
   THROW_NEW_ERROR(
       isolate(), NewReferenceError(MessageTemplate::kNotDefined, name), Object);
