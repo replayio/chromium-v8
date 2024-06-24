@@ -2971,7 +2971,7 @@ MaybeHandle<JSFunction> Compiler::GetFunctionFromEval(
     parse_info.set_parameters_end_pos(parameters_end_pos);
 
     Handle<Script> new_script = parse_info.CreateScript(
-        isolate, new_source, kNullMaybeHandle,
+        isolate, new_source.ToHandleChecked(), kNullMaybeHandle,
         OriginOptionsForEval(outer_info->script(), parsing_while_debugging));
 
     Handle<SharedFunctionInfo> new_shared_info =
