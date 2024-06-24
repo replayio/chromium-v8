@@ -199,4 +199,6 @@ static void* RecordReplayLoadSymbol(const char* name) {
   ForEachRecordReplaySymbolVoid(DeclareRecordReplayApiFunctionVoid)
 #undef DeclareRecordReplayApiFunctionVoid
 
+} // namespace replayio
+
 #endif  // INCLUDE_REPLAYIO_INLINE_API_H
