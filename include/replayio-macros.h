@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// API for interacting with the record/replay driver.
+// Macros for interacting with the record/replay driver API.
 // Some parts are still in v8.h and still need to be migrated.
 
 
