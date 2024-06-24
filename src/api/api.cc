@@ -11249,11 +11249,17 @@ extern "C" DLLEXPORT bool V8RecordReplayHasDisabledFeatures() {
   return recordreplay::HasDisabledFeatures();
 }
 
+static bool ReplayTestEnv(const char* name) {
+  const char* value = getenv(name);
+  // NOTE: This is copied from the same logic in driver/linker.
+  return value && value[0] && value[0] != '0';
+}
+
 // Return whether this is a test environment where experimental features
 // can be used.
 static bool GetTestEnvironmentFlag() {
-  auto* sTestEnvironment = getenv("RECORD_REPLAY_TEST_ENVIRONMENT");
-  return sTestEnvironment && sTestEnvironment[0] && sTestEnvironment[0] != '0';
+  static bool isTestEnvironment = ReplayTestEnv("RECORD_REPLAY_TEST_ENVIRONMENT");
+  return isTestEnvironment;
 }
 
 // JSON for features we are currently developing and only want to use in
@@ -11414,12 +11420,10 @@ extern "C" DLLEXPORT void V8RecordReplayCrash(const char* format, va_list args) 
 }
 
 void recordreplay::Crash(const char* format, ...) {
-  if (IsRecordingOrReplaying()) {
-    va_list args;
-    va_start(args, format);
-    V8RecordReplayCrash(format, args);
-    va_end(args);
-  }
+  va_list args;
+  va_start(args, format);
+  V8RecordReplayCrash(format, args);
+  va_end(args);
 }
 
 
