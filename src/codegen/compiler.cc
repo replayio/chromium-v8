@@ -2948,6 +2948,9 @@ MaybeHandle<JSFunction> Compiler::GetFunctionFromEval(
   }
   DCHECK(is_compiled_scope.is_compiled());
 
+  // See if we need to use replaced source contents while replaying, in which
+  // case we need to compile the new source in the same way we did above and
+  // replace the result.
   MaybeHandle<String> new_source = ReplayingReplaceScriptContents(isolate, source);
   if (!new_source.is_null()) {
     MaybeHandle<ScopeInfo> maybe_outer_scope_info;
