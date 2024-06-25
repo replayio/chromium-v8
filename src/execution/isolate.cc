@@ -1587,7 +1587,13 @@ bool Isolate::MayAccess(Handle<Context> accessing_context,
 }
 
 Object Isolate::StackOverflow() {
-  recordreplay::InvalidateRecording("Stack overflow");
+  if (recordreplay::IsRecordingOrReplaying()) {
+    std::stringstream stack;
+    isolate->PrintCurrentStackTrace(stack);
+
+    recordreplay::Print("Stack overflow, invalidating recording: %s", stack.str().c_Str());
+    recordreplay::InvalidateRecording("Stack overflow");
+  }
 
   // Whoever calls this method should not have overflown the stack limit by too
   // much. Otherwise we risk actually running out of stack space.
