@@ -2556,43 +2556,52 @@ i::ScriptDetails GetScriptDetails(
 
 static const char* RecordReplayReplaceSourceContents(const char* contents);
 
-static int gReplaceSourceContentsScriptId;
+namespace internal {
 
 // If we are compiling a script while replaying that replaces another one,
-// return the ID of the script being replaced.
-int ReplayingGetReplacedScriptId() {
-  return IsMainThread() ? gReplaceSourceContentsScriptId : 0;
-}
+// the ID of the script being replaced. Main thread only.
+int gReplaceSourceContentsScriptId;
 
-static i::MaybeHandle<i::SharedFunctionInfo>
-ReplayingMaybeReplaceScript(i::Isolate* isolate,
-                            i::MaybeHandle<i::SharedFunctionInfo> maybe_function_info,
-                            const i::ScriptDetails& script_details,
-                            i::Handle<i::String> source) {
-  if (!recordreplay::IsReplaying() || !IsMainThread() || maybe_function_info.is_null()) {
-    return maybe_function_info;
+MaybeHandle<String>
+ReplayingReplaceScriptContents(Isolate* isolate, Handle<String> source) {
+  if (!recordreplay::IsReplaying() || !IsMainThread()) {
+    return MaybeHandle<String>();
   }
 
   std::unique_ptr<char[]> contents = source->ToCString();
   const char* new_contents = RecordReplayReplaceSourceContents(contents.get());
   if (!new_contents) {
+    return MaybeHandle<String>();
+  }
+
+  return isolate->factory()->NewStringFromUtf8(base::CStrVector(new_contents)).ToHandleChecked();
+}
+
+MaybeHandle<SharedFunctionInfo>
+ReplayingMaybeReplaceScript(Isolate* isolate,
+                            MaybeHandle<SharedFunctionInfo> maybe_function_info,
+                            const ScriptDetails& script_details,
+                            Handle<String> source) {
+  MaybeHandle<String> new_source = ReplayingReplaceScriptContents(isolate, source);
+
+  if (new_source.is_null() || maybe_function_info.is_null()) {
     return maybe_function_info;
   }
 
-  i::Handle<i::String> new_source = isolate->factory()->NewStringFromUtf8(base::CStrVector(new_contents)).ToHandleChecked();
-
   CHECK(!gReplaceSourceContentsScriptId);
-  gReplaceSourceContentsScriptId = i::Script::cast(maybe_function_info.ToHandleChecked()->script()).id();
+  gReplaceSourceContentsScriptId = Script::cast(maybe_function_info.ToHandleChecked()->script()).id();
 
-  maybe_function_info = i::Compiler::GetSharedFunctionInfoForScript(
-      isolate, new_source, script_details,
+  maybe_function_info = Compiler::GetSharedFunctionInfoForScript(
+      isolate, new_source.ToHandleChecked(), script_details,
       ScriptCompiler::kNoCompileOptions,
       ScriptCompiler::kNoCacheNoReason,
-      i::NOT_NATIVES_CODE);
+      NOT_NATIVES_CODE);
 
   gReplaceSourceContentsScriptId = 0;
   return maybe_function_info;
 }
+
+} // namespace internal
 
 MaybeLocal<UnboundScript> ScriptCompiler::CompileUnboundInternal(
     Isolate* v8_isolate, Source* source, CompileOptions options,
@@ -2643,7 +2652,7 @@ MaybeLocal<UnboundScript> ScriptCompiler::CompileUnboundInternal(
         i::NOT_NATIVES_CODE);
   }
 
-  maybe_function_info = ReplayingMaybeReplaceScript(i_isolate, maybe_function_info, script_details, str);
+  maybe_function_info = i::ReplayingMaybeReplaceScript(i_isolate, maybe_function_info, script_details, str);
 
   has_pending_exception = !maybe_function_info.ToHandle(&result);
   RETURN_ON_FAILED_EXECUTION(UnboundScript);
@@ -2888,7 +2897,7 @@ i::MaybeHandle<i::SharedFunctionInfo> CompileStreamedSource(
   i::MaybeHandle<i::SharedFunctionInfo> maybe_function_info = i::Compiler::GetSharedFunctionInfoForStreamedScript(
       i_isolate, str, script_details, data);
 
-  return ReplayingMaybeReplaceScript(i_isolate, maybe_function_info, script_details, str);
+  return i::ReplayingMaybeReplaceScript(i_isolate, maybe_function_info, script_details, str);
 }
 
 }  // namespace
@@ -11086,7 +11095,12 @@ bool gRecordReplayAssertProgress;
 bool gRecordReplayAssertTrackedObjects;
 
 // Enable reporting the dependency graph while replaying.
+// This is on by default.
 bool gRecordReplayEnableDependencyGraph;
+
+// Assert that dependency graph nodes / edges are created consistently.
+// This adds recording overhead and is off by default.
+bool gRecordReplayAssertDependencyGraph;
 
 // Enable various checks when advancing the progress counter. Set via the
 // environment, or when events are disallowed on the main thread.
@@ -11783,13 +11797,20 @@ extern "C" DLLEXPORT bool V8RecordReplayAllowSideEffects() {
   return recordreplay::AllowSideEffects();
 }
 
-static inline bool UpdateDependencyGraph() {
-  return i::gRecordReplayEnableDependencyGraph && IsMainThread();
+extern "C" DLLEXPORT bool V8RecordReplayUpdateDependencyGraph() {
+  return i::gRecordReplayEnableDependencyGraph
+      && (recordreplay::IsReplaying() || i::gRecordReplayAssertDependencyGraph)
+      && IsMainThread();
 }
 
 extern "C" DLLEXPORT int V8RecordReplayNewDependencyGraphNode(const char* json) {
-  if (UpdateDependencyGraph()) {
-    return gRecordReplayNewDependencyGraphNode(json);
+  if (V8RecordReplayUpdateDependencyGraph()) {
+    int id = gRecordReplayNewDependencyGraphNode(json);
+    if (i::gRecordReplayAssertDependencyGraph) {
+      recordreplay::Assert("NewDependencyGraphNode id=%d %s",
+                           id, json ? json : "");
+    }
+    return id;
   }
   return 0;
 }
@@ -11799,8 +11820,12 @@ int recordreplay::NewDependencyGraphNode(const char* json) {
 }
 
 extern "C" DLLEXPORT void V8RecordReplayAddDependencyGraphEdge(int source, int target, const char* json) {
-  if (UpdateDependencyGraph()) {
+  if (V8RecordReplayUpdateDependencyGraph()) {
     gRecordReplayAddDependencyGraphEdge(source, target, json);
+    if (i::gRecordReplayAssertDependencyGraph) {
+      recordreplay::Assert("NewDependencyGraphEdge source=%d target=%d %s",
+                           source, target, json ? json : "");
+    }
   }
 }
 
@@ -11820,12 +11845,15 @@ extern "C" int V8RecordReplayDependencyGraphExecutionNode() {
 }
 
 extern "C" DLLEXPORT void V8RecordReplayBeginDependencyExecution(int node) {
-  if (UpdateDependencyGraph()) {
+  if (V8RecordReplayUpdateDependencyGraph()) {
     if (!gDependencyGraphExecutionStack) {
       gDependencyGraphExecutionStack = new std::vector<int>();
     }
     gDependencyGraphExecutionStack->push_back(node);
     gRecordReplayBeginDependencyExecution(node);
+    if (i::gRecordReplayAssertDependencyGraph) {
+      recordreplay::Assert("BeginDependencyExecution id=%d", node);
+    }
   }
 }
 
@@ -11834,9 +11862,12 @@ void recordreplay::BeginDependencyExecution(int node) {
 }
 
 extern "C" DLLEXPORT void V8RecordReplayEndDependencyExecution() {
-  if (UpdateDependencyGraph()) {
+  if (V8RecordReplayUpdateDependencyGraph()) {
     gDependencyGraphExecutionStack->pop_back();
     gRecordReplayEndDependencyExecution();
+    if (i::gRecordReplayAssertDependencyGraph) {
+      recordreplay::Assert("EndDependencyExecution");
+    }
   }
 }
 
@@ -12250,9 +12281,11 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
                                         i::RecordReplayCallbackAssertDescribeData);
   }
 
-  // Currently the dependency graph is disabled by default.
+  // Currently the dependency graph is enabled by default.
   i::gRecordReplayEnableDependencyGraph =
-    V8RecordReplayFeatureEnabled("dependency-graph", "v8");
+    V8RecordReplayFeatureEnabled("dependency-graph", nullptr);
+
+  i::gRecordReplayAssertDependencyGraph = !!getenv("RECORD_REPLAY_DEPENDENCY_GRAPH_ASSERTS");
 
   // Disable wasm background compilation.
   if (V8RecordReplayFeatureEnabled("disable-v8-flags-wasm-compilation-tasks", nullptr)) {
