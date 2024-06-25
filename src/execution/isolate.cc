@@ -1589,9 +1589,9 @@ bool Isolate::MayAccess(Handle<Context> accessing_context,
 Object Isolate::StackOverflow() {
   if (recordreplay::IsRecordingOrReplaying()) {
     std::stringstream stack;
-    isolate->PrintCurrentStackTrace(stack);
+    PrintCurrentStackTrace(stack);
 
-    recordreplay::Print("Stack overflow, invalidating recording: %s", stack.str().c_Str());
+    recordreplay::Print("Stack overflow, invalidating recording: %s", stack.str().c_str());
     recordreplay::InvalidateRecording("Stack overflow");
   }
 
