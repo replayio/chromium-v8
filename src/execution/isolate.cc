@@ -1746,7 +1746,7 @@ void Isolate::RecordReplayInvokeApiInterruptCallbacksAtProgress() {
       ExecutionAccess access(this);
       if (api_interrupts_queue_.empty()) {
         recordreplay::OrderedUnlock(record_replay_api_interrupts_ordered_lock_id_);
-        return;
+        break;
       }
       entry = api_interrupts_queue_.front();
       api_interrupts_queue_.pop();
