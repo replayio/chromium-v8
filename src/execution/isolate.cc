@@ -1596,7 +1596,7 @@ Object Isolate::StackOverflow(bool record_replay_non_deterministic) {
         record_replay_pending_stack_overflow_ = true;
         RecordReplayTriggerProgressInterrupt();
       }
-      return;
+      return ReadOnlyRoots(heap()).exception();
     } else {
       std::stringstream stack;
       PrintCurrentStackTrace(stack);
