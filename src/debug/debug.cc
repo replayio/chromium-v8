@@ -3793,7 +3793,14 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
                          ? "inlineScript"
                          : "scriptSource";
 
-  recordreplay::Diagnostic("OnNewSource %s %s", id.get(), kind);
+  std::string source_mapping_url;
+  if (!script->source_mapping_url().IsUndefined()) {
+    std::unique_ptr<char[]> str = String::cast(script->source_mapping_url()).ToCString();
+    source_mapping_url = str.get();
+  }
+
+  recordreplay::Assert("OnNewSource id=%s kind=%s url=%s sourceMap=%s",
+                       id.get(), kind, url.c_str(), source_mapping_url.c_str());
 
   if (!gRegisteredScripts) {
     gRegisteredScripts = new ScriptIdSet;
