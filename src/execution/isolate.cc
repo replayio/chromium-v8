@@ -1591,7 +1591,7 @@ bool Isolate::MayAccess(Handle<Context> accessing_context,
 Object Isolate::StackOverflow(bool record_replay_non_deterministic) {
   if (record_replay_non_deterministic && recordreplay::IsRecordingOrReplaying()) {
     recordreplay::Diagnostic("StackOverflow");
-    if (IsMainThread()) {
+    if (IsMainThread() && getenv("RECORD_REPLAY_ALLOW_STACK_OVERFLOW")) {
       if (recordreplay::IsRecording()) {
         record_replay_pending_stack_overflow_ = true;
         RecordReplayTriggerProgressInterrupt();
@@ -1600,8 +1600,10 @@ Object Isolate::StackOverflow(bool record_replay_non_deterministic) {
     } else {
       std::stringstream stack;
       PrintCurrentStackTrace(stack);
+      std::string stack_str = stack.str();
 
-      recordreplay::Print("Stack overflow, invalidating recording: %s", stack.str().c_str());
+      int offset = max(0, stack_str.length() - 1500);
+      recordreplay::Print("Stack overflow, invalidating recording: %s", stack.str().c_str() + offset);
       recordreplay::InvalidateRecording("Stack overflow");
     }
   }
