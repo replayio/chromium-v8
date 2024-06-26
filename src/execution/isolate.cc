@@ -1602,7 +1602,7 @@ Object Isolate::StackOverflow(bool record_replay_non_deterministic) {
       PrintCurrentStackTrace(stack);
       std::string stack_str = stack.str();
 
-      int offset = stack_str.length() - 1500;
+      int offset = (int)stack_str.length() - 1500;
       if (offset < 0) {
         offset = 0;
       }
