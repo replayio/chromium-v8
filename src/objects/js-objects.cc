@@ -110,7 +110,9 @@ Maybe<bool> JSReceiver::HasProperty(LookupIterator* it) {
         break;
       }
       case LookupIterator::ACCESS_CHECK: {
+        REPLAY_ASSERT_MAYBE_EVENTS_DISALLOWED("[TT-366-1480] JSReceiver::HasProperty A");
         if (it->HasAccess()) break;
+        REPLAY_ASSERT_MAYBE_EVENTS_DISALLOWED("[TT-366-1480] JSReceiver::HasProperty B");
         Maybe<PropertyAttributes> result =
             JSObject::GetPropertyAttributesWithFailedAccessCheck(it);
         if (result.IsNothing()) return Nothing<bool>();

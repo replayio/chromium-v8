@@ -1183,6 +1183,7 @@ MaybeHandle<Object> Object::GetProperty(LookupIterator* it,
         break;
       }
       case LookupIterator::ACCESS_CHECK:
+        REPLAY_ASSERT_MAYBE_EVENTS_DISALLOWED("[TT-366-1480] Object::GetProperty");
         if (it->HasAccess()) break;
         return JSObject::GetPropertyWithFailedAccessCheck(it);
       case LookupIterator::ACCESSOR:

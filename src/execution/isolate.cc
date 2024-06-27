@@ -1540,6 +1540,11 @@ bool Isolate::MayAccess(Handle<Context> accessing_context,
 
   // Check for compatibility between the security tokens in the
   // current lexical context and the accessed object.
+  
+  REPLAY_ASSERT("[TT-366-1480] Isolate::MayAccess A %d %d %d",
+                bootstrapper()->IsActive(),
+                V8RecordReplayIsInReplayCode(),
+                receiver->IsJSGlobalProxy());
 
   // During bootstrapping, callback functions are not enabled yet.
   if (bootstrapper()->IsActive()) return true;
@@ -1563,6 +1568,8 @@ bool Isolate::MayAccess(Handle<Context> accessing_context,
       if (Context::cast(receiver_context).security_token() ==
           native_context.security_token())
         return true;
+
+      REPLAY_ASSERT("[TT-366-1480] Isolate::MayAccess B");
     }
   }
 
