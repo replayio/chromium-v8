@@ -392,8 +392,11 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
         !recordreplay::AreEventsDisallowed() &&
         V8RecordReplayDependencyGraphExecutionNode() == 0 &&
         function->shared().script().IsScript()) {
-      std::string location = GetFunctionLocationInfo(isolate, function);
-      recordreplay::Warning("DependencyGraph missing execution: %s", location.c_str());
+      static bool show_warning = !!getenv("RECORD_REPLAY_WARN_MISSING_EXECUTION");
+      if (show_warning) {
+        std::string location = GetFunctionLocationInfo(isolate, function);
+        recordreplay::Warning("DependencyGraph missing execution: %s", location.c_str());
+      }
     }
 
     // Set up a ScriptContext when running scripts that need it.
