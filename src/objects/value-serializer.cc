@@ -422,12 +422,12 @@ void ValueSerializer::WriteUint64(uint64_t value) {
 }
 
 std::pair<uint8_t*, size_t> ValueSerializer::Release() {
+  REPLAY_ASSERT_MAYBE_EVENTS_DISALLOWED(
+    "[TT-1403] V8ScriptValueSerializer::Serialize %zu", buffer_size_);
   auto result = std::make_pair(buffer_, buffer_size_);
   buffer_ = nullptr;
   buffer_size_ = 0;
   buffer_capacity_ = 0;
-  REPLAY_ASSERT_MAYBE_EVENTS_DISALLOWED(
-    "[TT-1403] V8ScriptValueSerializer::Serialize %zu", buffer_size_);
   return result;
 }
 
