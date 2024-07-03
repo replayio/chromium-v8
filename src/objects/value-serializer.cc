@@ -426,6 +426,8 @@ std::pair<uint8_t*, size_t> ValueSerializer::Release() {
   buffer_ = nullptr;
   buffer_size_ = 0;
   buffer_capacity_ = 0;
+  REPLAY_ASSERT_MAYBE_EVENTS_DISALLOWED(
+    "[TT-1403] V8ScriptValueSerializer::Serialize %zu", buffer_size_);
   return result;
 }
 
@@ -442,18 +444,14 @@ Maybe<bool> ValueSerializer::WriteObject(Handle<Object> object) {
   // previously failed and so the buffer is corrupt.
   if (V8_UNLIKELY(out_of_memory_)) return ThrowIfOutOfMemory();
 
-  if (recordreplay::HasAsserts()) {
-    recordreplay::AssertBufferAllocationState* bufferAssertsState =
-      recordreplay::AutoAssertBufferAllocations::GetState();
-    if (bufferAssertsState) {
-      recordreplay::Assert("[%s] ValueSerializer::WriteObject %d",
-        bufferAssertsState->issueLabel.c_str(),
-        object->IsSmi()
-      );
-    }
-  }
-
   if (object->IsSmi()) {
+    if (recordreplay::IsRecordingOrReplaying("ValueSerializer")) {
+      // [TT-1403] Boxed numbers can be JIT'ed into SMIs.
+      // → Never take the optimized path to avoid divergence instead.
+      WriteTag(SerializationTag::kDouble);
+      WriteDouble(Smi::cast(*object).value());
+      return ThrowIfOutOfMemory();
+    }
     WriteSmi(Smi::cast(*object));
     return ThrowIfOutOfMemory();
   }
@@ -671,21 +669,10 @@ Maybe<bool> ValueSerializer::WriteJSReceiver(Handle<JSReceiver> receiver) {
 Maybe<bool> ValueSerializer::WriteJSObject(Handle<JSObject> object) {
   DCHECK(!object->map().IsCustomElementsReceiverMap());
   const bool can_serialize_fast =
-    // [TT-492] slow path all serialization so we're guaranteed to always match
-    !recordreplay::IsRecordingOrReplaying("values", "ValueSerializer::WriteJSObject") &&
-    object->HasFastProperties(isolate_) && object->elements().length() == 0;
+    // [TT-492] Slow path all serialization so we're guaranteed to always match.
+    !recordreplay::IsRecordingOrReplaying("ValueSerializer") &&
+      object->HasFastProperties(isolate_) && object->elements().length() == 0;
 
-  if (recordreplay::HasAsserts()) {
-    recordreplay::AssertBufferAllocationState* bufferAssertsState =
-      recordreplay::AutoAssertBufferAllocations::GetState();
-    if (bufferAssertsState) {
-      recordreplay::Assert("[%s] ValueSerializer::WriteJSObject %d %d",
-        bufferAssertsState->issueLabel.c_str(),
-        can_serialize_fast,
-        object->elements().length() == 0
-      );
-    }
-  }
   if (!can_serialize_fast) return WriteJSObjectSlow(object);
 
   Handle<Map> map(object->map(), isolate_);
