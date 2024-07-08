@@ -152,6 +152,8 @@ extern "C" uint32_t v8_Default_embedded_blob_data_size_;
 namespace v8 {
 namespace internal {
 
+extern void RecordReplayTriggerProgressInterrupt();
+
 #ifdef DEBUG
 #define TRACE_ISOLATE(tag)                                                  \
   do {                                                                      \
@@ -1586,8 +1588,28 @@ bool Isolate::MayAccess(Handle<Context> accessing_context,
   }
 }
 
-Object Isolate::StackOverflow() {
-  recordreplay::InvalidateRecording("Stack overflow");
+Object Isolate::StackOverflow(bool record_replay_non_deterministic) {
+  if (record_replay_non_deterministic && recordreplay::IsRecordingOrReplaying()) {
+    recordreplay::Diagnostic("StackOverflow");
+    if (IsMainThread() && getenv("RECORD_REPLAY_ALLOW_STACK_OVERFLOW")) {
+      if (recordreplay::IsRecording()) {
+        record_replay_pending_stack_overflow_ = true;
+        RecordReplayTriggerProgressInterrupt();
+      }
+      return ReadOnlyRoots(heap()).exception();
+    } else {
+      std::stringstream stack;
+      PrintCurrentStackTrace(stack);
+      std::string stack_str = stack.str();
+
+      int offset = (int)stack_str.length() - 1500;
+      if (offset < 0) {
+        offset = 0;
+      }
+      recordreplay::Print("Stack overflow, invalidating recording: %s", stack.str().c_str() + offset);
+      recordreplay::InvalidateRecording("Stack overflow");
+    }
+  }
 
   // Whoever calls this method should not have overflown the stack limit by too
   // much. Otherwise we risk actually running out of stack space.
@@ -1686,8 +1708,6 @@ void Isolate::RequestInterrupt(InterruptCallback callback, void* data) {
   recordreplay::OrderedUnlock(record_replay_api_interrupts_ordered_lock_id_);
 }
 
-extern void RecordReplayTriggerProgressInterrupt();
-
 void Isolate::InvokeApiInterruptCallbacks() {
   if (recordreplay::IsRecordingOrReplaying("interrupts")) {
     // When recording, we can't invoke API interrupt callbacks at arbitrary points
@@ -1731,7 +1751,7 @@ void Isolate::RecordReplayInvokeApiInterruptCallbacksAtProgress() {
       ExecutionAccess access(this);
       if (api_interrupts_queue_.empty()) {
         recordreplay::OrderedUnlock(record_replay_api_interrupts_ordered_lock_id_);
-        return;
+        break;
       }
       entry = api_interrupts_queue_.front();
       api_interrupts_queue_.pop();
@@ -1740,6 +1760,11 @@ void Isolate::RecordReplayInvokeApiInterruptCallbacksAtProgress() {
     VMState<EXTERNAL> state(this);
     HandleScope handle_scope(this);
     entry.first(reinterpret_cast<v8::Isolate*>(this), entry.second);
+  }
+
+  bool overflow = recordreplay::RecordReplayValue("IsolateHasStackOverflow", record_replay_pending_stack_overflow_);
+  if (overflow) {
+    StackOverflow(/* record_replay_non_deterministic */ false);
   }
 }
 

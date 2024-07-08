@@ -1067,7 +1067,7 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   Handle<JSMessageObject> CreateMessageFromException(Handle<Object> exception);
 
   // Out of resource exception helpers.
-  Object StackOverflow();
+  Object StackOverflow(bool record_replay_non_deterministic = true);
   Object TerminateExecution();
   void CancelTerminateExecution();
 
@@ -2366,6 +2366,8 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
 
   using InterruptEntry = std::pair<InterruptCallback, void*>;
   std::queue<InterruptEntry> api_interrupts_queue_;
+
+  bool record_replay_pending_stack_overflow_ = false;
 
   // Lock to ensure consistent ordering of other threads adding API interrupts
   // vs. the isolate's thread removing and running them.
