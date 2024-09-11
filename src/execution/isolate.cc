@@ -1594,7 +1594,7 @@ Object Isolate::StackOverflow() {
   if (recordreplay::IsRecordingOrReplaying() && !gHasPrintedStack) {
     gHasPrintedStack = true;
     std::stringstream stack;
-    isolate->PrintCurrentStackTrace(stack);
+    PrintCurrentStackTrace(stack);
     recordreplay::Print("Stack overflow: %s", stack.str().c_str());
   }
 
