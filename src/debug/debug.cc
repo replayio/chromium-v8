@@ -4297,7 +4297,7 @@ void RecordReplayOnPromiseHook(Isolate* isolate, PromiseHookType type,
   switch (type) {
     case PromiseHookType::kInit: {
       CHECK(!data.new_node_id);
-      std::string new_node_str = StringPrintf("{\"kind\":\"promiseCreated\",\"persistentId\": %d}",
+      std::string new_node_str = StringPrintf("{\"kind\":\"promiseCreated\",\"persistentId\":%d}",
                                                data.persistentId);
       data.new_node_id = recordreplay::NewDependencyGraphNode(new_node_str.c_str());
       if (!parent->IsUndefined()) {
