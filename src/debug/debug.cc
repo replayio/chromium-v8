@@ -4226,6 +4226,9 @@ std::string RecordReplayBasicValueContents(Handle<Object> value) {
 
 // Information in the dependency graph for a JS promise.
 struct PromiseDependencyGraphData {
+  // persistentId of the promise value.
+  int persistentId = 0;
+
   // Graph node ID for the point the promise was created.
   int new_node_id = 0;
 
@@ -4239,7 +4242,7 @@ static PromiseDependencyGraphDataMap* gPromiseDependencyGraphDataMap;
 static PromiseDependencyGraphData&
 GetOrCreatePromiseDependencyGraphData(Isolate* isolate, Handle<Object> promise) {
   v8::Isolate* v8_isolate = (v8::Isolate*) isolate;
-  int promise_object_id =
+  int promisePersistentId =
     RecordReplayObjectId(v8_isolate, v8_isolate->GetCurrentContext(),
                          v8::Utils::ToLocal(promise), /* allow_create */ true);
 
@@ -4247,10 +4250,13 @@ GetOrCreatePromiseDependencyGraphData(Isolate* isolate, Handle<Object> promise) 
   if (!gPromiseDependencyGraphDataMap) {
     gPromiseDependencyGraphDataMap = new PromiseDependencyGraphDataMap();
   }
-  auto iter = gPromiseDependencyGraphDataMap->find(promise_object_id);
+  auto iter = gPromiseDependencyGraphDataMap->find(promisePersistentId);
   if (iter == gPromiseDependencyGraphDataMap->end()) {
-    (*gPromiseDependencyGraphDataMap)[promise_object_id] = PromiseDependencyGraphData();
-    iter = gPromiseDependencyGraphDataMap->find(promise_object_id);
+    // Previously unseen promise.
+    PromiseDependencyGraphData data = PromiseDependencyGraphData();
+    data.persistentId = promisePersistentId;
+    (*gPromiseDependencyGraphDataMap)[promisePersistentId] = data;
+    iter = gPromiseDependencyGraphDataMap->find(promisePersistentId);
   }
   return iter->second;
 }
@@ -4291,7 +4297,9 @@ void RecordReplayOnPromiseHook(Isolate* isolate, PromiseHookType type,
   switch (type) {
     case PromiseHookType::kInit: {
       CHECK(!data.new_node_id);
-      data.new_node_id = recordreplay::NewDependencyGraphNode("{\"kind\":\"newPromise\"}");
+      std::string new_node_str = StringPrintf("{\"kind\":\"promiseCreated\",\"persistentId\": %d}",
+                                               data.persistentId);
+      data.new_node_id = recordreplay::NewDependencyGraphNode(new_node_str.c_str());
       if (!parent->IsUndefined()) {
         PromiseDependencyGraphData& parent_data =
           GetOrCreatePromiseDependencyGraphData(isolate, parent);
