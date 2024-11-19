@@ -5556,7 +5556,7 @@ Handle<Object> JSPromise::Reject(Handle<JSPromise> promise,
 }
 
 extern bool RecordReplayShouldCallOnPromiseHook();
-void AddPromiseDependencyGraphNesting(Isolate* isolate, Handle<Object> promise, Handle<Object> nested);
+void AddPromiseDependencyGraphAdoption(Isolate* isolate, Handle<Object> promise, Handle<Object> nested);
 
 // https://tc39.es/ecma262/#sec-promise-resolve-functions
 // static
@@ -5565,11 +5565,6 @@ MaybeHandle<Object> JSPromise::Resolve(Handle<JSPromise> promise,
   Isolate* const isolate = promise->GetIsolate();
   DCHECK(
       !reinterpret_cast<v8::Isolate*>(isolate)->GetCurrentContext().IsEmpty());
-  
-  if (RecordReplayShouldCallOnPromiseHook() && resolution->IsJSReceiver()) {
-    // Add the nested relationship before the hook call.
-    AddPromiseDependencyGraphNesting(isolate, promise, Handle<Object>::cast(resolution));
-  }
 
   isolate->RunPromiseHook(PromiseHookType::kResolve, promise,
                           isolate->factory()->undefined_value());
@@ -5607,6 +5602,10 @@ MaybeHandle<Object> JSPromise::Resolve(Handle<JSPromise> promise,
     // is intact, as that guards the lookup path for the "then" property
     // on JSPromise instances which have the (initial) %PromisePrototype%.
     then = isolate->promise_then();
+
+    if (RecordReplayShouldCallOnPromiseHook() && resolution->IsJSReceiver()) {
+      AddPromiseDependencyGraphAdoption(isolate, promise, Handle<Object>::cast(resolution));
+    }
   } else {
     then = JSReceiver::GetProperty(isolate, receiver,
                                    isolate->factory()->then_string());
