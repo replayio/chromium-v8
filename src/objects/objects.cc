@@ -5555,6 +5555,9 @@ Handle<Object> JSPromise::Reject(Handle<JSPromise> promise,
                                  PromiseReaction::kReject);
 }
 
+extern bool RecordReplayShouldCallOnPromiseHook();
+void AddPromiseDependencyGraphNesting(Isolate* isolate, Handle<Object> promise, Handle<Object> nested);
+
 // https://tc39.es/ecma262/#sec-promise-resolve-functions
 // static
 MaybeHandle<Object> JSPromise::Resolve(Handle<JSPromise> promise,
@@ -5562,6 +5565,11 @@ MaybeHandle<Object> JSPromise::Resolve(Handle<JSPromise> promise,
   Isolate* const isolate = promise->GetIsolate();
   DCHECK(
       !reinterpret_cast<v8::Isolate*>(isolate)->GetCurrentContext().IsEmpty());
+  
+  if (RecordReplayShouldCallOnPromiseHook() && resolution->IsJSReceiver()) {
+    // Add the nested relationship before the hook call.
+    AddPromiseDependencyGraphNesting(isolate, promise, Handle<Object>::cast(resolution));
+  }
 
   isolate->RunPromiseHook(PromiseHookType::kResolve, promise,
                           isolate->factory()->undefined_value());

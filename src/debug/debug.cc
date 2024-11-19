@@ -4234,6 +4234,10 @@ struct PromiseDependencyGraphData {
 
   // Graph node ID for the point the promise was settled.
   int settled_node_id = 0;
+
+  // persistent_id of the nested value, if any.
+  // Might not be promise.
+  int nested_persistent_id = 0;
 };
 
 typedef std::unordered_map<int32_t, PromiseDependencyGraphData> PromiseDependencyGraphDataMap;
@@ -4259,6 +4263,15 @@ GetOrCreatePromiseDependencyGraphData(Isolate* isolate, Handle<Object> promise) 
     iter = gPromiseDependencyGraphDataMap->find(promise_persistent_id);
   }
   return iter->second;
+}
+
+void AddPromiseDependencyGraphNesting(Isolate* isolate, Handle<Object> promise, Handle<Object> nested) {
+  PromiseDependencyGraphData& data = GetOrCreatePromiseDependencyGraphData(isolate, promise);
+  v8::Isolate* v8_isolate = (v8::Isolate*) isolate;
+  data.nested_persistent_id = RecordReplayObjectId(v8_isolate,
+                                                   v8_isolate->GetCurrentContext(),
+                                                   v8::Utils::ToLocal(nested),
+                                                   /* allow_create */ true);
 }
 
 extern bool gRecordReplayEnableDependencyGraph;
@@ -4314,8 +4327,13 @@ void RecordReplayOnPromiseHook(Isolate* isolate, PromiseHookType type,
       if (!data.new_node_id || data.settled_node_id) {
         break;
       }
+      std::string nested_str = !data.nested_persistent_id ?
+                                 "" :
+                                 StringPrintf(",\"nestedPersistentId\":%d", data.nested_persistent_id);
+      std::string new_node_str = StringPrintf("{\"kind\":\"promiseSettled\"%s}",
+                                               nested_str.c_str());
       data.settled_node_id =
-        recordreplay::NewDependencyGraphNode("{\"kind\":\"promiseSettled\"}");
+        recordreplay::NewDependencyGraphNode(new_node_str.c_str());
       recordreplay::AddDependencyGraphEdge(data.new_node_id, data.settled_node_id,
                                            "{\"kind\":\"basePromise\"}");
       break;
