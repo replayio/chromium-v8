@@ -5470,6 +5470,10 @@ void JSPromise::set_async_task_id(int id) {
   set_flags(AsyncTaskIdBits::update(flags(), id));
 }
 
+
+extern bool RecordReplayShouldCallOnPromiseHook();
+void AddPromiseDependencyGraphAdoption(Isolate* isolate, Handle<Object> promise, Handle<Object> adoption);
+
 // static
 Handle<Object> JSPromise::Fulfill(Handle<JSPromise> promise,
                                   Handle<Object> value) {
@@ -5550,13 +5554,14 @@ Handle<Object> JSPromise::Reject(Handle<JSPromise> promise,
                                  kPromiseRejectWithNoHandler);
   }
 
+  if (RecordReplayShouldCallOnPromiseHook() && reason->IsJSReceiver()) {
+    AddPromiseDependencyGraphAdoption(isolate, Handle<Object>::cast(promise), reason);
+  }
+
   // 8. Return TriggerPromiseReactions(reactions, reason).
   return TriggerPromiseReactions(isolate, reactions, reason,
                                  PromiseReaction::kReject);
 }
-
-extern bool RecordReplayShouldCallOnPromiseHook();
-void AddPromiseDependencyGraphAdoption(Isolate* isolate, Handle<Object> promise, Handle<Object> nested);
 
 // https://tc39.es/ecma262/#sec-promise-resolve-functions
 // static
@@ -5602,10 +5607,6 @@ MaybeHandle<Object> JSPromise::Resolve(Handle<JSPromise> promise,
     // is intact, as that guards the lookup path for the "then" property
     // on JSPromise instances which have the (initial) %PromisePrototype%.
     then = isolate->promise_then();
-
-    if (RecordReplayShouldCallOnPromiseHook() && resolution->IsJSReceiver()) {
-      AddPromiseDependencyGraphAdoption(isolate, promise, Handle<Object>::cast(resolution));
-    }
   } else {
     then = JSReceiver::GetProperty(isolate, receiver,
                                    isolate->factory()->then_string());
@@ -5630,6 +5631,10 @@ MaybeHandle<Object> JSPromise::Resolve(Handle<JSPromise> promise,
   if (!then_action->IsCallable()) {
     // a. Return FulfillPromise(promise, resolution).
     return Fulfill(promise, resolution);
+  }
+
+  if (RecordReplayShouldCallOnPromiseHook()) {
+    AddPromiseDependencyGraphAdoption(isolate, Handle<Object>::cast(promise), resolution);
   }
 
   // 13. Let job be NewPromiseResolveThenableJob(promise, resolution,

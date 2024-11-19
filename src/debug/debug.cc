@@ -4265,8 +4265,11 @@ void AddPromiseDependencyGraphAdoption(Isolate* isolate, Handle<Object> promise,
   PromiseDependencyGraphData& data = GetOrCreatePromiseDependencyGraphData(isolate, promise);
   PromiseDependencyGraphData& adopted_data = GetOrCreatePromiseDependencyGraphData(isolate, adopted);
 
-  recordreplay::AddDependencyGraphEdge(data.new_node_id, adopted_data.new_node_id,
-                                       "{\"kind\":\"adoptedPromise\"}");
+  if (adopted_data.new_node_id) {
+    recordreplay::AddDependencyGraphEdge(data.new_node_id,
+                                         adopted_data.new_node_id,
+                                         "{\"kind\":\"adoptedPromise\"}");
+  }
 }
 
 extern bool gRecordReplayEnableDependencyGraph;
