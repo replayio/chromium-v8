@@ -5554,10 +5554,6 @@ Handle<Object> JSPromise::Reject(Handle<JSPromise> promise,
                                  kPromiseRejectWithNoHandler);
   }
 
-  if (RecordReplayShouldCallOnPromiseHook() && reason->IsJSReceiver()) {
-    AddPromiseDependencyGraphAdoption(isolate, Handle<Object>::cast(promise), reason);
-  }
-
   // 8. Return TriggerPromiseReactions(reactions, reason).
   return TriggerPromiseReactions(isolate, reactions, reason,
                                  PromiseReaction::kReject);
@@ -5634,6 +5630,8 @@ MaybeHandle<Object> JSPromise::Resolve(Handle<JSPromise> promise,
   }
 
   if (RecordReplayShouldCallOnPromiseHook()) {
+    // Fulfillment of this promise is delayed by adopted resolution.
+    // Ref: Promise/A+ 2.3.2
     AddPromiseDependencyGraphAdoption(isolate, Handle<Object>::cast(promise), resolution);
   }
 
