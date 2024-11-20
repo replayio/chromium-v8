@@ -4261,6 +4261,17 @@ GetOrCreatePromiseDependencyGraphData(Isolate* isolate, Handle<Object> promise) 
   return iter->second;
 }
 
+void AddPromiseDependencyGraphAdoption(Isolate* isolate, Handle<Object> promise, Handle<Object> adopted) {
+  PromiseDependencyGraphData& data = GetOrCreatePromiseDependencyGraphData(isolate, promise);
+  PromiseDependencyGraphData& adopted_data = GetOrCreatePromiseDependencyGraphData(isolate, adopted);
+
+  if (adopted_data.new_node_id) {
+    recordreplay::AddDependencyGraphEdge(data.settled_node_id,
+                                         adopted_data.new_node_id,
+                                         "{\"kind\":\"adoptedPromise\"}");
+  }
+}
+
 extern bool gRecordReplayEnableDependencyGraph;
 
 bool RecordReplayShouldCallOnPromiseHook() {
