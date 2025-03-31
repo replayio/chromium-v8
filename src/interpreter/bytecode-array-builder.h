@@ -468,9 +468,11 @@ class V8_EXPORT_PRIVATE BytecodeArrayBuilder final {
   BytecodeArrayBuilder& RecordReplayAssertValue(const std::string& desc);
 
   int RecordReplayRegisterInstrumentationSite(const char* kind,
-                                               int source_position);
+                                              int source_position,
+                                              bool force = false);
   BytecodeArrayBuilder& RecordReplayInstrumentation(const char* kind,
-                                                    int source_position = kNoSourcePosition);
+                                                    int source_position = kNoSourcePosition,
+                                                    bool force = false);
   BytecodeArrayBuilder& RecordReplayInstrumentationGenerator(const char* kind,
                                                              Register generator_object);
   BytecodeArrayBuilder& RecordReplayInstrumentationReturn(const char* kind,

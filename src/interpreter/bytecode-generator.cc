@@ -5647,8 +5647,33 @@ void BytecodeGenerator::VisitCall(Call* expr) {
 
   builder()->SetExpressionPosition(expr);
 
-  // Emit a breakpoint for all call expressions.
-  builder()->RecordReplayInstrumentation("breakpoint", expr->position());
+  // Emit a breakpoint for all call expressions:
+  // This happens after arguments have already been evaluated.
+  // The breakpoint should thus be inserted at the argument position.
+  // However, if there are no arguments, this might duplicate the call's
+  // parent's position, so we should try to have it get deduplicated
+  // by inserting it before the call.
+  // Example1: `/*BREAK*/f();`                        // Deduplication.
+  // Example2: `/*BREAK*//*BREAK*/f(/*BREAK*/g());`   // No deduplication.
+  
+  // TODO: Don't emit a duplicate breakpoint if there are no nested arguments.
+  //       Example: `/*BREAK*//*BREAK*/f(a, b);`
+  // TODO: Deduplicate property call locations
+  //       NOTE: In this case, `expr->position()` is different from the
+  //             `ExpressionStatement`'s position.
+  //       Example: `/*BREAK*/o./*BREAK*/f();`
+  int breakpoint_position;
+  bool force_duplicate_breakpoint;
+  if (!expr->arguments()->length()) {
+    // No arguments.
+    breakpoint_position = expr->position();
+    force_duplicate_breakpoint = false;
+  } else {
+    // Has arguments.
+    breakpoint_position = expr->position();
+    force_duplicate_breakpoint = true;
+  }
+  builder()->RecordReplayInstrumentation("breakpoint", breakpoint_position, force_duplicate_breakpoint);
 
   if (spread_position == Call::kHasFinalSpread) {
     DCHECK(!implicit_undefined_receiver);
@@ -5668,6 +5693,9 @@ void BytecodeGenerator::VisitCall(Call* expr) {
     builder()->CallAnyReceiver(
         callee, args, feedback_index(feedback_spec()->AddCallICSlot()));
   }
+  
+  // // Emit a breakpoint for all call expressions.
+  // builder()->RecordReplayInstrumentation("breakpoint", expr->position() + 1);
 }
 
 void BytecodeGenerator::VisitCallSuper(Call* expr) {
