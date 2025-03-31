@@ -5652,15 +5652,15 @@ void BytecodeGenerator::VisitCall(Call* expr) {
   // This might duplicate the call's parent's position,
   // so we should try to have it get deduplicated
   // by inserting it before the call, *if* there are no arguments.
-  // Example1: `/*BREAK1*/f();`                          // Deduplication.
-  // Example2: `/*BREAK1*//*BREAK3*/f(/*BREAK2*/g());`   // No deduplication.
+  // Example1: `/*BREAK1*/func();`                          // Deduped breakpoint.
+  // Example2: `/*BREAK1*/f/*BREAK3*/unc(/*BREAK2*/g());`   // Extra breakpoint for arguments.
   
   // TODO: Don't emit a duplicate breakpoint if there are no nested calls.
-  //       Example: `/*BREAK1*//*BREAK2*/f(a, b);`
+  //       Example: `/*BREAK1*/f/*BREAK2*/unc(a, b);`
   // TODO: Deduplicate property call locations
   //       NOTE: In this case, `expr->position()` is different from the
   //             `ExpressionStatement`'s position.
-  //       Example: `/*BREAK1*/o./*BREAK2*/f();`
+  //       Example: `/*BREAK1*/o./*BREAK2*/func();`
   int breakpoint_position;
   if (!expr->arguments()->length()) {
     // No arguments.
@@ -5668,8 +5668,7 @@ void BytecodeGenerator::VisitCall(Call* expr) {
   } else {
     // Has arguments.
     // Move this to a position that is assured not to conflict with any other AST node.
-    // The "-1" might take us to the left of the opening parenthesis or into indentation.
-    breakpoint_position = expr->arguments()->at(0)->position() - 1;
+    breakpoint_position = expr->position() + 1;
   }
   builder()->RecordReplayInstrumentation("breakpoint", breakpoint_position);
 
