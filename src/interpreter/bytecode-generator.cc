@@ -5662,17 +5662,16 @@ void BytecodeGenerator::VisitCall(Call* expr) {
   //             `ExpressionStatement`'s position.
   //       Example: `/*BREAK1*/o./*BREAK2*/f();`
   int breakpoint_position;
-  bool force_duplicate_breakpoint;
   if (!expr->arguments()->length()) {
     // No arguments.
     breakpoint_position = expr->position();
-    force_duplicate_breakpoint = false;
   } else {
     // Has arguments.
-    breakpoint_position = expr->position();
-    force_duplicate_breakpoint = true;
+    // Move this to a position that is assured not to conflict with any other AST node.
+    // The "-1" might take us to the left of the opening parenthesis or into indentation.
+    breakpoint_position = expr->arguments()->at(0)->position() - 1;
   }
-  builder()->RecordReplayInstrumentation("breakpoint", breakpoint_position, force_duplicate_breakpoint);
+  builder()->RecordReplayInstrumentation("breakpoint", breakpoint_position);
 
   if (spread_position == Call::kHasFinalSpread) {
     DCHECK(!implicit_undefined_receiver);
