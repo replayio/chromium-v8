@@ -1039,7 +1039,7 @@ class PreParser : public ParserBase<PreParser> {
   V8_INLINE void AddTemplateSpan(TemplateLiteralState* state, bool should_cook,
                                  bool tail) {}
   V8_INLINE PreParserExpression CloseTemplateLiteral(
-      TemplateLiteralState* state, int start, const PreParserExpression& tag) {
+      TemplateLiteralState* state, int start, const PreParserExpression& tag, int lparen_token_position = 0) {
     return PreParserExpression::Default();
   }
   V8_INLINE bool IsPrivateReference(const PreParserExpression& expression) {

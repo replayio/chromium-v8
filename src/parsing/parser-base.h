@@ -4942,6 +4942,7 @@ typename ParserBase<Impl>::ExpressionT ParserBase<Impl>::ParseTemplateLiteral(
 
   Consume(Token::TEMPLATE_SPAN);
   int pos = position();
+  int lparen_token_position = pos;
   typename Impl::TemplateLiteralState ts = impl()->OpenTemplateLiteral(pos);
   bool is_valid = CheckTemplateEscapes(forbid_illegal_escapes);
   impl()->AddTemplateSpan(&ts, is_valid, false);
@@ -4977,7 +4978,7 @@ typename ParserBase<Impl>::ExpressionT ParserBase<Impl>::ParseTemplateLiteral(
 
   DCHECK_IMPLIES(!has_error(), next == Token::TEMPLATE_TAIL);
   // Once we've reached a TEMPLATE_TAIL, we can close the TemplateLiteral.
-  return impl()->CloseTemplateLiteral(&ts, start, tag);
+  return impl()->CloseTemplateLiteral(&ts, start, tag, lparen_token_position);
 }
 
 template <typename Impl>
