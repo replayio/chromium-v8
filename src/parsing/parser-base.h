@@ -3561,8 +3561,7 @@ ParserBase<Impl>::ParseLeftHandSideContinuation(ExpressionT result) {
         }
         /* Tagged Template */
         DCHECK(Token::IsTemplate(peek()));
-        result = ParseTemplateLiteral(result, position(),
-                                      true);
+        result = ParseTemplateLiteral(result, position(), true);
         break;
     }
     if (is_optional) {
@@ -3642,7 +3641,7 @@ ParserBase<Impl>::ParseMemberWithPresentNewPrefixesExpression() {
 
   // NewExpression without arguments.
   ExpressionListT args(pointer_buffer());
-  return factory()->NewCallNew(result, args, new_pos, false, 0);
+  return factory()->NewCallNew(result, args, new_pos, false);
 }
 
 template <typename Impl>

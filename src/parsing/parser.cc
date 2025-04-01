@@ -72,7 +72,7 @@ FunctionLiteral* Parser::DefaultConstructor(const AstRawString* name,
         args.Add(spread_args);
         Expression* super_call_ref = NewSuperCallReference(pos);
         constexpr bool has_spread = true;
-        call = factory()->NewCall(super_call_ref, args, pos, has_spread, 0);
+        call = factory()->NewCall(super_call_ref, args, pos, has_spread);
       }
       body.Add(factory()->NewReturnStatement(call, pos));
     }

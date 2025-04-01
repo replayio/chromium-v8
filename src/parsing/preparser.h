@@ -645,7 +645,7 @@ class PreParserFactory {
   PreParserExpression NewCall(PreParserExpression expression,
                               const PreParserExpressionList& arguments, int pos,
                               bool has_spread,
-                              int lparen_token_position,
+                              int lparen_token_position = 0,
                               Call::PossiblyEval possibly_eval = Call::NOT_EVAL,
                               bool optional_chain = false) {
     if (possibly_eval == Call::IS_POSSIBLY_EVAL) {
@@ -663,7 +663,7 @@ class PreParserFactory {
   PreParserExpression NewCallNew(const PreParserExpression& expression,
                                  const PreParserExpressionList& arguments,
                                  int pos, bool has_spread,
-                                 int lparen_token_position) {
+                                 int lparen_token_position = 0) {
     return PreParserExpression::Default();
   }
   PreParserStatement NewReturnStatement(

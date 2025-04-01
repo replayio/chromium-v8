@@ -3111,7 +3111,7 @@ class AstNodeFactory final {
   Call* NewCall(Expression* expression,
                 const ScopedPtrList<Expression>& arguments, int pos,
                 bool has_spread,
-                int lparen_token_position,
+                int lparen_token_position = 0,
                 Call::PossiblyEval possibly_eval = Call::NOT_EVAL,
                 bool optional_chain = false) {
     DCHECK_IMPLIES(possibly_eval == Call::IS_POSSIBLY_EVAL, !optional_chain);
@@ -3127,7 +3127,7 @@ class AstNodeFactory final {
 
   CallNew* NewCallNew(Expression* expression,
                       const ScopedPtrList<Expression>& arguments, int pos,
-                      bool has_spread, int lparen_token_position) {
+                      bool has_spread, int lparen_token_position = 0) {
     return zone_->New<CallNew>(zone_, expression, arguments, pos, has_spread,
                                lparen_token_position);
   }
