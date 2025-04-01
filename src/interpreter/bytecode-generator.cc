@@ -5674,7 +5674,7 @@ void BytecodeGenerator::VisitCall(Call* expr) {
     // Has arguments.
     // Move this to a position that is assured not to conflict with any other
     // AST node.
-    breakpoint_position = expr->lparen_token_position()
+    breakpoint_position = expr->lparen_token_position();
   }
   builder()->RecordReplayInstrumentation("breakpoint", breakpoint_position);
 
