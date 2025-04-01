@@ -3487,7 +3487,7 @@ void Parser::AddTemplateExpression(TemplateLiteralState* state,
 }
 
 Expression* Parser::CloseTemplateLiteral(TemplateLiteralState* state, int start,
-                                         Expression* tag, int lparen_token_position = 0) {
+                                         Expression* tag, int lparen_token_position) {
   TemplateLiteral* lit = *state;
   int pos = lit->position();
   const ZonePtrList<const AstRawString>* cooked_strings = lit->cooked();
