@@ -5652,23 +5652,29 @@ void BytecodeGenerator::VisitCall(Call* expr) {
   // This might duplicate the call's parent's position,
   // so we should try to have it get deduplicated
   // by inserting it before the call, *if* there are no arguments.
-  // Example1: `/*BREAK1*/func();`                          // Deduped breakpoint.
-  // Example2: `/*BREAK1*/f/*BREAK3*/unc(/*BREAK2*/g());`   // Extra breakpoint for arguments.
-  
+  //
+  // Example1 (potentially deduped breakpoint):
+  // `/*BREAK1*/func();
+  //
+  // Example2 (extra breakpoint after arguments evaluation):
+  // `/*BREAK1*/func/*BREAK3*/(/*BREAK2*/g());`
+
   // TODO: Don't emit a duplicate breakpoint if there are no nested calls.
-  //       Example: `/*BREAK1*/f/*BREAK2*/unc(a, b);`
+  //       Example: `/*BREAK1*/func/*BREAK2*/(a, b);`
   // TODO: Deduplicate property call locations
   //       NOTE: In this case, `expr->position()` is different from the
   //             `ExpressionStatement`'s position.
-  //       Example: `/*BREAK1*/o./*BREAK2*/func();`
+  //       Example: `/*BREAK1*/o.func/*BREAK2*/();`
+
   int breakpoint_position;
   if (!expr->arguments()->length()) {
     // No arguments.
     breakpoint_position = expr->position();
   } else {
     // Has arguments.
-    // Move this to a position that is assured not to conflict with any other AST node.
-    breakpoint_position = expr->position() + 1;
+    // Move this to a position that is assured not to conflict with any other
+    // AST node.
+    breakpoint_position = expr->lparen_token_position()
   }
   builder()->RecordReplayInstrumentation("breakpoint", breakpoint_position);
 
@@ -5690,9 +5696,6 @@ void BytecodeGenerator::VisitCall(Call* expr) {
     builder()->CallAnyReceiver(
         callee, args, feedback_index(feedback_spec()->AddCallICSlot()));
   }
-  
-  // // Emit a breakpoint for all call expressions.
-  // builder()->RecordReplayInstrumentation("breakpoint", expr->position() + 1);
 }
 
 void BytecodeGenerator::VisitCallSuper(Call* expr) {

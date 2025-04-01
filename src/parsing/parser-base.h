@@ -3441,6 +3441,7 @@ ParserBase<Impl>::ParseLeftHandSideContinuation(ExpressionT result) {
 
     ExpressionListT args(pointer_buffer());
     bool has_spread;
+    int lparen_token_position = peek_position();
     ParseArguments(&args, &has_spread, kMaybeArrowHead);
     if (V8_LIKELY(peek() == Token::ARROW)) {
       fni_.RemoveAsyncKeywordFromEnd();
@@ -3454,7 +3455,7 @@ ParserBase<Impl>::ParseLeftHandSideContinuation(ExpressionT result) {
       return result;
     }
 
-    result = factory()->NewCall(result, args, pos, has_spread);
+    result = factory()->NewCall(result, args, pos, has_spread, lparen_token_position);
 
     maybe_arrow.ValidateExpression();
 
@@ -3531,6 +3532,7 @@ ParserBase<Impl>::ParseLeftHandSideContinuation(ExpressionT result) {
         }
         bool has_spread;
         ExpressionListT args(pointer_buffer());
+        int lparen_token_position = peek_position();
         ParseArguments(&args, &has_spread);
 
         // Keep track of eval() calls since they disable all local variable
@@ -3543,7 +3545,7 @@ ParserBase<Impl>::ParseLeftHandSideContinuation(ExpressionT result) {
         Call::PossiblyEval is_possibly_eval =
             CheckPossibleEvalCall(result, is_optional, scope());
 
-        result = factory()->NewCall(result, args, pos, has_spread,
+        result = factory()->NewCall(result, args, pos, has_spread, lparen_token_position,
                                     is_possibly_eval, is_optional);
 
         fni_.RemoveLastFunction();
@@ -3559,7 +3561,8 @@ ParserBase<Impl>::ParseLeftHandSideContinuation(ExpressionT result) {
         }
         /* Tagged Template */
         DCHECK(Token::IsTemplate(peek()));
-        result = ParseTemplateLiteral(result, position(), true);
+        result = ParseTemplateLiteral(result, position(),
+                                      true);
         break;
     }
     if (is_optional) {
@@ -3622,9 +3625,10 @@ ParserBase<Impl>::ParseMemberWithPresentNewPrefixesExpression() {
     {
       ExpressionListT args(pointer_buffer());
       bool has_spread;
+      int lparen_token_position = peek_position();
       ParseArguments(&args, &has_spread);
-
-      result = factory()->NewCallNew(result, args, new_pos, has_spread);
+      result = factory()->NewCallNew(result, args, new_pos, has_spread,
+                                     lparen_token_position);
     }
     // The expression can still continue with . or [ after the arguments.
     return ParseMemberExpressionContinuation(result);
@@ -3638,7 +3642,7 @@ ParserBase<Impl>::ParseMemberWithPresentNewPrefixesExpression() {
 
   // NewExpression without arguments.
   ExpressionListT args(pointer_buffer());
-  return factory()->NewCallNew(result, args, new_pos, false);
+  return factory()->NewCallNew(result, args, new_pos, false, 0);
 }
 
 template <typename Impl>
