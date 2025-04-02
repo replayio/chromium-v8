@@ -5669,11 +5669,11 @@ void BytecodeGenerator::VisitCall(Call* expr) {
   if (!expr->arguments()->length()) {
     // No arguments.
     builder()->RecordReplayInstrumentation("breakpoint", expr->position());
-  } else if (expr->lparen_token_position() && start_locations_size != builder()->record_replay_instrumentation_site_locations_.size()) {
+  } else if (expr->call_head_token_position() && start_locations_size != builder()->record_replay_instrumentation_site_locations_.size()) {
     // Has arguments.
     // Move this to a position that is assured not to conflict with any other
     // AST node.
-    builder()->RecordReplayInstrumentation("breakpoint", expr->lparen_token_position());
+    builder()->RecordReplayInstrumentation("breakpoint", expr->call_head_token_position());
   }
 
   if (spread_position == Call::kHasFinalSpread) {
