@@ -1402,11 +1402,13 @@ int BytecodeArrayBuilder::RecordReplayRegisterInstrumentationSite(
       record_replay_instrumentation_site_locations_.find(source_position) !=
           record_replay_instrumentation_site_locations_.end()) {
     // Don't insert a breakpoint at the same location more than once.
+    recordreplay::Print("SKIP RecordReplayRegisterInstrumentationSite - return -1 for %d, but size is %d", source_position, record_replay_instrumentation_site_locations_.size());
     return -1;
   }
   record_replay_instrumentation_site_locations_.insert(source_position);
 
   int function_index = (int)record_replay_instrumentation_site_locations_.size();
+  recordreplay::Print("ADD RecordReplayRegisterInstrumentationSite %d, for %d, size after %d",  function_index, source_position, record_replay_instrumentation_site_locations_.size());
   return RegisterInstrumentationSite(kind, source_position, function_index);
 }
 
@@ -1419,9 +1421,13 @@ bool BytecodeArrayBuilder::EmitRecordReplayInstrumentationOpcodes() const {
 
 BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayInstrumentation(
     const char* kind, int source_position) {
+  recordreplay::Print("RecordReplayInstrumentation (call) for %d", source_position);
   if (EmitRecordReplayInstrumentationOpcodes()) {
+    recordreplay::Print("RecordReplayInstrumentation (should emit) for %d", source_position);
     int index = RecordReplayRegisterInstrumentationSite(kind, source_position);
+    recordreplay::Print("RecordReplayInstrumentation (got index %d) for %d", index, source_position);
     if (index >= 0) {
+      recordreplay::Print("RecordReplayInstrumentation (output) for %d", source_position);
       OutputRecordReplayInstrumentation(index);
     }
   }
