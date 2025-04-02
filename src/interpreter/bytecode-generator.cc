@@ -5670,7 +5670,7 @@ void BytecodeGenerator::VisitCall(Call* expr) {
     // No arguments.
     builder()->RecordReplayInstrumentation("breakpoint", expr->position());
   } else if (expr->call_head_token_position() && start_locations_size != builder()->record_replay_instrumentation_site_locations_.size()) {
-    // Has arguments.
+    // Has arguments and visiting them added breakpoints.
     // Move this to a position that is assured not to conflict with any other
     // AST node.
     builder()->RecordReplayInstrumentation("breakpoint", expr->call_head_token_position());
