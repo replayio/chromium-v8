@@ -5459,6 +5459,8 @@ void BytecodeGenerator::VisitCall(Call* expr) {
     return VisitCallSuper(expr);
   }
 
+  size_t start_locations_size = builder()->record_replay_instrumentation_site_locations_.size();
+
   // We compile the call differently depending on the presence of spreads and
   // their positions.
   //
@@ -5659,8 +5661,6 @@ void BytecodeGenerator::VisitCall(Call* expr) {
   // Example2 (extra breakpoint after arguments evaluation):
   // `/*BREAK1*/func/*BREAK3*/(/*BREAK2*/g());`
 
-  // TODO: Don't emit a duplicate breakpoint if there are no nested calls.
-  //       Example: `/*BREAK1*/func/*BREAK2*/(a, b);`
   // TODO: Deduplicate property call locations
   //       NOTE: In this case, `expr->position()` is different from the
   //             `ExpressionStatement`'s position.
@@ -5669,7 +5669,7 @@ void BytecodeGenerator::VisitCall(Call* expr) {
   if (!expr->arguments()->length()) {
     // No arguments.
     builder()->RecordReplayInstrumentation("breakpoint", expr->position());
-  } else if (expr->lparen_token_position()) {
+  } else if (expr->lparen_token_position() && start_locations_size != builder()->record_replay_instrumentation_site_locations_.size()) {
     // Has arguments.
     // Move this to a position that is assured not to conflict with any other
     // AST node.
