@@ -5666,14 +5666,16 @@ void BytecodeGenerator::VisitCall(Call* expr) {
   //             `ExpressionStatement`'s position.
   //       Example: `/*BREAK1*/o.func/*BREAK2*/();`
 
-  if (!expr->arguments()->length()) {
-    // No arguments.
-    builder()->RecordReplayInstrumentation("breakpoint", expr->position());
-  } else if (expr->call_head_token_position() && start_locations_size != builder()->record_replay_instrumentation_site_locations_.size()) {
+  if (expr->call_head_token_position() && start_locations_size != builder()->record_replay_instrumentation_site_locations_.size()) {
     // Has arguments and visiting them added breakpoints.
     // Move this to a position that is assured not to conflict with any other
     // AST node.
     builder()->RecordReplayInstrumentation("breakpoint", expr->call_head_token_position());
+  } else {
+    // Might have arguments but visiting them didn't add breakpoints.
+    // Add this to a potentially conflicting position, letting it to be deduplicated in such case.
+    // If there is no conflict, a breakpoint will be added.
+    builder()->RecordReplayInstrumentation("breakpoint", expr->position());
   }
 
   if (spread_position == Call::kHasFinalSpread) {
