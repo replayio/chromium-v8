@@ -1414,11 +1414,15 @@ bool BytecodeArrayBuilder::EmitRecordReplayInstrumentationOpcodes() const {
   // Instrumentation opcodes aren't needed when recording, except when we are asserting
   // encountered values and need consistent IDs for these objects when recording.
   // Generator instrumentation will create persistent object IDs.
-  return emit_record_replay_opcodes_ && (recordreplay::IsReplaying() || gRecordReplayAssertTrackedObjects);
+  // return emit_record_replay_opcodes_ && (recordreplay::IsReplaying() || gRecordReplayAssertTrackedObjects);
+  return true
 }
 
 BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayInstrumentation(
     const char* kind, int source_position) {
+  std::string new_node_str = StringPrintf("{\"source_position\":%d}",
+    source_position);
+  recordreplay::NewDependencyGraphNode(new_node_str.c_str());
   if (EmitRecordReplayInstrumentationOpcodes()) {
     int index = RecordReplayRegisterInstrumentationSite(kind, source_position);
     if (index >= 0) {
