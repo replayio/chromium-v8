@@ -1801,6 +1801,7 @@ void BytecodeGenerator::VisitBreakStatement(BreakStatement* stmt) {
 
 void BytecodeGenerator::VisitReturnStatement(ReturnStatement* stmt) {
   AllocateBlockCoverageSlotIfEnabled(stmt, SourceRangeKind::kContinuation);
+  recordreplay::Print("VisitReturnStatement: %d %d %d\n", stmt->position(), stmt->expression()->position(), stmt->end_position());
   ReplayShiftedBreakpointPosition(stmt, stmt->expression());
   VisitForAccumulatorValue(stmt->expression());
   int return_position = stmt->end_position();
