@@ -1731,17 +1731,6 @@ void BytecodeGenerator::VisitStatements(
   }
 }
 
-void BytecodeGenerator::ReplayShiftedBreakpointPosition(Statement* stmt, Expression* expr) {
-  if (
-    recordreplay::IsRecordingOrReplaying("ReplayShiftedBreakpointPosition") &&
-    expr->position() >= 0 // Checks if expression node is not empty.
-  ) {
-    builder()->SetExpressionAsStatementPosition(expr);
-  } else {
-    builder()->SetStatementPosition(stmt);
-  }
-}
-
 void BytecodeGenerator::VisitExpressionStatement(ExpressionStatement* stmt) {
   builder()->SetStatementPosition(stmt);
   VisitForEffect(stmt->expression());
@@ -1800,10 +1789,14 @@ void BytecodeGenerator::VisitBreakStatement(BreakStatement* stmt) {
 }
 
 void BytecodeGenerator::VisitReturnStatement(ReturnStatement* stmt) {
-  AllocateBlockCoverageSlotIfEnabled(stmt, SourceRangeKind::kContinuation);
   recordreplay::Print("VisitReturnStatement: %d %d %d\n", stmt->position(), stmt->expression()->position(), stmt->end_position());
-  ReplayShiftedBreakpointPosition(stmt, stmt->expression());
+  size_t start_locations_size = builder()->record_replay_instrumentation_site_locations_.size();
+  AllocateBlockCoverageSlotIfEnabled(stmt, SourceRangeKind::kContinuation);
   VisitForAccumulatorValue(stmt->expression());
+  recordreplay::Print("VisitReturnStatement2: %d %d %d\n", stmt->position(), start_locations_size, builder()->record_replay_instrumentation_site_locations_.size());
+  if (stmt->expression()->position() == 0 || start_locations_size == builder()->record_replay_instrumentation_site_locations_.size()) {
+    builder()->SetStatementPosition(stmt);
+  } 
   int return_position = stmt->end_position();
   if (return_position == ReturnStatement::kFunctionLiteralReturnPosition) {
     return_position = info()->literal()->return_position();
