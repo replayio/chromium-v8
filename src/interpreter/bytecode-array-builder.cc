@@ -15,7 +15,6 @@
 #include "src/interpreter/interpreter-intrinsics.h"
 #include "src/objects/feedback-vector-inl.h"
 #include "src/objects/smi.h"
-#include "v8.h"
 
 namespace v8 {
 namespace internal {
@@ -1415,13 +1414,11 @@ bool BytecodeArrayBuilder::EmitRecordReplayInstrumentationOpcodes() const {
   // Instrumentation opcodes aren't needed when recording, except when we are asserting
   // encountered values and need consistent IDs for these objects when recording.
   // Generator instrumentation will create persistent object IDs.
-  // return emit_record_replay_opcodes_ && (recordreplay::IsReplaying() || gRecordReplayAssertTrackedObjects);
-  return true;
+  return emit_record_replay_opcodes_ && (recordreplay::IsReplaying() || gRecordReplayAssertTrackedObjects);
 }
 
 BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayInstrumentation(
     const char* kind, int source_position) {
-  v8::recordreplay::Trace("RecordReplayInstrumentationBreakpoint %d", source_position);
   if (EmitRecordReplayInstrumentationOpcodes()) {
     int index = RecordReplayRegisterInstrumentationSite(kind, source_position);
     if (index >= 0) {

@@ -1801,7 +1801,6 @@ void BytecodeGenerator::VisitBreakStatement(BreakStatement* stmt) {
 
 void BytecodeGenerator::VisitReturnStatement(ReturnStatement* stmt) {
   AllocateBlockCoverageSlotIfEnabled(stmt, SourceRangeKind::kContinuation);
-  recordreplay::Print("VisitReturnStatement: %d %d %d\n", stmt->position(), stmt->expression()->position(), stmt->end_position());
   ReplayShiftedBreakpointPosition(stmt, stmt->expression());
   VisitForAccumulatorValue(stmt->expression());
   int return_position = stmt->end_position();
@@ -5667,24 +5666,12 @@ void BytecodeGenerator::VisitCall(Call* expr) {
   //             `ExpressionStatement`'s position.
   //       Example: `/*BREAK1*/o.func/*BREAK2*/();`
 
-  if (!script_.is_null()) {
-    recordreplay::Print("Script id: %d\n", script_->id());
-  } else {
-    recordreplay::Print("Script is null.\n");
-  }
-  recordreplay::Print("Expr position: %d\n", expr->position());
-  recordreplay::Print("Start locations size: %d\n", start_locations_size);
-  recordreplay::Print("Current locations size: %d\n", builder()->record_replay_instrumentation_site_locations_.size());
-  recordreplay::Print("Lparen location: %d\n", expr->call_head_token_position());
-
   if (expr->call_head_token_position() && start_locations_size != builder()->record_replay_instrumentation_site_locations_.size()) {
-    recordreplay::Print("Breakpoints in between - add at lparen");
     // Has arguments and visiting them added breakpoints.
     // Move this to a position that is assured not to conflict with any other
     // AST node.
     builder()->RecordReplayInstrumentation("breakpoint", expr->call_head_token_position());
   } else {
-    recordreplay::Print("No breakpoints in between - maybe dedup");
     // Might have arguments but visiting them didn't add breakpoints.
     // Add this to a potentially conflicting position, letting it to be deduplicated in such case.
     // If there is no conflict, a breakpoint will be added.
@@ -6703,7 +6690,6 @@ void BytecodeGenerator::VisitSuperPropertyReference(
 }
 
 void BytecodeGenerator::VisitCommaExpression(BinaryOperation* binop) {
-  v8::recordreplay::Trace("VisitCommaExpression: %d %d %d\n", binop->position(), binop->left()->position(), binop->right()->position());
   VisitForEffect(binop->left());
   builder()->SetExpressionAsStatementPosition(binop->right());
   Visit(binop->right());
@@ -6711,14 +6697,12 @@ void BytecodeGenerator::VisitCommaExpression(BinaryOperation* binop) {
 
 void BytecodeGenerator::VisitNaryCommaExpression(NaryOperation* expr) {
   DCHECK_GT(expr->subsequent_length(), 0);
-  v8::recordreplay::Trace("VisitNaryCommaExpression - first: %d %d\n", expr->position(), expr->first()->position());
+
   VisitForEffect(expr->first());
   for (size_t i = 0; i < expr->subsequent_length() - 1; ++i) {
-    recordreplay::Print("VisitNaryCommaExpression - subsequent: %d %d\n", i, expr->subsequent(i)->position());
     builder()->SetExpressionAsStatementPosition(expr->subsequent(i));
     VisitForEffect(expr->subsequent(i));
   }
-  recordreplay::Print("VisitNaryCommaExpression - subsequent last?: %d\n", expr->subsequent(expr->subsequent_length() - 1));
   builder()->SetExpressionAsStatementPosition(
       expr->subsequent(expr->subsequent_length() - 1));
   Visit(expr->subsequent(expr->subsequent_length() - 1));
