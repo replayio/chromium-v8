@@ -6703,6 +6703,7 @@ void BytecodeGenerator::VisitSuperPropertyReference(
 }
 
 void BytecodeGenerator::VisitCommaExpression(BinaryOperation* binop) {
+  recordreplay::Print("VisitCommaExpression: %d %d\n", binop->left()->position(), binop->right()->position());
   VisitForEffect(binop->left());
   builder()->SetExpressionAsStatementPosition(binop->right());
   Visit(binop->right());
@@ -6710,12 +6711,14 @@ void BytecodeGenerator::VisitCommaExpression(BinaryOperation* binop) {
 
 void BytecodeGenerator::VisitNaryCommaExpression(NaryOperation* expr) {
   DCHECK_GT(expr->subsequent_length(), 0);
-
+  recordreplay::Print("VisitNaryCommaExpression - first: %d\n", expr->first()->position());
   VisitForEffect(expr->first());
   for (size_t i = 0; i < expr->subsequent_length() - 1; ++i) {
+    recordreplay::Print("VisitNaryCommaExpression - subsequent: %d %d\n", i, expr->subsequent(i)->position());
     builder()->SetExpressionAsStatementPosition(expr->subsequent(i));
     VisitForEffect(expr->subsequent(i));
   }
+  recordreplay::Print("VisitNaryCommaExpression - subsequent last?: %d\n", expr->subsequent(expr->subsequent_length() - 1));
   builder()->SetExpressionAsStatementPosition(
       expr->subsequent(expr->subsequent_length() - 1));
   Visit(expr->subsequent(expr->subsequent_length() - 1));
