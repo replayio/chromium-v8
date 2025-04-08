@@ -527,8 +527,8 @@ class V8_EXPORT_PRIVATE BytecodeArrayBuilder final {
 
   void InitializeReturnPosition(FunctionLiteral* literal);
 
-  void SetStatementPosition(Statement* stmt) {
-    SetStatementPosition(stmt->position());
+  void SetStatementPosition(Statement* stmt, bool record_replay_breakpoint = true) {
+    SetStatementPosition(stmt->position(), record_replay_breakpoint);
   }
 
   base::Optional<BytecodeSourceInfo> MaybePopSourcePosition(int scope_start) {
@@ -569,8 +569,8 @@ class V8_EXPORT_PRIVATE BytecodeArrayBuilder final {
     }
   }
 
-  void SetExpressionAsStatementPosition(Expression* expr) {
-    SetStatementPosition(expr->position());
+  void SetExpressionAsStatementPosition(Expression* expr, bool record_replay_breakpoint = true) {
+    SetStatementPosition(expr->position(), record_replay_breakpoint);
   }
 
   bool RemainderOfBlockIsDead() const {
