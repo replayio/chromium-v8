@@ -1731,6 +1731,26 @@ void BytecodeGenerator::VisitStatements(
   }
 }
 
+void BytecodeGenerator::ReplayExpressionShiftedSetStatementPosition(Statement* stmt, Expression* expr) {
+  builder()->SetStatementPosition(stmt, /* record_replay_breakpoint */ false);
+  if (expr->position() < 0) {
+    // expression is empty, so the breakpoint gets added at the statement itself
+    builder()->RecordReplayInstrumentation("breakpoint", stmt->position());
+  } else if (expr->IsBinaryOperation()) {
+    // given the breakpoint gets shifted to the expression (if that's available) by default
+    // we first check if it's not a binary operation, in which case we need to make sure the breakpoint is added at the position of the left operand
+    // this targets the case in which the binary operation's position is set to its right operand, see:
+    // https://github.com/v8/v8/commit/5bf9e470f8290dde983797e695e5156374d81962
+    // without this the pre-call-post-args breakpoint added by `VisitCall` would not be added as it would be treated as duplicate.
+    // without this specialcase the breakpoints would be added like this (3 would be skipped):
+    //
+    // return /*2*/foo(), /*1*//*3*/bar();
+    builder()->RecordReplayInstrumentation("breakpoint", expr->AsBinaryOperation()->left()->position());
+  } else {
+    builder()->RecordReplayInstrumentation("breakpoint", expr->position());
+  }
+}
+
 void BytecodeGenerator::VisitExpressionStatement(ExpressionStatement* stmt) {
   builder()->SetStatementPosition(stmt);
   VisitForEffect(stmt->expression());
@@ -1790,24 +1810,7 @@ void BytecodeGenerator::VisitBreakStatement(BreakStatement* stmt) {
 
 void BytecodeGenerator::VisitReturnStatement(ReturnStatement* stmt) {
   AllocateBlockCoverageSlotIfEnabled(stmt, SourceRangeKind::kContinuation);
-  builder()->SetStatementPosition(stmt, /* record_replay_breakpoint */ false);
-  if (stmt->expression()->position() < 0) {
-    // expression is empty, so the breakpoint gets added at the return statement itself
-    builder()->RecordReplayInstrumentation("breakpoint", stmt->position());
-  } else if (stmt->expression()->IsBinaryOperation()) {
-    // given the breakpoint gets shifted to the expression (if that's available) by default
-    // we first check if it's not a binary operation, in which case we need to make sure the breakpoint is added at the position of the left operand
-    // this targets the case in which the binary operation's position is set to its right operand, see:
-    // https://github.com/v8/v8/commit/5bf9e470f8290dde983797e695e5156374d81962
-    // without this the pre-call-post-args breakpoint added by `VisitCall` would not be added as it would be treated as duplicate.
-    // without this specialcase the breakpoints would be added like this (3 would be skipped):
-    //
-    // return /*2*/foo(), /*1*//*3*/bar();
-    builder()->RecordReplayInstrumentation("breakpoint", stmt->expression()->AsBinaryOperation()->left()->position());
-  } else {
-    // [RUN-3317] Shift breakpoint from |stmt| to |expr|, if |expr| exists.
-    builder()->RecordReplayInstrumentation("breakpoint", stmt->expression()->position());
-  }
+  ReplayExpressionShiftedSetStatementPosition(stmt, stmt->expression());
   VisitForAccumulatorValue(stmt->expression());
   int return_position = stmt->end_position();
   if (return_position == ReturnStatement::kFunctionLiteralReturnPosition) {
