@@ -1793,7 +1793,7 @@ void BytecodeGenerator::VisitReturnStatement(ReturnStatement* stmt) {
   builder()->SetStatementPosition(stmt, /* record_replay_breakpoint */ false);
   if (stmt->expression()->position() < 0) {
     // expression is empty, so the breakpoint gets added at the return statement itself
-    RecordReplayInstrumentation("breakpoint", stmt->position());
+    builder()->RecordReplayInstrumentation("breakpoint", stmt->position());
   } else if (stmt->expression()->IsBinaryOperation()) {
     // given the breakpoint gets shifted to the expression (if that's available) by default
     // we first check if it's not a binary operation, in which case we need to make sure the breakpoint is added at the position of the left operand
@@ -1803,10 +1803,10 @@ void BytecodeGenerator::VisitReturnStatement(ReturnStatement* stmt) {
     // without this specialcase the breakpoints would be added like this (3 would be skipped):
     //
     // return /*2*/foo(), /*1*//*3*/bar();
-    RecordReplayInstrumentation("breakpoint", stmt->expression()->AsBinaryOperation()->left()->position());
+    builder()->RecordReplayInstrumentation("breakpoint", stmt->expression()->AsBinaryOperation()->left()->position());
   } else {
     // [RUN-3317] Shift breakpoint from |stmt| to |expr|, if |expr| exists.
-    RecordReplayInstrumentation("breakpoint", stmt->expression()->position());
+    builder()->RecordReplayInstrumentation("breakpoint", stmt->expression()->position());
   }
   VisitForAccumulatorValue(stmt->expression());
   int return_position = stmt->end_position();
