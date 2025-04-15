@@ -520,9 +520,9 @@ MaybeHandle<String> MessageFormatter::Format(Isolate* isolate,
 
 
   MaybeHandle<String> rv = builder.Finish();
-  if (recordreplay::IsRecordingOrReplEaying("MessageFormatter::Format")) {
+  if (recordreplay::IsRecordingOrReplaying("MessageFormatter::Format")) {
     // [PRO-1150] Replay error messages.
-    std::string str = rv.ToHandleChecked()->ToCString();
+    std::string str = rv.ToHandleChecked()->ToCString().get();
     recordreplay::RecordReplayString("MessageFormatter::Format", str);
     rv = isolate->factory()->NewStringFromUtf8(base::CStrVector(str.c_str()));
   }
