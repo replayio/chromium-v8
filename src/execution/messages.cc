@@ -518,7 +518,15 @@ MaybeHandle<String> MessageFormatter::Format(Isolate* isolate,
     }
   }
 
-  return builder.Finish();
+
+  MaybeHandle<String> rv = builder.Finish();
+  if (recordreplay::IsRecordingOrReplEaying("MessageFormatter::Format")) {
+    // [PRO-1150] Replay error messages.
+    std::string str = rv.ToHandleChecked()->ToCString();
+    recordreplay::RecordReplayString("MessageFormatter::Format", str);
+    rv = isolate->factory()->NewStringFromUtf8(base::CStrVector(str.c_str()));
+  }
+  return rv;
 }
 
 MaybeHandle<JSObject> ErrorUtils::Construct(Isolate* isolate,
