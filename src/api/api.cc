@@ -10969,30 +10969,6 @@ void RecordReplayOnExceptionUnwind(Isolate* isolate) {
   if (!isolate->is_catchable_by_javascript(*exception))
     return;
 
-  {
-    // Note: Most of this is copied from |ComputeLocation| in messages.cc.
-    JavaScriptFrameIterator it(isolate);
-    if (!it.done()) {
-      // Compute the location from the function and the relocation info of the
-      // baseline code. For optimized code this will use the deoptimization
-      // information to get canonical location information.
-      std::vector<FrameSummary> frames;
-      it.frame()->Summarize(&frames);
-      if (!frames.empty()) { // There might not always be a frame due to RUN-1920.
-        auto& summary = frames.back().AsJavaScript();
-        Handle<SharedFunctionInfo> shared(summary.function()->shared(), isolate);
-        Handle<Object> script(shared->script(), isolate);
-        if (script->IsScript()) {
-          Handle<Script> casted_script = Handle<Script>::cast(script);
-          if (!RecordReplayHasRegisteredScript(*casted_script)) {
-            // Don't repor errors from unregistered.
-            return;
-          }
-        }
-      }
-    }
-  }
-
   isolate->clear_pending_exception();
   Handle<Object> message(isolate->pending_message(), isolate);
   isolate->clear_pending_message();
