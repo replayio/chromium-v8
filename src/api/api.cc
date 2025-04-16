@@ -11550,6 +11550,14 @@ extern "C" DLLEXPORT void V8RecordReplayBytes(const char* why, void* buf, size_t
   recordreplay::RecordReplayBytes(why, buf, size);
 }
 
+void recordreplay::RecordReplayString(const char* why, std::string& str) {
+  size_t length = RecordReplayValue(why, str.length());
+  str.resize(length);
+  if (length) {
+    RecordReplayBytes(why, &str[0], length);
+  }
+}
+
 bool recordreplay::AreEventsDisallowed(const char* why) {
   if (IsRecordingOrReplaying("disallow-events", why)) {
     return gRecordReplayAreEventsDisallowed();
