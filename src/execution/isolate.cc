@@ -2570,6 +2570,9 @@ bool Isolate::ComputeLocation(MessageLocation* target) {
 
   if (summary.IsJavaScript()) {
     shared = handle(summary.AsJavaScript().function()->shared(), this);
+    recordreplay::AssertMaybeEventsDisallowed(
+      "[PRO-1150] Isolate::ComputeLocation %d",
+      Handle<Script>::cast(script)->id());
   }
   if (summary.AreSourcePositionsAvailable()) {
     int pos = summary.SourcePosition();
@@ -2604,6 +2607,9 @@ bool Isolate::ComputeLocationFromException(MessageLocation* target,
   if (!script->IsScript()) return false;
 
   Handle<Script> cast_script(Script::cast(*script), this);
+
+  recordreplay::AssertMaybeEventsDisallowed("[PRO-1150] Isolate::ComputeLocationFromException %d", cast_script->id());
+
   *target = MessageLocation(cast_script, start_pos_value, end_pos_value);
   return true;
 }
@@ -2639,6 +2645,10 @@ bool Isolate::ComputeLocationFromDetailedStackTrace(MessageLocation* target,
                               this);
   const int pos = StackFrameInfo::GetSourcePosition(info);
   *target = MessageLocation(handle(info->script(), this), pos, pos + 1);
+  
+  recordreplay::AssertMaybeEventsDisallowed(
+    "[PRO-1150] Isolate::ComputeLocationFromDetailedStackTrace %d",
+    info->script().id());
   return true;
 }
 
