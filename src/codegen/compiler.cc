@@ -414,7 +414,7 @@ ScriptOriginOptions OriginOptionsForEval(
       is_opaque = true;
     }
   }
-  recordreplay::Assert("ScriptOriginOptions OriginOptionsForEval %d",
+  recordreplay::Print("ScriptOriginOptions OriginOptionsForEval %d",
                        is_shared_cross_origin);
   return ScriptOriginOptions(is_shared_cross_origin, is_opaque);
 }
