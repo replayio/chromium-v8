@@ -10981,7 +10981,7 @@ void RecordReplayOnExceptionUnwind(Isolate* isolate) {
       if (!frames.empty()) { // There might not always be a frame due to RUN-1920.
         bool hasFrameFromRegisteredScript = false;
         for (int i = static_cast<int>(frames.size()) - 1; i >= 0; i--) {
-          auto& summary = *frames[i].AsJavaScript();
+          auto& summary = frames[i].AsJavaScript();
           Handle<SharedFunctionInfo> shared(summary.function()->shared(), isolate);
           Handle<Object> script(shared->script(), isolate);
           if (script->IsScript()) {
