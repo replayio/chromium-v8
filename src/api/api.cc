@@ -10966,6 +10966,7 @@ void RecordReplayOnExceptionUnwind(Isolate* isolate) {
     return;
 
   Handle<Object> exception(isolate->pending_exception(), isolate);
+  recordreplay::Print("[PRO-1150] RecordReplayOnExceptionUnwind A %d", isolate->is_catchable_by_javascript(*exception));
   if (!isolate->is_catchable_by_javascript(*exception))
     return;
 
@@ -11000,10 +11001,13 @@ void RecordReplayOnExceptionUnwind(Isolate* isolate) {
     }
   }
 
+  recordreplay::Print("[PRO-1150] RecordReplayOnExceptionUnwind B");
+
   isolate->clear_pending_exception();
   Handle<Object> message(isolate->pending_message(), isolate);
   isolate->clear_pending_message();
   Handle<Object> scheduledException;
+  recordreplay::Print("[PRO-1150] RecordReplayOnExceptionUnwind C %d", isolate->has_scheduled_exception());
   if (isolate->has_scheduled_exception()) {
     scheduledException = Handle<Object>(isolate->scheduled_exception(), isolate);
     isolate->clear_scheduled_exception();
@@ -11016,6 +11020,7 @@ void RecordReplayOnExceptionUnwind(Isolate* isolate) {
   CHECK(!isolate->has_pending_exception());
   isolate->set_pending_exception(*exception);
   isolate->set_pending_message(*message);
+  recordreplay::Print("[PRO-1150] RecordReplayOnExceptionUnwind D %d", scheduledException.is_null());
   if (!scheduledException.is_null()) {
     isolate->set_scheduled_exception(*scheduledException);
   }
