@@ -266,10 +266,10 @@ FrameSummary StackTraceFrameIterator::GetTopValidFrame() const {
         !recordreplay::AreEventsDisallowed()) {
         // [PRO-1105] Skip our own (or generally, divergent) scripts.
         if (!RecordReplayHasRegisteredScript(*Handle<Script>::cast(frames[i].script()))) {
-          recordreplay::Print("[PRO-1150] StackTraceFrameIterator::GetTopValidFrame i %d script_id %d continue", i, *Handle<Script>::cast(frames[i].script()))->id());
+          recordreplay::Print("[PRO-1150] StackTraceFrameIterator::GetTopValidFrame i %d script_id %d continue", i, Handle<Script>::cast(frames[i].script())->id());
           continue;
         }
-        recordreplay::Print("[PRO-1150] StackTraceFrameIterator::GetTopValidFrame i %d script_id %d return", i, *Handle<Script>::cast(frames[i].script()))->id());
+        recordreplay::Print("[PRO-1150] StackTraceFrameIterator::GetTopValidFrame i %d script_id %d return", i, Handle<Script>::cast(frames[i].script())->id());
       }
       return frames[i];
     }
