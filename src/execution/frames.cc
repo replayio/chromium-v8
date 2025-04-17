@@ -259,6 +259,7 @@ FrameSummary StackTraceFrameIterator::GetTopValidFrame() const {
   frame()->Summarize(&frames);
   if (is_javascript()) {
     recordreplay::Print("[PRO-1150] StackTraceFrameIterator::GetTopValidFrame size %d", static_cast<int>(frames.size()));
+    base::Optional<FrameSummary> normal_rv;
     for (int i = static_cast<int>(frames.size()) - 1; i >= 0; i--) {
       if (!IsValidJSFunction(*frames[i].AsJavaScript().function())) continue;
       recordreplay::Print("[PRO-1150] StackTraceFrameIterator::GetTopValidFrame 1");
@@ -267,11 +268,19 @@ FrameSummary StackTraceFrameIterator::GetTopValidFrame() const {
         // [PRO-1105] Skip our own (or generally, divergent) scripts.
         if (!RecordReplayHasRegisteredScript(*Handle<Script>::cast(frames[i].script()))) {
           recordreplay::Print("[PRO-1150] StackTraceFrameIterator::GetTopValidFrame i %d script_id %d continue", i, Handle<Script>::cast(frames[i].script())->id());
+          if (!fallback_unregistered.has_value()) {
+            normal_rv = frames[i];
+          }
           continue;
         }
         recordreplay::Print("[PRO-1150] StackTraceFrameIterator::GetTopValidFrame i %d script_id %d return", i, Handle<Script>::cast(frames[i].script())->id());
       }
       return frames[i];
+    }
+    if (normal_rv.has_value()) {
+      // if all frames belongs to unregistered scripts return the first one like that
+      recordreplay::Print("[PRO-1150] StackTraceFrameIterator::GetTopValidFrame returning fallback unregistered frame");
+      return *normal_rv;
     }
     UNREACHABLE();
   }
