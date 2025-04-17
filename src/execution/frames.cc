@@ -249,6 +249,8 @@ int StackTraceFrameIterator::FrameFunctionCount() const {
   return static_cast<int>(infos.size());
 }
 
+extern bool RecordReplayHasRegisteredScript(Script script);
+
 FrameSummary StackTraceFrameIterator::GetTopValidFrame() const {
   DCHECK(!done());
   // Like FrameSummary::GetTop, but additionally observes
@@ -258,6 +260,13 @@ FrameSummary StackTraceFrameIterator::GetTopValidFrame() const {
   if (is_javascript()) {
     for (int i = static_cast<int>(frames.size()) - 1; i >= 0; i--) {
       if (!IsValidJSFunction(*frames[i].AsJavaScript().function())) continue;
+      if (recordreplay::IsRecordingOrReplaying("StackTraceFrameIterator::GetTopValidFrame") &&
+        !recordreplay::AreEventsDisallowed()) {
+        // [PRO-1105] Skip our own (or generally, divergent) scripts.
+        if (!RecordReplayHasRegisteredScript(*Handle<Script>::cast(frames[i].script()))) {
+          continue;
+        }
+      }
       return frames[i];
     }
     UNREACHABLE();

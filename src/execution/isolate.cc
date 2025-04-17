@@ -2605,8 +2605,6 @@ bool Isolate::ComputeLocationFromException(MessageLocation* target,
 
   Handle<Script> cast_script(Script::cast(*script), this);
 
-  recordreplay::AssertMaybeEventsDisallowed("[PRO-1150] Isolate::ComputeLocationFromException %d", cast_script->id());
-
   *target = MessageLocation(cast_script, start_pos_value, end_pos_value);
   return true;
 }
