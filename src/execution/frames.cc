@@ -268,8 +268,8 @@ FrameSummary StackTraceFrameIterator::GetTopValidFrame() const {
         // [PRO-1105] Skip our own (or generally, divergent) scripts.
         if (!RecordReplayHasRegisteredScript(*Handle<Script>::cast(frames[i].script()))) {
           recordreplay::Print("[PRO-1150] StackTraceFrameIterator::GetTopValidFrame i %d script_id %d continue", i, Handle<Script>::cast(frames[i].script())->id());
-          if (!fallback_unregistered.has_value()) {
-            normal_rv = frames[i];
+          if (!normal_rv.has_value()) {
+            normal_rv.emplace(std::move(frames[i]));
           }
           continue;
         }
