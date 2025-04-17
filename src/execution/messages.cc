@@ -33,7 +33,7 @@ MessageLocation::MessageLocation(Handle<Script> script, int start_pos,
       start_pos_(start_pos),
       end_pos_(end_pos),
       bytecode_offset_(-1) {
-  recordreplay::AssertMaybeEventsDisallowed(
+  recordreplay::Print(
     "[PRO-1150] MessageLocation::MessageLocation A %d %d %d",
     script->id(), start_pos, end_pos);
 }
@@ -44,8 +44,8 @@ MessageLocation::MessageLocation(Handle<Script> script, int start_pos,
       start_pos_(start_pos),
       end_pos_(end_pos),
       bytecode_offset_(-1),
-      shared_(shared) {        
-  recordreplay::AssertMaybeEventsDisallowed(
+      shared_(shared) {
+  recordreplay::Print(
     "[PRO-1150] MessageLocation::MessageLocation B %d %d %d",
     script->id(), start_pos, end_pos);
 }
@@ -58,14 +58,14 @@ MessageLocation::MessageLocation(Handle<Script> script,
       end_pos_(-1),
       bytecode_offset_(bytecode_offset),
       shared_(shared) {
-  recordreplay::AssertMaybeEventsDisallowed(
+  recordreplay::Print(
     "[PRO-1150] MessageLocation::MessageLocation C %d",
     script->id());
 }
 
 MessageLocation::MessageLocation()
     : start_pos_(-1), end_pos_(-1), bytecode_offset_(-1) {
-  recordreplay::AssertMaybeEventsDisallowed(
+  recordreplay::Print(
     "[PRO-1150] MessageLocation::MessageLocation D");
 }
 
@@ -453,7 +453,14 @@ MaybeHandle<Object> ErrorUtils::FormatStackTrace(Isolate* isolate,
     }
   }
 
-  return builder.Finish();
+  MaybeHandle<String> rv = builder.Finish();
+  if (recordreplay::IsRecordingOrReplaying("ErrorUtils::FormatStackTrace")) {
+    // [PRO-1150] Replay error stack.
+    std::string str = rv.ToHandleChecked()->ToCString().get();
+    recordreplay::RecordReplayString("ErrorUtils::FormatStackTrace", str);
+    rv = isolate->factory()->NewStringFromUtf8(base::CStrVector(str.c_str()));
+  }
+  return rv;
 }
 
 Handle<String> MessageFormatter::Format(Isolate* isolate, MessageTemplate index,
