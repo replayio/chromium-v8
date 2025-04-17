@@ -32,7 +32,11 @@ MessageLocation::MessageLocation(Handle<Script> script, int start_pos,
     : script_(script),
       start_pos_(start_pos),
       end_pos_(end_pos),
-      bytecode_offset_(-1) {}
+      bytecode_offset_(-1) {
+  recordreplay::AssertMaybeEventsDisallowed(
+    "[PRO-1150] MessageLocation::MessageLocation A %d %d %d",
+    script->id(), start_pos, end_pos);
+}
 
 MessageLocation::MessageLocation(Handle<Script> script, int start_pos,
                                  int end_pos, Handle<SharedFunctionInfo> shared)
@@ -40,7 +44,11 @@ MessageLocation::MessageLocation(Handle<Script> script, int start_pos,
       start_pos_(start_pos),
       end_pos_(end_pos),
       bytecode_offset_(-1),
-      shared_(shared) {}
+      shared_(shared) {        
+  recordreplay::AssertMaybeEventsDisallowed(
+    "[PRO-1150] MessageLocation::MessageLocation B %d %d %d",
+    script->id(), start_pos, end_pos);
+}
 
 MessageLocation::MessageLocation(Handle<Script> script,
                                  Handle<SharedFunctionInfo> shared,
@@ -49,10 +57,17 @@ MessageLocation::MessageLocation(Handle<Script> script,
       start_pos_(-1),
       end_pos_(-1),
       bytecode_offset_(bytecode_offset),
-      shared_(shared) {}
+      shared_(shared) {
+  recordreplay::AssertMaybeEventsDisallowed(
+    "[PRO-1150] MessageLocation::MessageLocation C %d",
+    script->id());
+}
 
 MessageLocation::MessageLocation()
-    : start_pos_(-1), end_pos_(-1), bytecode_offset_(-1) {}
+    : start_pos_(-1), end_pos_(-1), bytecode_offset_(-1) {
+  recordreplay::AssertMaybeEventsDisallowed(
+    "[PRO-1150] MessageLocation::MessageLocation D");
+}
 
 // If no message listeners have been registered this one is called
 // by default.
