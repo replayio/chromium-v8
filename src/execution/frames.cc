@@ -261,15 +261,15 @@ FrameSummary StackTraceFrameIterator::GetTopValidFrame() const {
     recordreplay::Print("[PRO-1150] StackTraceFrameIterator::GetTopValidFrame size %d", static_cast<int>(frames.size()));
     for (int i = static_cast<int>(frames.size()) - 1; i >= 0; i--) {
       if (!IsValidJSFunction(*frames[i].AsJavaScript().function())) continue;
-      recordreplay::Print("[PRO-1150] StackTraceFrameIterator::GetTopValidFrame 1")
+      recordreplay::Print("[PRO-1150] StackTraceFrameIterator::GetTopValidFrame 1");
       if (recordreplay::IsRecordingOrReplaying("StackTraceFrameIterator::GetTopValidFrame") &&
         !recordreplay::AreEventsDisallowed()) {
         // [PRO-1105] Skip our own (or generally, divergent) scripts.
         if (!RecordReplayHasRegisteredScript(*Handle<Script>::cast(frames[i].script()))) {
-          recordreplay::Print("[PRO-1150] StackTraceFrameIterator::GetTopValidFrame i %d script_id %d continue", i, frames[i].script()->id());
+          recordreplay::Print("[PRO-1150] StackTraceFrameIterator::GetTopValidFrame i %d script_id %d continue", i, *Handle<Script>::cast(frames[i].script()))->id());
           continue;
         }
-        recordreplay::Print("[PRO-1150] StackTraceFrameIterator::GetTopValidFrame i %d script_id %d return", i, frames[i].script()->id());
+        recordreplay::Print("[PRO-1150] StackTraceFrameIterator::GetTopValidFrame i %d script_id %d return", i, *Handle<Script>::cast(frames[i].script()))->id());
       }
       return frames[i];
     }
