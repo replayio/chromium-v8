@@ -10986,6 +10986,10 @@ void RecordReplayOnExceptionUnwind(Isolate* isolate) {
           Handle<Object> script(shared->script(), isolate);
           if (script->IsScript()) {
             Handle<Script> casted_script = Handle<Script>::cast(script);
+            recordreplay::Assert("[PRO-1105] RecordReplayOnExceptionUnwind casted_script %d/%d id=%d",
+                                 i,
+                                 static_cast<int>(frames.size()),
+                                 casted_script->id());
             if (!RecordReplayHasRegisteredScript(*casted_script)) {
               hasFrameFromRegisteredScript = true;
               break;
