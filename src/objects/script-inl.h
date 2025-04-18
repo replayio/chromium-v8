@@ -155,6 +155,8 @@ void Script::set_is_repl_mode(bool value) {
 }
 
 ScriptOriginOptions Script::origin_options() {
+  recordreplay::Print("ScriptOriginOptions Script::origin_options %d",
+                       OriginOptionsBits::decode(flags()));
   return ScriptOriginOptions(OriginOptionsBits::decode(flags()));
 }
 void Script::set_origin_options(ScriptOriginOptions origin_options) {

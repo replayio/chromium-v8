@@ -10966,6 +10966,7 @@ void RecordReplayOnExceptionUnwind(Isolate* isolate) {
     return;
 
   Handle<Object> exception(isolate->pending_exception(), isolate);
+  recordreplay::Print("[PRO-1150] RecordReplayOnExceptionUnwind A %d", isolate->is_catchable_by_javascript(*exception));
   if (!isolate->is_catchable_by_javascript(*exception))
     return;
 
@@ -10979,24 +10980,44 @@ void RecordReplayOnExceptionUnwind(Isolate* isolate) {
       std::vector<FrameSummary> frames;
       it.frame()->Summarize(&frames);
       if (!frames.empty()) { // There might not always be a frame due to RUN-1920.
-        auto& summary = frames.back().AsJavaScript();
-        Handle<SharedFunctionInfo> shared(summary.function()->shared(), isolate);
-        Handle<Object> script(shared->script(), isolate);
-        if (script->IsScript()) {
-          Handle<Script> casted_script = Handle<Script>::cast(script);
-          if (!RecordReplayHasRegisteredScript(*casted_script)) {
-            // Don't repor errors from unregistered.
-            return;
+        bool hasFrameFromRegisteredScript = false;
+        for (int i = static_cast<int>(frames.size()) - 1; i >= 0; i--) {
+          FrameSummary::JavaScriptFrameSummary const& summary = frames[i].AsJavaScript();
+          Handle<SharedFunctionInfo> shared(summary.function()->shared(), isolate);
+          Handle<Object> s(shared->script(), isolate);
+          if (s->IsScript()) {
+            Handle<Script> script = Handle<Script>::cast(s);
+
+            std::string script_name = script->name().IsString()
+              ? String::cast(script->name()).ToCString().get()
+              : "(anonymous script)";
+            recordreplay::Assert("[PRO-1105] RecordReplayOnExceptionUnwind %d/%d id=%d fun=%s script=%s",
+                                 i,
+                                 static_cast<int>(frames.size()),
+                                 script->id(),
+                                 SharedFunctionInfo::DebugName(shared),
+                                 script_name.c_str());
+            if (!RecordReplayHasRegisteredScript(*script)) {
+              hasFrameFromRegisteredScript = true;
+              break;
+            }
           }
+        }
+        if (!hasFrameFromRegisteredScript) {
+          // Don't report errors from unregistered.
+          return;
         }
       }
     }
   }
 
+  recordreplay::Print("[PRO-1150] RecordReplayOnExceptionUnwind B");
+
   isolate->clear_pending_exception();
   Handle<Object> message(isolate->pending_message(), isolate);
   isolate->clear_pending_message();
   Handle<Object> scheduledException;
+  recordreplay::Print("[PRO-1150] RecordReplayOnExceptionUnwind C %d", isolate->has_scheduled_exception());
   if (isolate->has_scheduled_exception()) {
     scheduledException = Handle<Object>(isolate->scheduled_exception(), isolate);
     isolate->clear_scheduled_exception();
@@ -11009,6 +11030,7 @@ void RecordReplayOnExceptionUnwind(Isolate* isolate) {
   CHECK(!isolate->has_pending_exception());
   isolate->set_pending_exception(*exception);
   isolate->set_pending_message(*message);
+  recordreplay::Print("[PRO-1150] RecordReplayOnExceptionUnwind D %d", scheduledException.is_null());
   if (!scheduledException.is_null()) {
     isolate->set_scheduled_exception(*scheduledException);
   }

@@ -2604,6 +2604,7 @@ bool Isolate::ComputeLocationFromException(MessageLocation* target,
   if (!script->IsScript()) return false;
 
   Handle<Script> cast_script(Script::cast(*script), this);
+
   *target = MessageLocation(cast_script, start_pos_value, end_pos_value);
   return true;
 }
@@ -2639,6 +2640,10 @@ bool Isolate::ComputeLocationFromDetailedStackTrace(MessageLocation* target,
                               this);
   const int pos = StackFrameInfo::GetSourcePosition(info);
   *target = MessageLocation(handle(info->script(), this), pos, pos + 1);
+  
+  recordreplay::AssertMaybeEventsDisallowed(
+    "[PRO-1150] Isolate::ComputeLocationFromDetailedStackTrace %d %d",
+    info->script().id(), pos);
   return true;
 }
 

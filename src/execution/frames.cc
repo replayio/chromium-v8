@@ -249,6 +249,9 @@ int StackTraceFrameIterator::FrameFunctionCount() const {
   return static_cast<int>(infos.size());
 }
 
+extern bool RecordReplayHasRegisteredScript(Script script);
+extern "C" void V8RecordReplayGetCurrentJSStack(std::string* js_stack);
+
 FrameSummary StackTraceFrameIterator::GetTopValidFrame() const {
   DCHECK(!done());
   // Like FrameSummary::GetTop, but additionally observes
@@ -256,9 +259,34 @@ FrameSummary StackTraceFrameIterator::GetTopValidFrame() const {
   std::vector<FrameSummary> frames;
   frame()->Summarize(&frames);
   if (is_javascript()) {
+    
+    std::string js_stack;
+    V8RecordReplayGetCurrentJSStack(&js_stack);
+    recordreplay::Trace("[PRO-1150] StackTraceFrameIterator::GetTopValidFrame size %d %s",
+                        static_cast<int>(frames.size()),
+                        js_stack.c_str());
+    base::Optional<FrameSummary> normal_rv;
     for (int i = static_cast<int>(frames.size()) - 1; i >= 0; i--) {
       if (!IsValidJSFunction(*frames[i].AsJavaScript().function())) continue;
+      recordreplay::Print("[PRO-1150] StackTraceFrameIterator::GetTopValidFrame 1");
+      if (recordreplay::IsRecordingOrReplaying("StackTraceFrameIterator::GetTopValidFrame") &&
+        !recordreplay::AreEventsDisallowed()) {
+        // [PRO-1105] Skip our own (or generally, divergent) scripts.
+        if (!RecordReplayHasRegisteredScript(*Handle<Script>::cast(frames[i].script()))) {
+          recordreplay::Print("[PRO-1150] StackTraceFrameIterator::GetTopValidFrame i %d script_id %d continue", i, Handle<Script>::cast(frames[i].script())->id());
+          if (!normal_rv.has_value()) {
+            normal_rv.emplace(std::move(frames[i]));
+          }
+          continue;
+        }
+        recordreplay::Print("[PRO-1150] StackTraceFrameIterator::GetTopValidFrame i %d script_id %d return", i, Handle<Script>::cast(frames[i].script())->id());
+      }
       return frames[i];
+    }
+    if (normal_rv.has_value()) {
+      // if all frames belongs to unregistered scripts return the first one like that
+      recordreplay::Print("[PRO-1150] StackTraceFrameIterator::GetTopValidFrame returning fallback unregistered frame");
+      return *normal_rv;
     }
     UNREACHABLE();
   }

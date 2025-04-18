@@ -553,6 +553,10 @@ bool CallSiteInfo::ComputeLocation(Handle<CallSiteInfo> info,
   if (!shared->IsSubjectToDebugging()) return false;
   Handle<Script> script(Script::cast(shared->script()), isolate);
   if (script->source().IsUndefined()) return false;
+  
+  recordreplay::AssertMaybeEventsDisallowed(
+    "[PRO-1150] CallSiteInfo::ComputeLocation %d",
+    script->id());
   if (info->flags() & kIsSourcePositionComputed ||
       (shared->HasBytecodeArray() &&
        shared->GetBytecodeArray(isolate).HasSourcePositionTable())) {
