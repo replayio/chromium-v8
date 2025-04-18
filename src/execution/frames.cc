@@ -250,6 +250,7 @@ int StackTraceFrameIterator::FrameFunctionCount() const {
 }
 
 extern bool RecordReplayHasRegisteredScript(Script script);
+extern "C" void V8RecordReplayGetCurrentJSStack(std::string* js_stack);
 
 FrameSummary StackTraceFrameIterator::GetTopValidFrame() const {
   DCHECK(!done());
@@ -258,7 +259,12 @@ FrameSummary StackTraceFrameIterator::GetTopValidFrame() const {
   std::vector<FrameSummary> frames;
   frame()->Summarize(&frames);
   if (is_javascript()) {
-    recordreplay::Print("[PRO-1150] StackTraceFrameIterator::GetTopValidFrame size %d", static_cast<int>(frames.size()));
+    
+    std::string js_stack;
+    V8RecordReplayGetCurrentJSStack(&js_stack);
+    recordreplay::Trace("[PRO-1150] StackTraceFrameIterator::GetTopValidFrame size %d %s",
+                        static_cast<int>(frames.size()),
+                        js_stack.c_str());
     base::Optional<FrameSummary> normal_rv;
     for (int i = static_cast<int>(frames.size()) - 1; i >= 0; i--) {
       if (!IsValidJSFunction(*frames[i].AsJavaScript().function())) continue;
