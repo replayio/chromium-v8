@@ -195,6 +195,10 @@ RUNTIME_FUNCTION(Runtime_UnwindAndFindExceptionHandler) {
   // a script, try/catch block, or try/finally block. If the progress counter
   // when unwinding is the same as the last time when unwinding, this is a
   // frame unwind instead of an initial throw and we can ignore it.
+  recordreplay::Print(
+      "[PRO-1150] Runtime_UnwindAndFindExceptionHandler %d %d %d\n",
+      *gProgressCounter, gLastExceptionUnwindProgress,
+      recordreplay::AreEventsDisallowed());
   if (recordreplay::IsRecordingOrReplaying() &&
       !recordreplay::AreEventsDisallowed() &&
       IsMainThread() &&
