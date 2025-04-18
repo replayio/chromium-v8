@@ -10982,16 +10982,22 @@ void RecordReplayOnExceptionUnwind(Isolate* isolate) {
       if (!frames.empty()) { // There might not always be a frame due to RUN-1920.
         bool hasFrameFromRegisteredScript = false;
         for (int i = static_cast<int>(frames.size()) - 1; i >= 0; i--) {
-          auto& summary = frames[i].AsJavaScript();
+          FrameSummary::JavaScriptFrameSummary const& summary = frames[i].AsJavaScript();
           Handle<SharedFunctionInfo> shared(summary.function()->shared(), isolate);
-          Handle<Object> script(shared->script(), isolate);
-          if (script->IsScript()) {
-            Handle<Script> casted_script = Handle<Script>::cast(script);
-            recordreplay::Assert("[PRO-1105] RecordReplayOnExceptionUnwind casted_script %d/%d id=%d",
+          Handle<Object> s(shared->script(), isolate);
+          if (s->IsScript()) {
+            Handle<Script> script = Handle<Script>::cast(s);
+
+            std::string script_name = script->name().IsString()
+              ? String::cast(script->name()).ToCString().get()
+              : "(anonymous script)";
+            recordreplay::Assert("[PRO-1105] RecordReplayOnExceptionUnwind %d/%d id=%d fun=%s script=%s",
                                  i,
                                  static_cast<int>(frames.size()),
-                                 casted_script->id());
-            if (!RecordReplayHasRegisteredScript(*casted_script)) {
+                                 script->id(),
+                                 SharedFunctionInfo::DebugName(shared),
+                                 script_name.c_str());
+            if (!RecordReplayHasRegisteredScript(*script)) {
               hasFrameFromRegisteredScript = true;
               break;
             }
