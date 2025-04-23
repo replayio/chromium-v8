@@ -1732,10 +1732,12 @@ void BytecodeGenerator::VisitStatements(
 }
 
 void BytecodeGenerator::ReplayExpressionShiftedSetStatementPosition(Statement* stmt, Expression* expr) {
+  recordreplay::Print("ReplayExpressionShiftedSetStatementPosition: expr->position(): %d\n", expr->position());
   builder()->SetStatementPosition(stmt, /* record_replay_breakpoint */ false);
   if (expr->position() < 0) {
     // expression is empty, so the breakpoint gets added at the statement itself
     builder()->RecordReplayInstrumentation("breakpoint", stmt->position());
+    recordreplay::Print("ReplayExpressionShiftedSetStatementPosition: add at stmt position: %d\n", stmt->position());
   } else if (expr->IsBinaryOperation()) {
     // given the breakpoint gets shifted to the expression (if that's available) by default
     // we first check if it's not a binary operation, in which case we need to make sure the breakpoint is added at the position of the left operand
@@ -1745,8 +1747,10 @@ void BytecodeGenerator::ReplayExpressionShiftedSetStatementPosition(Statement* s
     // without this specialcase the breakpoints would be added like this (3 would be skipped):
     //
     // return /*2*/foo(), /*1*//*3*/bar();
+    recordreplay::Print("ReplayExpressionShiftedSetStatementPosition: add at left operand: %d\n", expr->AsBinaryOperation()->left()->position());
     builder()->RecordReplayInstrumentation("breakpoint", expr->AsBinaryOperation()->left()->position());
   } else {
+    recordreplay::Print("ReplayExpressionShiftedSetStatementPosition: add at expression: %d\n", expr->position());
     builder()->RecordReplayInstrumentation("breakpoint", expr->position());
   }
 }
@@ -5675,15 +5679,21 @@ void BytecodeGenerator::VisitCall(Call* expr) {
   //             `ExpressionStatement`'s position.
   //       Example: `/*BREAK1*/o.func/*BREAK2*/();`
 
+  recordreplay::Print("VisitCall: call_head_token_position: %d\n", expr->call_head_token_position());
+  recordreplay::Print("VisitCall: start_locations_size: %d\n", start_locations_size);
+  recordreplay::Print("VisitCall: builder()->record_replay_instrumentation_site_locations_.size(): %d\n", builder()->record_replay_instrumentation_site_locations_.size());
+
   if (expr->call_head_token_position() && start_locations_size != builder()->record_replay_instrumentation_site_locations_.size()) {
     // Has arguments and visiting them added breakpoints.
     // Move this to a position that is assured not to conflict with any other
     // AST node.
+    recordreplay::Print("VisitCall: add at call_head_token_position\n");
     builder()->RecordReplayInstrumentation("breakpoint", expr->call_head_token_position());
   } else {
     // Might have arguments but visiting them didn't add breakpoints.
     // Add this to a potentially conflicting position, letting it to be deduplicated in such case.
     // If there is no conflict, a breakpoint will be added.
+    recordreplay::Print("VisitCall: add at expr position\n");
     builder()->RecordReplayInstrumentation("breakpoint", expr->position());
   }
 

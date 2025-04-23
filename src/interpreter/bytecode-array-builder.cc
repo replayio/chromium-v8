@@ -1414,7 +1414,7 @@ bool BytecodeArrayBuilder::EmitRecordReplayInstrumentationOpcodes() const {
   // Instrumentation opcodes aren't needed when recording, except when we are asserting
   // encountered values and need consistent IDs for these objects when recording.
   // Generator instrumentation will create persistent object IDs.
-  return emit_record_replay_opcodes_ && (recordreplay::IsReplaying() || gRecordReplayAssertTrackedObjects);
+  return emit_record_replay_opcodes_ && (recordreplay::IsRecordingOrReplaying() || gRecordReplayAssertTrackedObjects);
 }
 
 BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayInstrumentation(
