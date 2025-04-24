@@ -438,7 +438,14 @@ MaybeHandle<Object> ErrorUtils::FormatStackTrace(Isolate* isolate,
     }
   }
 
-  return builder.Finish();
+  MaybeHandle<String> rv = builder.Finish();
+  if (recordreplay::IsRecordingOrReplaying("ErrorUtils::FormatStackTrace")) {
+    // [PRO-1150] Replay error stack.
+    std::string str = rv.ToHandleChecked()->ToCString().get();
+    recordreplay::RecordReplayString("ErrorUtils::FormatStackTrace", str);
+    rv = isolate->factory()->NewStringFromUtf8(base::CStrVector(str.c_str()));
+  }
+  return rv;
 }
 
 Handle<String> MessageFormatter::Format(Isolate* isolate, MessageTemplate index,
