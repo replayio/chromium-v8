@@ -1257,7 +1257,7 @@ Handle<String> JSFunction::ToString(Handle<JSFunction> function) {
       // [PRO-1304] Replay stringified content of the class
       std::string str = rv->ToCString().get();
       recordreplay::RecordReplayString("JSFunction::ToString - class", str);
-      rv = isolate->factory()->NewStringFromUtf8(base::CStrVector(str.c_str()));
+      rv = isolate->factory()->NewStringFromUtf8(base::CStrVector(str.c_str())).toHandleChecked();
     }
     return rv;
   }
