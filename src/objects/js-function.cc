@@ -1294,8 +1294,15 @@ Handle<String> JSFunction::ToString(Handle<JSFunction> function) {
         v8::Isolate::UseCounterFeature::kFunctionTokenOffsetTooLongForToString);
     return NativeCodeFunctionSourceString(shared_info);
   }
-  return Handle<String>::cast(
-      SharedFunctionInfo::GetSourceCodeHarmony(shared_info));
+  Handle<String> rv = Handle<String>::cast(
+    SharedFunctionInfo::GetSourceCodeHarmony(shared_info));
+  if (recordreplay::IsRecordingOrReplaying("JSFunction::ToString - function")) {
+    // [PRO-1304] Replay stringified content of the function
+    std::string str = rv->ToCString().get();
+    recordreplay::RecordReplayString("JSFunction::ToString - function", str);
+    rv = isolate->factory()->NewStringFromUtf8(base::CStrVector(str.c_str())).ToHandleChecked();
+  }
+  return rv;
 }
 
 // static
