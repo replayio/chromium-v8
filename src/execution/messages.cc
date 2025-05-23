@@ -438,7 +438,7 @@ MaybeHandle<Object> ErrorUtils::FormatStackTrace(Isolate* isolate,
     }
   }
 
-  return recordreplay::RecordReplayString("ErrorUtils::FormatStackTrace", isolate, builder.Finish());
+  return replayio::RecordReplayStringHandle("ErrorUtils::FormatStackTrace", isolate, builder.Finish());
 }
 
 Handle<String> MessageFormatter::Format(Isolate* isolate, MessageTemplate index,
@@ -518,7 +518,7 @@ MaybeHandle<String> MessageFormatter::Format(Isolate* isolate,
     }
   }
 
-  return recordreplay::RecordReplayStringHandle("MessageFormatter::Format", isolate, builder.Finish());
+  return replayio::RecordReplayStringHandle("MessageFormatter::Format", isolate, builder.Finish());
 }
 
 MaybeHandle<JSObject> ErrorUtils::Construct(Isolate* isolate,

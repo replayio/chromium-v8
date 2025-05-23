@@ -18,6 +18,8 @@
 // Has to be the last include (doesn't have include guards):
 #include "src/objects/object-macros.h"
 
+#include "replayio.h"
+
 namespace v8 {
 namespace internal {
 
@@ -1251,7 +1253,7 @@ Handle<String> JSFunction::ToString(Handle<JSFunction> function) {
     int end_position = class_positions.end();
     Handle<String> script_source(
         String::cast(Script::cast(shared_info->script()).source()), isolate);
-    return recordreplay::RecordReplayString(
+    return replayio::RecordReplayStringHandle(
       "JSFunction::ToString",
       isolate,
       isolate->factory()->NewSubString(script_source, start_position, end_position)
@@ -1291,7 +1293,7 @@ Handle<String> JSFunction::ToString(Handle<JSFunction> function) {
     return NativeCodeFunctionSourceString(shared_info);
   }
   // [PRO-1304] Replay stringified content of the function
-  return recordreplay::RecordReplayStringHandle(
+  return replayio::RecordReplayStringHandle(
     "JSFunction::ToString"
     isolate,
     Handle<String>::cast(SharedFunctionInfo::GetSourceCodeHarmony(shared_info))
