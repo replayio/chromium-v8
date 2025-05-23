@@ -536,6 +536,13 @@ EXPORT_TEMPLATE_DECLARE(V8_EXPORT_PRIVATE)
 T ConvertDouble(double d);
 
 }  // namespace internal
+
+namespace recordreplay {
+
+Handle<String> RecordReplayStringHandle(const char* why, Isolate* isolate, Handle<String> input);
+MaybeHandle<String> RecordReplayStringHandle(const char* why, Isolate* isolate, MaybeHandle<String> input);
+
+}  // namespace recordreplay
 }  // namespace v8
 
 #endif  // V8_API_API_H_
