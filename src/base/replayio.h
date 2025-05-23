@@ -13,7 +13,7 @@
 
 #include "src/handles/handles.h"
 #include "src/handles/maybe-handles.h"
-#include "src/execution/isolate.h"
+#include "src/execution/isolate-inl.h"
 #include "src/objects/string.h"
 #include "src/base/optional.h"
 
