@@ -443,7 +443,14 @@ Handle<Object> SharedFunctionInfo::GetSourceCodeHarmony(
   builder.AppendCStringLiteral(") {\n");
   builder.AppendString(source);
   builder.AppendCStringLiteral("\n}");
-  return builder.Finish().ToHandleChecked();
+  MaybeHandle<String> rv = builder.Finish();
+  if (recordreplay::IsRecordingOrReplaying("SharedFunctionInfo::GetSourceCodeHarmony")) {
+    // [PRO-1304] Replay stringified content of the function
+    std::string str = rv.ToHandleChecked()->ToCString().get();
+    recordreplay::RecordReplayString("SharedFunctionInfo::GetSourceCodeHarmony", str);
+    rv = isolate->factory()->NewStringFromUtf8(base::CStrVector(str.c_str()));
+  }
+  return rv.ToHandleChecked();
 }
 
 int SharedFunctionInfo::SourceSize() { return EndPosition() - StartPosition(); }

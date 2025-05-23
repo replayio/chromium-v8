@@ -1251,8 +1251,15 @@ Handle<String> JSFunction::ToString(Handle<JSFunction> function) {
     int end_position = class_positions.end();
     Handle<String> script_source(
         String::cast(Script::cast(shared_info->script()).source()), isolate);
-    return isolate->factory()->NewSubString(script_source, start_position,
-                                            end_position);
+    Handle<String> rv = isolate->factory()->NewSubString(script_source, start_position,
+      end_position);
+    if (recordreplay::IsRecordingOrReplaying("JSFunction::ToString - class")) {
+      // [PRO-1304] Replay stringified content of the class
+      std::string str = rv->ToCString().get();
+      recordreplay::RecordReplayString("JSFunction::ToString - class", str);
+      rv = isolate->factory()->NewStringFromUtf8(base::CStrVector(str.c_str()));
+    }
+    return rv;
   }
 
   // Check if we have source code for the {function}.
