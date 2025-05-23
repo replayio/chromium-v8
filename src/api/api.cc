@@ -11568,7 +11568,7 @@ Handle<String> recordreplay::RecordReplayStringHandle(const char* why, Isolate* 
 }
 
 MaybeHandle<String> recordreplay::RecordReplayStringHandle(const char* why, Isolate* isolate, MaybeHandle<String> input) {
-  if (!IsRecordingOrReplaying(why) || input.is_null() || input.IsEmpty()) {
+  if (input.is_null() || input.IsEmpty()) {
     return input;
   }
   return MaybeHandle<String>(RecordReplayStringHandle(why, isolate, input.ToHandleChecked()));
