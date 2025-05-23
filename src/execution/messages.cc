@@ -438,14 +438,7 @@ MaybeHandle<Object> ErrorUtils::FormatStackTrace(Isolate* isolate,
     }
   }
 
-  MaybeHandle<String> rv = builder.Finish();
-  if (recordreplay::IsRecordingOrReplaying("ErrorUtils::FormatStackTrace")) {
-    // [PRO-1150] Replay Error.stack
-    std::string str = rv.ToHandleChecked()->ToCString().get();
-    recordreplay::RecordReplayString("ErrorUtils::FormatStackTrace", str);
-    rv = isolate->factory()->NewStringFromUtf8(base::CStrVector(str.c_str()));
-  }
-  return rv;
+  return recordreplay::RecordReplayString("ErrorUtils::FormatStackTrace", isolate, builder.Finish());
 }
 
 Handle<String> MessageFormatter::Format(Isolate* isolate, MessageTemplate index,
@@ -525,15 +518,7 @@ MaybeHandle<String> MessageFormatter::Format(Isolate* isolate,
     }
   }
 
-
-  MaybeHandle<String> rv = builder.Finish();
-  if (recordreplay::IsRecordingOrReplaying("MessageFormatter::Format")) {
-    // [PRO-1150] Replay error messages.
-    std::string str = rv.ToHandleChecked()->ToCString().get();
-    recordreplay::RecordReplayString("MessageFormatter::Format", str);
-    rv = isolate->factory()->NewStringFromUtf8(base::CStrVector(str.c_str()));
-  }
-  return rv;
+  return recordreplay::RecordReplayStringHandle("MessageFormatter::Format", isolate, builder.Finish());
 }
 
 MaybeHandle<JSObject> ErrorUtils::Construct(Isolate* isolate,

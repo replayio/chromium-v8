@@ -11558,6 +11558,22 @@ void recordreplay::RecordReplayString(const char* why, std::string& str) {
   }
 }
 
+Handle<String> recordreplay::RecordReplayStringHandle(const char* why, Isolate* isolate, Handle<String> input) {
+  if (!IsRecordingOrReplaying(why)) {
+    return input;
+  }
+  std::string str = input->ToCString().get();
+  RecordReplayString(why, str);
+  return isolate->factory()->NewStringFromUtf8(base::CStrVector(str.c_str())).ToHandleChecked();
+}
+
+MaybeHandle<String> recordreplay::RecordReplayStringHandle(const char* why, Isolate* isolate, MaybeHandle<String> input) {
+  if (!IsRecordingOrReplaying(why) || input.is_null() || input.IsEmpty()) {
+    return input;
+  }
+  return MaybeHandle<String>(RecordReplayStringHandle(why, isolate, input.ToHandleChecked()));
+}
+
 bool recordreplay::AreEventsDisallowed(const char* why) {
   if (IsRecordingOrReplaying("disallow-events", why)) {
     return gRecordReplayAreEventsDisallowed();

@@ -1251,15 +1251,11 @@ Handle<String> JSFunction::ToString(Handle<JSFunction> function) {
     int end_position = class_positions.end();
     Handle<String> script_source(
         String::cast(Script::cast(shared_info->script()).source()), isolate);
-    Handle<String> rv = isolate->factory()->NewSubString(script_source, start_position,
-      end_position);
-    if (recordreplay::IsRecordingOrReplaying("JSFunction::ToString - class")) {
-      // [PRO-1304] Replay stringified content of the class
-      std::string str = rv->ToCString().get();
-      recordreplay::RecordReplayString("JSFunction::ToString - class", str);
-      rv = isolate->factory()->NewStringFromUtf8(base::CStrVector(str.c_str())).ToHandleChecked();
-    }
-    return rv;
+    return recordreplay::RecordReplayString(
+      "JSFunction::ToString",
+      isolate,
+      isolate->factory()->NewSubString(script_source, start_position, end_position)
+    );
   }
 
   // Check if we have source code for the {function}.
@@ -1294,15 +1290,12 @@ Handle<String> JSFunction::ToString(Handle<JSFunction> function) {
         v8::Isolate::UseCounterFeature::kFunctionTokenOffsetTooLongForToString);
     return NativeCodeFunctionSourceString(shared_info);
   }
-  Handle<String> rv = Handle<String>::cast(
-    SharedFunctionInfo::GetSourceCodeHarmony(shared_info));
-  if (recordreplay::IsRecordingOrReplaying("JSFunction::ToString - function")) {
-    // [PRO-1304] Replay stringified content of the function
-    std::string str = rv->ToCString().get();
-    recordreplay::RecordReplayString("JSFunction::ToString - function", str);
-    rv = isolate->factory()->NewStringFromUtf8(base::CStrVector(str.c_str())).ToHandleChecked();
-  }
-  return rv;
+  // [PRO-1304] Replay stringified content of the function
+  return recordreplay::RecordReplayStringHandle(
+    "JSFunction::ToString"
+    isolate,
+    Handle<String>::cast(SharedFunctionInfo::GetSourceCodeHarmony(shared_info))
+  );
 }
 
 // static
