@@ -1295,7 +1295,7 @@ Handle<String> JSFunction::ToString(Handle<JSFunction> function) {
   }
   // [PRO-1304] Replay stringified content of the function
   return replayio::RecordReplayStringHandle(
-    "JSFunction::ToString"
+    "JSFunction::ToString",
     isolate,
     Handle<String>::cast(SharedFunctionInfo::GetSourceCodeHarmony(shared_info))
   );
