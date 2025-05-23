@@ -430,7 +430,7 @@ Handle<Object> SharedFunctionInfo::GetSourceCodeHarmony(
     // [PRO-1304] Replay stringified content of the function
     std::string str = source->ToCString().get();
     recordreplay::RecordReplayString("SharedFunctionInfo::GetSourceCodeHarmony", str);
-    source = isolate->factory()->NewStringFromUtf8(base::CStrVector(str.c_str())).toHandleChecked();
+    source = isolate->factory()->NewStringFromUtf8(base::CStrVector(str.c_str())).ToHandleChecked();
   }
   if (!shared->is_wrapped()) return source;
 
