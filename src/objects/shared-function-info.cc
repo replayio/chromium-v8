@@ -426,6 +426,12 @@ Handle<Object> SharedFunctionInfo::GetSourceCodeHarmony(
   DCHECK_NE(start_pos, kNoSourcePosition);
   Handle<String> source = isolate->factory()->NewSubString(
       script_source, start_pos, shared->EndPosition());
+  if (recordreplay::IsRecordingOrReplaying("SharedFunctionInfo::GetSourceCodeHarmony")) {
+    // [PRO-1304] Replay stringified content of the function
+    std::string str = source->ToCString().get();
+    recordreplay::RecordReplayString("SharedFunctionInfo::GetSourceCodeHarmony", str);
+    source = isolate->factory()->NewStringFromUtf8(base::CStrVector(str.c_str())).toHandleChecked();
+  }
   if (!shared->is_wrapped()) return source;
 
   DCHECK(!shared->name_should_print_as_anonymous());
@@ -443,14 +449,7 @@ Handle<Object> SharedFunctionInfo::GetSourceCodeHarmony(
   builder.AppendCStringLiteral(") {\n");
   builder.AppendString(source);
   builder.AppendCStringLiteral("\n}");
-  MaybeHandle<String> rv = builder.Finish();
-  if (recordreplay::IsRecordingOrReplaying("SharedFunctionInfo::GetSourceCodeHarmony")) {
-    // [PRO-1304] Replay stringified content of the function
-    std::string str = rv.ToHandleChecked()->ToCString().get();
-    recordreplay::RecordReplayString("SharedFunctionInfo::GetSourceCodeHarmony", str);
-    rv = isolate->factory()->NewStringFromUtf8(base::CStrVector(str.c_str()));
-  }
-  return rv.ToHandleChecked();
+  return builder.Finish().ToHandleChecked();
 }
 
 int SharedFunctionInfo::SourceSize() { return EndPosition() - StartPosition(); }
