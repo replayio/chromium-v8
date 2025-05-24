@@ -5448,6 +5448,8 @@ v8_component("v8_libbase") {
     "src/base/vlq-base64.cc",
     "src/base/vlq-base64.h",
     "src/base/vlq.h",
+    "src/base/replayio.cc",
+    "src/base/replayio.h",
   ]
 
   configs = [ ":internal_config_base" ]
