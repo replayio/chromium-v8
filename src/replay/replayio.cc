@@ -23,7 +23,7 @@ v8::internal::MaybeHandle<v8::internal::String> RecordReplayStringHandle(
   if (input.is_null()) {
     return input;
   }
-  return v8::internal::MaybeHandle<String>(RecordReplayStringHandle(why, isolate, input.ToHandleChecked()));
+  return RecordReplayStringHandle(why, isolate, input.ToHandleChecked());
 }
 
 }  // namespace replayio
