@@ -9,27 +9,23 @@
 #ifndef V8_BASE_REPLAYIO_H
 #define V8_BASE_REPLAYIO_H
 
-#include "src/handles/handles.h"
-#include "src/handles/maybe-handles.h"
+#include "include/replayio.h"
+
 #include "src/base/optional.h"
 
 namespace v8 {
 namespace replayio {
 
 struct AutoMaybeDisallowEvents {
-  AutoMaybeDisallowEvents(bool disallowEvents, const char* label);
-
+  AutoMaybeDisallowEvents(bool disallowEvents, const char* label) {
+    if (disallowEvents) {
+      disallow.emplace(label);
+    }
+  }
+  
 private:
   v8::base::Optional<v8::replayio::AutoDisallowEvents> disallow;
 };
-
-v8::internal::Handle<v8::internal::String> RecordReplayStringHandle(
-    const char* why, v8::internal::Isolate* isolate,
-    v8::internal::Handle<v8::internal::String> input);
-
-v8::internal::MaybeHandle<v8::internal::String> RecordReplayStringHandle(
-    const char* why, v8::internal::Isolate* isolate,
-    v8::internal::MaybeHandle<v8::internal::String> input);
 
 }  // namespace replayio
 }  // namespace v8

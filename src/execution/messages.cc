@@ -25,7 +25,7 @@
 #include "src/strings/string-builder-inl.h"
 
 #include "replayio.h"
-#include "src/base/replayio.h"
+#include "src/replay/replayio.h"
 
 namespace v8 {
 namespace internal {

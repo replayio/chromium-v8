@@ -4727,6 +4727,8 @@ v8_source_set("v8_base_without_compiler") {
     "src/zone/type-stats.cc",
     "src/zone/zone-segment.cc",
     "src/zone/zone.cc",
+    "src/replay/replayio.cc",
+    "src/replay/replayio.h",
   ]
 
   if (v8_enable_snapshot_compression) {
@@ -5448,8 +5450,6 @@ v8_component("v8_libbase") {
     "src/base/vlq-base64.cc",
     "src/base/vlq-base64.h",
     "src/base/vlq.h",
-    "src/base/replayio.cc",
-    "src/base/replayio.h",
   ]
 
   configs = [ ":internal_config_base" ]

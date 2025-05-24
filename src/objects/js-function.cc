@@ -19,7 +19,7 @@
 #include "src/objects/object-macros.h"
 
 #include "replayio.h"
-#include "src/base/replayio.h"
+#include "src/replay/replayio.h"
 
 namespace v8 {
 namespace internal {

@@ -24,7 +24,6 @@
 #include "src/objects/source-text-module.h"
 #include "src/objects/templates.h"
 #include "src/utils/detachable-vector.h"
-#include "v8.h"
 
 namespace v8 {
 
