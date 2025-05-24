@@ -9,49 +9,27 @@
 #ifndef V8_BASE_REPLAYIO_H
 #define V8_BASE_REPLAYIO_H
 
-#include "include/replayio.h"
-
 #include "src/handles/handles.h"
 #include "src/handles/maybe-handles.h"
-#include "src/objects/string.h"
 #include "src/base/optional.h"
-#include "src/execution/isolate.h"
 
 namespace v8 {
 namespace replayio {
 
 struct AutoMaybeDisallowEvents {
-  AutoMaybeDisallowEvents(bool disallowEvents, const char* label) {
-    if (disallowEvents) {
-      disallow.emplace(label);
-    }
-  }
-  
+  AutoMaybeDisallowEvents(bool disallowEvents, const char* label);
+
 private:
   v8::base::Optional<v8::replayio::AutoDisallowEvents> disallow;
 };
 
 v8::internal::Handle<v8::internal::String> RecordReplayStringHandle(
-    const char* why,
-    v8::internal::Isolate* isolate,
-    v8::internal::Handle<v8::internal::String> input) {
-  if (!v8::recordreplay::IsRecordingOrReplaying(why)) {
-    return input;
-  }
-  std::string str = input->ToCString().get();
-  v8::recordreplay::RecordReplayString(why, str);
-  return isolate->factory()->NewStringFromUtf8(base::CStrVector(str.c_str())).ToHandleChecked();
-}
+    const char* why, v8::internal::Isolate* isolate,
+    v8::internal::Handle<v8::internal::String> input);
 
 v8::internal::MaybeHandle<v8::internal::String> RecordReplayStringHandle(
-    const char* why,
-    v8::internal::Isolate* isolate,
-    v8::internal::MaybeHandle<v8::internal::String> input) {
-  if (input.is_null()) {
-    return input;
-  }
-  return RecordReplayStringHandle(why, isolate, input.ToHandleChecked());
-}
+    const char* why, v8::internal::Isolate* isolate,
+    v8::internal::MaybeHandle<v8::internal::String> input);
 
 }  // namespace replayio
 }  // namespace v8
