@@ -1,5 +1,5 @@
-#ifndef V8_REPLAYIO_STRINGS_H_
-#define V8_REPLAYIO_STRINGS_H_
+#ifndef V8_REPLAY_REPLAYIO_H_
+#define V8_REPLAY_REPLAYIO_H_
 
 #include "src/handles/handles.h"
 #include "src/handles/maybe-handles.h"
@@ -23,4 +23,4 @@ v8::internal::MaybeHandle<v8::internal::String> RecordReplayStringHandle(
 }  // namespace replayio
 }  // namespace v8
 
-#endif  // V8_REPLAYIO_STRINGS_H_
+#endif  // V8_REPLAY_REPLAYIO_H_
