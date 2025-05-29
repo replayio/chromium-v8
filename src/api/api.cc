@@ -5439,9 +5439,10 @@ MaybeLocal<v8::Value> Function::Call(Local<Context> context,
   i::Handle<i::Object>* args = reinterpret_cast<i::Handle<i::Object>*>(argv);
 
   // TODO: IsInReplayCode (RUN-1502)
+  // [PRO-1417] column is omitted because our instrumentation engine shifts columns but it shouldn't shift line numbers
   v8::recordreplay::AssertMaybeEventsDisallowed(
-    "JS Function::Call %d %d %d",
-    ScriptId(), GetScriptLineNumber(), GetScriptColumnNumber()
+    "JS Function::Call %d %d",
+    ScriptId(), GetScriptLineNumber()
   );
 
   Local<Value> result;
