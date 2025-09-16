@@ -5468,7 +5468,7 @@ void BytecodeGenerator::VisitCall(Call* expr) {
     return VisitCallSuper(expr);
   }
 
-  size_t start_instrumentation_count = builder()->record_replay_instrumentation_site_counter_;
+  int start_instrumentation_count = builder()->record_replay_instrumentation_site_counter_;
 
   // We compile the call differently depending on the presence of spreads and
   // their positions.
