@@ -1406,7 +1406,10 @@ int BytecodeArrayBuilder::RecordReplayRegisterInstrumentationSite(
   }
   record_replay_instrumentation_site_locations_.insert(source_position);
 
-  int function_index = (int)record_replay_instrumentation_site_locations_.size();
+  // some of the instrumentations bypass the above location-based deduplication mechanism (mainly the ones added with kNoSourcePosition)
+  // so to ensure unique function indices to be used for all registered instrumentation sites
+  // we use a dedicated counter for this
+  int function_index = ++record_replay_instrumentation_site_counter_;
   return RegisterInstrumentationSite(kind, source_position, function_index);
 }
 
