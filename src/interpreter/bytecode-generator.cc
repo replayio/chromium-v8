@@ -3143,6 +3143,24 @@ void BytecodeGenerator::VisitObjectLiteral(ObjectLiteral* expr) {
       object_literals_.push_back(std::make_pair(expr->builder(), entry));
     }
     BuildCreateObjectLiteral(literal, flags, entry);
+
+    // Check if any constant properties indicate the object should be tracked.
+    if (recordreplay::IsRecordingOrReplaying("emit-opcodes")) {
+      for (int i = 0; i < expr->properties()->length(); i++) {
+        ObjectLiteral::Property* prop = expr->properties()->at(i);
+        if (prop->is_computed_name()) break;
+        if (prop->kind() == ObjectLiteral::Property::CONSTANT &&
+            prop->IsCompileTimeValue()) {
+          Literal* key_lit = prop->key()->AsLiteral();
+          if (key_lit && key_lit->IsStringLiteral() &&
+              RecordReplayTrackThisObjectAssignment(
+                  key_lit->AsRawPropertyName()->to_string())) {
+            builder()->RecordReplayTrackObjectId(literal);
+            break;
+          }
+        }
+      }
+    }
   }
 
   // Store computed values into the literal.
