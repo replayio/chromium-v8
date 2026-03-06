@@ -527,7 +527,8 @@ MaybeHandle<String> MessageFormatter::Format(Isolate* isolate,
 
 
   MaybeHandle<String> rv = builder.Finish();
-  if (recordreplay::IsRecordingOrReplaying("MessageFormatter::Format")) {
+  if (recordreplay::IsRecordingOrReplaying("MessageFormatter::Format") &&
+      !recordreplay::AreEventsDisallowed()) {
     // [PRO-1150] Replay error messages.
     std::string str = rv.ToHandleChecked()->ToCString().get();
     recordreplay::RecordReplayString("MessageFormatter::Format", str);
