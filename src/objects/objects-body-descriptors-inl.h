@@ -7,6 +7,7 @@
 
 #include <algorithm>
 
+#include "include/v8.h"
 #include "src/codegen/reloc-info.h"
 #include "src/common/globals.h"
 #include "src/ic/handler-configuration.h"
@@ -268,7 +269,12 @@ class JSWeakRef::BodyDescriptor final : public BodyDescriptorBase {
   static inline void IterateBody(Map map, HeapObject obj, int object_size,
                                  ObjectVisitor* v) {
     IteratePointers(obj, JSReceiver::kPropertiesOrHashOffset, kTargetOffset, v);
-    IterateCustomWeakPointer(obj, kTargetOffset, v);
+    if (recordreplay::IsRecordingOrReplaying("leak-references", "JSWeakRef")) {
+      // Strong pointer to make deref() deterministic.
+      IteratePointer(obj, kTargetOffset, v);
+    } else {
+      IterateCustomWeakPointer(obj, kTargetOffset, v);
+    }
     IterateJSObjectBodyImpl(map, obj, kTargetOffset + kTaggedSize, object_size,
                             v);
   }
