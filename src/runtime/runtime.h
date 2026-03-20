@@ -675,6 +675,8 @@ namespace internal {
 
 #define FOR_EACH_INTRINSIC_WEAKREF(F, I)                             \
   F(JSFinalizationRegistryRegisterWeakCellWithUnregisterToken, 4, 1) \
+  F(JSWeakRefRegisterTargetForReplay, 2, 1)                          \
+  F(JSWeakRefDerefForReplay, 1, 1)                                   \
   F(JSWeakRefAddToKeptObjects, 1, 1)                                 \
   F(ShrinkFinalizationRegistryUnregisterTokenMap, 1, 1)
 

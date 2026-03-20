@@ -6,6 +6,10 @@
 
 namespace runtime {
 
+extern runtime JSWeakRefRegisterTargetForReplay(implicit context: Context)(
+    JSWeakRef, JSReceiver | Symbol): void;
+extern runtime JSWeakRefDerefForReplay(implicit context: Context)(JSWeakRef):
+    JSAny;
 extern runtime JSWeakRefAddToKeptObjects(implicit context: Context)(
     JSReceiver | Symbol): void;
 
@@ -36,6 +40,7 @@ WeakRefConstructor(
   runtime::JSWeakRefAddToKeptObjects(weakTarget);
   // 5. Set weakRef.[[WeakRefTarget]] to target.
   weakRef.target = weakTarget;
+  runtime::JSWeakRefRegisterTargetForReplay(weakRef, weakTarget);
   // 6. Return weakRef.
   return weakRef;
 }
@@ -48,19 +53,7 @@ WeakRefDeref(js-implicit context: NativeContext, receiver: JSAny)(): JSAny {
   ThrowTypeError(
       MessageTemplate::kIncompatibleMethodReceiver, 'WeakRef.prototype.deref',
       receiver);
-  // 3. Let target be the value of weakRef.[[WeakRefTarget]].
-  const target = weakRef.target;
-  // 4. If target is not empty,
-  //   a. Perform ! AddToKeptObjects(target).
-  //   b. Return target.
-  // 5. Return undefined.
-  if (target != Undefined) {
-    // JSWeakRefAddToKeptObjects might allocate and cause a GC, but it
-    // won't clear `target` since we hold it here on the stack.
-    runtime::JSWeakRefAddToKeptObjects(
-        UnsafeCast<(JSReceiver | Symbol)>(target));
-  }
-  return target;
+  return runtime::JSWeakRefDerefForReplay(weakRef);
 }
 
 }  // namespace weakrefs
