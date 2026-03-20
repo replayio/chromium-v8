@@ -9,10 +9,10 @@
 namespace v8 {
 namespace replayio {
 
-void WeakRefsReplay::Pin(internal::Isolate* isolate,
-                         internal::HeapObject target) {
-  if (!recordreplay::IsReplaying()) return;
-  auto& entries = isolate->EnsureReplayData()->weak_pins();
+void ReplayWeakRefPins::Pin(internal::Isolate* isolate,
+                            internal::HeapObject target) {
+  DCHECK(!recordreplay::IsReplaying());
+  auto& entries = isolate->EnsureReplayData()->weak_ref_pins();
   auto local = Utils::ToLocal(internal::Handle<internal::Object>(target, isolate));
   for (auto& entry : entries) {
     if (entry == local) return;
@@ -20,11 +20,11 @@ void WeakRefsReplay::Pin(internal::Isolate* isolate,
   entries.emplace_back(reinterpret_cast<v8::Isolate*>(isolate), local);
 }
 
-void WeakRefsReplay::Release(internal::Isolate* isolate,
-                             internal::HeapObject target) {
+void ReplayWeakRefPins::Unpin(internal::Isolate* isolate,
+                              internal::HeapObject target) {
   ReplayIsolateData* data = isolate->replay_data();
   if (!data) return;
-  auto& entries = data->weak_pins();
+  auto& entries = data->weak_ref_pins();
   auto local = Utils::ToLocal(internal::Handle<internal::Object>(target, isolate));
   for (auto it = entries.begin(); it != entries.end(); ++it) {
     if (*it == local) {

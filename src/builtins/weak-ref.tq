@@ -9,10 +9,10 @@ namespace runtime {
 extern runtime JSWeakRefAddToKeptObjects(implicit context: Context)(
     JSReceiver | Symbol): void;
 
-extern runtime JSWeakRefsReplayPin(implicit context: Context)(
+extern runtime JSReplayWeakRefConstruct(implicit context: Context)(
     JSReceiver | Symbol): void;
 
-extern runtime JSWeakRefDerefReplay(implicit context: Context)(
+extern runtime JSReplayWeakRefDeref(implicit context: Context)(
     JSWeakRef): JSAny;
 
 }  // namespace runtime
@@ -42,7 +42,7 @@ WeakRefConstructor(
   runtime::JSWeakRefAddToKeptObjects(weakTarget);
   // 5. Set weakRef.[[WeakRefTarget]] to target.
   weakRef.target = weakTarget;
-  runtime::JSWeakRefsReplayPin(weakTarget);
+  runtime::JSReplayWeakRefConstruct(weakTarget);
   // 6. Return weakRef.
   return weakRef;
 }
@@ -56,7 +56,7 @@ WeakRefDeref(js-implicit context: NativeContext, receiver: JSAny)(): JSAny {
       MessageTemplate::kIncompatibleMethodReceiver, 'WeakRef.prototype.deref',
       receiver);
   // 3. Let target be the value of weakRef.[[WeakRefTarget]].
-  const target = runtime::JSWeakRefDerefReplay(weakRef);
+  const target = runtime::JSReplayWeakRefDeref(weakRef);
   // 4. If target is not empty,
   //   a. Perform ! AddToKeptObjects(target).
   //   b. Return target.

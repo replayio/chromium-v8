@@ -17,10 +17,10 @@ class ReplayIsolateData {
   ReplayIsolateData(const ReplayIsolateData&) = delete;
   ReplayIsolateData& operator=(const ReplayIsolateData&) = delete;
 
-  std::vector<v8::Global<v8::Value>>& weak_pins() { return weak_pins_; }
+  std::vector<v8::Global<v8::Value>>& weak_ref_pins() { return weak_ref_pins_; }
 
  private:
-  std::vector<v8::Global<v8::Value>> weak_pins_;
+  std::vector<v8::Global<v8::Value>> weak_ref_pins_;
 };
 
 }  // namespace replayio

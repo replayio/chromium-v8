@@ -10,10 +10,10 @@ class Isolate;
 
 namespace replayio {
 
-class WeakRefsReplay {
+class ReplayWeakRefPins {
  public:
   static void Pin(internal::Isolate* isolate, internal::HeapObject target);
-  static void Release(internal::Isolate* isolate, internal::HeapObject target);
+  static void Unpin(internal::Isolate* isolate, internal::HeapObject target);
 };
 
 }  // namespace replayio

@@ -7,21 +7,23 @@
 namespace v8 {
 namespace internal {
 
-// During replay, keep the WeakRef target strongly reachable for at least as long
-// as it was during recording.
-RUNTIME_FUNCTION(Runtime_JSWeakRefsReplayPin) {
+// Called from WeakRef constructor. During replay, pin the target so the GC
+// cannot collect it earlier than it was collected during recording.
+RUNTIME_FUNCTION(Runtime_JSReplayWeakRefConstruct) {
   HandleScope scope(isolate);
   DCHECK_EQ(1, args.length());
   Handle<HeapObject> object = args.at<HeapObject>(0);
 
-  replayio::WeakRefsReplay::Pin(isolate, *object);
+  if (recordreplay::IsReplaying()) {
+    replayio::ReplayWeakRefPins::Pin(isolate, *object);
+  }
 
   return ReadOnlyRoots(isolate).undefined_value();
 }
 
-// WeakRef.deref liveness during replay is driven by the recording, not current
-// heap state. If the recording says "dead", release the replay pin.
-RUNTIME_FUNCTION(Runtime_JSWeakRefDerefReplay) {
+// Called from WeakRef.prototype.deref(). Records/replays target liveness so
+// the result is deterministic. Unpins the target once it is observed dead.
+RUNTIME_FUNCTION(Runtime_JSReplayWeakRefDeref) {
   HandleScope scope(isolate);
   DCHECK_EQ(1, args.length());
   Handle<JSWeakRef> weak_ref = args.at<JSWeakRef>(0);
@@ -32,11 +34,10 @@ RUNTIME_FUNCTION(Runtime_JSWeakRefDerefReplay) {
 
   if (!alive) {
     if (!target.IsUndefined(isolate)) {
-      replayio::WeakRefsReplay::Release(isolate, HeapObject::cast(target));
+      replayio::ReplayWeakRefPins::Unpin(isolate, HeapObject::cast(target));
     }
     return ReadOnlyRoots(isolate).undefined_value();
   }
-
 
   return target;
 }
