@@ -4,6 +4,10 @@
 #include "src/builtins/builtins-collections-gen.h"
 
 namespace runtime {
+extern runtime JSFinalizationRegistryCleanupLoopForReplay(
+    implicit context: Context)(JSFinalizationRegistry, Callable): void;
+extern runtime JSFinalizationRegistryRegisterForReplay(
+    implicit context: Context)(JSFinalizationRegistry, WeakCell, JSAny): void;
 extern runtime
 ShrinkFinalizationRegistryUnregisterTokenMap(
     Context, JSFinalizationRegistry): void;
@@ -190,6 +194,8 @@ FinalizationRegistryRegister(
     runtime::JSFinalizationRegistryRegisterWeakCellWithUnregisterToken(
         finalizationRegistry, cell);
   }
+  runtime::JSFinalizationRegistryRegisterForReplay(
+      finalizationRegistry, cell, heldValue);
   // 8. Return undefined.
   return Undefined;
 }
@@ -216,7 +222,8 @@ FinalizationRegistryPrototypeCleanupSome(
     callback = finalizationRegistry.cleanup;
   }
 
-  FinalizationRegistryCleanupLoop(finalizationRegistry, callback);
+  runtime::JSFinalizationRegistryCleanupLoopForReplay(
+      finalizationRegistry, callback);
   return Undefined;
 }
 }

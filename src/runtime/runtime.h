@@ -674,6 +674,8 @@ namespace internal {
   F(WasmTraceMemory, 1, 1)
 
 #define FOR_EACH_INTRINSIC_WEAKREF(F, I)                             \
+  F(JSFinalizationRegistryCleanupLoopForReplay, 2, 1)                \
+  F(JSFinalizationRegistryRegisterForReplay, 3, 1)                   \
   F(JSFinalizationRegistryRegisterWeakCellWithUnregisterToken, 4, 1) \
   F(JSWeakRefRegisterTargetForReplay, 2, 1)                          \
   F(JSWeakRefDerefForReplay, 1, 1)                                   \

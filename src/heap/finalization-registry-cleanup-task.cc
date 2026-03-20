@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "include/v8.h"
 #include "src/heap/finalization-registry-cleanup-task.h"
 
 #include "src/execution/frames.h"
@@ -14,6 +15,12 @@
 
 namespace v8 {
 namespace internal {
+
+extern int GetReplayFinalizationRegistryIdForTask(
+    Isolate* isolate, Handle<JSFinalizationRegistry> registry,
+    bool allow_create);
+extern Handle<JSFinalizationRegistry> LookupReplayFinalizationRegistryById(
+    Isolate* isolate, int registry_id);
 
 FinalizationRegistryCleanupTask::FinalizationRegistryCleanupTask(Heap* heap)
     : CancelableTask(heap->isolate()), heap_(heap) {}
@@ -47,8 +54,25 @@ void FinalizationRegistryCleanupTask::RunInternal() {
   // There could be no dirty FinalizationRegistries. When a context is disposed
   // by the embedder, its FinalizationRegistries are removed from the dirty
   // list.
-  if (!heap_->DequeueDirtyJSFinalizationRegistry().ToHandle(
-          &finalization_registry)) {
+  bool had_native_registry =
+      heap_->DequeueDirtyJSFinalizationRegistry().ToHandle(&finalization_registry);
+  int registry_id = 0;
+  if (recordreplay::IsRecordingOrReplaying("weak-refs",
+                                           "finalization-registry")) {
+    if (had_native_registry) {
+      registry_id =
+          GetReplayFinalizationRegistryIdForTask(isolate, finalization_registry,
+                                                true);
+    }
+    registry_id = static_cast<int>(recordreplay::RecordReplayValue(
+        "JSFinalizationRegistry::TaskRegistry", registry_id));
+    if (!had_native_registry && registry_id) {
+      finalization_registry =
+          LookupReplayFinalizationRegistryById(isolate, registry_id);
+      had_native_registry = !finalization_registry.is_null();
+    }
+  }
+  if (!had_native_registry) {
     return;
   }
   finalization_registry->set_scheduled_for_cleanup(false);

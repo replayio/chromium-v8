@@ -6572,8 +6572,17 @@ void Heap::SetDetachedContexts(WeakArrayList detached_contexts) {
 
 void Heap::PostFinalizationRegistryCleanupTaskIfNeeded() {
   // Only one cleanup task is posted at a time.
-  if (!HasDirtyJSFinalizationRegistries() ||
-      is_finalization_registry_cleanup_task_posted_) {
+  if (is_finalization_registry_cleanup_task_posted_) {
+    return;
+  }
+
+  bool should_post = HasDirtyJSFinalizationRegistries();
+  if (recordreplay::IsRecordingOrReplaying("weak-refs",
+                                           "finalization-registry")) {
+    should_post = !!recordreplay::RecordReplayValue(
+        "JSFinalizationRegistry::PostTask", should_post);
+  }
+  if (!should_post) {
     return;
   }
   auto taskrunner = V8::GetCurrentPlatform()->GetForegroundTaskRunner(
