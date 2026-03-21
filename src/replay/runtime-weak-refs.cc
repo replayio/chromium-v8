@@ -29,13 +29,14 @@ RUNTIME_FUNCTION(Runtime_JSReplayWeakRefDeref) {
   Handle<JSWeakRef> weak_ref = args.at<JSWeakRef>(0);
 
   Object target = weak_ref->target();
-  uintptr_t alive = target.IsUndefined(isolate) ? 0 : 1;
-  alive = recordreplay::RecordReplayValue("JSWeakRef.deref", alive);
+  const bool had_target = !target.IsUndefined(isolate);
+  uintptr_t alive = had_target ? 1 : 0;
+  uintptr_t recorded_alive = recordreplay::RecordReplayValue("JSWeakRef.deref", alive);
 
-  if (!alive) {
-    if (!target.IsUndefined(isolate)) {
-      replayio::ReplayWeakRefPins::Unpin(isolate, HeapObject::cast(target));
-    }
+  if (!recorded_alive && alive) {
+    // Can only happen during replay: The target is still alive but at recording time it was dead.
+    DCHECK(recordreplay::IsReplaying());
+    replayio::ReplayWeakRefPins::Unpin(isolate, HeapObject::cast(target));
     return ReadOnlyRoots(isolate).undefined_value();
   }
 
