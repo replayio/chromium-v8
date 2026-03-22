@@ -99,6 +99,7 @@
 #include "src/profiler/heap-profiler.h"
 #include "src/profiler/tracing-cpu-profiler.h"
 #include "src/regexp/regexp-stack.h"
+#include "src/replay/replay-isolate-data.h"
 #include "src/snapshot/embedded/embedded-data-inl.h"
 #include "src/snapshot/embedded/embedded-file-writer-interface.h"
 #include "src/snapshot/read-only-deserializer.h"
@@ -3559,6 +3560,13 @@ Isolate::Isolate(std::unique_ptr<i::IsolateAllocator> isolate_allocator,
     promise_hook_flags_ =
       PromiseHookFields::HasIsolatePromiseHook::encode(true);
   }
+}
+
+replayio::ReplayIsolateData* Isolate::EnsureReplayData() {
+  if (!replay_data_) {
+    replay_data_ = std::make_unique<replayio::ReplayIsolateData>();
+  }
+  return replay_data_.get();
 }
 
 void Isolate::CheckIsolateLayout() {
