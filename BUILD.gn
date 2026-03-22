@@ -4731,7 +4731,7 @@ v8_source_set("v8_base_without_compiler") {
     "src/replay/replay-isolate-data.h",
     "src/replay/replayio.cc",
     "src/replay/replayio.h",
-    "src/replay/runtime-weak-refs.cc",
+    "src/replay/replay-runtime-weak-refs.cc",
     "src/replay/weak-refs.cc",
     "src/replay/weak-refs.h",
   ]
