@@ -1357,7 +1357,8 @@ bool ValueMirror::getProperties(v8::Local<v8::Context> context,
                                 v8::Local<v8::Object> object,
                                 bool ownProperties, bool accessorPropertiesOnly,
                                 bool nonIndexedPropertiesOnly,
-                                PropertyAccumulator* accumulator) {
+                                PropertyAccumulator* accumulator,
+                                const v8::KeyIterationParams* params) {
   v8::Isolate* isolate = context->GetIsolate();
   v8::TryCatch tryCatch(isolate);
   v8::Local<v8::Set> set = v8::Set::New(isolate);
@@ -1380,8 +1381,25 @@ bool ValueMirror::getProperties(v8::Local<v8::Context> context,
     }
   }
 
+  // [RUN-3149] we're only interested in a subset of the properties on this
+  // object. In order to make sure we get enough own properties to satisfy
+  // expected behavior for objects, always request a much larger set of keys
+  // we will later prune returned properties down to the originally requested
+  // size.
+  const int SubsetPageSize = 100000;
+
+  v8::KeyIterationParams subsetIterationParams(SubsetPageSize, 0);
+  const v8::KeyIterationParams *keyIterationParams;
+  if (*params) {
+    // we're grabbing a subset.  use the larger subset params.
+    keyIterationParams = &subsetIterationParams;
+  } else {
+    // we're grabbing everything.  use the passed-in params.
+    keyIterationParams = params;
+  }
   auto iterator = v8::debug::PropertyIterator::Create(context, object,
-                                                      nonIndexedPropertiesOnly);
+                                                      nonIndexedPropertiesOnly,
+                                                      keyIterationParams);
   if (!iterator) {
     CHECK(tryCatch.HasCaught());
     return false;
@@ -1508,7 +1526,8 @@ bool ValueMirror::getProperties(v8::Local<v8::Context> context,
 // static
 void ValueMirror::getInternalProperties(
     v8::Local<v8::Context> context, v8::Local<v8::Object> object,
-    std::vector<InternalPropertyMirror>* mirrors) {
+    std::vector<InternalPropertyMirror>* mirrors,
+    const v8::KeyIterationParams* params) {
   v8::Isolate* isolate = context->GetIsolate();
   v8::MicrotasksScope microtasksScope(isolate,
                                       v8::MicrotasksScope::kDoNotRunMicrotasks);
