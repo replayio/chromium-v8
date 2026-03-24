@@ -17,8 +17,14 @@
 #include "src/wasm/wasm-engine.h"
 #endif  // V8_ENABLE_WEBASSEMBLY
 
+extern "C" int V8RecordReplayDependencyGraphExecutionNode();
+
 namespace v8 {
 namespace internal {
+
+extern bool RecordReplayIsDivergentUserJSWithoutPause(const SharedFunctionInfo& shared);
+extern uint64_t* gProgressCounter;
+extern bool gRecordReplayEnableDependencyGraph;
 
 namespace {
 
@@ -273,6 +279,28 @@ MaybeHandle<Context> NewScriptContext(Isolate* isolate,
   return result;
 }
 
+// Get a description of a function's location for logging etc.
+static std::string GetFunctionLocationInfo(Isolate* isolate, Handle<JSFunction> function) {
+  if (!function->shared().script().IsScript()) {
+    return "<not-script>";
+  }
+
+  Handle<Script> script(Script::cast(function->shared().script()), isolate);
+
+  Script::PositionInfo info;
+  Script::GetPositionInfo(script, function->shared().StartPosition(),
+                          &info, Script::WITH_OFFSET);
+
+  std::string name = script->name().IsString()
+    ? String::cast(script->name()).ToCString().get()
+    : "(anonymous script)";
+
+  std::ostringstream os;
+  os << "scriptId=" << (script.is_null() ? script->id() : -1);
+  os << " @" << name << ":" << info.line + 1 << ":" << info.column;
+  return os.str();
+}
+
 V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
                                                  const InvokeParams& params) {
   RCS_SCOPE(isolate, RuntimeCallCounterId::kInvoke);
@@ -343,6 +371,34 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
       DCHECK(!params.IsScript());
     }
 #endif
+
+    if (RecordReplayIsDivergentUserJSWithoutPause(function->shared())) {
+      // User JS should not get executed in divergent code paths,
+      // unless we have paused.
+      // → Print log and prevent execution.
+      std::string location = GetFunctionLocationInfo(isolate, function);
+      std::stringstream stack;
+      isolate->PrintCurrentStackTrace(stack);
+
+      recordreplay::Warning(
+          "JS Invoke: Non-deterministic user JS PC=%zu %s stack=%s",
+          *gProgressCounter, location.c_str(), stack.str().c_str());
+      return isolate->factory()->undefined_value();
+    }
+
+    if (recordreplay::IsReplaying() &&
+        IsMainThread() &&
+        gRecordReplayEnableDependencyGraph &&
+        !recordreplay::AreEventsDisallowed() &&
+        V8RecordReplayDependencyGraphExecutionNode() == 0 &&
+        function->shared().script().IsScript()) {
+      static bool show_warning = !!getenv("RECORD_REPLAY_WARN_MISSING_EXECUTION");
+      if (show_warning) {
+        std::string location = GetFunctionLocationInfo(isolate, function);
+        recordreplay::Warning("DependencyGraph missing execution: %s", location.c_str());
+      }
+    }
+
     // Set up a ScriptContext when running scripts that need it.
     if (function->shared().needs_script_context()) {
       Handle<Context> context;
@@ -381,7 +437,14 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
 
   if (params.execution_target == Execution::Target::kCallable) {
     Handle<Context> context = isolate->native_context();
-    if (!context->script_execution_callback().IsUndefined(isolate)) {
+    if (!context->script_execution_callback().IsUndefined(isolate) &&
+        // Ignore the script execution callback entirely when recording/replaying.
+        // Non-deterministic behavior has been seen here for reasons not yet
+        // understood, and this callback is only used by chromium to prevent
+        // scripts from executing against windows in the backforward cache.
+        //
+        // See https://linear.app/replay/issue/TT-1029
+        !recordreplay::IsRecordingOrReplaying()) {
       v8::Context::AbortScriptExecutionCallback callback =
           v8::ToCData<v8::Context::AbortScriptExecutionCallback>(
               context->script_execution_callback());

@@ -1270,7 +1270,7 @@ class ElementsAccessorBase : public InternalElementsAccessor {
     combined_keys = Subclass::DirectCollectElementIndicesImpl(
         isolate, object, backing_store,
         needs_sorting ? GetKeysConversion::kKeepNumbers : convert, filter,
-        combined_keys, &nof_indices);
+        combined_keys, &nof_indices, 0, params);
 
     if (needs_sorting) {
       SortIndices(isolate, combined_keys, nof_indices);

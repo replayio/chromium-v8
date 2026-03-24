@@ -44,6 +44,8 @@
 #include "src/base/platform/platform-posix.h"
 #include "src/base/platform/platform.h"
 
+#include "v8.h"
+
 namespace v8 {
 namespace base {
 
@@ -89,6 +91,9 @@ void* OS::RemapShared(void* old_address, void* new_address, size_t size) {
 std::vector<OS::MemoryRange> OS::GetFreeMemoryRangesWithin(
     OS::Address boundary_start, OS::Address boundary_end, size_t minimum_size,
     size_t alignment) {
+  // Reading from /proc/self/maps isn't supported when recording/replaying.
+  if (recordreplay::IsRecordingOrReplaying()) return {};
+
   std::vector<OS::MemoryRange> result = {};
   // This function assumes that the layout of the file is as follows:
   // hex_start_addr-hex_end_addr rwxp <unused data> [binary_file_name]
@@ -172,6 +177,9 @@ namespace {
 std::unique_ptr<std::vector<MemoryRegion>> ParseProcSelfMaps(
     FILE* fp, std::function<bool(const MemoryRegion&)> predicate,
     bool early_stopping) {
+  // Reading from /proc/self/maps isn't supported when recording/replaying.
+  if (recordreplay::IsRecordingOrReplaying()) return nullptr;
+
   auto result = std::make_unique<std::vector<MemoryRegion>>();
 
   if (!fp) fp = fopen("/proc/self/maps", "r");
