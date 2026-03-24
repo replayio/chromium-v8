@@ -2164,6 +2164,14 @@ MaybeLocal<Value> Script::Run(Local<Context> context,
     }
   }
 
+  // TODO: IsInReplayCode (RUN-1502)
+  v8::recordreplay::AssertMaybeEventsDisallowed(
+    "JS Script::Run %d",
+    fun->shared().script().IsScript()
+      ? i::Script::cast(fun->shared().script()).id()
+      : 0
+  );
+
   i::Handle<i::Object> receiver = i_isolate->global_proxy();
   // TODO(cbruni, chromium:1244145): Remove once migrated to the context.
   i::Handle<i::Object> options(
@@ -2446,6 +2454,9 @@ MaybeLocal<Value> Module::Evaluate(Local<Context> context) {
   Utils::ApiCheck(self->status() >= i::Module::kLinked, "Module::Evaluate",
                   "Expected instantiated module");
 
+  // TODO: IsInReplayCode (RUN-1502)
+  v8::recordreplay::AssertMaybeEventsDisallowed("JS Module::Evaluate %d", ScriptId());
+
   Local<Value> result;
   has_pending_exception =
       !ToLocal(i::Module::Evaluate(i_isolate, self), &result);
@@ -2543,6 +2554,55 @@ i::ScriptDetails GetScriptDetails(
 
 }  // namespace
 
+static const char* RecordReplayReplaceSourceContents(const char* contents);
+
+namespace internal {
+
+// If we are compiling a script while replaying that replaces another one,
+// the ID of the script being replaced. Main thread only.
+int gReplaceSourceContentsScriptId;
+
+MaybeHandle<String>
+ReplayingReplaceScriptContents(Isolate* isolate, Handle<String> source) {
+  if (!recordreplay::IsReplaying() || !IsMainThread()) {
+    return MaybeHandle<String>();
+  }
+
+  std::unique_ptr<char[]> contents = source->ToCString();
+  const char* new_contents = RecordReplayReplaceSourceContents(contents.get());
+  if (!new_contents) {
+    return MaybeHandle<String>();
+  }
+
+  return isolate->factory()->NewStringFromUtf8(base::CStrVector(new_contents)).ToHandleChecked();
+}
+
+MaybeHandle<SharedFunctionInfo>
+ReplayingMaybeReplaceScript(Isolate* isolate,
+                            MaybeHandle<SharedFunctionInfo> maybe_function_info,
+                            const ScriptDetails& script_details,
+                            Handle<String> source) {
+  MaybeHandle<String> new_source = ReplayingReplaceScriptContents(isolate, source);
+
+  if (new_source.is_null() || maybe_function_info.is_null()) {
+    return maybe_function_info;
+  }
+
+  CHECK(!gReplaceSourceContentsScriptId);
+  gReplaceSourceContentsScriptId = Script::cast(maybe_function_info.ToHandleChecked()->script()).id();
+
+  maybe_function_info = Compiler::GetSharedFunctionInfoForScript(
+      isolate, new_source.ToHandleChecked(), script_details,
+      ScriptCompiler::kNoCompileOptions,
+      ScriptCompiler::kNoCacheNoReason,
+      NOT_NATIVES_CODE);
+
+  gReplaceSourceContentsScriptId = 0;
+  return maybe_function_info;
+}
+
+} // namespace internal
+
 MaybeLocal<UnboundScript> ScriptCompiler::CompileUnboundInternal(
     Isolate* v8_isolate, Source* source, CompileOptions options,
     NoCacheReason no_cache_reason) {
@@ -2591,6 +2651,8 @@ MaybeLocal<UnboundScript> ScriptCompiler::CompileUnboundInternal(
         i_isolate, str, script_details, options, no_cache_reason,
         i::NOT_NATIVES_CODE);
   }
+
+  maybe_function_info = i::ReplayingMaybeReplaceScript(i_isolate, maybe_function_info, script_details, str);
 
   has_pending_exception = !maybe_function_info.ToHandle(&result);
   RETURN_ON_FAILED_EXECUTION(UnboundScript);
@@ -2832,8 +2894,10 @@ i::MaybeHandle<i::SharedFunctionInfo> CompileStreamedSource(
                        origin.ColumnOffset(), origin.SourceMapUrl(),
                        origin.GetHostDefinedOptions(), origin.Options());
   i::ScriptStreamingData* data = v8_source->impl();
-  return i::Compiler::GetSharedFunctionInfoForStreamedScript(
+  i::MaybeHandle<i::SharedFunctionInfo> maybe_function_info = i::Compiler::GetSharedFunctionInfoForStreamedScript(
       i_isolate, str, script_details, data);
+
+  return i::ReplayingMaybeReplaceScript(i_isolate, maybe_function_info, script_details, str);
 }
 
 }  // namespace
@@ -5174,11 +5238,26 @@ MaybeLocal<v8::Context> v8::Object::GetCreationContext() {
   return MaybeLocal<v8::Context>();
 }
 
+extern "C" void V8RecordReplayGetDefaultContext(v8::Isolate* isolate, v8::Local<v8::Context>* cx);
+
 Local<v8::Context> v8::Object::GetCreationContextChecked() {
   Local<Context> context;
-  Utils::ApiCheck(GetCreationContext().ToLocal(&context),
-                  "v8::Object::GetCreationContextChecked",
-                  "No creation context available");
+  if (!GetCreationContext().ToLocal(&context)) {
+    // When recording/replaying we avoid crashing by falling back to the
+    // default context.
+    //
+    // See https://linear.app/replay/issue/TT-957
+    if (recordreplay::IsRecordingOrReplaying() && IsMainThread()) {
+      recordreplay::Print("Warning: GetCreationContextChecked missing context, substituting default context");
+      Isolate* isolate = Isolate::GetCurrent();
+      V8RecordReplayGetDefaultContext(isolate, &context);
+    } else {
+      CHECK(false);
+    }
+  }
+  //Utils::ApiCheck(GetCreationContext().ToLocal(&context),
+  //                "v8::Object::GetCreationContextChecked",
+  //                "No creation context available");
   return context;
 }
 
@@ -5226,6 +5305,13 @@ MaybeLocal<Value> Object::CallAsFunction(Local<Context> context,
   auto recv_obj = Utils::OpenHandle(*recv);
   static_assert(sizeof(v8::Local<v8::Value>) == sizeof(i::Handle<i::Object>));
   i::Handle<i::Object>* args = reinterpret_cast<i::Handle<i::Object>*>(argv);
+  
+  // TODO: IsInReplayCode (RUN-1502)
+  v8::recordreplay::AssertMaybeEventsDisallowed(
+    "JS Object::CallAsFunction %d",
+    IsCodeLike(context->GetIsolate())
+  );
+
   Local<Value> result;
   has_pending_exception = !ToLocal<Value>(
       i::Execution::Call(i_isolate, self, recv_obj, argc, args), &result);
@@ -5245,6 +5331,13 @@ MaybeLocal<Value> Object::CallAsConstructor(Local<Context> context, int argc,
   auto self = Utils::OpenHandle(this);
   static_assert(sizeof(v8::Local<v8::Value>) == sizeof(i::Handle<i::Object>));
   i::Handle<i::Object>* args = reinterpret_cast<i::Handle<i::Object>*>(argv);
+
+  // TODO: IsInReplayCode (RUN-1502)
+  v8::recordreplay::AssertMaybeEventsDisallowed(
+    "JS Object::CallAsConstructor %d",
+    IsCodeLike(context->GetIsolate())
+  );
+
   Local<Value> result;
   has_pending_exception = !ToLocal<Value>(
       i::Execution::New(i_isolate, self, self, argc, args), &result);
@@ -5338,6 +5431,14 @@ MaybeLocal<v8::Value> Function::Call(Local<Context> context,
   i::Handle<i::Object> recv_obj = Utils::OpenHandle(*recv);
   static_assert(sizeof(v8::Local<v8::Value>) == sizeof(i::Handle<i::Object>));
   i::Handle<i::Object>* args = reinterpret_cast<i::Handle<i::Object>*>(argv);
+
+  // TODO: IsInReplayCode (RUN-1502)
+  // [PRO-1417] column is omitted because our instrumentation engine shifts columns but it shouldn't shift line numbers
+  v8::recordreplay::AssertMaybeEventsDisallowed(
+    "JS Function::Call %d %d",
+    ScriptId(), GetScriptLineNumber()
+  );
+
   Local<Value> result;
   has_pending_exception = !ToLocal<Value>(
       i::Execution::Call(i_isolate, self, recv_obj, argc, args), &result);
@@ -7930,6 +8031,7 @@ Promise::PromiseState Promise::State() {
 
 void Promise::MarkAsHandled() {
   i::Handle<i::JSPromise> js_promise = Utils::OpenHandle(this);
+  recordreplay::Assert("[TT-1029-1030] Promise::MarkAsHandled");
   js_promise->set_has_handler(true);
 }
 
@@ -9838,6 +9940,8 @@ String::Value::~Value() { i::DeleteArray(str_); }
     {                                                                      \
       i::HandleScope scope(i_isolate);                                     \
       i::Handle<i::String> message = Utils::OpenHandle(*raw_message);      \
+      std::unique_ptr<char[]> message_str = message->ToCString();          \
+      recordreplay::AssertMaybeEventsDisallowed("CreateException %s %s", #NAME, message_str.get()); \
       i::Handle<i::JSFunction> constructor = i_isolate->name##_function(); \
       error = *i_isolate->factory()->NewError(constructor, message);       \
     }                                                                      \
