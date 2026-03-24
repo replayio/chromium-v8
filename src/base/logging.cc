@@ -134,6 +134,18 @@ class FailureMessage {
 
 }  // namespace
 
+const char* gCrashReason;
+
+extern "C" const char* V8RecordReplayCrashReasonCallback() {
+  return gCrashReason;
+}
+
+static __attribute__((noinline)) void BusyWait() {
+  fprintf(stderr, "Busy-waiting... (pid %d)", getpid());
+  volatile int x = 1;
+  while (x) {}
+}
+
 #ifdef DEBUG
 void V8_Fatal(const char* file, int line, const char* format, ...) {
 #else
@@ -141,6 +153,18 @@ void V8_Fatal(const char* format, ...) {
   const char* file = "";
   int line = 0;
 #endif
+
+  {
+    char str[4096];
+    va_list arguments;
+    va_start(arguments, format);
+    vsnprintf(str, sizeof(str), format, arguments);
+    str[sizeof(str) - 1] = 0;
+    va_end(arguments);
+
+    gCrashReason = strdup(str);
+  }
+
   va_list arguments;
   va_start(arguments, format);
   // Format the error message into a stack object for later retrieveal by the
@@ -164,6 +188,12 @@ void V8_Fatal(const char* format, ...) {
   if (v8::base::g_print_stack_trace) v8::base::g_print_stack_trace();
 
   fflush(stderr);
+
+  if (getenv("RECORD_REPLAY_WAIT_AT_CRASH") ||
+      getenv("RECORD_REPLAY_WAIT_AT_FATAL_ERROR")) {
+    BusyWait();
+  }
+
   v8::base::OS::Abort();
 }
 
