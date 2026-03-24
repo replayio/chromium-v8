@@ -28,9 +28,44 @@
 namespace v8 {
 namespace internal {
 
+#if V8_OS_WIN
+
 namespace {
 thread_local LocalHeap* current_local_heap = nullptr;
 }  // namespace
+
+#else // !V8_OS_WIN
+
+template <typename T>
+class ThreadLocal {
+  T default_value_;
+  pthread_key_t key_;
+
+ public:
+  ThreadLocal(const T& default_value) : default_value_(default_value) {
+    int rv = pthread_key_create(&key_, nullptr);
+    CHECK(rv == 0);
+  }
+
+  T& operator*() {
+    T* v = (T*)pthread_getspecific(key_);
+    if (!v) {
+      v = new T(default_value_);
+      pthread_setspecific(key_, v);
+    }
+    return *v;
+  }
+};
+
+static ThreadLocal<LocalHeap*>& CurrentLocalHeap() {
+  static ThreadLocal<LocalHeap*> instance(nullptr);
+  return instance;
+}
+
+// Workaround thread_local not supported on linux when recording/replaying.
+#define current_local_heap *CurrentLocalHeap()
+
+#endif // !V8_OS_WIN
 
 LocalHeap* LocalHeap::Current() { return current_local_heap; }
 
@@ -80,6 +115,8 @@ LocalHeap::LocalHeap(Heap* heap, ThreadKind kind,
 }
 
 LocalHeap::~LocalHeap() {
+  recordreplay::Diagnostic("LocalHeap Destroy %p", this);
+
   // Park thread since removing the local heap could block.
   EnsureParkedBeforeDestruction();
 
@@ -232,6 +269,8 @@ void LocalHeap::ParkSlowPath() {
 }
 
 void LocalHeap::UnparkSlowPath() {
+  replayio::AutoDisallowEvents disallow("LocalHeap::UnparkSlowPath");
+
   while (true) {
     ThreadState current_state = ThreadState::Parked();
     if (state_.CompareExchangeStrong(current_state, ThreadState::Running()))
@@ -292,6 +331,8 @@ void LocalHeap::EnsureParkedBeforeDestruction() {
 }
 
 void LocalHeap::SafepointSlowPath() {
+  replayio::AutoDisallowEvents disallow("LocalHeap::SafepointSlowPath");
+
   ThreadState current_state = state_.load_relaxed();
   DCHECK(current_state.IsRunning());
 
@@ -383,6 +424,8 @@ void LocalHeap::UnmarkSharedLinearAllocationArea() {
 Address LocalHeap::PerformCollectionAndAllocateAgain(
     int object_size, AllocationType type, AllocationOrigin origin,
     AllocationAlignment alignment) {
+  replayio::AutoDisallowEvents disallow("LocalHeap::PerformCollectionAndAllocateAgain");
+
   CHECK(!allocation_failed_);
   CHECK(!main_thread_parked_);
   allocation_failed_ = true;

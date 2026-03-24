@@ -4248,7 +4248,7 @@ class PageEvacuationJob : public v8::JobTask {
   void Run(JobDelegate* delegate) override {
     RwxMemoryWriteScope::SetDefaultPermissionsForNewThread();
     Evacuator* evacuator = (*evacuators_)[delegate->GetTaskId()].get();
-    if (delegate->IsJoiningThread()) {
+    if (!delegate || delegate->IsJoiningThread()) {
       TRACE_GC(tracer_, evacuator->GetTracingScope());
       ProcessItems(delegate, evacuator);
     } else {
