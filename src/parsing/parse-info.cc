@@ -21,6 +21,9 @@
 namespace v8 {
 namespace internal {
 
+extern bool RecordReplayHasRegisteredScript(Script script);
+extern bool RecordReplayAssertValues(const std::string& url);
+
 UnoptimizedCompileFlags::UnoptimizedCompileFlags(Isolate* isolate,
                                                  int script_id)
     : flags_(0),
@@ -87,8 +90,11 @@ UnoptimizedCompileFlags UnoptimizedCompileFlags::ForScriptCompile(
 // static
 UnoptimizedCompileFlags UnoptimizedCompileFlags::ForToplevelCompile(
     Isolate* isolate, bool is_user_javascript, LanguageMode language_mode,
-    REPLMode repl_mode, ScriptType type, bool lazy) {
-  UnoptimizedCompileFlags flags(isolate, isolate->GetNextScriptId());
+    REPLMode repl_mode, ScriptType type, bool lazy,
+    int script_id) {
+  if (script_id == UnboundScript::kNoScriptId)
+    script_id = isolate->GetNextScriptId();
+  UnoptimizedCompileFlags flags(isolate, script_id);
   flags.SetFlagsForToplevelCompile(is_user_javascript, language_mode, repl_mode,
                                    type, lazy);
 
@@ -155,6 +161,19 @@ void UnoptimizedCompileFlags::SetFlagsForFunctionFromScript(Script script) {
 
   set_block_coverage_enabled(block_coverage_enabled() &&
                              script.IsUserJavaScript());
+
+  if (!RecordReplayHasRegisteredScript(script)) {
+    set_record_replay_ignore(true);
+  } else if (recordreplay::IsRecordingOrReplaying()) {
+    std::string url;
+    if (!script.name().IsUndefined()) {
+      std::unique_ptr<char[]> name = String::cast(script.name()).ToCString();
+      url = name.get();
+    }
+    if (RecordReplayAssertValues(url)) {
+      set_record_replay_assert_values(true);
+    }
+  }
 }
 
 ReusableUnoptimizedCompileState::ReusableUnoptimizedCompileState(
