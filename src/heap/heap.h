@@ -2407,6 +2407,9 @@ class Heap {
 
   PretenturingHandler pretenuring_handler_;
 
+  // For ordering allocations of new script IDs.
+  int script_ordered_lock_id_ = 0;
+
   // Classes in "heap" can be friends.
   friend class AlwaysAllocateScope;
   friend class ArrayBufferCollector;

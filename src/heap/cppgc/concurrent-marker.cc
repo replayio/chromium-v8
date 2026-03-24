@@ -4,6 +4,7 @@
 
 #include "src/heap/cppgc/concurrent-marker.h"
 
+#include "v8.h"
 #include "include/cppgc/platform.h"
 #include "src/heap/cppgc/heap-object-header.h"
 #include "src/heap/cppgc/heap.h"
@@ -93,7 +94,7 @@ void ConcurrentMarkingTask::Run(JobDelegate* job_delegate) {
 size_t ConcurrentMarkingTask::GetMaxConcurrency(
     size_t current_worker_count) const {
   return WorkSizeForConcurrentMarking(concurrent_marker_.marking_worklists()) +
-         current_worker_count;
+              current_worker_count;
 }
 
 void ConcurrentMarkingTask::ProcessWorklists(
