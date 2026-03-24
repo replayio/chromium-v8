@@ -3212,6 +3212,12 @@ int Message::ErrorLevel() const {
   return self->error_level();
 }
 
+extern "C" int V8GetMessageRecordReplayBookmark(v8::Local<v8::Message> message) {
+  auto self = Utils::OpenHandle(*message);
+  DCHECK_NO_SCRIPT_NO_EXCEPTION(self->GetIsolate());
+  return self->record_replay_bookmark();
+}
+
 int Message::GetStartColumn() const {
   auto self = Utils::OpenHandle(this);
   i::Isolate* i_isolate = self->GetIsolate();
