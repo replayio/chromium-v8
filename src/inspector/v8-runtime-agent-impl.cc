@@ -52,6 +52,9 @@
 #include "src/inspector/v8-value-utils.h"
 #include "src/tracing/trace-event.h"
 
+#include "replayio.h"
+#include "src/base/replayio.h"
+
 namespace v8_inspector {
 
 namespace V8RuntimeAgentImplState {
@@ -229,8 +232,14 @@ Response ensureContext(V8InspectorImpl* inspector, int contextGroupId,
     v8::HandleScope handles(inspector->isolate());
     v8::Local<v8::Context> defaultContext =
         inspector->client()->ensureDefaultContextInGroup(contextGroupId);
-    if (defaultContext.IsEmpty())
+    if (defaultContext.IsEmpty()) {
+      if (v8::recordreplay::IsInReplayCode("InjectedScript::bindRemoteObjectIfNeeded")) {
+        v8::recordreplay::Warning(
+          "[RUN-2486-2498] Cannot find default execution context %d",
+          contextGroupId);
+      }
       return Response::ServerError("Cannot find default execution context");
+    }
     *contextId = InspectedContext::contextId(defaultContext);
   }
 
@@ -246,7 +255,11 @@ V8RuntimeAgentImpl::V8RuntimeAgentImpl(
       m_state(state),
       m_frontend(FrontendChannel),
       m_inspector(session->inspector()),
-      m_enabled(false) {}
+      m_enabled(false),
+      m_replay_owned(
+          (!v8::recordreplay::FeatureEnabled("replay-only-command-handling") ||
+           v8::recordreplay::IsReplaying()) &&
+          v8::recordreplay::AreEventsDisallowed()) {}
 
 V8RuntimeAgentImpl::~V8RuntimeAgentImpl() = default;
 
@@ -473,7 +486,7 @@ Response V8RuntimeAgentImpl::getProperties(
   std::unique_ptr<protocol::Array<PrivatePropertyDescriptor>>
       privatePropertiesProtocolArray;
   response = scope.injectedScript()->getInternalAndPrivateProperties(
-      object, scope.objectGroupName(), accessorPropertiesOnly.fromMaybe(false),
+      object, scope.objectGroupName(), accessorPropertiesOnly.fromMaybe(false), &params,
       &internalPropertiesProtocolArray, &privatePropertiesProtocolArray);
   if (!response.IsSuccess()) return response;
   if (!internalPropertiesProtocolArray->empty())
@@ -861,6 +874,9 @@ Response V8RuntimeAgentImpl::getExceptionDetails(
 void V8RuntimeAgentImpl::bindingCalled(const String16& name,
                                        const String16& payload,
                                        int executionContextId) {
+  v8::replayio::AutoMaybeDisallowEvents disallow(
+      m_replay_owned, "V8RuntimeAgentImpl::bindingCalled");
+
   if (!m_activeBindings.count(name)) return;
   m_frontend.bindingCalled(name, payload, executionContextId);
   m_frontend.flush();
@@ -887,6 +903,9 @@ void V8RuntimeAgentImpl::addBindings(InspectedContext* context) {
 }
 
 void V8RuntimeAgentImpl::restore() {
+  v8::replayio::AutoMaybeDisallowEvents disallow(m_replay_owned,
+                                               "V8RuntimeAgentImpl::restore");
+
   if (!m_state->booleanProperty(V8RuntimeAgentImplState::runtimeEnabled, false))
     return;
   m_frontend.executionContextsCleared();
@@ -945,6 +964,9 @@ Response V8RuntimeAgentImpl::disable() {
 }
 
 void V8RuntimeAgentImpl::reset() {
+  v8::replayio::AutoMaybeDisallowEvents disallow(m_replay_owned,
+                                               "V8RuntimeAgentImpl::reset");
+
   m_compiledScripts.clear();
   if (m_enabled) {
     int sessionId = m_session->sessionId();
@@ -958,6 +980,9 @@ void V8RuntimeAgentImpl::reset() {
 
 void V8RuntimeAgentImpl::reportExecutionContextCreated(
     InspectedContext* context) {
+  v8::replayio::AutoMaybeDisallowEvents disallow(
+      m_replay_owned, "V8RuntimeAgentImpl::reportExecutionContextCreated");
+
   if (!m_enabled) return;
   context->setReported(m_session->sessionId(), true);
   std::unique_ptr<protocol::Runtime::ExecutionContextDescription> description =
@@ -980,6 +1005,9 @@ void V8RuntimeAgentImpl::reportExecutionContextCreated(
 
 void V8RuntimeAgentImpl::reportExecutionContextDestroyed(
     InspectedContext* context) {
+  v8::replayio::AutoMaybeDisallowEvents disallow(
+      m_replay_owned, "V8RuntimeAgentImpl::reportExecutionContextDestroyed");
+
   if (m_enabled && context->isReported(m_session->sessionId())) {
     context->setReported(m_session->sessionId(), false);
     m_frontend.executionContextDestroyed(context->contextId());
@@ -989,6 +1017,9 @@ void V8RuntimeAgentImpl::reportExecutionContextDestroyed(
 void V8RuntimeAgentImpl::inspect(
     std::unique_ptr<protocol::Runtime::RemoteObject> objectToInspect,
     std::unique_ptr<protocol::DictionaryValue> hints, int executionContextId) {
+  v8::replayio::AutoMaybeDisallowEvents disallow(m_replay_owned,
+                                               "V8RuntimeAgentImpl::inspect");
+
   if (m_enabled)
     m_frontend.inspectRequested(std::move(objectToInspect), std::move(hints),
                                 executionContextId);
@@ -1000,8 +1031,12 @@ void V8RuntimeAgentImpl::messageAdded(V8ConsoleMessage* message) {
 
 bool V8RuntimeAgentImpl::reportMessage(V8ConsoleMessage* message,
                                        bool generatePreview) {
+  v8::replayio::AutoMaybeDisallowEvents disallow(
+      m_replay_owned, "V8RuntimeAgentImpl::reportMessage");
+
   message->reportToFrontend(&m_frontend, m_session, generatePreview);
   m_frontend.flush();
+
   return m_inspector->hasConsoleMessageStorage(m_session->contextGroupId());
 }
 }  // namespace v8_inspector
