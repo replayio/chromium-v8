@@ -379,7 +379,8 @@ Handle<FixedArray> GetFastEnumPropertyKeys(Isolate* isolate,
   // Check if the {map} has a valid enum length, which implies that it
   // must have a valid enum cache as well.
   int enum_length = map->EnumLength();
-  if (enum_length != kInvalidEnumCacheSentinel) {
+  // Ignore cache in case of custom params.
+  if (enum_length != kInvalidEnumCacheSentinel && !*params) {
     DCHECK(map->OnlyHasSimpleProperties());
     DCHECK_LE(enum_length, keys->length());
     DCHECK_EQ(enum_length, map->NumberOfEnumerableProperties());
@@ -464,7 +465,7 @@ MaybeHandle<FixedArray> GetOwnKeysWithElements(Isolate* isolate,
     result = keys;
   } else {
     result = accessor->PrependElementIndices(isolate, object, keys, convert,
-                                             ONLY_ENUMERABLE);
+                                             ONLY_ENUMERABLE, params);
   }
 
   if (v8_flags.trace_for_in_enumerate) {
@@ -504,7 +505,6 @@ MaybeHandle<FixedArray> FastKeyAccumulator::GetKeysFast(
   if (!own_only || map.IsCustomElementsReceiverMap()) {
     return MaybeHandle<FixedArray>();
   }
-
   // From this point on we are certain to only collect own keys.
   DCHECK(receiver_->IsJSObject());
   Handle<JSObject> object = Handle<JSObject>::cast(receiver_);
@@ -701,7 +701,6 @@ Maybe<bool> KeyAccumulator::CollectInterceptorKeysInternal(
     Handle<InterceptorInfo> interceptor, IndexedOrNamed type) {
   PropertyCallbackArguments enum_args(isolate_, interceptor->data(), *receiver,
                                       *object, Just(kDontThrow));
-
   Handle<JSObject> result;
   if (!interceptor->enumerator().IsUndefined(isolate_)) {
     if (type == kIndexed) {
@@ -947,6 +946,8 @@ ExceptionStatus CollectKeysFromDictionary(Handle<Dictionary> dictionary,
       // TODO(emrich): consider storing keys instead of indices into the array
       // in case of ordered dictionary type.
       array->set(array_size++, Smi::FromInt(i.as_int()));
+
+      if (array_size == numberOfElements) break;
     }
     if (!Dictionary::kIsOrderedDictionaryType) {
       // Sorting only needed if it's an unordered dictionary,
