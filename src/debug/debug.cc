@@ -4343,6 +4343,7 @@ void RecordReplayOnPromiseHook(Isolate* isolate, PromiseHookType type,
   }
 }
 
+}  // namespace internal
 
 namespace i = internal;
 
@@ -4396,5 +4397,4 @@ void FunctionCallbackRecordReplayGetScriptSource(const FunctionCallbackInfo<Valu
   callArgs.GetReturnValue().Set(source_val);
 }
 
-}  // namespace internal
 }  // namespace v8
