@@ -99,6 +99,7 @@
 #include "src/profiler/heap-profiler.h"
 #include "src/profiler/tracing-cpu-profiler.h"
 #include "src/regexp/regexp-stack.h"
+#include "src/replay/replay-isolate-data.h"
 #include "src/snapshot/embedded/embedded-data-inl.h"
 #include "src/snapshot/embedded/embedded-file-writer-interface.h"
 #include "src/snapshot/read-only-deserializer.h"
@@ -1671,12 +1672,31 @@ void Isolate::CancelTerminateExecution() {
 }
 
 void Isolate::RequestInterrupt(InterruptCallback callback, void* data) {
+  recordreplay::OrderedLock(record_replay_api_interrupts_ordered_lock_id_);
   ExecutionAccess access(this);
   api_interrupts_queue_.push(InterruptEntry(callback, data));
   stack_guard()->RequestApiInterrupt();
+  recordreplay::OrderedUnlock(record_replay_api_interrupts_ordered_lock_id_);
 }
 
+extern void RecordReplayTriggerProgressInterrupt();
+
 void Isolate::InvokeApiInterruptCallbacks() {
+  if (recordreplay::IsRecordingOrReplaying("interrupts")) {
+    // When recording, we can't invoke API interrupt callbacks at arbitrary points
+    // where we check for interrupts, as we won't be able to invoke those callbacks
+    // at the same point when replaying. Instead, after detecting that interrupts
+    // have been added to the queue we trigger an interrupt the next time the progress
+    // counter advances, and will invoke the callbacks then.
+    if (recordreplay::IsRecording() && IsMainThread()) {
+      ExecutionAccess access(this);
+      if (!api_interrupts_queue_.empty()) {
+        RecordReplayTriggerProgressInterrupt();
+      }
+    }
+    return;
+  }
+
   RCS_SCOPE(this, RuntimeCallCounterId::kInvokeApiInterruptCallbacks);
   // Note: callback below should be called outside of execution access lock.
   while (true) {
@@ -1687,6 +1707,29 @@ void Isolate::InvokeApiInterruptCallbacks() {
       entry = api_interrupts_queue_.front();
       api_interrupts_queue_.pop();
     }
+    VMState<EXTERNAL> state(this);
+    HandleScope handle_scope(this);
+    entry.first(reinterpret_cast<v8::Isolate*>(this), entry.second);
+  }
+}
+
+void Isolate::RecordReplayInvokeApiInterruptCallbacksAtProgress() {
+  CHECK(recordreplay::IsRecordingOrReplaying("interrupts"));
+  CHECK(IsMainThread());
+
+  while (true) {
+    InterruptEntry entry;
+    recordreplay::OrderedLock(record_replay_api_interrupts_ordered_lock_id_);
+    {
+      ExecutionAccess access(this);
+      if (api_interrupts_queue_.empty()) {
+        recordreplay::OrderedUnlock(record_replay_api_interrupts_ordered_lock_id_);
+        return;
+      }
+      entry = api_interrupts_queue_.front();
+      api_interrupts_queue_.pop();
+    }
+    recordreplay::OrderedUnlock(record_replay_api_interrupts_ordered_lock_id_);
     VMState<EXTERNAL> state(this);
     HandleScope handle_scope(this);
     entry.first(reinterpret_cast<v8::Isolate*>(this), entry.second);
@@ -3479,6 +3522,24 @@ Isolate::Isolate(std::unique_ptr<i::IsolateAllocator> isolate_allocator,
   InitializeDefaultEmbeddedBlob();
 
   MicrotaskQueue::SetUpDefaultMicrotaskQueue(this);
+
+  record_replay_api_interrupts_ordered_lock_id_ = (int)recordreplay::CreateOrderedLock("APIInterrupts");
+
+  if (recordreplay::IsRecordingOrReplaying() && IsMainThread()) {
+    RecordReplayOnMainThreadIsolateCreated(this);
+  }
+
+  if (RecordReplayShouldCallOnPromiseHook()) {
+    promise_hook_flags_ =
+      PromiseHookFields::HasIsolatePromiseHook::encode(true);
+  }
+}
+
+replayio::ReplayIsolateData* Isolate::EnsureReplayData() {
+  if (!replay_data_) {
+    replay_data_ = std::make_unique<replayio::ReplayIsolateData>();
+  }
+  return replay_data_.get();
 }
 
 void Isolate::CheckIsolateLayout() {
