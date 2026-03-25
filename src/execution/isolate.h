@@ -84,6 +84,10 @@ class ConsoleDelegate;
 class AsyncEventDelegate;
 }  // namespace debug
 
+namespace replayio {
+class ReplayIsolateData;
+}  // namespace replayio
+
 namespace internal {
 
 void DefaultWasmAsyncResolvePromiseCallback(
@@ -1074,6 +1078,8 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   void RequestInterrupt(InterruptCallback callback, void* data);
   void InvokeApiInterruptCallbacks();
 
+  void RecordReplayInvokeApiInterruptCallbacksAtProgress();
+
   // Administration
   void Iterate(RootVisitor* v);
   void Iterate(RootVisitor* v, ThreadLocalTop* t);
@@ -1303,6 +1309,9 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   GlobalHandles* global_handles() const { return global_handles_; }
 
   EternalHandles* eternal_handles() const { return eternal_handles_; }
+
+  replayio::ReplayIsolateData* replay_data() const { return replay_data_.get(); }
+  replayio::ReplayIsolateData* EnsureReplayData();
 
   ThreadManager* thread_manager() const { return thread_manager_; }
 
@@ -2364,6 +2373,12 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
 
   using InterruptEntry = std::pair<InterruptCallback, void*>;
   std::queue<InterruptEntry> api_interrupts_queue_;
+
+  // Lock to ensure consistent ordering of other threads adding API interrupts
+  // vs. the isolate's thread removing and running them.
+  int record_replay_api_interrupts_ordered_lock_id_ = 0;
+
+  std::unique_ptr<replayio::ReplayIsolateData> replay_data_;
 
 #define GLOBAL_BACKING_STORE(type, name, initialvalue) type name##_;
   ISOLATE_INIT_LIST(GLOBAL_BACKING_STORE)
