@@ -5470,6 +5470,10 @@ void JSPromise::set_async_task_id(int id) {
   set_flags(AsyncTaskIdBits::update(flags(), id));
 }
 
+
+extern bool RecordReplayShouldCallOnPromiseHook();
+void AddPromiseDependencyGraphAdoption(Isolate* isolate, Handle<Object> promise, Handle<Object> adoption);
+
 // static
 Handle<Object> JSPromise::Fulfill(Handle<JSPromise> promise,
                                   Handle<Object> value) {
@@ -5546,7 +5550,8 @@ Handle<Object> JSPromise::Reject(Handle<JSPromise> promise,
   // 7. If promise.[[PromiseIsHandled]] is false, perform
   //    HostPromiseRejectionTracker(promise, "reject").
   if (!promise->has_handler()) {
-    isolate->ReportPromiseReject(promise, reason, kPromiseRejectWithNoHandler);
+    isolate->ReportPromiseReject(promise, reason,
+                                 kPromiseRejectWithNoHandler);
   }
 
   // 8. Return TriggerPromiseReactions(reactions, reason).
@@ -5622,6 +5627,12 @@ MaybeHandle<Object> JSPromise::Resolve(Handle<JSPromise> promise,
   if (!then_action->IsCallable()) {
     // a. Return FulfillPromise(promise, resolution).
     return Fulfill(promise, resolution);
+  }
+
+  if (RecordReplayShouldCallOnPromiseHook()) {
+    // Fulfillment of this promise is delayed by adopted resolution.
+    // Ref: Promise/A+ 2.3.2
+    AddPromiseDependencyGraphAdoption(isolate, Handle<Object>::cast(promise), resolution);
   }
 
   // 13. Let job be NewPromiseResolveThenableJob(promise, resolution,

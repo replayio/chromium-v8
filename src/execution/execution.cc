@@ -17,8 +17,14 @@
 #include "src/wasm/wasm-engine.h"
 #endif  // V8_ENABLE_WEBASSEMBLY
 
+extern "C" int V8RecordReplayDependencyGraphExecutionNode();
+
 namespace v8 {
 namespace internal {
+
+extern bool RecordReplayIsDivergentUserJSWithoutPause(const SharedFunctionInfo& shared);
+extern uint64_t* gProgressCounter;
+extern bool gRecordReplayEnableDependencyGraph;
 
 namespace {
 
@@ -365,6 +371,34 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
       DCHECK(!params.IsScript());
     }
 #endif
+
+    if (RecordReplayIsDivergentUserJSWithoutPause(function->shared())) {
+      // User JS should not get executed in divergent code paths,
+      // unless we have paused.
+      // → Print log and prevent execution.
+      std::string location = GetFunctionLocationInfo(isolate, function);
+      std::stringstream stack;
+      isolate->PrintCurrentStackTrace(stack);
+
+      recordreplay::Warning(
+          "JS Invoke: Non-deterministic user JS PC=%zu %s stack=%s",
+          *gProgressCounter, location.c_str(), stack.str().c_str());
+      return isolate->factory()->undefined_value();
+    }
+
+    if (recordreplay::IsReplaying() &&
+        IsMainThread() &&
+        gRecordReplayEnableDependencyGraph &&
+        !recordreplay::AreEventsDisallowed() &&
+        V8RecordReplayDependencyGraphExecutionNode() == 0 &&
+        function->shared().script().IsScript()) {
+      static bool show_warning = !!getenv("RECORD_REPLAY_WARN_MISSING_EXECUTION");
+      if (show_warning) {
+        std::string location = GetFunctionLocationInfo(isolate, function);
+        recordreplay::Warning("DependencyGraph missing execution: %s", location.c_str());
+      }
+    }
+
     // Set up a ScriptContext when running scripts that need it.
     if (function->shared().needs_script_context()) {
       Handle<Context> context;
