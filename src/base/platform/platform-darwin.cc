@@ -39,6 +39,8 @@
 #include "src/base/platform/platform-posix.h"
 #include "src/base/platform/platform.h"
 
+#include "v8.h"
+
 namespace v8 {
 namespace base {
 
@@ -74,6 +76,10 @@ TimezoneCache* OS::CreateTimezoneCache() {
 
 void OS::AdjustSchedulingParams() {
 #if V8_TARGET_ARCH_X64 || V8_TARGET_ARCH_IA32
+  // Avoid making system calls that didn't originally happen if we recorded on ARM.
+  if (recordreplay::IsARMRecording())
+    return;
+
   {
     // Check availability of scheduling params.
     uint32_t val = 0;
