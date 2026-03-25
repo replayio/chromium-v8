@@ -132,9 +132,14 @@ RUNTIME_FUNCTION(Runtime_DebugBreakAtEntry) {
   return ReadOnlyRoots(isolate).undefined_value();
 }
 
+extern "C" void V8RecordReplayOnDebuggerStatement();
+
 RUNTIME_FUNCTION(Runtime_HandleDebuggerStatement) {
   SealHandleScope shs(isolate);
   DCHECK_EQ(0, args.length());
+  if (recordreplay::IsRecordingOrReplaying()) {
+    V8RecordReplayOnDebuggerStatement();
+  }
   if (isolate->debug()->break_points_active()) {
     isolate->debug()->HandleDebugBreak(
         kIgnoreIfTopFrameBlackboxed,
@@ -822,6 +827,7 @@ RUNTIME_FUNCTION(Runtime_IncBlockCounter) {
 
 RUNTIME_FUNCTION(Runtime_DebugAsyncFunctionSuspended) {
   DCHECK_EQ(5, args.length());
+
   HandleScope scope(isolate);
   Handle<JSPromise> promise = args.at<JSPromise>(0);
   Handle<JSPromise> outer_promise = args.at<JSPromise>(1);

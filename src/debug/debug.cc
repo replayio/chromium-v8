@@ -2776,7 +2776,13 @@ bool Debug::PerformSideEffectCheck(Handle<JSFunction> function,
                          &is_compiled_scope)) {
     return false;
   }
-  DCHECK(is_compiled_scope.is_compiled());
+  if (recordreplay::IsReplaying() && recordreplay::AreEventsDisallowed()) {
+    // TODO: IsInReplayCode (RUN-1502)
+    // Always allow Replay code.
+    // https://linear.app/replay/issue/RUN-1908/fix-devtools-crashes
+    return true;
+  }
+  CHECK(is_compiled_scope.is_compiled());
   Handle<SharedFunctionInfo> shared(function->shared(), isolate_);
   Handle<DebugInfo> debug_info = GetOrCreateDebugInfo(shared);
   DebugInfo::SideEffectState side_effect_state =
@@ -2822,6 +2828,12 @@ bool Debug::PerformSideEffectCheckForCallback(
   DCHECK_EQ(isolate_->debug_execution_mode(), DebugInfo::kSideEffects);
   if (!callback_info.is_null() && callback_info->IsCallHandlerInfo() &&
       i::CallHandlerInfo::cast(*callback_info).NextCallHasNoSideEffect()) {
+    return true;
+  }
+  if (recordreplay::IsReplaying() && recordreplay::AreEventsDisallowed()) {
+    // TODO: IsInReplayCode (RUN-1502)
+    // Always allow Replay code.
+    // https://linear.app/replay/issue/RUN-1908/fix-devtools-crashes
     return true;
   }
   // TODO(7515): always pass a valid callback info object.
@@ -2876,6 +2888,13 @@ bool Debug::PerformSideEffectCheckAtBytecode(InterpretedFrame* frame) {
   RCS_SCOPE(isolate_, RuntimeCallCounterId::kDebugger);
   using interpreter::Bytecode;
 
+  if (recordreplay::IsReplaying() && recordreplay::AreEventsDisallowed()) {
+    // TODO: IsInReplayCode (RUN-1502)
+    // Always allow Replay code.
+    // https://linear.app/replay/issue/RUN-1908/fix-devtools-crashes
+    return true;
+  }
+
   DCHECK_EQ(isolate_->debug_execution_mode(), DebugInfo::kSideEffects);
   SharedFunctionInfo shared = frame->function().shared();
   BytecodeArray bytecode_array = shared.GetBytecodeArray(isolate_);
@@ -2919,6 +2938,13 @@ bool Debug::PerformSideEffectCheckForObject(Handle<Object> object) {
   if (object->IsName()) return true;
 
   if (temporary_objects_->HasObject(Handle<HeapObject>::cast(object))) {
+    return true;
+  }
+
+  if (recordreplay::IsReplaying() && recordreplay::AreEventsDisallowed()) {
+    // TODO: IsInReplayCode (RUN-1502)
+    // Always allow Replay code.
+    // https://linear.app/replay/issue/RUN-1908/fix-devtools-crashes
     return true;
   }
 
