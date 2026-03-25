@@ -23,6 +23,10 @@
 #include "src/inspector/v8-value-utils.h"
 #include "src/inspector/v8-webdriver-serializer.h"
 
+#include "v8.h"
+
+#include "src/inspector/string-util.h"
+
 namespace v8_inspector {
 
 using protocol::Response;
@@ -1311,12 +1315,60 @@ std::unique_ptr<ValueMirror> createNativeSetter(v8::Local<v8::Context> context,
   return ValueMirror::create(context, function);
 }
 
+static const char* allowed_getters[] = {
+    "type",
+    "fromElement",
+    "target",
+    "isTrusted",
+    "key",
+    "clientX",
+    "clientY",
+    "altKey",
+    "button",
+    "buttons",
+    "ctrlKey",
+    "currentTarget",
+    "defaultPrevented",
+    "eventPhase",
+    "metaKey",
+    "movementX",
+    "movementY",
+    "offsetX",
+    "offsetY",
+    "pageX",
+    "pageY",
+    "screenX",
+    "screenY",
+    "shiftKey",
+    "srcElement",
+    "timeStamp",
+    "which",
+    "x",
+    "y",
+};
+
 bool doesAttributeHaveObservableSideEffectOnGet(v8::Local<v8::Context> context,
                                                 v8::Local<v8::Object> object,
                                                 v8::Local<v8::Name> name) {
   // TODO(dgozman): we should remove this, annotate more embedder properties as
   // side-effect free, and call all getters which do not produce side effects.
   if (!name->IsString()) return false;
+
+  if (v8::recordreplay::IsRecordingOrReplaying() &&
+      v8::recordreplay::AreEventsDisallowed()) {
+    // Disallow most native getters while in Replay code, since they cause
+    // unwanted crashes.
+    // -> https://linear.app/replay/issue/RUN-1478
+    for (auto allowed : allowed_getters) {
+      v8::String::Utf8Value nameRaw(context->GetIsolate(),
+                                    name.As<v8::String>());
+      if (!strcmp(allowed, *nameRaw)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   v8::Isolate* isolate = context->GetIsolate();
   if (!name.As<v8::String>()->StringEquals(toV8String(isolate, "body"))) {
     return false;
@@ -1556,7 +1608,7 @@ void ValueMirror::getInternalProperties(
       static_cast<V8InspectorImpl*>(v8::debug::GetInspector(isolate))
           ->debugger();
   v8::Local<v8::Array> properties;
-  if (debugger->internalProperties(context, object).ToLocal(&properties)) {
+  if (debugger->internalProperties(context, object, params).ToLocal(&properties)) {
     for (uint32_t i = 0; i < properties->Length(); i += 2) {
       v8::Local<v8::Value> name;
       if (!properties->Get(context, i).ToLocal(&name) || !name->IsString()) {
@@ -1687,12 +1739,14 @@ std::unique_ptr<ValueMirror> ValueMirror::create(v8::Local<v8::Context> context,
   if (value->IsSymbol()) {
     return std::make_unique<SymbolMirror>(value.As<v8::Symbol>());
   }
-  auto clientSubtype = (value->IsUndefined() || value->IsObject())
-                           ? clientFor(context)->valueSubtype(value)
-                           : nullptr;
-  if (clientSubtype) {
-    String16 subtype = toString16(clientSubtype->string());
-    return clientMirror(context, value, subtype);
+  if (!v8::recordreplay::HasDivergedFromRecording()) {
+    auto clientSubtype = (value->IsUndefined() || value->IsObject())
+                            ? clientFor(context)->valueSubtype(value)
+                            : nullptr;
+    if (clientSubtype) {
+      String16 subtype = toString16(clientSubtype->string());
+      return clientMirror(context, value, subtype);
+    }
   }
   if (value->IsUndefined()) {
     return std::make_unique<PrimitiveValueMirror>(
