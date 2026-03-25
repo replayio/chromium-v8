@@ -1528,6 +1528,8 @@ Type Typer::Visitor::TypeJSObjectIsArray(Node* node) { return Type::Boolean(); }
 
 Type Typer::Visitor::TypeDateNow(Node* node) { return Type::Number(); }
 
+Type Typer::Visitor::TypeIncrementAndCheckProgressCounter(Node* node) { return Type::Any(); }
+
 Type Typer::Visitor::TypeUnsigned32Divide(Node* node) {
   Type lhs = Operand(node, 0);
   return Type::Range(0, lhs.Max(), zone());
