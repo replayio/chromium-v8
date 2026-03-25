@@ -3505,6 +3505,36 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
     maybe_script = lookup_result.script();
     maybe_result = lookup_result.toplevel_sfi();
     is_compiled_scope = lookup_result.is_compiled_scope();
+
+    // The compilation cache isn't enabled when replaying, but we still need
+    // to record/replay whether a script was found when recording so that the
+    // same scripts are created at the same points. The SFI will need to be
+    // recompiled when replaying but that's fine when the right script ID is used.
+    if (recordreplay::IsRecordingOrReplaying("values") &&
+        !recordreplay::AreEventsDisallowed() &&
+        IsMainThread() &&
+        !gReplaceSourceContentsScriptId) {
+      int script_id = v8::UnboundScript::kNoScriptId;
+      if (Handle<Script> script;
+          recordreplay::IsRecording() && maybe_script.ToHandle(&script)) {
+        script_id = script->id();
+        CHECK(script_id != v8::UnboundScript::kNoScriptId);
+
+        // Make sure the script has been registered, if it hasn't then we won't
+        // be able to find it when replaying.
+        if (MaybeGetScript(isolate, script_id).is_null()) {
+          maybe_script = MaybeHandle<Script>();
+          maybe_result = MaybeHandle<SharedFunctionInfo>();
+          is_compiled_scope = IsCompiledScope();
+          script_id = v8::UnboundScript::kNoScriptId;
+        }
+      }
+      script_id = (int)recordreplay::RecordReplayValue("GetSharedFunctionInfoForScriptImpl script_id", script_id);
+      if (recordreplay::IsReplaying() && script_id != v8::UnboundScript::kNoScriptId) {
+        maybe_script = GetScript(isolate, script_id);
+      }
+    }
+
     if (!maybe_result.is_null()) {
       compile_timer.set_hit_isolate_cache();
     } else if (can_consume_code_cache) {
@@ -3757,7 +3787,11 @@ Compiler::GetSharedFunctionInfoForStreamedScript(
   // Check if compile cache already holds the SFI, if so no need to finalize
   // the code compiled on the background thread.
   CompilationCache* compilation_cache = isolate->compilation_cache();
-  {
+
+  // For now we don't support using the compilation cache with streamed scripts,
+  // due to the lack of support for handling the case when the script is present
+  // but not the top level SFI.
+  if (!recordreplay::IsRecordingOrReplaying("no-streamed-script-cache")) {
     TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("v8.compile"),
                  "V8.StreamingFinalization.CheckCache");
     CompilationCacheScript::LookupResult lookup_result =
