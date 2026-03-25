@@ -2543,6 +2543,55 @@ i::ScriptDetails GetScriptDetails(
 
 }  // namespace
 
+static const char* RecordReplayReplaceSourceContents(const char* contents);
+
+namespace internal {
+
+// If we are compiling a script while replaying that replaces another one,
+// the ID of the script being replaced. Main thread only.
+int gReplaceSourceContentsScriptId;
+
+MaybeHandle<String>
+ReplayingReplaceScriptContents(Isolate* isolate, Handle<String> source) {
+  if (!recordreplay::IsReplaying() || !IsMainThread()) {
+    return MaybeHandle<String>();
+  }
+
+  std::unique_ptr<char[]> contents = source->ToCString();
+  const char* new_contents = RecordReplayReplaceSourceContents(contents.get());
+  if (!new_contents) {
+    return MaybeHandle<String>();
+  }
+
+  return isolate->factory()->NewStringFromUtf8(base::CStrVector(new_contents)).ToHandleChecked();
+}
+
+MaybeHandle<SharedFunctionInfo>
+ReplayingMaybeReplaceScript(Isolate* isolate,
+                            MaybeHandle<SharedFunctionInfo> maybe_function_info,
+                            const ScriptDetails& script_details,
+                            Handle<String> source) {
+  MaybeHandle<String> new_source = ReplayingReplaceScriptContents(isolate, source);
+
+  if (new_source.is_null() || maybe_function_info.is_null()) {
+    return maybe_function_info;
+  }
+
+  CHECK(!gReplaceSourceContentsScriptId);
+  gReplaceSourceContentsScriptId = Script::cast(maybe_function_info.ToHandleChecked()->script()).id();
+
+  maybe_function_info = Compiler::GetSharedFunctionInfoForScript(
+      isolate, new_source.ToHandleChecked(), script_details,
+      ScriptCompiler::kNoCompileOptions,
+      ScriptCompiler::kNoCacheNoReason,
+      NOT_NATIVES_CODE);
+
+  gReplaceSourceContentsScriptId = 0;
+  return maybe_function_info;
+}
+
+} // namespace internal
+
 MaybeLocal<UnboundScript> ScriptCompiler::CompileUnboundInternal(
     Isolate* v8_isolate, Source* source, CompileOptions options,
     NoCacheReason no_cache_reason) {
@@ -2591,6 +2640,8 @@ MaybeLocal<UnboundScript> ScriptCompiler::CompileUnboundInternal(
         i_isolate, str, script_details, options, no_cache_reason,
         i::NOT_NATIVES_CODE);
   }
+
+  maybe_function_info = i::ReplayingMaybeReplaceScript(i_isolate, maybe_function_info, script_details, str);
 
   has_pending_exception = !maybe_function_info.ToHandle(&result);
   RETURN_ON_FAILED_EXECUTION(UnboundScript);
@@ -2832,8 +2883,10 @@ i::MaybeHandle<i::SharedFunctionInfo> CompileStreamedSource(
                        origin.ColumnOffset(), origin.SourceMapUrl(),
                        origin.GetHostDefinedOptions(), origin.Options());
   i::ScriptStreamingData* data = v8_source->impl();
-  return i::Compiler::GetSharedFunctionInfoForStreamedScript(
+  i::MaybeHandle<i::SharedFunctionInfo> maybe_function_info = i::Compiler::GetSharedFunctionInfoForStreamedScript(
       i_isolate, str, script_details, data);
+
+  return i::ReplayingMaybeReplaceScript(i_isolate, maybe_function_info, script_details, str);
 }
 
 }  // namespace
