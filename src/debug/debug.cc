@@ -3974,5 +3974,427 @@ void ClearPauseDataCallback() {
   MaybeHandle<Object> rv = Execution::Call(isolate, callback, undefined, 0, nullptr);
   CHECK(!rv.is_null());
 }
+
+static std::string StringPrintf(const char* format, ...) {
+  char buf[4096];
+  buf[sizeof(buf) - 1] = 0;
+  va_list ap;
+  va_start(ap, format);
+  vsnprintf(buf, sizeof(buf) - 1, format, ap);
+  va_end(ap);
+  return std::string(buf);
+}
+
+// When assertions are used we assign an ID to each object that is ever
+// encountered in one, so that we can determine whether consistent objects
+// are used when replaying.
+struct ContextObjectIdMap {
+  v8::Global<v8::Context> context_;
+  v8::Global<v8::Value> object_ids_;
+};
+typedef std::vector<ContextObjectIdMap> ContextObjectIdMapVector;
+static ContextObjectIdMapVector* gRecordReplayObjectIds;
+
+static Local<v8::Value> GetObjectIdMapForContext(v8::Isolate* v8_isolate, Local<v8::Context> cx) {
+  Isolate* isolate = (Isolate*)v8_isolate;
+
+  if (!gRecordReplayObjectIds) {
+    gRecordReplayObjectIds = new ContextObjectIdMapVector();
+  }
+
+  for (const auto& entry : *gRecordReplayObjectIds) {
+    if (entry.context_ == cx) {
+      return entry.object_ids_.Get(v8_isolate);
+    }
+  }
+
+  Handle<Object> object_ids = isolate->factory()->NewJSWeakMap();
+
+  ContextObjectIdMap new_entry;
+  new_entry.context_.Reset(v8_isolate, cx);
+  new_entry.object_ids_.Reset(v8_isolate, v8::Utils::ToLocal(object_ids));
+  gRecordReplayObjectIds->push_back(std::move(new_entry));
+  return gRecordReplayObjectIds->back().object_ids_.Get(v8_isolate);
+}
+
+extern bool gRecordReplayAssertTrackedObjects;
+extern bool gRecordReplayAssertDependencyGraph;
+extern int (*gGetAPIObjectIdCallback)(v8::Local<v8::Object> object);
+
+static int gNextObjectId = 1;
+
+int RecordReplayObjectId(v8::Isolate* v8_isolate, v8::Local<v8::Context> cx,
+                         v8::Local<v8::Value> v8_object, bool allow_create) {
+  CHECK(IsMainThread());
+
+  if (!v8_object->IsObject()) {
+    return 0;
+  }
+
+  if (gGetAPIObjectIdCallback) {
+    // Check for Blink objects.
+    int api_id = gGetAPIObjectIdCallback(v8_object.As<v8::Object>());
+    if (api_id) {
+      return api_id;
+    }
+  }
+
+  Isolate* isolate = (Isolate*)v8_isolate;
+  Handle<Object> object = Utils::OpenHandle(*v8_object);
+
+  // Look through all weak maps we've created, the object might not be associated
+  // with the current context.
+  if (gRecordReplayObjectIds) {
+    for (const auto& entry : *gRecordReplayObjectIds) {
+      Local<v8::Value> object_ids_val = entry.object_ids_.Get(v8_isolate);
+      Handle<JSWeakMap> object_ids = Handle<JSWeakMap>::cast(Utils::OpenHandle(*object_ids_val));
+
+      Handle<Object> existing(EphemeronHashTable::cast(object_ids->table()).Lookup(object), isolate);
+      if (!existing->IsTheHole(isolate)) {
+        v8::Local<v8::Value> id_value = v8::Utils::ToLocal(existing);
+        if (id_value->IsInt32()) {
+          int id = id_value.As<v8::Int32>()->Value();
+          if (gRecordReplayAssertTrackedObjects) {
+            recordreplay::AssertMaybeEventsDisallowed("JS ReuseObjectId %d", id);
+          }
+          return id;
+        }
+      }
+    }
+  }
+
+  if (!allow_create) {
+    return 0;
+  }
+
+  int id = gNextObjectId++;
+
+  if (gRecordReplayAssertTrackedObjects) {
+    recordreplay::AssertMaybeEventsDisallowed("JS NewObjectId %d", id);
+  }
+
+  Local<Value> id_value = v8::Integer::New(v8_isolate, id);
+
+  int32_t hash = object->GetOrCreateHash(isolate).value();
+
+  Local<v8::Value> object_ids_val = GetObjectIdMapForContext(v8_isolate, cx);
+  Handle<JSWeakMap> object_ids = Handle<JSWeakMap>::cast(Utils::OpenHandle(*object_ids_val));
+  JSWeakCollection::Set(object_ids, object, Utils::OpenHandle(*id_value), hash);
+
+  return id;
+}
+
+static bool gTrackObjects = false;
+
+// Called by the recorder when we need to track persistent IDs for as many objects
+// as we are able to. Currently this is enabled while replaying via the
+// enablePersistentIDs experimental setting.
+void TrackObjectsCallback(bool track_objects) {
+  CHECK(recordreplay::IsReplaying());
+  gTrackObjects = track_objects;
+}
+
+// Whether to keep track of 'this' objects being assigned a property.
+bool RecordReplayTrackThisObjectAssignment(const std::string& property) {
+  // If we've been told to track objects then all 'this' objects which are
+  // assigned a property will be tracked.
+  if (gRecordReplayAssertTrackedObjects || gTrackObjects) {
+    return true;
+  }
+
+  // By default we only track objects which might be React fibers. These will
+  // have an "alternate" property assigned to in the constructor. Tracking objects
+  // is only needed when replaying.
+  if (recordreplay::IsReplaying() && property == "alternate") {
+    return true;
+  }
+
+  return false;
+}
+
+// Print a message if an object does not have a persistent ID. For use in testing.
+void RecordReplayConfirmObjectHasId(v8::Isolate* isolate, v8::Local<v8::Context> cx,
+                                    v8::Local<v8::Value> object) {
+  int id = RecordReplayObjectId(isolate, cx, object, /* allow_create */ false);
+  if (!id) {
+    recordreplay::Print("RecordReplayConfirmObjectHasId unexpected missing persistent ID");
+  }
+}
+
+inline int HashBytes(const void* aPtr, size_t aSize) {
+  int hash = 0;
+  uint8_t* ptr = (uint8_t*)aPtr;
+  for (size_t i = 0; i < aSize; i++) {
+    hash = (((hash << 5) - hash) + ptr[i]) | 0;
+  }
+  return hash;
+}
+
+int (*gGetAPIObjectIdCallback)(v8::Local<v8::Object> object);
+
+extern "C" void V8RecordReplaySetAPIObjectIdCallback(int (*callback)(v8::Local<v8::Object>)) {
+  gGetAPIObjectIdCallback = callback;
+}
+
+// Get a string that can be included in recording assertions.
+static std::string ToReadableString(const char* str) {
+  std::ostringstream o;
+  for (; *str; str++) {
+    if ((int)*str >= 32 && (int)*str <= 126) {
+      o << *str;
+    } else {
+      o << "\\" << (int)*str;
+    }
+  }
+  return o.str();
+}
+
+// Get a string describing a value which can be used in assertions.
+// Only basic information about the value is obtained, to keep things fast.
+std::string RecordReplayBasicValueContents(Handle<Object> value) {
+  if (value->IsNumber()) {
+    double num = value->Number();
+    if (std::isnan(num)) {
+      return "NaN";
+    }
+    int num2 = num;
+    if (num2 != num) {
+      num2 = -1;
+    }
+    return StringPrintf("Number %d %llu", num2, *(uint64_t*)&num);
+  }
+
+  if (value->IsBoolean()) {
+    return StringPrintf("Boolean %d", value->IsTrue());
+  }
+
+  if (value->IsUndefined()) {
+    return "Undefined";
+  }
+
+  if (value->IsNull()) {
+    return "Null";
+  }
+
+  if (value->IsString()) {
+    String str = String::cast(*value);
+    if (str.length() <= 200) {
+      std::unique_ptr<char[]> name = str.ToCString();
+      std::string readable_name = ToReadableString(name.get());
+      return StringPrintf("String %s", readable_name.c_str());
+    }
+    return StringPrintf("LongString %d", str.length());
+  }
+
+  if (value->IsJSObject()) {
+    v8::Isolate* isolate = v8::Isolate::GetCurrent();
+    v8::Local<v8::Context> cx = isolate->GetCurrentContext();
+    int object_id = RecordReplayObjectId(isolate, cx, v8::Utils::ToLocal(value),
+                                         /* allow_create */ true);
+
+    InstanceType type = JSObject::cast(*value).map().instance_type();
+    const char* typeStr;
+    switch (type) {
+#define STRINGIFY_TYPE(TYPE) case TYPE: typeStr = #TYPE; break;
+    INSTANCE_TYPE_LIST(STRINGIFY_TYPE)
+#undef STRINGIFY_TYPE
+    default:
+      typeStr = "<unknown>";
+    }
+    if (!strcmp(typeStr, "JS_DATE_TYPE")) {
+      JSDate date = JSDate::cast(*value);
+      double time = date.value().Number();
+      return StringPrintf("Date %d %.2f", object_id, time);
+    }
+    if (!strcmp(typeStr, "JS_TYPED_ARRAY_TYPE")) {
+      v8::Local<v8::Value> obj = v8::Utils::ToLocal(value);
+      v8::Local<v8::TypedArray> tarr = obj.As<v8::TypedArray>();
+      char buf[50];
+      size_t written = tarr->CopyContents(buf, sizeof(buf));
+      int hash = HashBytes(buf, written);
+      return StringPrintf("TypedArray %d %lu %d", object_id, tarr->ByteLength(), hash);
+    }
+    return StringPrintf("Object %d %s", object_id, typeStr);
+  }
+
+  if (value->IsJSProxy()) {
+    return "Proxy";
+  }
+
+  return "Unknown";
+}
+
+// Information in the dependency graph for a JS promise.
+struct PromiseDependencyGraphData {
+  // persistent_id of the promise value.
+  int persistent_id = 0;
+
+  // Graph node ID for the point the promise was created.
+  int new_node_id = 0;
+
+  // Graph node ID for the point the promise was settled.
+  int settled_node_id = 0;
+};
+
+typedef std::unordered_map<int32_t, PromiseDependencyGraphData> PromiseDependencyGraphDataMap;
+static PromiseDependencyGraphDataMap* gPromiseDependencyGraphDataMap;
+
+static PromiseDependencyGraphData&
+GetOrCreatePromiseDependencyGraphData(Isolate* isolate, Handle<Object> promise) {
+  v8::Isolate* v8_isolate = (v8::Isolate*) isolate;
+  int promise_persistent_id =
+    RecordReplayObjectId(v8_isolate, v8_isolate->GetCurrentContext(),
+                         v8::Utils::ToLocal(promise), /* allow_create */ true);
+
+  CHECK(IsMainThread());
+  if (!gPromiseDependencyGraphDataMap) {
+    gPromiseDependencyGraphDataMap = new PromiseDependencyGraphDataMap();
+  }
+  auto iter = gPromiseDependencyGraphDataMap->find(promise_persistent_id);
+  if (iter == gPromiseDependencyGraphDataMap->end()) {
+    // Previously unseen promise.
+    PromiseDependencyGraphData data = PromiseDependencyGraphData();
+    data.persistent_id = promise_persistent_id;
+    (*gPromiseDependencyGraphDataMap)[promise_persistent_id] = data;
+    iter = gPromiseDependencyGraphDataMap->find(promise_persistent_id);
+  }
+  return iter->second;
+}
+
+void AddPromiseDependencyGraphAdoption(Isolate* isolate, Handle<Object> promise, Handle<Object> adopted) {
+  PromiseDependencyGraphData& data = GetOrCreatePromiseDependencyGraphData(isolate, promise);
+  PromiseDependencyGraphData& adopted_data = GetOrCreatePromiseDependencyGraphData(isolate, adopted);
+
+  if (adopted_data.new_node_id) {
+    recordreplay::AddDependencyGraphEdge(data.settled_node_id,
+                                         adopted_data.new_node_id,
+                                         "{\"kind\":\"adoptedPromise\"}");
+  }
+}
+
+extern bool gRecordReplayEnableDependencyGraph;
+
+bool RecordReplayShouldCallOnPromiseHook() {
+  // Ideally we would be able to avoid calling the promise hook when recording
+  // and its results aren't needed, but the isolate state we set to ensure
+  // the hook gets called have effects on the state of certain promises that
+  // affect how the process behaves and are not fully understood.
+  //
+  // See https://linear.app/replay/issue/TT-1361
+  //
+  // For now we workaround this problem by setting this state consistently and
+  // add a small amount of recording overhead.
+  return gRecordReplayEnableDependencyGraph && IsMainThread();
+}
+
+void RecordReplayOnPromiseHook(Isolate* isolate, PromiseHookType type,
+                               Handle<JSPromise> promise, Handle<Object> parent) {
+  if (!gRecordReplayEnableDependencyGraph) {
+    return;
+  }
+
+  // The promise hook only needs to report nodes/edges while replaying,
+  // but can assign persistent IDs to objects so the calls below are needed
+  // while recording if we are asserting on those IDs.
+  if (!recordreplay::IsReplaying() &&
+      !gRecordReplayAssertTrackedObjects &&
+      !gRecordReplayAssertDependencyGraph) {
+    return;
+  }
+
+  PromiseDependencyGraphData& data =
+    GetOrCreatePromiseDependencyGraphData(isolate, promise);
+
+  switch (type) {
+    case PromiseHookType::kInit: {
+      CHECK(!data.new_node_id);
+      std::string new_node_str = StringPrintf("{\"kind\":\"newPromise\",\"persistentId\":%d}",
+                                               data.persistent_id);
+      data.new_node_id = recordreplay::NewDependencyGraphNode(new_node_str.c_str());
+      if (!parent->IsUndefined()) {
+        PromiseDependencyGraphData& parent_data =
+          GetOrCreatePromiseDependencyGraphData(isolate, parent);
+        if (parent_data.new_node_id) {
+          recordreplay::AddDependencyGraphEdge(parent_data.new_node_id, data.new_node_id,
+                                               "{\"kind\":\"parentPromise\"}");
+        }
+      }
+      break;
+    }
+    case PromiseHookType::kResolve: {
+      if (!data.new_node_id || data.settled_node_id) {
+        break;
+      }
+      data.settled_node_id =
+        recordreplay::NewDependencyGraphNode("{\"kind\":\"promiseSettled\"}");
+      recordreplay::AddDependencyGraphEdge(data.new_node_id, data.settled_node_id,
+                                           "{\"kind\":\"basePromise\"}");
+      break;
+    }
+    case PromiseHookType::kBefore: {
+      int node_id = data.settled_node_id ? data.settled_node_id : data.new_node_id;
+      recordreplay::BeginDependencyExecution(node_id);
+      break;
+    }
+    case PromiseHookType::kAfter: {
+      recordreplay::EndDependencyExecution();
+      break;
+    }
+  }
+}
+
+
+namespace i = internal;
+
+void FunctionCallbackRecordReplaySetCommandCallback(const FunctionCallbackInfo<Value>& callArgs) {
+  CHECK(recordreplay::IsRecordingOrReplaying());
+  CHECK(IsMainThread());
+
+  Isolate* v8isolate = callArgs.GetIsolate();
+  i::gCommandCallback = new Eternal<Value>(v8isolate, callArgs[0]);
+}
+
+void FunctionCallbackRecordReplaySetClearPauseDataCallback(const FunctionCallbackInfo<Value>& callArgs) {
+  CHECK(recordreplay::IsRecordingOrReplaying());
+  CHECK(IsMainThread());
+
+  Isolate* v8isolate = callArgs.GetIsolate();
+  i::gClearPauseDataCallback = new Eternal<Value>(v8isolate, callArgs[0]);
+}
+
+void FunctionCallbackRecordReplayAddNewScriptHandler(const FunctionCallbackInfo<Value>& callArgs) {
+  CHECK(recordreplay::IsRecordingOrReplaying());
+  CHECK(IsMainThread());
+
+  Isolate* v8isolate = callArgs.GetIsolate();
+  auto handler = new Eternal<Value>(v8isolate, callArgs[0]);
+  bool disallowEvents = callArgs.Length() >= 2 && callArgs[1]->IsTrue();
+
+  if (!i::gNewScriptHandlers) {
+    i::gNewScriptHandlers = new i::NewScriptHandlerVector();
+  }
+  i::gNewScriptHandlers->emplace_back(handler, disallowEvents);
+}
+
+void FunctionCallbackRecordReplayGetScriptSource(const FunctionCallbackInfo<Value>& callArgs) {
+  CHECK(recordreplay::IsRecordingOrReplaying());
+  CHECK(IsMainThread());
+  CHECK(callArgs.Length() == 1);
+  CHECK(callArgs[0]->IsString());
+
+  i::Handle<i::Object> id_obj = Utils::OpenHandle(*callArgs[0]);
+
+  std::unique_ptr<char[]> script_id_text = i::String::cast(*id_obj).ToCString();
+  int script_id = atoi(script_id_text.get());
+
+  i::Isolate* isolate = (i::Isolate*)callArgs.GetIsolate();
+
+  i::Handle<i::Script> script = i::GetScript(isolate, script_id);
+  i::Handle<i::String> source(i::String::cast(script->source()), isolate);
+
+  Local<Value> source_val = v8::Utils::ToLocal(source);
+  callArgs.GetReturnValue().Set(source_val);
+}
+
 }  // namespace internal
 }  // namespace v8
