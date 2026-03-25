@@ -28,6 +28,14 @@
 #include "src/wasm/wasm-objects-inl.h"
 #endif  // V8_ENABLE_WEBASSEMBLY
 
+#if !V8_OS_WIN
+#include <sys/time.h>
+#include <unistd.h>
+#endif
+
+#include "src/api/api-inl.h"
+#include "src/base/replayio.h"
+
 namespace v8 {
 namespace internal {
 
