@@ -393,22 +393,28 @@ InjectedScript::~InjectedScript() { discardEvaluateCallbacks(); }
 namespace {
 class PropertyAccumulator : public ValueMirror::PropertyAccumulator {
  public:
-  explicit PropertyAccumulator(std::vector<PropertyMirror>* mirrors)
-      : m_mirrors(mirrors) {}
+  explicit PropertyAccumulator(std::vector<PropertyMirror>* mirrors, const v8::KeyIterationParams* params)
+      : m_mirrors(mirrors), m_params(params) {}
   bool Add(PropertyMirror mirror) override {
     m_mirrors->push_back(std::move(mirror));
+    if (m_mirrors->size() > (size_t)m_params->PageSize((int)m_mirrors->size())) {
+      return false;
+    }
     return true;
   }
 
  private:
   std::vector<PropertyMirror>* m_mirrors;
+  const v8::KeyIterationParams* m_params;
 };
 }  // anonymous namespace
 
 Response InjectedScript::getProperties(
     v8::Local<v8::Object> object, const String16& groupName, bool ownProperties,
     bool accessorPropertiesOnly, bool nonIndexedPropertiesOnly,
-    WrapMode wrapMode, std::unique_ptr<Array<PropertyDescriptor>>* properties,
+    WrapMode wrapMode,
+    const v8::KeyIterationParams* params,
+    std::unique_ptr<Array<PropertyDescriptor>>* properties,
     Maybe<protocol::Runtime::ExceptionDetails>* exceptionDetails) {
   v8::HandleScope handles(m_context->isolate());
   v8::Local<v8::Context> context = m_context->context();
@@ -490,6 +496,7 @@ Response InjectedScript::getProperties(
 Response InjectedScript::getInternalAndPrivateProperties(
     v8::Local<v8::Value> value, const String16& groupName,
     bool accessorPropertiesOnly,
+    const v8::KeyIterationParams* params,
     std::unique_ptr<protocol::Array<InternalPropertyDescriptor>>*
         internalProperties,
     std::unique_ptr<protocol::Array<PrivatePropertyDescriptor>>*
