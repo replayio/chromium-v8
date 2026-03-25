@@ -622,6 +622,10 @@ bool UseAsmWasm(FunctionLiteral* literal, bool asm_wasm_broken) {
   // invalid module instantiation attempts are off limit forever.
   if (asm_wasm_broken) return false;
 
+  // Instrumentation added when recording/replaying requires that scripts be
+  // compiled in the regular way.
+  if (recordreplay::IsRecordingOrReplaying("no-asm-wasm")) return false;
+
   // In stress mode we want to run the validator on everything.
   if (v8_flags.stress_validate_asm) return true;
 
@@ -2720,6 +2724,10 @@ bool Compiler::FinalizeBackgroundCompileTask(BackgroundCompileTask* task,
 // static
 void Compiler::CompileOptimized(Isolate* isolate, Handle<JSFunction> function,
                                 ConcurrencyMode mode, CodeKind code_kind) {
+  // The point at which optimized compilations occur can vary between recording
+  // and replaying.
+  replayio::AutoDisallowEvents disallow("Compiler::CompileOptimized");
+
   DCHECK(CodeKindIsOptimizedJSFunction(code_kind));
   DCHECK(AllowCompilation::IsAllowed(isolate));
 
@@ -3875,6 +3883,10 @@ MaybeHandle<CodeT> Compiler::CompileOptimizedOSR(Isolate* isolate,
                                                  Handle<JSFunction> function,
                                                  BytecodeOffset osr_offset,
                                                  ConcurrencyMode mode) {
+  // The point at which optimized compilations occur can vary between recording
+  // and replaying.
+  replayio::AutoDisallowEvents disallow("Compiler::CompileOptimizedOSR");
+
   DCHECK(IsOSR(osr_offset));
 
   if (V8_UNLIKELY(isolate->serializer_enabled())) return {};
