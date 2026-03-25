@@ -226,7 +226,13 @@ StackTraceFrameIterator::StackTraceFrameIterator(Isolate* isolate)
 StackTraceFrameIterator::StackTraceFrameIterator(Isolate* isolate,
                                                  StackFrameId id)
     : StackTraceFrameIterator(isolate) {
-  while (!done() && frame()->id() != id) Advance();
+  if (id == NO_ID) {
+    // Support stack trace iteration when stopped by the Record Replay driver,
+    // where there is no break frame.
+    if (!done() && !IsValidFrame(iterator_.frame())) Advance();
+  } else {
+    while (!done() && frame()->id() != id) Advance();
+  }
 }
 
 void StackTraceFrameIterator::Advance() {
@@ -2187,6 +2193,13 @@ void OptimizedFrame::Summarize(std::vector<FrameSummary>* frames) const {
     }
 
     CHECK(data.is_null());
+
+    if (recordreplay::IsRecordingOrReplaying()) {
+      // Replay workaround: Sometimes, DeoptimizationData could not be found for an unknown reason.
+      // → Let this be a no-op instead of a crash.
+      recordreplay::Warning("[RUN-1920] Missing deoptimization information for OptimizedFrame::Summarize.");
+      return;
+    }
     FATAL("Missing deoptimization information for OptimizedFrame::Summarize.");
   }
 

@@ -1533,6 +1533,8 @@ void Isolate::ReportFailedAccessCheck(Handle<JSObject> receiver) {
       v8::Utils::ToLocal(receiver), v8::ACCESS_HAS, v8::Utils::ToLocal(data));
 }
 
+extern "C" bool V8RecordReplayIsInReplayCode();
+
 bool Isolate::MayAccess(Handle<Context> accessing_context,
                         Handle<JSObject> receiver) {
   DCHECK(receiver->IsJSGlobalProxy() || receiver->IsAccessCheckNeeded());
@@ -1542,6 +1544,10 @@ bool Isolate::MayAccess(Handle<Context> accessing_context,
 
   // During bootstrapping, callback functions are not enabled yet.
   if (bootstrapper()->IsActive()) return true;
+
+  // Allow all accesses made while replay code is running.
+  if (V8RecordReplayIsInReplayCode()) return true;
+
   {
     DisallowGarbageCollection no_gc;
 
@@ -1581,7 +1587,18 @@ bool Isolate::MayAccess(Handle<Context> accessing_context,
   }
 }
 
+static bool gHasPrintedStack = false;
+
 Object Isolate::StackOverflow() {
+  recordreplay::InvalidateRecording("Stack overflow");
+
+  if (recordreplay::IsRecordingOrReplaying() && !gHasPrintedStack) {
+    gHasPrintedStack = true;
+    std::stringstream stack;
+    PrintCurrentStackTrace(stack);
+    recordreplay::Print("Stack overflow: %s", stack.str().c_str());
+  }
+
   // Whoever calls this method should not have overflown the stack limit by too
   // much. Otherwise we risk actually running out of stack space.
   // We allow for up to 8kB overflow, because we typically allow up to 4KB
@@ -1826,6 +1843,8 @@ Handle<JSMessageObject> Isolate::CreateMessageOrAbort(
 }
 
 Object Isolate::ThrowInternal(Object raw_exception, MessageLocation* location) {
+  recordreplay::AssertMaybeEventsDisallowed("[RUN-885] Isolate::ThrowInternal");
+
   DCHECK(!has_pending_exception());
   IF_WASM(DCHECK_IMPLIES, trap_handler::IsTrapHandlerEnabled(),
           !trap_handler::IsThreadInWasm());
@@ -1966,7 +1985,12 @@ Object Isolate::UnwindAndFindHandler() {
   // handler handles such non-wasm exceptions.
   SetThreadInWasmFlagScope set_thread_in_wasm_flag_scope;
 #endif  // V8_ENABLE_WEBASSEMBLY
-  Object exception = pending_exception();
+
+  // hackfix: pending_exception disappears sometimes, but we don't want to
+  // crash. - https://linear.app/replay/issue/RUN-1258/
+  Object exception = has_pending_exception()
+                         ? pending_exception()
+                         : ReadOnlyRoots(this).undefined_value();
 
   auto FoundHandler = [&](Context context, Address instruction_start,
                           intptr_t handler_offset,
@@ -5517,11 +5541,19 @@ void Isolate::OnTerminationDuringRunMicrotasks() {
 
 void Isolate::SetPromiseRejectCallback(PromiseRejectCallback callback) {
   promise_reject_callback_ = callback;
+
+  recordreplay::Assert("[TT-1029-1030] Isolate::SetPromiseRejectCallback %d",
+                       !!promise_reject_callback_);
 }
 
 void Isolate::ReportPromiseReject(Handle<JSPromise> promise,
                                   Handle<Object> value,
                                   v8::PromiseRejectEvent event) {
+  v8::recordreplay::AssertMaybeEventsDisallowed(
+    "[TT-1029-1030] Isolate::ReportPromiseReject %d",
+    !!promise_reject_callback_
+  );
+
   if (promise_reject_callback_ == nullptr) return;
   promise_reject_callback_(v8::PromiseRejectMessage(
       v8::Utils::PromiseToLocal(promise), event, v8::Utils::ToLocal(value)));
@@ -5533,6 +5565,13 @@ void Isolate::SetUseCounterCallback(v8::Isolate::UseCounterCallback callback) {
 }
 
 void Isolate::CountUsage(v8::Isolate::UseCounterFeature feature) {
+  // Don't count usage when recording/replaying, as this can involve posting
+  // tasks to other threads in places that run non-deterministically
+  // (e.g. compilation).
+  if (recordreplay::IsRecordingOrReplaying("no-count-usage")) {
+    return;
+  }
+
   // The counter callback
   // - may cause the embedder to call into V8, which is not generally possible
   //   during GC.
@@ -5557,7 +5596,20 @@ void Isolate::CountUsage(v8::Isolate::UseCounterFeature feature, int count) {
   }
 }
 
-int Isolate::GetNextScriptId() { return heap()->NextScriptId(); }
+// Start disallowed script IDs at a value that won't conflict with regular IDs,
+// which start at one and increment from there.
+static int gNextDisallowedScriptId = 1 << 30;
+
+int Isolate::GetNextScriptId() {
+  // Use a separate pool of IDs when events are disallowed, as these scripts
+  // won't be created at consistently when recording vs. replaying.
+  if (recordreplay::AreEventsDisallowed("Isolate::GetNextScriptId")) {
+    CHECK(IsMainThread());
+    return gNextDisallowedScriptId++;
+  }
+
+  return heap()->NextScriptId();
+}
 
 // static
 std::string Isolate::GetTurboCfgFileName(Isolate* isolate) {

@@ -133,6 +133,8 @@
 #include "src/wasm/wasm-objects.h"
 #endif  // V8_ENABLE_WEBASSEMBLY
 
+#include "src/base/replayio.h"
+
 namespace v8 {
 namespace internal {
 
@@ -1777,6 +1779,12 @@ bool Object::IsCodeLike(Isolate* isolate) const {
 }
 
 void Object::ShortPrint(FILE* out) const {
+  if (recordreplay::AreEventsDisallowed()) {
+    std::ostringstream os;
+    os << Brief(*this);
+    recordreplay::Print("[Object::ShortPrint] %s", os.str().c_str());
+    return;
+  }
   OFStream os(out);
   os << Brief(*this);
 }
