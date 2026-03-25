@@ -567,6 +567,10 @@ void BaselineAssembler::AddSmi(Register lhs, Smi rhs) {
   }
 }
 
+void BaselineAssembler::AddPointer(Register output, Immediate value) {
+  __ addq(output, value);
+}
+
 void BaselineAssembler::Word32And(Register output, Register lhs, int rhs) {
   Move(output, lhs);
   __ andq(output, Immediate(rhs));
