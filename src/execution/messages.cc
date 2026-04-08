@@ -439,7 +439,8 @@ MaybeHandle<Object> ErrorUtils::FormatStackTrace(Isolate* isolate,
   }
 
   MaybeHandle<String> rv = builder.Finish();
-  if (recordreplay::IsRecordingOrReplaying("ErrorUtils::FormatStackTrace")) {
+  if (recordreplay::IsRecordingOrReplaying("ErrorUtils::FormatStackTrace") &&
+      !recordreplay::AreEventsDisallowed()) {
     // [PRO-1150] Replay Error.stack
     std::string str = rv.ToHandleChecked()->ToCString().get();
     recordreplay::RecordReplayString("ErrorUtils::FormatStackTrace", str);
@@ -1062,6 +1063,8 @@ MaybeHandle<Object> ErrorUtils::GetFormattedStack(
   if (error_stack->IsErrorStackData()) {
     Handle<ErrorStackData> error_stack_data =
         Handle<ErrorStackData>::cast(error_stack);
+    REPLAY_ASSERT(
+      "[PRO-2368] ErrorUtils::GetFormattedStack A %d", (int)error_stack_data->HasFormattedStack());
     if (error_stack_data->HasFormattedStack()) {
       return handle(error_stack_data->formatted_stack(), isolate);
     }
@@ -1072,7 +1075,10 @@ MaybeHandle<Object> ErrorUtils::GetFormattedStack(
         FormatStackTrace(isolate, error_object,
                          handle(error_stack_data->call_site_infos(), isolate)),
         Object);
-    error_stack_data->set_formatted_stack(*formatted_stack);
+    if (!recordreplay::AreEventsDisallowed()) {
+      // [PRO-2368] Don't cache the formatted stack during replay-only invocations.
+      error_stack_data->set_formatted_stack(*formatted_stack);
+    }
     return formatted_stack;
   }
 
