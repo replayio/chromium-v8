@@ -555,6 +555,8 @@ void TraceV8ConsoleMessageEvent(V8MessageOrigin origin, ConsoleAPIType type) {
 }  // anonymous namespace
 
 extern "C" void V8RecordReplayOnConsoleMessage(size_t bookmark);
+extern "C" void SetContextGroupIdForSendCDPMessage(int contextGroupId);
+extern "C" void ClearContextGroupIdForSendCDPMessage();
 
 void V8ConsoleMessageStorage::addMessage(
     std::unique_ptr<V8ConsoleMessage> message) {
@@ -578,7 +580,9 @@ void V8ConsoleMessageStorage::addMessage(
   // After notifying the inspector about the message, listeners will know about
   // the message contents if any commands are sent within RecordReplayOnConsoleMessage.
   if (message->origin() == V8MessageOrigin::kConsole && v8::IsMainThread()) {
+    SetContextGroupIdForSendCDPMessage(contextGroupId);
     V8RecordReplayOnConsoleMessage(0);
+    ClearContextGroupIdForSendCDPMessage();
   }
 
   if (!inspector->hasConsoleMessageStorage(contextGroupId)) return;
