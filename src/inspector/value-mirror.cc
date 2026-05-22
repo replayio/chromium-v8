@@ -1723,7 +1723,8 @@ bool ValueMirror::getProperties(v8::Local<v8::Context> context,
 // static
 void ValueMirror::getInternalProperties(
     v8::Local<v8::Context> context, v8::Local<v8::Object> object,
-    std::vector<InternalPropertyMirror>* mirrors) {
+    std::vector<InternalPropertyMirror>* mirrors,
+    const v8::KeyIterationParams* params) {
   v8::Isolate* isolate = v8::Isolate::GetCurrent();
   v8::MicrotasksScope microtasksScope(context,
                                       v8::MicrotasksScope::kDoNotRunMicrotasks);
