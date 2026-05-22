@@ -4223,10 +4223,6 @@ MaybeDirectHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
           compile_options &
           ScriptCompiler::kFollowCompileHintsPerFunctionMagicComment);
 
-      if (DirectHandle<Script> script; maybe_script.ToHandle(&script)) {
-        flags.set_script_id(script->id());
-      }
-
       maybe_result = CompileScriptOnMainThread(
           flags, source, script_details, natives, extension, isolate,
           maybe_script, &is_compiled_scope, compile_hint_callback,
