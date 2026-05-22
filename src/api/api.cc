@@ -252,6 +252,12 @@ static __attribute__((noinline)) void BusyWait() {
 // OOM error handler is called and execution is stopped.
 void i::V8::FatalProcessOutOfMemory(i::Isolate* i_isolate, const char* location,
                                     const OOMDetails& details) {
+  gCrashReason = location;
+
+  if (getenv("RECORD_REPLAY_WAIT_AT_FATAL_ERROR")) {
+    BusyWait();
+  }
+
   i::HeapStats heap_stats;
 
   if (i_isolate == nullptr) {
