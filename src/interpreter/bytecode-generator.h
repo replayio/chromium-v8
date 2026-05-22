@@ -668,6 +668,11 @@ class BytecodeGenerator final : public AstVisitor<BytecodeGenerator> {
   // block. Managed by HoleCheckElisionScope and HoleCheckElisionMergeScope.
   Variable::HoleCheckBitmap hole_check_bitmap_;
 
+  // Whether we've emitted an opcode to track the 'this' object after
+  // seeing an assignment to one of its properties. This is emitted at
+  // most once per function.
+  bool record_replay_has_track_this_ = false;
+
   LoopScope* current_loop_scope_;
   ForInScope* current_for_in_scope_;
 
