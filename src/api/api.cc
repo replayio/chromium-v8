@@ -2046,6 +2046,15 @@ MaybeLocal<Value> Script::Run(Local<Context> context,
   }
 #endif  // V8_ENABLE_ETW_STACK_WALKING
   auto fun = i::Cast<i::JSFunction>(Utils::OpenDirectHandle(this));
+
+  // TODO: IsInReplayCode (RUN-1502)
+  v8::recordreplay::AssertMaybeEventsDisallowed(
+    "JS Script::Run %d",
+    IsScript(fun->shared()->script())
+      ? i::Cast<i::Script>(fun->shared()->script())->id()
+      : 0
+  );
+
   i::DirectHandle<i::Object> receiver = i_isolate->global_proxy();
   // TODO(cbruni, chromium:1244145): Remove once migrated to the context.
   i::DirectHandle<i::Object> options(
@@ -2428,6 +2437,9 @@ Maybe<bool> Module::InstantiateModule(Local<Context> context,
 }
 
 MaybeLocal<Value> Module::Evaluate(Local<Context> context) {
+  // TODO: IsInReplayCode (RUN-1502)
+  v8::recordreplay::AssertMaybeEventsDisallowed("JS Module::Evaluate %d", ScriptId());
+
   auto i_isolate = i::Isolate::Current();
   TRACE_EVENT_CALL_STATS_SCOPED(i_isolate, "v8", "V8.Execute");
   EnterV8Scope<InternalEscapableScope> api_scope{i_isolate, context,
@@ -5593,6 +5605,13 @@ MaybeLocal<Value> Object::CallAsFunction(Local<Context> context,
   auto self = Utils::OpenDirectHandle(this);
   auto recv_obj = Utils::OpenDirectHandle(*recv);
   auto args = PrepareArguments(argc, argv);
+
+  // TODO: IsInReplayCode (RUN-1502)
+  v8::recordreplay::AssertMaybeEventsDisallowed(
+    "JS Object::CallAsFunction %d",
+    IsCodeLike(context->GetIsolate())
+  );
+
   return api_scope.EscapeMaybe(
       Utils::ToMaybeLocal(i::Execution::Call(i_isolate, self, recv_obj, args)));
 }
@@ -5608,6 +5627,13 @@ MaybeLocal<Value> Object::CallAsConstructor(Local<Context> context, int argc,
                                              i_isolate);
   auto self = Utils::OpenDirectHandle(this);
   auto args = PrepareArguments(argc, argv);
+
+  // TODO: IsInReplayCode (RUN-1502)
+  v8::recordreplay::AssertMaybeEventsDisallowed(
+    "JS Object::CallAsConstructor %d",
+    IsCodeLike(context->GetIsolate())
+  );
+
   return api_scope.EscapeMaybe(
       Utils::ToMaybeLocal(i::Execution::New(i_isolate, self, self, args)));
 }
@@ -5678,6 +5704,14 @@ MaybeLocal<v8::Value> Function::Call(v8::Isolate* isolate,
                   "Function to be called is a null pointer");
   auto recv_obj = Utils::OpenDirectHandle(*recv);
   auto args = PrepareArguments(argc, argv);
+
+  // TODO: IsInReplayCode (RUN-1502)
+  // [PRO-1417] column is omitted because our instrumentation engine shifts columns but it shouldn't shift line numbers
+  v8::recordreplay::AssertMaybeEventsDisallowed(
+    "JS Function::Call %d %d",
+    ScriptId(), GetScriptLineNumber()
+  );
+
   return api_scope.EscapeMaybe(
       Utils::ToMaybeLocal(i::Execution::Call(i_isolate, self, recv_obj, args)));
 }
@@ -8841,6 +8875,7 @@ void Promise::MarkAsHandled() {
     i_isolate->ReportPromiseReject(promise, i::DirectHandle<i::Object>(),
                                    v8::kPromiseHandlerAddedAfterReject);
   }
+  recordreplay::Assert("[TT-1029-1030] Promise::MarkAsHandled");
   promise->set_has_handler(true);
 }
 
@@ -11353,6 +11388,8 @@ void String::ValueView::CheckOneByte(bool is_one_byte) const {
         options = Utils::OpenDirectHandle(*raw_options);                      \
       }                                                                       \
       auto message = Utils::OpenDirectHandle(*raw_message);                   \
+      std::unique_ptr<char[]> message_str = message->ToCString();             \
+      recordreplay::AssertMaybeEventsDisallowed("CreateException %s %s", #NAME, message_str.get()); \
       i::DirectHandle<i::JSFunction> constructor =                            \
           i_isolate->name##_function();                                       \
       error = *i_isolate->factory()->NewError(constructor, message, options); \
