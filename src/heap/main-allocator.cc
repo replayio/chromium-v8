@@ -667,6 +667,8 @@ bool PagedSpaceAllocatorPolicy::RefillLab(int size_in_bytes,
   // Allocation in this space has failed.
   DCHECK_GE(size_in_bytes, 0);
 
+  replayio::AutoDisallowEvents disallow("PagedSpaceAllocatorPolicy::RefillLab");
+
   if (TryExtendLAB(size_in_bytes)) return true;
 
   if (TryAllocationFromFreeList(size_in_bytes, origin)) return true;
