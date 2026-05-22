@@ -141,6 +141,9 @@ bool FutexWaitListNode::CancelTimeoutTask() {
 
 void FutexWaitListNode::NotifyWake() {
   DCHECK(!IsAsync());
+
+  replayio::AutoDisallowEvents disallow("FutexWaitListNode::NotifyWake");
+
   // Lock the correct mutex before notifying. We know that the mutex
   // will have been unlocked if we are currently waiting on the condition
   // variable. The mutex will not be locked if FutexEmulation::Wait hasn't
