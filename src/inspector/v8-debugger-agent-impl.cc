@@ -2512,6 +2512,17 @@ Response V8DebuggerAgentImpl::processSkipList(
   return Response::Success();
 }
 
+std::unique_ptr<protocol::Runtime::RemoteObject>
+V8DebuggerAgentImpl::wrapObject(int context_id, v8::Local<v8::Value> val) {
+  InjectedScript* injectedScript = nullptr;
+  m_session->findInjectedScript(context_id, injectedScript);
+
+  std::unique_ptr<protocol::Runtime::RemoteObject> rv;
+  injectedScript->wrapObject(val, kBacktraceObjectGroup,
+                             WrapOptions({WrapMode::kIdOnly}), &rv);
+  return rv;
+}
+
 void V8DebuggerAgentImpl::stop() {
   disable();
   m_enableState = kStopping;
