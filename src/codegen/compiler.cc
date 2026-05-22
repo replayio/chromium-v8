@@ -1973,6 +1973,8 @@ void BackgroundCompileTask::RunOnMainThread(Isolate* isolate) {
 
 void BackgroundCompileTask::Run(
     LocalIsolate* isolate, ReusableUnoptimizedCompileState* reusable_state) {
+  gNumRunningBackgroundCompileTasks++;
+
   TimedHistogramScope timer(
       timer_, nullptr,
       compilation_details_
