@@ -3306,6 +3306,12 @@ bool Debug::PerformSideEffectCheckForCallback(
   if (!function.is_null() && !function->has_side_effects()) {
     return true;
   }
+  if (recordreplay::IsReplaying() && recordreplay::AreEventsDisallowed()) {
+    // TODO: IsInReplayCode (RUN-1502)
+    // Always allow Replay code.
+    // https://linear.app/replay/issue/RUN-1908/fix-devtools-crashes
+    return true;
+  }
   if (!ignore_side_effects_for_function_template_info_.is_null()) {
     // If the |ignore_side_effects_for_function_template_info_| is set then
     // the next API callback call must be made to this function.
