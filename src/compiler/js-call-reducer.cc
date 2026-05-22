@@ -7534,6 +7534,11 @@ Reduction JSCallReducer::ReduceStringConstructor(Node* node,
 }
 
 Reduction JSCallReducer::ReducePromiseConstructor(Node* node) {
+  if (recordreplay::IsRecordingOrReplaying(
+        "disable-v8-optimize-promises",
+        "JSCallReducer::ReducePromiseConstructor"))
+    return NoChange();
+
   PromiseBuiltinReducerAssembler a(this, node);
 
   // We only inline when we have the executor.
