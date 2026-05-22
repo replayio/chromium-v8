@@ -33,6 +33,14 @@ __thread bool TrapHandlerGuard::is_active_ = 0;
 thread_local bool TrapHandlerGuard::is_active_ = 0;
 #endif
 
+#if V8_OS_WIN
+
+thread_local int g_thread_in_wasm_code2;
+
+static_assert(sizeof(g_thread_in_wasm_code2) > 1,
+              "sizeof(thread_local_var) must be > 1, see "
+              "https://sourceware.org/bugzilla/show_bug.cgi?id=14898");
+
 int& IsThreadInWasmCode() {
   return g_thread_in_wasm_code2;
 }
