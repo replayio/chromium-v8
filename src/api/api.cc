@@ -11411,7 +11411,8 @@ Maybe<bool> Exception::CaptureStackTrace(Local<Context> context,
   return Just(true);
 }
 
-v8::MaybeLocal<v8::Array> v8::Object::PreviewEntries(bool* is_key_value) {
+v8::MaybeLocal<v8::Array> v8::Object::PreviewEntries(
+    bool* is_key_value, const v8::KeyIterationParams* params) {
   auto object = Utils::OpenDirectHandle(this);
   i::Isolate* i_isolate = i::Isolate::Current();
   if (i_isolate->is_execution_terminating()) return {};
