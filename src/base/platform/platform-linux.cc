@@ -92,6 +92,9 @@ void* OS::RemapShared(void* old_address, void* new_address, size_t size) {
 std::optional<OS::MemoryRange> OS::GetFirstFreeMemoryRangeWithin(
     OS::Address boundary_start, OS::Address boundary_end, size_t minimum_size,
     size_t alignment) {
+  // Reading from /proc/self/maps isn't supported when recording/replaying.
+  if (recordreplay::IsRecordingOrReplaying()) return {};
+
   std::optional<OS::MemoryRange> result;
   SignalSafeMapsParser parser;
   if (!parser.IsValid()) return {};
