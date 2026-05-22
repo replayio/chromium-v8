@@ -17145,6 +17145,12 @@ ReduceResult MaglevGraphBuilder::VisitRecordReplayAssertValue() {
   return ReduceResult::Done();
 }
 
+ReduceResult MaglevGraphBuilder::VisitRecordReplayTrackObjectId() {
+  ValueNode* object = LoadRegisterTagged(0);
+  BuildCallRuntime(Runtime::kRecordReplayTrackObjectId, {object});
+  return ReduceResult::Done();
+}
+
 ReduceResult MaglevGraphBuilder::VisitAbort() {
   AbortReason reason = static_cast<AbortReason>(GetFlag8Operand(0));
   return BuildAbort(reason);
