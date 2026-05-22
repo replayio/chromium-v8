@@ -8533,7 +8533,8 @@ enum class SetAsArrayKind {
 
 i::DirectHandle<i::JSArray> MapAsArray(i::Isolate* i_isolate,
                                        i::Tagged<i::Object> table_obj,
-                                       int offset, MapAsArrayKind kind) {
+                                       int offset, MapAsArrayKind kind,
+                                       const KeyIterationParams* params = KeyIterationParams::Default()) {
   i::Factory* factory = i_isolate->factory();
   i::DirectHandle<i::OrderedHashMap> table(
       i::Cast<i::OrderedHashMap>(table_obj), i_isolate);
@@ -8542,8 +8543,10 @@ i::DirectHandle<i::JSArray> MapAsArray(i::Isolate* i_isolate,
   const bool collect_values =
       kind == MapAsArrayKind::kEntries || kind == MapAsArrayKind::kValues;
   int capacity = table->UsedCapacity();
-  int max_length =
-      (capacity - offset) * ((collect_keys && collect_values) ? 2 : 1);
+
+  auto page_size = params->PageSize(capacity - offset);
+  int max_length = page_size * ((collect_keys && collect_values) ? 2 : 1);
+
   i::DirectHandle<i::FixedArray> result = factory->NewFixedArray(max_length);
   uint32_t result_index = 0;
   {
@@ -8569,7 +8572,7 @@ i::DirectHandle<i::JSArray> MapAsArray(i::Isolate* i_isolate,
 
 }  // namespace
 
-Local<Array> Map::AsArray() const {
+Local<Array> Map::AsArray(const v8::KeyIterationParams* params) const {
   auto obj = Utils::OpenDirectHandle(this);
   i::Isolate* i_isolate = i::Isolate::Current();
   ApiRuntimeCallStatsScope rcs_scope(i_isolate, RCCId::kAPI_Map_AsArray);
