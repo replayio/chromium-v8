@@ -13,6 +13,7 @@
 #include "src/base/enum-set.h"
 #include "src/base/fpu.h"
 #include "src/base/platform/mutex.h"
+#include "src/base/replayio.h"
 #include "src/base/platform/semaphore.h"
 #include "src/base/platform/time.h"
 #include "src/codegen/compiler.h"
@@ -1575,6 +1576,8 @@ void TransitiveTypeFeedbackProcessor::ProcessFunction(int func_index) {
 void TriggerTierUp(Isolate* isolate,
                    Tagged<WasmTrustedInstanceData> trusted_instance_data,
                    int func_index) {
+  replayio::AutoDisallowEvents disallow("wasm::TriggerTierUp");
+
   NativeModule* native_module = trusted_instance_data->native_module();
   CompilationStateImpl* compilation_state =
       Impl(native_module->compilation_state());
