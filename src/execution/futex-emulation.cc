@@ -897,6 +897,7 @@ void FutexEmulation::ResolveAsyncWaiterPromises(Isolate* isolate) {
   FutexWaitList* wait_list = GetWaitList();
   FutexWaitListNode* node;
   {
+    replayio::AutoDisallowEvents disallow("FutexEmulation::ResolveAsyncWaiterPromises");
     NoGarbageCollectionMutexGuard lock_guard(wait_list->mutex());
 
     auto& isolate_map = wait_list->isolate_promises_to_resolve_;
