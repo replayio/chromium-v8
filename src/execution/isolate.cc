@@ -2448,6 +2448,8 @@ DirectHandle<JSMessageObject> Isolate::CreateMessageOrAbort(
 
 Tagged<Object> Isolate::Throw(Tagged<Object> raw_exception,
                               MessageLocation* location) {
+  recordreplay::AssertMaybeEventsDisallowed("[RUN-885] Isolate::ThrowInternal");
+
   if (has_exception()) {
     // A termination exception may have been thrown while preparing
     // {raw_exception}, e.g. by the near heap limit callback
