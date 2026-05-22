@@ -17128,6 +17128,15 @@ ReduceResult MaglevGraphBuilder::VisitRecordReplayInstrumentationGenerator() {
   return ReduceResult::Done();
 }
 
+ReduceResult MaglevGraphBuilder::VisitRecordReplayInstrumentationReturn() {
+  ValueNode* closure = GetClosure();
+  ValueNode* index = GetSmiConstant(iterator_.GetIndexOperand(0));
+  ValueNode* return_value = LoadRegisterTagged(1);
+  BuildCallRuntime(Runtime::kRecordReplayInstrumentationReturn,
+                   {closure, index, return_value});
+  return ReduceResult::Done();
+}
+
 ReduceResult MaglevGraphBuilder::VisitAbort() {
   AbortReason reason = static_cast<AbortReason>(GetFlag8Operand(0));
   return BuildAbort(reason);
