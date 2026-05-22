@@ -2099,6 +2099,7 @@ void Heap::StartIncrementalMarkingOnInterrupt() {
 void Heap::StartIncrementalMarkingIfAllocationLimitIsReached(
     LocalHeap* local_heap, GCFlags gc_flags,
     const GCCallbackFlags gc_callback_flags) {
+  replayio::AutoDisallowEvents disallow("Heap::StartIncrementalMarkingIfAllocationLimitIsReached");
   if (incremental_marking()->IsStopped() &&
       incremental_marking()->CanAndShouldBeStarted()) {
     auto [limit, reason] = IncrementalMarkingLimitReached();
