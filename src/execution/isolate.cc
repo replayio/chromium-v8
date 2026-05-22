@@ -2159,6 +2159,10 @@ bool Isolate::MayAccess(DirectHandle<NativeContext> accessing_context,
 
   // During bootstrapping, callback functions are not enabled yet.
   if (bootstrapper()->IsActive()) return true;
+
+  // Allow all accesses made while replay code is running.
+  if (V8RecordReplayIsInReplayCode()) return true;
+
   {
     DisallowGarbageCollection no_gc;
 
