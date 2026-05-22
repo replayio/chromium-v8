@@ -5433,13 +5433,29 @@ MaybeLocal<v8::Context> v8::Object::GetCreationContext(
       Isolate::GetCurrent());
 }
 
+extern "C" void V8RecordReplayGetDefaultContext(v8::Isolate* isolate, v8::Local<v8::Context>* cx);
+
 namespace {
 V8_INLINE Local<v8::Context> GetCreationContextCheckedImpl(
     i::DirectHandle<i::JSReceiver> object, i::Isolate* i_isolate) {
   i::DirectHandle<i::NativeContext> context;
-  Utils::ApiCheck(object->GetCreationContext(i_isolate).ToHandle(&context),
-                  "v8::Object::GetCreationContextChecked",
-                  "No creation context available");
+  if (!object->GetCreationContext(i_isolate).ToHandle(&context)) {
+    // When recording/replaying we avoid crashing by falling back to the
+    // default context.
+    //
+    // See https://linear.app/replay/issue/TT-957
+    if (recordreplay::IsRecordingOrReplaying() && IsMainThread()) {
+      recordreplay::Print("Warning: GetCreationContextChecked missing context, substituting default context");
+      Local<v8::Context> fallback;
+      V8RecordReplayGetDefaultContext(reinterpret_cast<v8::Isolate*>(i_isolate), &fallback);
+      return fallback;
+    } else {
+      CHECK(false);
+    }
+  }
+  //Utils::ApiCheck(object->GetCreationContext(i_isolate).ToHandle(&context),
+  //                "v8::Object::GetCreationContextChecked",
+  //                "No creation context available");
   return Utils::ToLocal(context);
 }
 }  // namespace
