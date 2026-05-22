@@ -199,6 +199,7 @@ Tagged<HeapObject> HeapAllocator::AllocateRawSlowPath(
     AllocationRetryMode retry_mode, int size, AllocationType allocation,
     AllocationOrigin origin, AllocationAlignment alignment,
     AllocationHint hint) {
+  replayio::AutoDisallowEvents disallow("HeapAllocator::AllocateRawSlowPath");
   AllocationResult result;
   auto allocate = [&result, size, allocation, origin, alignment, hint, this]() {
     // Initially flags on the LocalHeap are always disabled. They are only
