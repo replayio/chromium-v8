@@ -1207,7 +1207,10 @@ MaybeDirectHandle<Object> ErrorUtils::GetFormattedStack(
         FormatStackTrace(
             isolate, error_object,
             direct_handle(error_stack_data->call_site_infos(), isolate)));
-    error_stack_data->set_formatted_stack(*formatted_stack);
+    if (!recordreplay::AreEventsDisallowed()) {
+      // [PRO-2368] Don't cache the formatted stack during replay-only invocations.
+      error_stack_data->set_formatted_stack(*formatted_stack);
+    }
     return formatted_stack;
   }
 
