@@ -3007,6 +3007,13 @@ void BytecodeGenerator::BuildTryCatch(
 
   {
     HoleCheckElisionMergeScope::Branch branch_elider(merge_elider);
+    // Unlike in gecko, we need to increment the progress counter at catch
+    // blocks so we can detect when exceptions are initially thrown vs. being
+    // rethrown. See Runtime_UnwindAndFindExceptionHandler.
+    builder()->RecordReplayOnProgress();
+
+    builder()->RecordReplayAssertValue("BeginCatch");
+
     catch_body_func(context);
   }
 
