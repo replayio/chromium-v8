@@ -8642,7 +8642,8 @@ Maybe<bool> Set::Delete(Local<Context> context, Local<Value> key) {
 namespace {
 i::DirectHandle<i::JSArray> SetAsArray(i::Isolate* i_isolate,
                                        i::Tagged<i::Object> table_obj,
-                                       int offset, SetAsArrayKind kind) {
+                                       int offset, SetAsArrayKind kind,
+                                       const KeyIterationParams* params = KeyIterationParams::Default()) {
   i::Factory* factory = i_isolate->factory();
   i::DirectHandle<i::OrderedHashSet> table(
       i::Cast<i::OrderedHashSet>(table_obj), i_isolate);
@@ -8678,7 +8679,7 @@ i::DirectHandle<i::JSArray> SetAsArray(i::Isolate* i_isolate,
 }
 }  // namespace
 
-Local<Array> Set::AsArray() const {
+Local<Array> Set::AsArray(const v8::KeyIterationParams* params) const {
   auto obj = Utils::OpenDirectHandle(this);
   i::Isolate* i_isolate = i::Isolate::Current();
   ApiRuntimeCallStatsScope rcs_scope(i_isolate, RCCId::kAPI_Set_AsArray);
