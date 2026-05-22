@@ -394,7 +394,13 @@ DebuggableStackFrameIterator::DebuggableStackFrameIterator(Isolate* isolate)
 DebuggableStackFrameIterator::DebuggableStackFrameIterator(Isolate* isolate,
                                                            StackFrameId id)
     : DebuggableStackFrameIterator(isolate) {
-  while (!done() && frame()->id() != id) Advance();
+  if (id == NO_ID) {
+    // Support stack trace iteration when stopped by the Record Replay driver,
+    // where there is no break frame.
+    if (!done() && !IsValidFrame(iterator_.frame())) Advance();
+  } else {
+    while (!done() && frame()->id() != id) Advance();
+  }
 }
 
 void DebuggableStackFrameIterator::Advance() {
