@@ -1111,6 +1111,8 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
 
   void RequestInvalidateNoProfilingProtector();
 
+  void RecordReplayInvokeApiInterruptCallbacksAtProgress();
+
   // Administration
   void Iterate(RootVisitor* v);
   void Iterate(RootVisitor* v, ThreadLocalTop* t);
