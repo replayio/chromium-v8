@@ -7031,6 +7031,35 @@ void BytecodeGenerator::VisitCall(Call* expr) {
 
   builder()->SetExpressionPosition(expr);
 
+  // Emit a breakpoint for all call expressions
+  // after arguments have already been evaluated.
+  // This might duplicate the call's parent's position,
+  // so we should try to have it get deduplicated
+  // by inserting it before the call, *if* there are no arguments.
+  //
+  // Example1 (potentially deduped breakpoint):
+  // `/*BREAK1*/func();
+  //
+  // Example2 (extra breakpoint after arguments evaluation):
+  // `/*BREAK1*/func/*BREAK3*/(/*BREAK2*/g());`
+
+  // TODO: Deduplicate property call locations
+  //       NOTE: In this case, `expr->position()` is different from the
+  //             `ExpressionStatement`'s position.
+  //       Example: `/*BREAK1*/o.func/*BREAK2*/();`
+
+  if (expr->call_head_token_position() && start_instrumentation_count != builder()->record_replay_instrumentation_site_counter_) {
+    // Has arguments and visiting them added breakpoints.
+    // Move this to a position that is assured not to conflict with any other
+    // AST node.
+    builder()->RecordReplayInstrumentation("breakpoint", expr->call_head_token_position());
+  } else {
+    // Might have arguments but visiting them didn't add breakpoints.
+    // Add this to a potentially conflicting position, letting it to be deduplicated in such case.
+    // If there is no conflict, a breakpoint will be added.
+    builder()->RecordReplayInstrumentation("breakpoint", expr->position());
+  }
+
   if (use_reflect_apply) {
     builder()->CallJSRuntime(Context::REFLECT_APPLY_INDEX, args);
   } else if (spread_position == Call::kHasFinalSpread) {
