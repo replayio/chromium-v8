@@ -159,6 +159,7 @@ RUNTIME_FUNCTION(Runtime_RejectPromise) {
   DirectHandle<JSPromise> promise = args.at<JSPromise>(0);
   DirectHandle<Object> reason = args.at(1);
   DirectHandle<Boolean> debug_event = args.at<Boolean>(2);
+
   return *JSPromise::Reject(promise, reason,
                             Object::BooleanValue(*debug_event, isolate));
 }
