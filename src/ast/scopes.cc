@@ -1097,6 +1097,14 @@ Variable* DeclarationScope::DeclareParameter(const AstRawString* name,
   if (name == ast_value_factory->arguments_string()) {
     set_has_arguments_parameter(true);
   }
+  // While replaying, force all variables to be context-allocated.
+  // Ideally we'd only do this for non-leaf functions, but it's not
+  // immediately obvious how to do that at this level.
+  // (RUN-2604)
+  if (recordreplay::IsReplaying() &&
+      recordreplay::FeatureEnabled("force-variable-context-allocation")) {
+    var->ForceContextAllocation();
+  }
   return var;
 }
 
