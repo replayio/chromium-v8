@@ -45,6 +45,8 @@
 #include <mach/mach_vm.h>
 #endif
 
+#include "v8.h"
+
 namespace v8 {
 namespace base {
 
