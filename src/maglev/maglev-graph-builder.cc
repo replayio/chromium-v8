@@ -17107,6 +17107,11 @@ ReduceResult MaglevGraphBuilder::VisitRecordReplayIncExecutionProgressCounter() 
   return ReduceResult::Done();
 }
 
+ReduceResult MaglevGraphBuilder::VisitRecordReplayNotifyActivity() {
+  BuildCallRuntime(Runtime::kRecordReplayNotifyActivity, {});
+  return ReduceResult::Done();
+}
+
 ReduceResult MaglevGraphBuilder::VisitAbort() {
   AbortReason reason = static_cast<AbortReason>(GetFlag8Operand(0));
   return BuildAbort(reason);
