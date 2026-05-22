@@ -7567,6 +7567,13 @@ void Isolate::CountUsage(v8::Isolate::UseCounterFeature feature) {
 
 void Isolate::CountUsage(
     base::Vector<const v8::Isolate::UseCounterFeature> features) {
+  // Don't count usage when recording/replaying, as this can involve posting
+  // tasks to other threads in places that run non-deterministically
+  // (e.g. compilation).
+  if (recordreplay::IsRecordingOrReplaying("no-count-usage")) {
+    return;
+  }
+
   // The counter callback
   // - may cause the embedder to call into V8, which is not generally possible
   //   during GC.
