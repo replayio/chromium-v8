@@ -4025,7 +4025,7 @@ ParserBase<Impl>::ParseLeftHandSideContinuation(ExpressionT result) {
           }
         }
 
-        result = factory()->NewCall(result, args, pos, has_spread,
+        result = factory()->NewCall(result, args, pos, has_spread, call_head_token_position,
                                     eval_scope_info_index, is_optional);
 
         fni_.RemoveLastFunction();
@@ -5542,7 +5542,7 @@ typename ParserBase<Impl>::ExpressionT ParserBase<Impl>::ParseTemplateLiteral(
 
   DCHECK_IMPLIES(!has_error(), next == Token::kTemplateTail);
   // Once we've reached a kTemplateTail, we can close the TemplateLiteral.
-  return impl()->CloseTemplateLiteral(&ts, start, tag);
+  return impl()->CloseTemplateLiteral(&ts, start, tag, call_head_token_position);
 }
 
 template <typename Impl>
