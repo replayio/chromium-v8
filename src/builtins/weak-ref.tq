@@ -52,6 +52,7 @@ transitioning javascript builtin WeakRefConstructor(
   weakRef.target = weakTarget;
   // 4. Perfom ! AddToKeptObjects(target).
   runtime::JSWeakRefAddToKeptObjects(weakTarget);
+  runtime::JSReplayWeakRefConstruct(weakTarget);
   // 6. Return weakRef.
   return weakRef;
 }
