@@ -592,7 +592,9 @@ class PreParserFactory {
   }
   PreParserExpression NewCall(PreParserExpression expression,
                               const PreParserExpressionList& arguments, int pos,
-                              bool has_spread, int eval_scope_info_index = 0,
+                              bool has_spread,
+                              int call_head_token_position = 0,
+                              int eval_scope_info_index = 0,
                               bool optional_chain = false) {
     if (eval_scope_info_index > 0) {
       DCHECK(expression.IsIdentifier() && expression.AsIdentifier().IsEval());
