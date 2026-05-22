@@ -5629,6 +5629,13 @@ bool Heap::IsInputHandlingInitialized() const {
 // - or the incremental marking is not in progress and we cannot start it.
 bool Heap::ShouldExpandOldGenerationOnSlowAllocation(LocalHeap* local_heap,
                                                      AllocationOrigin origin) {
+  replayio::AutoDisallowEvents disallow("Heap::ShouldExpandOldGenerationOnSlowAllocation");
+
+  // Always allow background threads to allocate while replaying without triggering GC.
+  // Waiting on a main thread GC can introduce deadlocks if the main thread
+  // is itself waiting on an ordered lock which this thread is next in line to acquire.
+  if (recordreplay::IsReplaying() && !local_heap->is_main_thread()) return true;
+
   if (always_allocate()) {
     return true;
   }
