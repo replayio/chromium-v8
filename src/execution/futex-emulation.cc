@@ -957,6 +957,7 @@ void FutexEmulation::HandleAsyncWaiterTimeout(FutexWaitListNode* node) {
 }
 
 void FutexEmulation::IsolateDeinit(Isolate* isolate) {
+  replayio::AutoDisallowEvents disallow("FutexEmulation::IsolateDeinit");
   FutexWaitList* wait_list = GetWaitList();
   NoGarbageCollectionMutexGuard lock_guard(wait_list->mutex());
 
