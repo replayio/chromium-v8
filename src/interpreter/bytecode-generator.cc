@@ -3086,6 +3086,10 @@ void BytecodeGenerator::BuildTryFinally(
 
   try_control_builder.BeginFinally();
 
+  // See BuildTryCatch for why we increment the progress counter here.
+  builder()->RecordReplayOnProgress();
+  builder()->RecordReplayAssertValue("BeginFinally");
+
   // Evaluate the finally-block.
   finally_body_func(token, result, message);
   try_control_builder.EndFinally();
