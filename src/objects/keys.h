@@ -74,7 +74,8 @@ class KeyAccumulator final {
   // Does not throw for uninitialized exports in module namespace objects, so
   // this has to be checked separately.
   static Handle<FixedArray> GetOwnEnumPropertyKeys(
-      Isolate* isolate, DirectHandle<JSObject> object);
+      Isolate* isolate, DirectHandle<JSObject> object,
+      const KeyIterationParams* params = KeyIterationParams::Default());
 
   V8_WARN_UNUSED_RESULT ExceptionStatus
   AddKey(Tagged<Object> key, AddKeyConversion convert = DO_NOT_CONVERT);
@@ -220,7 +221,8 @@ class FastKeyAccumulator {
   // Returns the keys.
   static Handle<FixedArray> InitializeFastPropertyEnumCache(
       Isolate* isolate, DirectHandle<Map> map, int enum_length,
-      AllocationType allocation = AllocationType::kOld);
+      AllocationType allocation = AllocationType::kOld,
+      const KeyIterationParams* params = KeyIterationParams::Default());
 
  private:
   void Prepare();
