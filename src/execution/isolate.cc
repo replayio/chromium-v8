@@ -2353,6 +2353,29 @@ void Isolate::InvokeApiInterruptCallbacks() {
   }
 }
 
+void Isolate::RecordReplayInvokeApiInterruptCallbacksAtProgress() {
+  CHECK(recordreplay::IsRecordingOrReplaying("interrupts"));
+  CHECK(IsMainThread());
+
+  while (true) {
+    InterruptEntry entry;
+    recordreplay::OrderedLock(record_replay_api_interrupts_ordered_lock_id_);
+    {
+      ExecutionAccess access(this);
+      if (api_interrupts_queue_.empty()) {
+        recordreplay::OrderedUnlock(record_replay_api_interrupts_ordered_lock_id_);
+        return;
+      }
+      entry = api_interrupts_queue_.front();
+      api_interrupts_queue_.pop();
+    }
+    recordreplay::OrderedUnlock(record_replay_api_interrupts_ordered_lock_id_);
+    VMState<EXTERNAL> state(this);
+    HandleScope handle_scope(this);
+    entry.first(reinterpret_cast<v8::Isolate*>(this), entry.second);
+  }
+}
+
 void Isolate::RequestInvalidateNoProfilingProtector() {
   // This request might be triggered from arbitrary thread but protector
   // invalidation must happen on the main thread, so use Api interrupt
