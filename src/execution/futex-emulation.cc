@@ -1002,6 +1002,7 @@ void FutexEmulation::IsolateDeinit(Isolate* isolate) {
 
 int FutexEmulation::NumWaitersForTesting(Tagged<JSArrayBuffer> array_buffer,
                                          size_t addr) {
+  replayio::AutoDisallowEvents disallow("FutexEmulation::NumWaitersForTesting");
   void* wait_location = FutexWaitList::ToWaitLocation(*array_buffer, addr);
   FutexWaitList* wait_list = GetWaitList();
   NoGarbageCollectionMutexGuard lock_guard(wait_list->mutex());
