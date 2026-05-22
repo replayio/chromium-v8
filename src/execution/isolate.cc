@@ -2626,7 +2626,11 @@ Tagged<Object> Isolate::UnwindAndFindHandler() {
   // unwinding.
   clear_topmost_script_having_context();
 
-  Tagged<Object> exception = this->exception();
+  // hackfix: pending_exception disappears sometimes, but we don't want to
+  // crash. - https://linear.app/replay/issue/RUN-1258/
+  Tagged<Object> exception = has_exception()
+                                 ? this->exception()
+                                 : ReadOnlyRoots(this).undefined_value();
 
   auto FoundHandler = [&](StackFrameIterator& iter, Tagged<Context> context,
                           Address instruction_start, intptr_t handler_offset,
