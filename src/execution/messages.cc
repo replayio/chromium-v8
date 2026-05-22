@@ -872,6 +872,7 @@ bool ComputeLocation(Isolate* isolate, MessageLocation* target) {
     // baseline code. For optimized code this will use the deoptimization
     // information to get canonical location information.
     FrameSummaries summaries = it.frame()->Summarize();
+    CHECK(summaries.frames.size()); // There might not always be a frame due to RUN-1920.
     auto& summary = summaries.frames.back().AsJavaScript();
     Handle<SharedFunctionInfo> shared(summary.function()->shared(), isolate);
     Handle<Object> script(shared->script(), isolate);
@@ -1195,6 +1196,8 @@ MaybeDirectHandle<Object> ErrorUtils::GetFormattedStack(
 
   if (IsErrorStackData(*lookup.error_stack)) {
     auto error_stack_data = Cast<ErrorStackData>(lookup.error_stack);
+    REPLAY_ASSERT(
+      "[PRO-2368] ErrorUtils::GetFormattedStack A %d", (int)error_stack_data->HasFormattedStack());
     if (error_stack_data->HasFormattedStack()) {
       return direct_handle(error_stack_data->formatted_stack(), isolate);
     }
