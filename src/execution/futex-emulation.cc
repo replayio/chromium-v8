@@ -395,6 +395,8 @@ Tagged<Object> FutexEmulation::Wait(Isolate* isolate, WaitMode mode,
     }
   }
 
+  recordreplay::AutoAssertMaybeEventsDisallowed assrt("[RUN-2378] FutexEmulation::Wait");
+
   if (mode == WaitMode::kSync) {
     return WaitSync(isolate, FutexWaitList::ToWaitLocation(*array_buffer, addr),
                     value, use_timeout, rel_timeout_ns, call_type);
