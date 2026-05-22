@@ -190,7 +190,8 @@ class FastKeyAccumulator {
  public:
   FastKeyAccumulator(Isolate* isolate, DirectHandle<JSReceiver> receiver,
                      KeyCollectionMode mode, PropertyFilter filter,
-                     bool is_for_in = false, bool skip_indices = false)
+                     bool is_for_in = false, bool skip_indices = false,
+                     const KeyIterationParams* params = KeyIterationParams::Default())
       : isolate_(isolate),
         receiver_(receiver),
         mode_(mode),
@@ -223,6 +224,8 @@ class FastKeyAccumulator {
       Isolate* isolate, DirectHandle<Map> map, int enum_length,
       AllocationType allocation = AllocationType::kOld,
       const KeyIterationParams* params = KeyIterationParams::Default());
+
+  MaybeHandle<FixedArray> GetKeysSlow(GetKeysConversion convert);
 
  private:
   void Prepare();
