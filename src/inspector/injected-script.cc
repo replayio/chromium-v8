@@ -434,6 +434,7 @@ Response InjectedScript::getProperties(
     v8::Local<v8::Object> object, const String16& groupName, bool ownProperties,
     bool accessorPropertiesOnly, bool nonIndexedPropertiesOnly,
     const WrapOptions& wrapOptions,
+    const v8::KeyIterationParams* params,
     std::unique_ptr<Array<PropertyDescriptor>>* properties,
     std::unique_ptr<protocol::Runtime::ExceptionDetails>* exceptionDetails) {
   v8::HandleScope handles(m_context->isolate());
