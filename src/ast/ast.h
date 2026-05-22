@@ -1827,8 +1827,10 @@ class Call final : public CallBase {
 
   Call(Zone* zone, Expression* expression,
        const ScopedPtrList<Expression>& arguments, int pos, bool has_spread,
+       int call_head_token_position,
        int eval_scope_info_index, bool optional_chain)
-      : CallBase(zone, kCall, expression, arguments, pos, has_spread) {
+      : CallBase(zone, kCall, expression, arguments, pos, has_spread,
+                 call_head_token_position) {
     bit_field_ |= IsTaggedTemplateField::encode(false) |
                   IsOptionalChainLinkField::encode(optional_chain) |
                   EvalScopeInfoIndexField::encode(eval_scope_info_index);
@@ -1837,8 +1839,9 @@ class Call final : public CallBase {
 
   Call(Zone* zone, Expression* expression,
        const ScopedPtrList<Expression>& arguments, int pos,
-       TaggedTemplateTag tag)
-      : CallBase(zone, kCall, expression, arguments, pos, false) {
+       TaggedTemplateTag tag, int call_head_token_position)
+      : CallBase(zone, kCall, expression, arguments, pos, false,
+                 call_head_token_position) {
     bit_field_ |= IsTaggedTemplateField::encode(true) |
                   IsOptionalChainLinkField::encode(false) |
                   EvalScopeInfoIndexField::encode(0);
@@ -3353,10 +3356,13 @@ class AstNodeFactory final {
 
   Call* NewCall(Expression* expression,
                 const ScopedPtrList<Expression>& arguments, int pos,
-                bool has_spread, int eval_scope_info_index = 0,
+                bool has_spread,
+                int call_head_token_position = 0,
+                int eval_scope_info_index = 0,
                 bool optional_chain = false) {
     DCHECK_IMPLIES(eval_scope_info_index > 0, !optional_chain);
     return zone_->New<Call>(zone_, expression, arguments, pos, has_spread,
+                            call_head_token_position,
                             eval_scope_info_index, optional_chain);
   }
 
