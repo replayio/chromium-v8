@@ -499,6 +499,7 @@
   V(FastApiCall)                            \
   V(FindOrderedHashMapEntry)                \
   V(FindOrderedHashMapEntryForInt32Key)     \
+  V(IncrementAndCheckProgressCounter)       \
   V(FindOrderedHashSetEntry)                \
   V(InitializeImmutableInObject)            \
   V(LoadDataViewElement)                    \
