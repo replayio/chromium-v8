@@ -2609,6 +2609,8 @@ void Heap::CompleteSweepingYoung(CompleteSweepingReason reason) {
 }
 
 void Heap::EnsureSweepingCompletedForObject(Tagged<HeapObject> object) {
+  replayio::AutoDisallowEvents disallow("Heap::EnsureSweepingCompletedForObject");
+
   if (!sweeping_in_progress()) return;
 
   MemoryChunk* chunk = MemoryChunk::FromHeapObject(object);
