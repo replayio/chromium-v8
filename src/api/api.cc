@@ -2699,6 +2699,8 @@ MaybeLocal<UnboundScript> ScriptCompiler::CompileUnboundInternal(
         i::NOT_NATIVES_CODE, &source->compilation_details);
   }
 
+  maybe_function_info = i::ReplayingMaybeReplaceScript(i_isolate, maybe_function_info, script_details, str);
+
   if (!maybe_function_info.ToHandle(&result)) return {};
   DCHECK(!i::HeapLayout::InReadOnlySpace(*result));
   return api_scope.Escape(ToApiHandle<UnboundScript>(result));
