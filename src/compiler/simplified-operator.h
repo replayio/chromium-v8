@@ -1260,6 +1260,8 @@ class V8_EXPORT_PRIVATE SimplifiedOperatorBuilder final
   const Operator* DoubleArrayMin();
   const Operator* DoubleArrayMax();
 
+  const Operator* IncrementAndCheckProgressCounter();
+
   // Unsigned32Divide is a special operator to express the division of two
   // Unsigned32 inputs and truncating the result to Unsigned32. It's semantics
   // is equivalent to NumberFloor(NumberDivide(x:Unsigned32, y:Unsigned32)) but
