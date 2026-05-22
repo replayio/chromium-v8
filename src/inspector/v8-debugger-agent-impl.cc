@@ -1898,7 +1898,7 @@ Response V8DebuggerAgentImpl::currentCallFrames(
     if (injectedScript && !noContents) {
       v8::Local<v8::Value> receiver;
       if (iterator->GetReceiver().ToLocal(&receiver)) {
-        res = injectedScript->wrapObject(receiver, kBacktraceObjectGroup,
+        res = injectedScript->wrapObject(receiver, objectGroup.fromMaybe(kBacktraceObjectGroup),
                                          WrapOptions({WrapMode::kIdOnly}),
                                          &protocolReceiver);
         if (!res.IsSuccess()) return res;
@@ -1945,7 +1945,7 @@ Response V8DebuggerAgentImpl::currentCallFrames(
     if (!returnValue.IsEmpty() && injectedScript) {
       std::unique_ptr<RemoteObject> value;
       res =
-          injectedScript->wrapObject(returnValue, kBacktraceObjectGroup,
+          injectedScript->wrapObject(returnValue, objectGroup.fromMaybe(kBacktraceObjectGroup),
                                      WrapOptions({WrapMode::kIdOnly}), &value);
       if (!res.IsSuccess()) return res;
       frame->setReturnValue(std::move(value));
