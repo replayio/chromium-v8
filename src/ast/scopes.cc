@@ -1228,6 +1228,16 @@ Variable* Scope::DeclareVariable(
   // lead to repeated DeclareEvalVar or DeclareEvalFunction calls.
   decls_.Add(declaration);
   declaration->set_var(var);
+
+  // While replaying, force all variables to be context-allocated.
+  // Ideally we'd only do this for non-leaf functions, but it's not
+  // immediately obvious how to do that at this level.
+  // (RUN-2604)
+  if (recordreplay::IsReplaying() &&
+      recordreplay::FeatureEnabled("force-variable-context-allocation") &&
+      kind == VariableKind::NORMAL_VARIABLE) {
+        var->ForceContextAllocation();
+  }
   return var;
 }
 

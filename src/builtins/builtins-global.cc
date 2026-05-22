@@ -82,12 +82,17 @@ BUILTIN(GlobalUnescape) {
 
 // ES6 section 18.2.1 eval (x)
 BUILTIN(GlobalEval) {
+  // https://linear.app/replay/issue/RUN-544
+  recordreplay::Assert("BUILTIN(GlobalEval) Start");
+
   HandleScope scope(isolate);
   Handle<Object> x = args.atOrUndefined(isolate, 1);
   DirectHandle<JSFunction> target = args.target();
   DirectHandle<JSObject> target_global_proxy(target->global_proxy(), isolate);
   if (!Builtins::AllowDynamicFunction(isolate, target, target_global_proxy)) {
     isolate->CountUsage(v8::Isolate::kFunctionConstructorReturnedUndefined);
+    // https://linear.app/replay/issue/RUN-544
+    recordreplay::Assert("BUILTIN(GlobalEval) #1");
     return ReadOnlyRoots(isolate).undefined_value();
   }
 
@@ -107,6 +112,10 @@ BUILTIN(GlobalEval) {
       Compiler::GetFunctionFromValidatedString(
           isolate, direct_handle(target->native_context(), isolate), source,
           NO_PARSE_RESTRICTION, kNoSourcePosition));
+
+  // https://linear.app/replay/issue/RUN-544
+  recordreplay::Assert("BUILTIN(GlobalEval) #3");
+
   RETURN_RESULT_OR_FAILURE(
       isolate, Execution::Call(isolate, function, target_global_proxy, {}));
 }

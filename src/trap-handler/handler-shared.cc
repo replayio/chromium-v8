@@ -20,6 +20,9 @@
 
 #include "src/trap-handler/trap-handler-internal.h"
 
+#include "include/v8.h"
+#include "src/base/logging.h"
+
 namespace v8 {
 namespace internal {
 namespace trap_handler {
@@ -29,6 +32,30 @@ __thread bool TrapHandlerGuard::is_active_ = 0;
 #else
 thread_local bool TrapHandlerGuard::is_active_ = 0;
 #endif
+
+int& IsThreadInWasmCode() {
+  return g_thread_in_wasm_code2;
+}
+
+#else // V8_OS_WIN
+
+int& IsThreadInWasmCode() {
+  static pthread_key_t key;
+  if (!key) {
+    int rv = pthread_key_create(&key, nullptr);
+    CHECK(rv == 0);
+    CHECK(key);
+  }
+
+  int* v = (int*)pthread_getspecific(key);
+  if (!v) {
+    v = new int(0);
+    pthread_setspecific(key, v);
+  }
+  return *v;
+}
+
+#endif // V8_OS_WIN
 
 size_t gNumCodeObjects = 0;
 CodeProtectionInfoListEntry* gCodeObjects = nullptr;

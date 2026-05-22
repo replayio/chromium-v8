@@ -38,6 +38,8 @@
 #include "src/wasm/wasm-module-sourcemap.h"
 #include "src/wasm/wasm-tier.h"
 
+#include "include/v8.h"
+
 namespace v8 {
 class CFunctionInfo;
 namespace internal {

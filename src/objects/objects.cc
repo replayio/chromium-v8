@@ -4697,7 +4697,8 @@ Handle<Object> JSPromise::Reject(DirectHandle<JSPromise> promise,
   // 7. If promise.[[PromiseIsHandled]] is false, perform
   //    HostPromiseRejectionTracker(promise, "reject").
   if (!promise->has_handler()) {
-    isolate->ReportPromiseReject(promise, reason, kPromiseRejectWithNoHandler);
+    isolate->ReportPromiseReject(promise, reason,
+                                 kPromiseRejectWithNoHandler);
   }
 
   // 8. Return TriggerPromiseReactions(reactions, reason).
@@ -4779,6 +4780,12 @@ MaybeHandle<Object> JSPromise::Resolve(DirectHandle<JSPromise> promise,
   if (!IsCallable(*then_action)) {
     // a. Return FulfillPromise(promise, resolution).
     return Fulfill(promise, resolution_recv);
+  }
+
+  if (RecordReplayShouldCallOnPromiseHook()) {
+    // Fulfillment of this promise is delayed by adopted resolution.
+    // Ref: Promise/A+ 2.3.2
+    AddPromiseDependencyGraphAdoption(isolate, Handle<Object>::cast(promise), resolution);
   }
 
   // 13. Let job be NewPromiseResolveThenableJob(promise, resolution,

@@ -184,8 +184,7 @@ void ClearBreakOnNextFunctionCall(Isolate* isolate) {
   i_isolate->debug()->ClearBreakOnNextFunctionCall();
 }
 
-MaybeLocal<Array> GetInternalProperties(Isolate* v8_isolate,
-                                        Local<Value> value) {
+MaybeLocal<Array> GetInternalProperties(Isolate* v8_isolate, Local<Value> value) {
   i::Isolate* isolate = reinterpret_cast<i::Isolate*>(v8_isolate);
   EnterV8NoScriptNoExceptionScope api_scope(isolate);
   i::DirectHandle<i::Object> val = Utils::OpenDirectHandle(*value);

@@ -567,6 +567,7 @@ Tagged<Object> FutexEmulation::WaitAsync(
   std::weak_ptr<BackingStore> backing_store{array_buffer->GetBackingStore()};
   FutexWaitList* wait_list = GetWaitList();
   {
+    replayio::AutoDisallowEvents disallow("FutexEmulation::WaitAsync");
     // 16. Perform EnterCriticalSection(WL).
     NoGarbageCollectionMutexGuard lock_guard(wait_list->mutex());
 

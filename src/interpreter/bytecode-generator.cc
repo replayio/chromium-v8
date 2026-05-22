@@ -51,6 +51,9 @@
 
 namespace v8 {
 namespace internal {
+
+extern bool RecordReplayTrackThisObjectAssignment(const std::string& property);
+
 namespace interpreter {
 
 // Scoped class tracking context objects created by the visitor. Represents
@@ -1438,7 +1441,10 @@ BytecodeGenerator::BytecodeGenerator(
     : local_isolate_(local_isolate),
       zone_(compile_zone),
       builder_(zone(), info->num_parameters_including_this(),
-               info->scope()->num_stack_slots(), info->feedback_vector_spec(),
+               info->scope()->num_stack_slots(),
+               info->flags().record_replay_ignore(),
+               info->flags().record_replay_assert_values(),
+               info->feedback_vector_spec(),
                info->SourcePositionRecordingMode()),
       info_(info),
       ast_string_constants_(ast_string_constants),
@@ -1793,6 +1799,19 @@ void BytecodeGenerator::GenerateBodyPrologue() {
   FunctionLiteral* literal = info()->literal();
   // Emit tracing call if requested to do so.
   if (v8_flags.trace) builder()->CallRuntime(Runtime::kTraceEnter);
+
+  if (recordreplay::IsRecordingOrReplaying("emit-opcodes")) {
+    builder()->RecordReplayOnProgress();
+
+    if (IsResumableFunction(literal->kind())) {
+      builder()->RecordReplayInstrumentationGenerator("generator", generator_object());
+    } else {
+      builder()->RecordReplayInstrumentation("main");
+    }
+
+    // Reset for each function.
+    record_replay_has_track_this_ = false;
+  }
 
   // Increment the function-scope block coverage counter.
   BuildIncrementBlockCoverageCounterIfEnabled(literal, SourceRangeKind::kBody);
@@ -2490,6 +2509,26 @@ void BytecodeGenerator::VisitStatements(
   }
 }
 
+void BytecodeGenerator::ReplayExpressionShiftedSetStatementPosition(Statement* stmt, Expression* expr) {
+  builder()->SetStatementPosition(stmt, /* record_replay_breakpoint */ false);
+  if (expr->position() < 0) {
+    // expression is empty, so the breakpoint gets added at the statement itself
+    builder()->RecordReplayInstrumentation("breakpoint", stmt->position());
+  } else if (expr->IsBinaryOperation()) {
+    // given the breakpoint gets shifted to the expression (if that's available) by default
+    // we first check if it's not a binary operation, in which case we need to make sure the breakpoint is added at the position of the left operand
+    // this targets the case in which the binary operation's position is set to its right operand, see:
+    // https://github.com/v8/v8/commit/5bf9e470f8290dde983797e695e5156374d81962
+    // without this the pre-call-post-args breakpoint added by `VisitCall` would not be added as it would be treated as duplicate.
+    // without this specialcase the breakpoints would be added like this (3 would be skipped):
+    //
+    // return /*2*/foo(), /*1*//*3*/bar();
+    builder()->RecordReplayInstrumentation("breakpoint", expr->AsBinaryOperation()->left()->position());
+  } else {
+    builder()->RecordReplayInstrumentation("breakpoint", expr->position());
+  }
+}
+
 void BytecodeGenerator::VisitExpressionStatement(ExpressionStatement* stmt) {
   builder()->SetStatementPosition(stmt);
   VisitForEffect(stmt->expression());
@@ -2558,7 +2597,7 @@ void BytecodeGenerator::VisitBreakStatement(BreakStatement* stmt) {
 
 void BytecodeGenerator::VisitReturnStatement(ReturnStatement* stmt) {
   AllocateBlockCoverageSlotIfEnabled(stmt, SourceRangeKind::kContinuation);
-  builder()->SetStatementPosition(stmt);
+  ReplayExpressionShiftedSetStatementPosition(stmt, stmt->expression());
   VisitForAccumulatorValue(stmt->expression());
   int return_position = stmt->end_position();
   if (return_position == ReturnStatement::kFunctionLiteralReturnPosition) {
@@ -4241,6 +4280,24 @@ void BytecodeGenerator::VisitObjectLiteral(ObjectLiteral* expr) {
       object_literals_.push_back(std::make_pair(expr->builder(), entry));
     }
     BuildCreateObjectLiteral(literal, flags, entry);
+
+    // Check if any constant properties indicate the object should be tracked.
+    if (recordreplay::IsRecordingOrReplaying("emit-opcodes")) {
+      for (int i = 0; i < expr->properties()->length(); i++) {
+        ObjectLiteral::Property* prop = expr->properties()->at(i);
+        if (prop->is_computed_name()) break;
+        if (prop->kind() == ObjectLiteral::Property::CONSTANT &&
+            prop->IsCompileTimeValue()) {
+          Literal* key_lit = prop->key()->AsLiteral();
+          if (key_lit && key_lit->IsStringLiteral() &&
+              RecordReplayTrackThisObjectAssignment(
+                  key_lit->AsRawPropertyName()->to_string())) {
+            builder()->RecordReplayTrackObjectId(literal);
+            break;
+          }
+        }
+      }
+    }
   }
 
   // Store computed values into the literal.
@@ -4842,7 +4899,14 @@ void BytecodeGenerator::BuildReturn(int source_position) {
     builder()->StoreAccumulatorInRegister(result).CallRuntime(
         Runtime::kTraceExit, result);
   }
-  builder()->SetStatementPosition(source_position);
+  builder()->SetStatementPosition(source_position,
+                                  /* record_replay_breakpoint */ false);
+  if (builder()->EmitRecordReplayInstrumentationOpcodes()) {
+    RegisterAllocationScope register_scope(this);
+    Register return_value = register_allocator()->NewRegister();
+    builder()->StoreAccumulatorInRegister(return_value);
+    builder()->RecordReplayInstrumentationReturn("exit", return_value);
+  }
   builder()->Return();
 }
 
@@ -5130,6 +5194,14 @@ void BytecodeGenerator::BuildLoadNamedProperty(const Expression* object_expr,
 void BytecodeGenerator::BuildSetNamedProperty(const Expression* object_expr,
                                               Register object,
                                               const AstRawString* name) {
+  if (recordreplay::IsRecordingOrReplaying("emit-opcodes") &&
+      !record_replay_has_track_this_ &&
+      object_expr->IsThisExpression() &&
+      RecordReplayTrackThisObjectAssignment(name->to_string())) {
+    builder()->RecordReplayTrackObjectId(object);
+    record_replay_has_track_this_ = true;
+  }
+
   Register value;
   if (!execution_result()->IsEffect()) {
     value = register_allocator()->NewRegister();
@@ -5981,6 +6053,8 @@ void BytecodeGenerator::BuildSuspendPoint(int position) {
 
   RegisterList registers = register_allocator()->AllLiveRegisters();
 
+  builder()->RecordReplayInstrumentation("exit");
+
   // Save context, registers, and state. This bytecode then returns the value
   // in the accumulator.
   builder()->SetExpressionPosition(position);
@@ -5992,6 +6066,9 @@ void BytecodeGenerator::BuildSuspendPoint(int position) {
   // Clobbers all registers and sets the accumulator to the
   // [[input_or_debug_pos]] slot of the generator object.
   builder()->ResumeGenerator(generator_object(), registers);
+
+  builder()->RecordReplayOnProgress();
+  builder()->RecordReplayInstrumentationGenerator("entry", generator_object());
 }
 
 void BytecodeGenerator::VisitYield(Yield* expr) {
@@ -6738,6 +6815,8 @@ void BytecodeGenerator::VisitCall(Call* expr) {
   if (call_type == Call::SUPER_CALL) {
     return VisitCallSuper(expr);
   }
+
+  int start_instrumentation_count = builder()->record_replay_instrumentation_site_counter_;
 
   // We compile the call differently depending on the presence of spreads and
   // their positions.

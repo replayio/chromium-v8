@@ -61,6 +61,7 @@ class DebugPropertyIterator final : public debug::PropertyIterator {
     kAllProperties = 2
   } stage_ = kExoticIndices;
   bool skip_indices_;
+  const v8::KeyIterationParams* key_iteration_params_;
 
   size_t current_key_index_;
   Handle<FixedArray> current_keys_;

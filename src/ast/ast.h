@@ -1747,12 +1747,16 @@ class CallBase : public Expression {
     return SpreadPositionField::decode(bit_field_);
   }
 
+  int call_head_token_position() const { return call_head_token_position_; }
+
  protected:
   CallBase(Zone* zone, NodeType type, Expression* expression,
-           const ScopedPtrList<Expression>& arguments, int pos, bool has_spread)
+           const ScopedPtrList<Expression>& arguments, int pos, bool has_spread,
+           int call_head_token_position)
       : Expression(pos, type),
         expression_(expression),
-        arguments_(arguments.ToConstVector(), zone) {
+        arguments_(arguments.ToConstVector(), zone),
+        call_head_token_position_(call_head_token_position) {
     DCHECK(type == kCall || type == kCallNew);
     if (has_spread) {
       ComputeSpreadPosition();
@@ -1771,6 +1775,7 @@ class CallBase : public Expression {
 
   Expression* expression_;
   ZonePtrList<Expression> arguments_;
+  int call_head_token_position_;
 };
 
 class Call final : public CallBase {
@@ -1852,8 +1857,10 @@ class CallNew final : public CallBase {
   friend Zone;
 
   CallNew(Zone* zone, Expression* expression,
-          const ScopedPtrList<Expression>& arguments, int pos, bool has_spread)
-      : CallBase(zone, kCallNew, expression, arguments, pos, has_spread) {}
+          const ScopedPtrList<Expression>& arguments, int pos, bool has_spread,
+          int call_head_token_position)
+      : CallBase(zone, kCallNew, expression, arguments, pos, has_spread,
+                 call_head_token_position) {}
 };
 
 // SuperCallForwardArgs is not utterable in JavaScript. It is used to
@@ -3359,15 +3366,16 @@ class AstNodeFactory final {
   }
 
   Call* NewTaggedTemplate(Expression* expression,
-                          const ScopedPtrList<Expression>& arguments, int pos) {
+                          const ScopedPtrList<Expression>& arguments, int pos, int call_head_token_position) {
     return zone_->New<Call>(zone_, expression, arguments, pos,
-                            Call::TaggedTemplateTag::kTrue);
+                            Call::TaggedTemplateTag::kTrue, call_head_token_position);
   }
 
   CallNew* NewCallNew(Expression* expression,
                       const ScopedPtrList<Expression>& arguments, int pos,
-                      bool has_spread) {
-    return zone_->New<CallNew>(zone_, expression, arguments, pos, has_spread);
+                      bool has_spread, int call_head_token_position = 0) {
+    return zone_->New<CallNew>(zone_, expression, arguments, pos, has_spread,
+                               call_head_token_position);
   }
 
   CallRuntime* NewCallRuntime(Runtime::FunctionId id,

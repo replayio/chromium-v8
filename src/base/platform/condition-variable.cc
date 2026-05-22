@@ -10,6 +10,8 @@
 #include "absl/time/time.h"
 #include "src/base/platform/time.h"
 
+#include "replayio.h"
+
 #if V8_OS_WIN
 #include <windows.h>
 #endif

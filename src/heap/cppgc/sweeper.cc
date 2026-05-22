@@ -30,6 +30,8 @@
 #include "src/heap/cppgc/stats-collector.h"
 #include "src/heap/cppgc/task-handle.h"
 
+#include "replayio.h"
+
 namespace cppgc::internal {
 
 namespace {

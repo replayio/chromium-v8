@@ -2294,12 +2294,31 @@ void Isolate::CancelTerminateExecution() {
 }
 
 void Isolate::RequestInterrupt(InterruptCallback callback, void* data) {
+  recordreplay::OrderedLock(record_replay_api_interrupts_ordered_lock_id_);
   ExecutionAccess access(this);
   api_interrupts_queue_.push(InterruptEntry(callback, data));
   stack_guard()->RequestApiInterrupt();
+  recordreplay::OrderedUnlock(record_replay_api_interrupts_ordered_lock_id_);
 }
 
+extern void RecordReplayTriggerProgressInterrupt();
+
 void Isolate::InvokeApiInterruptCallbacks() {
+  if (recordreplay::IsRecordingOrReplaying("interrupts")) {
+    // When recording, we can't invoke API interrupt callbacks at arbitrary points
+    // where we check for interrupts, as we won't be able to invoke those callbacks
+    // at the same point when replaying. Instead, after detecting that interrupts
+    // have been added to the queue we trigger an interrupt the next time the progress
+    // counter advances, and will invoke the callbacks then.
+    if (recordreplay::IsRecording() && IsMainThread()) {
+      ExecutionAccess access(this);
+      if (!api_interrupts_queue_.empty()) {
+        RecordReplayTriggerProgressInterrupt();
+      }
+    }
+    return;
+  }
+
   RCS_SCOPE(this, RuntimeCallCounterId::kInvokeApiInterruptCallbacks);
   // Note: callback below should be called outside of execution access lock.
   while (true) {
@@ -4524,6 +4543,24 @@ Isolate::Isolate(IsolateGroup* isolate_group)
 #endif  // V8_ENABLE_WEBASSEMBLY
 
   MicrotaskQueue::SetUpDefaultMicrotaskQueue(this);
+
+  record_replay_api_interrupts_ordered_lock_id_ = (int)recordreplay::CreateOrderedLock("APIInterrupts");
+
+  if (recordreplay::IsRecordingOrReplaying() && IsMainThread()) {
+    RecordReplayOnMainThreadIsolateCreated(this);
+  }
+
+  if (RecordReplayShouldCallOnPromiseHook()) {
+    promise_hook_flags_ =
+      PromiseHookFields::HasIsolatePromiseHook::encode(true);
+  }
+}
+
+replayio::ReplayIsolateData* Isolate::EnsureReplayData() {
+  if (!replay_data_) {
+    replay_data_ = std::make_unique<replayio::ReplayIsolateData>();
+  }
+  return replay_data_.get();
 }
 
 void Isolate::CheckIsolateLayout() {
@@ -7311,6 +7348,10 @@ void Isolate::RunPromiseHook(PromiseHookType type,
                              DirectHandle<JSPromise> promise,
                              DirectHandle<Object> parent) {
   if (!HasIsolatePromiseHooks()) return;
+  if (RecordReplayShouldCallOnPromiseHook()) {
+    RecordReplayOnPromiseHook(this, type, promise, parent);
+    if (!promise_hook_) return;
+  }
   DCHECK(promise_hook_ != nullptr);
   promise_hook_(type, v8::Utils::ToLocal(promise), v8::Utils::ToLocal(parent));
 }
@@ -7444,11 +7485,19 @@ void Isolate::OnTerminationDuringRunMicrotasks() {
 
 void Isolate::SetPromiseRejectCallback(PromiseRejectCallback callback) {
   promise_reject_callback_ = callback;
+
+  recordreplay::Assert("[TT-1029-1030] Isolate::SetPromiseRejectCallback %d",
+                       !!promise_reject_callback_);
 }
 
 void Isolate::ReportPromiseReject(DirectHandle<JSPromise> promise,
                                   DirectHandle<Object> value,
                                   v8::PromiseRejectEvent event) {
+  v8::recordreplay::AssertMaybeEventsDisallowed(
+    "[TT-1029-1030] Isolate::ReportPromiseReject %d",
+    !!promise_reject_callback_
+  );
+
   if (promise_reject_callback_ == nullptr) return;
   promise_reject_callback_(v8::PromiseRejectMessage(
       v8::Utils::ToLocal(promise), event, v8::Utils::ToLocal(value)));
@@ -7485,7 +7534,20 @@ void Isolate::CountUsage(
   }
 }
 
-int Isolate::GetNextScriptId() { return heap()->NextScriptId(); }
+// Start disallowed script IDs at a value that won't conflict with regular IDs,
+// which start at one and increment from there.
+static int gNextDisallowedScriptId = 1 << 30;
+
+int Isolate::GetNextScriptId() {
+  // Use a separate pool of IDs when events are disallowed, as these scripts
+  // won't be created at consistently when recording vs. replaying.
+  if (recordreplay::AreEventsDisallowed("Isolate::GetNextScriptId")) {
+    CHECK(IsMainThread());
+    return gNextDisallowedScriptId++;
+  }
+
+  return heap()->NextScriptId();
+}
 
 // static
 std::string Isolate::GetTurboCfgFileName(Isolate* isolate) {

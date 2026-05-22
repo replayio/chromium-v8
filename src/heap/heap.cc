@@ -2005,6 +2005,8 @@ void Heap::StartIncrementalMarking(GCFlags gc_flags,
         dict.Add("global_space_available", GlobalSpaceAvailable());
       });
 
+  replayio::AutoDisallowEvents disallow("Heap::StartIncrementalMarking");
+
   if (IsYoungGenerationCollector(collector)) {
     CompleteSweepingYoung(CompleteSweepingReason::kStartMinorMarking);
   } else {
@@ -4156,6 +4158,8 @@ void Heap::CheckMemoryPressure() {
 }
 
 void Heap::CollectGarbageOnMemoryPressure() {
+  replayio::AutoDisallowEvents disallow("Heap::CollectGarbageOnMemoryPressure");
+
   const int kGarbageThresholdInBytes = 8 * MB;
   const double kGarbageThresholdAsFractionOfTotalMemory = 0.1;
   // This constant is the maximum response time in RAIL performance model.
@@ -4192,6 +4196,8 @@ void Heap::CollectGarbageOnMemoryPressure() {
 
 void Heap::MemoryPressureNotification(MemoryPressureLevel level,
                                       bool is_isolate_locked) {
+  replayio::AutoDisallowEvents disallow("Heap::MemoryPressureNotification");
+
   TRACE_EVENT1("devtools.timeline,v8", "V8.MemoryPressureNotification", "level",
                static_cast<int>(level));
   MemoryPressureLevel previous =

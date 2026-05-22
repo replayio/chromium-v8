@@ -1374,11 +1374,14 @@ class ElementsAccessorBase : public InternalElementsAccessor {
     PropertyFilter filter = keys->filter();
     Isolate* isolate = keys->isolate();
     Factory* factory = isolate->factory();
+    auto* params = keys->key_iteration_params();
+    auto pageSize = (size_t)params->PageSize((KeyIterationIndex)length);
     for (size_t i = 0; i < length; i++) {
       if (Subclass::HasElementImpl(isolate, *object, i, *backing_store,
                                    filter)) {
         RETURN_FAILURE_IF_NOT_SUCCESSFUL(
             keys->AddKey(factory->NewNumberFromSize(i)));
+        if (i == pageSize) break;
       }
     }
     return ExceptionStatus::kSuccess;
@@ -1411,6 +1414,8 @@ class ElementsAccessorBase : public InternalElementsAccessor {
           list->set(insertion_index, *number);
         }
         insertion_index++;
+
+        if (insertion_index == pageSize) break;
       }
     }
     *nof_indices = insertion_index;
@@ -1423,7 +1428,7 @@ class ElementsAccessorBase : public InternalElementsAccessor {
       DirectHandle<FixedArrayBase> backing_store, DirectHandle<FixedArray> keys,
       GetKeysConversion convert, PropertyFilter filter) final {
     return Subclass::PrependElementIndicesImpl(isolate, object, backing_store,
-                                               keys, convert, filter);
+                                               keys, convert, filter, params);
   }
 
   static MaybeHandle<FixedArray> PrependElementIndicesImpl(
@@ -1440,6 +1445,13 @@ class ElementsAccessorBase : public InternalElementsAccessor {
     }
     uint32_t nof_elements = static_cast<uint32_t>(nof_elements_szt);
     uint32_t initial_list_length = nof_elements + nof_property_keys;
+
+    initial_list_length = (size_t)params->PageSize((KeyIterationIndex)initial_list_length);
+    if (*params && initial_list_length <= nof_property_keys) {
+      // No space for indices.
+      // NOTE: We can return |keys| here because it was a temp allocated object when it was passed in.
+      return keys;
+    }
 
     // Collect the element indices into a new list.
     DCHECK_LE(initial_list_length, std::numeric_limits<int>::max());
@@ -1917,6 +1929,8 @@ class DictionaryElementsAccessor
       }
       elements->set(insertion_index, raw_key);
       insertion_index++;
+
+      if (insertion_index == pageSize) break;
     }
     SortIndices(isolate, elements, insertion_index);
     for (uint32_t i = 0; i < insertion_index; i++) {
@@ -1939,6 +1953,8 @@ class DictionaryElementsAccessor
       DirectHandle<Object> index = isolate->factory()->NewNumberFromUint(key);
       list->set(insertion_index, *index);
       insertion_index++;
+
+      if (insertion_index == pageSize) break;
     }
     *nof_indices = insertion_index;
     CHECK_LE(*nof_indices, max_nof_indices);
@@ -5266,6 +5282,8 @@ class SloppyArgumentsElementsAccessor
     auto elements = Cast<SloppyArgumentsElements>(backing_store);
     uint32_t length = elements->ulength().value();
 
+    uint32_t pageSize =
+        (uint32_t)params->PageSize((KeyIterationIndex)elements->length());
     for (uint32_t i = 0; i < length; ++i) {
       if (IsTheHole(elements->mapped_entries(i, kRelaxedLoad), isolate))
         continue;
@@ -5277,6 +5295,8 @@ class SloppyArgumentsElementsAccessor
         list->set(insertion_index, Smi::FromUInt(i));
       }
       insertion_index++;
+
+      if (insertion_index == pageSize) break;
     }
 
     DirectHandle<FixedArray> store(elements->arguments(), isolate);
@@ -5724,9 +5744,14 @@ class StringWrapperElementsAccessor
       KeyAccumulator* keys) {
     uint32_t length = GetString(*object)->length();
     Factory* factory = keys->isolate()->factory();
+
+    auto* params = keys->key_iteration_params();
+    auto pageSize = (uint32_t)params->PageSize((KeyIterationIndex)length);
     for (uint32_t i = 0; i < length; i++) {
       RETURN_FAILURE_IF_NOT_SUCCESSFUL(
           keys->AddKey(factory->NewNumberFromUint(i)));
+
+      if (i == pageSize) break;
     }
     return BackingStoreAccessor::CollectElementIndicesImpl(object,
                                                            backing_store, keys);
