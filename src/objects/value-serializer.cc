@@ -485,6 +485,13 @@ Maybe<bool> ValueSerializer::WriteObject(DirectHandle<Object> object) {
   if (V8_UNLIKELY(out_of_memory_)) return ThrowIfOutOfMemory();
 
   if (IsSmi(*object)) {
+    if (recordreplay::IsRecordingOrReplaying("ValueSerializer")) {
+      // [TT-1403] Boxed numbers can be JIT'ed into SMIs.
+      // → Never take the optimized path to avoid divergence instead.
+      WriteTag(SerializationTag::kDouble);
+      WriteDouble(Cast<Smi>(*object).value());
+      return ThrowIfOutOfMemory();
+    }
     WriteSmi(Cast<Smi>(*object));
     return ThrowIfOutOfMemory();
   }
@@ -725,7 +732,10 @@ Maybe<bool> ValueSerializer::WriteJSReceiver(
 
 Maybe<bool> ValueSerializer::WriteJSObject(DirectHandle<JSObject> object) {
   DCHECK(!IsCustomElementsReceiverMap(object->map()));
-  const bool can_serialize_fast = object->HasFastProperties(isolate_) &&
+  const bool can_serialize_fast =
+    // [TT-492] Slow path all serialization so we're guaranteed to always match.
+    !recordreplay::IsRecordingOrReplaying("ValueSerializer") &&
+                                  object->HasFastProperties(isolate_) &&
                                   object->elements()->ulength().value() == 0;
   if (!can_serialize_fast) return WriteJSObjectSlow(object);
 
