@@ -3291,6 +3291,10 @@ void Compiler::CompileOptimized(Isolate* isolate,
                                 DirectHandle<JSFunction> function,
                                 ConcurrencyMode mode, CodeKind code_kind) {
   function->TraceOptimizationStatus("^%s", CodeKindToString(code_kind));
+  // The point at which optimized compilations occur can vary between recording
+  // and replaying.
+  replayio::AutoDisallowEvents disallow("Compiler::CompileOptimized");
+
   DCHECK(CodeKindIsOptimizedJSFunction(code_kind));
   DCHECK(AllowCompilation::IsAllowed(isolate));
 
