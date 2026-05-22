@@ -6435,6 +6435,8 @@ const ::heap::base::Stack& Heap::stack() const {
 }
 
 void Heap::StartTearDown() {
+  replayio::AutoDisallowEvents disallow("Heap::StartTearDown");
+
   if (cpp_heap_) {
     // This may invoke a GC in case marking is running to get us into a
     // well-defined state for tear down.
