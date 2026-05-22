@@ -1939,6 +1939,14 @@ class MergeAssumptionChecker final : public ObjectVisitor {
 
 }  // namespace
 
+// For use when checking that record/replay opcodes are only emitted
+// for the main thread.
+static std::atomic<size_t> gNumRunningBackgroundCompileTasks;
+
+size_t NumRunningBackgroundCompileTasks() {
+  return gNumRunningBackgroundCompileTasks;
+}
+
 bool BackgroundCompileTask::is_streaming_compilation() const {
   return function_literal_id_ == kFunctionLiteralIdTopLevel;
 }
