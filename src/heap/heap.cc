@@ -1479,6 +1479,8 @@ void Heap::PreciseCollectAllGarbage(GCFlags gc_flags,
 }
 
 void Heap::HandleExternalMemoryInterrupt() {
+  replayio::AutoDisallowEvents disallow("Heap::HandleExternalMemoryInterrupt");
+
   const GCCallbackFlags kGCCallbackFlagsForExternalMemory =
       static_cast<GCCallbackFlags>(
           kGCCallbackFlagSynchronousPhantomCallbackProcessing |
