@@ -4576,6 +4576,10 @@ template DirectHandle<SharedFunctionInfo> Compiler::GetSharedFunctionInfo(
 MaybeHandle<Code> Compiler::CompileOptimizedOSR(
     Isolate* isolate, DirectHandle<JSFunction> function,
     BytecodeOffset osr_offset, ConcurrencyMode mode, CodeKind code_kind) {
+  // The point at which optimized compilations occur can vary between recording
+  // and replaying.
+  replayio::AutoDisallowEvents disallow("Compiler::CompileOptimizedOSR");
+
   DCHECK(IsOSR(osr_offset));
 
   if (V8_UNLIKELY(isolate->serializer_enabled())) return {};
