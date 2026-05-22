@@ -356,7 +356,11 @@ V8RuntimeAgentImpl::V8RuntimeAgentImpl(
       m_frontend(FrontendChannel),
       m_inspector(session->inspector()),
       m_debuggerBarrier(debuggerBarrier),
-      m_enabled(false) {}
+      m_enabled(false),
+      m_replay_owned(
+          (!v8::recordreplay::FeatureEnabled("replay-only-command-handling") ||
+           v8::recordreplay::IsReplaying()) &&
+          v8::recordreplay::AreEventsDisallowed()) {}
 
 V8RuntimeAgentImpl::~V8RuntimeAgentImpl() = default;
 
@@ -580,6 +584,8 @@ Response V8RuntimeAgentImpl::getProperties(
     std::optional<bool> accessorPropertiesOnly,
     std::optional<bool> generatePreview,
     std::optional<bool> nonIndexedPropertiesOnly,
+    std::optional<protocol::Runtime::KeyIterationIndex> pageSize,
+    std::optional<protocol::Runtime::KeyIterationIndex> pageIndex,
     std::unique_ptr<protocol::Array<protocol::Runtime::PropertyDescriptor>>*
         result,
     std::unique_ptr<
@@ -610,10 +616,12 @@ Response V8RuntimeAgentImpl::getProperties(
                      m_inspector->isolate(), &wrapOptions);
   if (!response.IsSuccess()) return response;
 
+  v8::KeyIterationParams params(pageSize.value_or(0), pageIndex.value_or(0));
+
   response = scope.injectedScript()->getProperties(
       object, scope.objectGroupName(), ownProperties.value_or(false),
       accessorPropertiesOnly.value_or(false),
-      nonIndexedPropertiesOnly.value_or(false), *wrapOptions, result,
+      nonIndexedPropertiesOnly.value_or(false), *wrapOptions, &params, result,
       exceptionDetails);
   if (!response.IsSuccess()) return response;
   if (*exceptionDetails) return Response::Success();
@@ -623,7 +631,8 @@ Response V8RuntimeAgentImpl::getProperties(
       privatePropertiesProtocolArray;
   response = scope.injectedScript()->getInternalAndPrivateProperties(
       object, scope.objectGroupName(), accessorPropertiesOnly.value_or(false),
-      &internalPropertiesProtocolArray, &privatePropertiesProtocolArray);
+      &params, &internalPropertiesProtocolArray,
+      &privatePropertiesProtocolArray);
   if (!response.IsSuccess()) return response;
   if (!internalPropertiesProtocolArray->empty())
     *internalProperties = std::move(internalPropertiesProtocolArray);

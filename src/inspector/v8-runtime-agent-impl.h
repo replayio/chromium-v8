@@ -104,6 +104,8 @@ class V8RuntimeAgentImpl : public protocol::Runtime::Backend {
       std::optional<bool> accessorPropertiesOnly,
       std::optional<bool> generatePreview,
       std::optional<bool> nonIndexedPropertiesOnly,
+      std::optional<protocol::Runtime::KeyIterationIndex> pageSize,
+      std::optional<protocol::Runtime::KeyIterationIndex> pageIndex,
       std::unique_ptr<protocol::Array<protocol::Runtime::PropertyDescriptor>>*
           result,
       std::unique_ptr<
