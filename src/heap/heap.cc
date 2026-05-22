@@ -7711,6 +7711,8 @@ void Heap::FinishSweepingIfOutOfWork(CompleteSweepingReason reason) {
 
 void Heap::EnsureSweepingCompleted(SweepingForcedFinalizationMode mode,
                                    CompleteSweepingReason reason) {
+  replayio::AutoDisallowEvents disallow("Heap::EnsureSweepingCompleted");
+
   TRACE_GC_EPOCH(tracer(), GCTracer::Scope::HEAP_ENSURE_SWEEPING_COMPLETED,
                  ThreadKind::kMain, "value", [&](perfetto::TracedValue ctx) {
                    auto dict = std::move(ctx).WriteDictionary();
