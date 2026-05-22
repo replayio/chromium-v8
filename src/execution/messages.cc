@@ -93,9 +93,38 @@ Handle<JSMessageObject> MessageHandler::MakeMessageObject(
     shared_info = location->shared();
   }
 
+  // This code gets called when handling exceptions and
+  // |V8RecordReplayNewBookmark| might call into Replay's own JavaScript
+  // event/command handling code. We thus need to store current exception
+  // state, and then reset it after we have finished.
+  int record_replay_bookmark = 0;
+  if (!recordreplay::AreEventsDisallowed() && IsMainThread()) {
+    Handle<Object> exception;
+    if (isolate->has_exception()) {
+      exception = Handle<Object>(isolate->exception(), isolate);
+      isolate->clear_exception();
+      gCurrentException = &exception;
+    }
+    Handle<Object> message;
+    if (isolate->has_pending_message()) {
+      message = Handle<Object>(isolate->pending_message(), isolate);
+      isolate->clear_pending_message();
+    }
+    record_replay_bookmark = (int)V8RecordReplayNewBookmark();
+    gCurrentException = nullptr;
+    CHECK(!isolate->has_exception());
+    if (!exception.is_null()) {
+      isolate->set_exception(*exception);
+    }
+    if (!message.is_null()) {
+      isolate->set_pending_message(*message);
+    }
+  }
+
   return isolate->factory()->NewJSMessageObject(message, argument, start, end,
                                                 shared_info, bytecode_offset,
-                                                script_handle, stack_trace);
+                                                script_handle, stack_trace,
+                                                record_replay_bookmark);
 }
 
 void MessageHandler::ReportMessage(Isolate* isolate, const MessageLocation* loc,
