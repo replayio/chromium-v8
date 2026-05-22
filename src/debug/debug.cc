@@ -2795,8 +2795,10 @@ void Debug::OnAfterCompile(DirectHandle<Script> script) {
   ProcessCompileEvent(false, script);
 }
 
-void Debug::ProcessCompileEvent(bool has_compile_error,
-                                DirectHandle<Script> script) {
+static void RecordReplayRegisterScript(Handle<Script> script);
+
+void Debug::DoProcessCompileEvent(bool has_compile_error,
+                                  DirectHandle<Script> script) {
   RCS_SCOPE(isolate_, RuntimeCallCounterId::kDebugger);
   // Ignore temporary scripts.
   if (script->id() == Script::kTemporaryScriptId) return;
