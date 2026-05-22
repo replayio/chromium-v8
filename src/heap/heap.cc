@@ -3809,6 +3809,7 @@ void Heap::ActivateMemoryReducerIfNeededOnMainThread() {
   const int kMinCommittedMemory = 7 * NormalPage::kPageSize;
   if (ms_count_ == 0 && CommittedMemory() > kMinCommittedMemory &&
       isolate()->is_backgrounded()) {
+    replayio::AutoDisallowEvents disallow("Heap::ActivateMemoryReducerIfNeeded");
     memory_reducer_->NotifyPossibleGarbage();
   }
 }
