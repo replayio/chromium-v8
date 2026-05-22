@@ -117,6 +117,7 @@
 #include "src/profiler/heap-profiler.h"
 #include "src/profiler/tracing-cpu-profiler.h"
 #include "src/regexp/regexp-stack.h"
+#include "src/replay/replay-isolate-data.h"
 #include "src/roots/roots.h"
 #include "src/roots/static-roots.h"
 #include "src/sandbox/js-dispatch-table-inl.h"
@@ -2146,6 +2147,8 @@ MaybeDirectHandle<Object> Isolate::ReportFailedAccessCheck(
   // Throw exception even the callback forgot to do so.
   THROW_NEW_ERROR(this, NewTypeError(MessageTemplate::kNoAccess));
 }
+
+extern "C" bool V8RecordReplayIsInReplayCode();
 
 bool Isolate::MayAccess(DirectHandle<NativeContext> accessing_context,
                         DirectHandle<JSObject> receiver) {
@@ -4475,6 +4478,9 @@ void Isolate::SetUpFromReadOnlyArtifacts(ReadOnlyArtifacts* artifacts) {
 v8::PageAllocator* Isolate::page_allocator() const {
   return isolate_group()->page_allocator();
 }
+
+extern void RecordReplayOnMainThreadIsolateCreated(Isolate* isolate);
+extern bool RecordReplayShouldCallOnPromiseHook();
 
 Isolate::Isolate(IsolateGroup* isolate_group)
     : isolate_data_(this, isolate_group),
@@ -7343,6 +7349,9 @@ void Isolate::RunAllPromiseHooks(PromiseHookType type,
     RunPromiseHook(type, promise, parent);
   }
 }
+
+extern void RecordReplayOnPromiseHook(Isolate* isolate, PromiseHookType type,
+                                      DirectHandle<JSPromise> promise, DirectHandle<Object> parent);
 
 void Isolate::RunPromiseHook(PromiseHookType type,
                              DirectHandle<JSPromise> promise,
