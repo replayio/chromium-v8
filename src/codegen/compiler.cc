@@ -3871,12 +3871,20 @@ Handle<Script> NewScript(Isolate* isolate, ParseInfo* parse_info,
 }
 
 MaybeDirectHandle<SharedFunctionInfo> CompileScriptOnMainThread(
-    const UnoptimizedCompileFlags flags, DirectHandle<String> source,
+    UnoptimizedCompileFlags flags, DirectHandle<String> source,
     const ScriptDetails& script_details, NativesFlag natives,
     v8::Extension* extension, Isolate* isolate,
     MaybeHandle<Script> maybe_script, IsCompiledScope* is_compiled_scope,
     CompileHintCallback compile_hint_callback = nullptr,
     void* compile_hint_callback_data = nullptr) {
+  std::string url;
+  Handle<Object> script_name;
+  if (script_details.name_obj.ToHandle(&script_name) && IsString(*script_name)) {
+    std::unique_ptr<char[]> name = Cast<String>(*script_name)->ToCString();
+    url = name.get();
+  }
+  SetRecordReplayFlags(flags, url);
+
   UnoptimizedCompileState compile_state;
   ReusableUnoptimizedCompileState reusable_state(isolate);
   ParseInfo parse_info(isolate, flags, &compile_state, &reusable_state);
