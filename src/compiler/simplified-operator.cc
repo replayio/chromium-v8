@@ -954,7 +954,6 @@ bool operator==(AssertNotNullParameters const& lhs,
   V(StringCodePointAt, Operator::kNoProperties, 2, 1)     \
   V(StringFromCodePointAt, Operator::kNoProperties, 2, 1) \
   V(StringSubstring, Operator::kNoProperties, 3, 1)       \
-  V(DateNow, Operator::kNoProperties, 0, 1)               \
   V(DoubleArrayMax, Operator::kNoProperties, 1, 1)        \
   V(DoubleArrayMin, Operator::kNoProperties, 1, 1)
 
