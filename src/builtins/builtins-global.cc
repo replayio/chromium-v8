@@ -104,7 +104,11 @@ BUILTIN(GlobalEval) {
   std::tie(source, unhandled_object) =
       Compiler::ValidateDynamicCompilationSource(
           isolate, direct_handle(target->native_context(), isolate), x);
-  if (unhandled_object) return *x;
+  if (unhandled_object) {
+    // https://linear.app/replay/issue/RUN-544
+    recordreplay::Assert("BUILTIN(GlobalEval) #2");
+    return *x;
+  }
 
   DirectHandle<JSFunction> function;
   ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
