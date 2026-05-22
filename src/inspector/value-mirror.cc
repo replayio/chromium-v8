@@ -1552,7 +1552,8 @@ bool ValueMirror::getProperties(v8::Local<v8::Context> context,
                                 v8::Local<v8::Object> object,
                                 bool ownProperties, bool accessorPropertiesOnly,
                                 bool nonIndexedPropertiesOnly,
-                                PropertyAccumulator* accumulator) {
+                                PropertyAccumulator* accumulator,
+                                const v8::KeyIterationParams* params) {
   v8::Isolate* isolate = v8::Isolate::GetCurrent();
   v8::TryCatch tryCatch(isolate);
   v8::Local<v8::Set> set = v8::Set::New(isolate);
