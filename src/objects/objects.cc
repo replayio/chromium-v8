@@ -111,6 +111,8 @@
 #include "src/objects/js-segments.h"
 #endif  // V8_INTL_SUPPORT
 
+#include "src/base/replayio.h"
+
 namespace v8::internal {
 
 ShouldThrow GetShouldThrow(Isolate* isolate, Maybe<ShouldThrow> should_throw) {
@@ -1922,6 +1924,12 @@ bool Object::IsCodeLike(Tagged<Object> obj, Isolate* isolate) {
 }
 
 void ShortPrint(Tagged<Object> obj, FILE* out) {
+  if (recordreplay::AreEventsDisallowed()) {
+    std::ostringstream os;
+    os << Brief(obj);
+    recordreplay::Print("[Object::ShortPrint] %s", os.str().c_str());
+    return;
+  }
   OFStream os(out);
   os << Brief(obj);
 }
@@ -4705,6 +4713,9 @@ Handle<Object> JSPromise::Reject(DirectHandle<JSPromise> promise,
   return TriggerPromiseReactions(isolate, reactions, reason,
                                  PromiseReaction::kReject);
 }
+
+extern bool RecordReplayShouldCallOnPromiseHook();
+void AddPromiseDependencyGraphAdoption(Isolate* isolate, Handle<Object> promise, Handle<Object> adoption);
 
 // https://tc39.es/ecma262/#sec-promise-resolve-functions
 // static
