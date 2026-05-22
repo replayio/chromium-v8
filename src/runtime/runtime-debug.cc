@@ -28,6 +28,14 @@
 #include "src/wasm/wasm-objects-inl.h"
 #endif  // V8_ENABLE_WEBASSEMBLY
 
+#if !V8_OS_WIN
+#include <sys/time.h>
+#include <unistd.h>
+#endif
+
+#include "src/api/api-inl.h"
+#include "src/base/replayio.h"
+
 #include "src/builtins/builtins-iterator-inl.h"
 
 namespace v8 {
@@ -920,6 +928,7 @@ RUNTIME_FUNCTION(Runtime_IncBlockCounter) {
 
 RUNTIME_FUNCTION(Runtime_DebugAsyncFunctionSuspended) {
   DCHECK_EQ(4, args.length());
+
   HandleScope scope(isolate);
   DirectHandle<JSPromise> promise = args.at<JSPromise>(0);
   DirectHandle<JSPromise> outer_promise = args.at<JSPromise>(1);
