@@ -878,7 +878,8 @@ v8::MaybeLocal<v8::Value> V8Debugger::generatorScopes(
 }
 
 v8::MaybeLocal<v8::Array> V8Debugger::collectionsEntries(
-    v8::Local<v8::Context> context, v8::Local<v8::Value> collection) {
+    v8::Local<v8::Context> context, v8::Local<v8::Value> collection,
+    const v8::KeyIterationParams* params) {
   v8::Isolate* isolate = v8::Isolate::GetCurrent();
   v8::Local<v8::Array> entries;
   bool isKeyValue = false;

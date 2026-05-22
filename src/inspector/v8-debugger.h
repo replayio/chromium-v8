@@ -185,8 +185,9 @@ class V8Debugger : public v8::debug::DebugDelegate,
                                            v8::Local<v8::Function>);
   v8::MaybeLocal<v8::Value> generatorScopes(v8::Local<v8::Context>,
                                             v8::Local<v8::Value>);
-  v8::MaybeLocal<v8::Array> collectionsEntries(v8::Local<v8::Context> context,
-                                               v8::Local<v8::Value> value);
+  v8::MaybeLocal<v8::Array> collectionsEntries(
+      v8::Local<v8::Context> context, v8::Local<v8::Value> value,
+      const v8::KeyIterationParams* params);
   v8::MaybeLocal<v8::Array> privateMethods(v8::Local<v8::Context> context,
                                            v8::Local<v8::Value> value);
 
