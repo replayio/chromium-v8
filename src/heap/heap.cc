@@ -1588,6 +1588,7 @@ void Heap::CollectGarbage(
     const v8::GCCallbackFlags gc_callback_flags,
     PerformHeapLimitCheck perform_heap_limit_check,
     PerformIneffectiveMarkCompactCheck check_ineffective_mark_compact) {
+  replayio::AutoDisallowEvents disallow("Heap::CollectGarbage");
   CHECK(isolate_->IsOnCentralStack());
   // Any handles that are created during GC (eg during API callbacks)
   // should be in a fresh handle scope that is torn down before the GC
