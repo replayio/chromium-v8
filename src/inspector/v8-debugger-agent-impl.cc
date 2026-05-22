@@ -350,7 +350,7 @@ Response buildScopes(v8::Isolate* isolate, v8::debug::ScopeIterator* iterator,
   for (; !iterator->Done(); iterator->Advance()) {
     std::unique_ptr<RemoteObject> object;
     Response result =
-        injectedScript->wrapObject(iterator->GetObject(), kBacktraceObjectGroup,
+        injectedScript->wrapObject(iterator->GetObject(), objectGroup,
                                    WrapOptions({WrapMode::kIdOnly}), &object);
     if (!result.IsSuccess()) return result;
 
