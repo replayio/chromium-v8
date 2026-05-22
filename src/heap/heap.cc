@@ -4005,6 +4005,7 @@ void Heap::NotifyObjectLayoutChange(
     InvalidateRecordedSlots invalidate_recorded_slots,
     InvalidateExternalPointerSlots invalidate_external_pointer_slots,
     int new_size) {
+  replayio::AutoDisallowEvents disallow("Heap::NotifyObjectLayoutChange");
   if (invalidate_recorded_slots == InvalidateRecordedSlots::kYes) {
     const bool may_contain_recorded_slots = MayContainRecordedSlots(object);
     MutablePage* const page = MutablePage::FromHeapObject(isolate(), object);
