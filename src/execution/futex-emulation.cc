@@ -935,6 +935,7 @@ void FutexEmulation::HandleAsyncWaiterTimeout(FutexWaitListNode* node) {
   FutexWaitList* wait_list = GetWaitList();
 
   {
+    replayio::AutoDisallowEvents disallow("FutexEmulation::HandleAsyncWaiterTimeout");
     NoGarbageCollectionMutexGuard lock_guard(wait_list->mutex());
 
     node->async_state_->timeout_task_id = CancelableTaskManager::kInvalidTaskId;
