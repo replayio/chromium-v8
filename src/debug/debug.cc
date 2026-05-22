@@ -3178,7 +3178,7 @@ bool Debug::PerformSideEffectCheck(DirectHandle<JSFunction> function,
     // https://linear.app/replay/issue/RUN-1908/fix-devtools-crashes
     return true;
   }
-  DCHECK(is_compiled_scope.is_compiled());
+  CHECK(is_compiled_scope.is_compiled());
   DirectHandle<SharedFunctionInfo> shared(function->shared(), isolate_);
   DirectHandle<DebugInfo> debug_info = GetOrCreateDebugInfo(shared);
   DebugInfo::SideEffectState side_effect_state =
