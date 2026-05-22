@@ -17101,6 +17101,12 @@ ReduceResult MaglevGraphBuilder::VisitIncBlockCounter() {
   return ReduceResult::Done();
 }
 
+ReduceResult MaglevGraphBuilder::VisitRecordReplayIncExecutionProgressCounter() {
+  ValueNode* closure = GetClosure();
+  BuildCallRuntime(Runtime::kRecordReplayAssertExecutionProgress, {closure});
+  return ReduceResult::Done();
+}
+
 ReduceResult MaglevGraphBuilder::VisitAbort() {
   AbortReason reason = static_cast<AbortReason>(GetFlag8Operand(0));
   return BuildAbort(reason);
