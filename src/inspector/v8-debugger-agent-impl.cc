@@ -1810,14 +1810,14 @@ Response V8DebuggerAgentImpl::setBlackboxedRanges(
 }
 
 Response V8DebuggerAgentImpl::getCallFrames(
-    Maybe<int> maxFrames, Maybe<bool> noContents,
-    Maybe<String16> objectGroup,
+    std::optional<int> maxFrames, std::optional<bool> noContents,
+    std::optional<String16> objectGroup,
     std::unique_ptr<protocol::Array<protocol::Debugger::CallFrame>>* out_callFrames) {
   return currentCallFrames(std::move(maxFrames), std::move(noContents),
                            std::move(objectGroup), out_callFrames);
 }
 
-Response V8DebuggerAgentImpl::getTopFrameLocation(Maybe<protocol::Debugger::Location>* out_location) {
+Response V8DebuggerAgentImpl::getTopFrameLocation(std::unique_ptr<protocol::Debugger::Location>* out_location) {
   if (!isPaused()) {
     return Response::Success();
   }
@@ -1843,7 +1843,7 @@ Response V8DebuggerAgentImpl::getTopFrameLocation(Maybe<protocol::Debugger::Loca
 extern "C" void V8RecordReplayGetCurrentException(v8::MaybeLocal<v8::Value>* exception);
 
 Response V8DebuggerAgentImpl::getPendingException(
-    Maybe<String16> objectGroup, Maybe<RemoteObject>* out_exception) {
+    std::optional<String16> objectGroup, std::unique_ptr<RemoteObject>* out_exception) {
   v8::MaybeLocal<v8::Value> maybe_exception;
   V8RecordReplayGetCurrentException(&maybe_exception);
 
@@ -1851,7 +1851,7 @@ Response V8DebuggerAgentImpl::getPendingException(
     v8::Local<v8::Context> context = m_isolate->GetCurrentContext();
     v8::Local<v8::Value> exception = maybe_exception.ToLocalChecked();
     std::unique_ptr<RemoteObject> obj =
-        m_session->wrapObject(context, exception, objectGroup.fromMaybe(""), false);
+        m_session->wrapObject(context, exception, objectGroup.value_or(""), false);
 
     *out_exception = std::move(obj);
   }
@@ -1860,8 +1860,8 @@ Response V8DebuggerAgentImpl::getPendingException(
 }
 
 Response V8DebuggerAgentImpl::currentCallFrames(
-    Maybe<int> maxFrames, Maybe<bool> noContentsRaw,
-    Maybe<String16> objectGroup,
+    std::optional<int> maxFrames, std::optional<bool> noContentsRaw,
+    std::optional<String16> objectGroup,
     std::unique_ptr<Array<CallFrame>>* result) {
   if (!isPaused()) {
     *result = std::make_unique<Array<CallFrame>>();
@@ -1871,9 +1871,9 @@ Response V8DebuggerAgentImpl::currentCallFrames(
   *result = std::make_unique<Array<CallFrame>>();
   auto iterator = v8::debug::StackTraceIterator::Create(m_isolate);
   int frameOrdinal = 0;
-  bool noContents = noContentsRaw.isJust() && noContentsRaw.fromJust();
+  bool noContents = noContentsRaw.has_value() && noContentsRaw.value();
   for (; !iterator->Done(); iterator->Advance(), frameOrdinal++) {
-    if (maxFrames.isJust() && frameOrdinal >= maxFrames.fromJust())
+    if (maxFrames.has_value() && frameOrdinal >= maxFrames.value())
       break;
     int contextId = iterator->GetContextId();
     InjectedScript* injectedScript = nullptr;
@@ -1890,7 +1890,7 @@ Response V8DebuggerAgentImpl::currentCallFrames(
       scopes = std::make_unique<Array<Scope>>();
     } else {
       auto scopeIterator = iterator->GetScopeIterator();
-      res = buildScopes(m_isolate, scopeIterator.get(), injectedScript, objectGroup.fromMaybe(kBacktraceObjectGroup), &scopes);
+      res = buildScopes(m_isolate, scopeIterator.get(), injectedScript, objectGroup.value_or(kBacktraceObjectGroup), &scopes);
       if (!res.IsSuccess()) return res;
     }
 
@@ -1898,7 +1898,7 @@ Response V8DebuggerAgentImpl::currentCallFrames(
     if (injectedScript && !noContents) {
       v8::Local<v8::Value> receiver;
       if (iterator->GetReceiver().ToLocal(&receiver)) {
-        res = injectedScript->wrapObject(receiver, objectGroup.fromMaybe(kBacktraceObjectGroup),
+        res = injectedScript->wrapObject(receiver, objectGroup.value_or(kBacktraceObjectGroup),
                                          WrapOptions({WrapMode::kIdOnly}),
                                          &protocolReceiver);
         if (!res.IsSuccess()) return res;
@@ -1945,7 +1945,7 @@ Response V8DebuggerAgentImpl::currentCallFrames(
     if (!returnValue.IsEmpty() && injectedScript) {
       std::unique_ptr<RemoteObject> value;
       res =
-          injectedScript->wrapObject(returnValue, objectGroup.fromMaybe(kBacktraceObjectGroup),
+          injectedScript->wrapObject(returnValue, objectGroup.value_or(kBacktraceObjectGroup),
                                      WrapOptions({WrapMode::kIdOnly}), &value);
       if (!res.IsSuccess()) return res;
       frame->setReturnValue(std::move(value));
@@ -2241,7 +2241,7 @@ void V8DebuggerAgentImpl::didPauseOnInstrumentation(
   std::unique_ptr<protocol::DictionaryValue> breakAuxData;
 
   std::unique_ptr<Array<CallFrame>> protocolCallFrames;
-  Response response = currentCallFrames(Maybe<int>(), Maybe<bool>(), Maybe<String16>(), &protocolCallFrames);
+  Response response = currentCallFrames(std::nullopt, std::nullopt, std::nullopt, &protocolCallFrames);
   if (!response.IsSuccess())
     protocolCallFrames = std::make_unique<Array<CallFrame>>();
 
@@ -2378,7 +2378,7 @@ void V8DebuggerAgentImpl::didPause(
   }
 
   std::unique_ptr<Array<CallFrame>> protocolCallFrames;
-  Response response = currentCallFrames(Maybe<int>(), Maybe<bool>(), Maybe<String16>(), &protocolCallFrames);
+  Response response = currentCallFrames(std::nullopt, std::nullopt, std::nullopt, &protocolCallFrames);
   if (!response.IsSuccess())
     protocolCallFrames = std::make_unique<Array<CallFrame>>();
 

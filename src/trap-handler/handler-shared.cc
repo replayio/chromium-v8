@@ -23,6 +23,10 @@
 #include "include/v8.h"
 #include "src/base/logging.h"
 
+#if !V8_OS_WIN
+#include <pthread.h>
+#endif
+
 namespace v8 {
 namespace internal {
 namespace trap_handler {
