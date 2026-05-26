@@ -4384,8 +4384,8 @@ MaybeDirectHandle<JSFunction> Compiler::GetWrappedFunction(
 
     std::string url;
     Handle<Object> script_name;
-    if (script_details.name_obj.ToHandle(&script_name) && script_name->IsString()) {
-      std::unique_ptr<char[]> name = String::cast(*script_name).ToCString();
+    if (script_details.name_obj.ToHandle(&script_name) && IsString(*script_name)) {
+      std::unique_ptr<char[]> name = Cast<String>(*script_name)->ToCString();
       url = name.get();
     }
     SetRecordReplayFlags(flags, url);
