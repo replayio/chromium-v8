@@ -202,13 +202,13 @@ void PendingCompilationErrorHandler::ThrowPendingError(
 
   if (recordreplay::IsReplaying()) {
     std::string url;
-    if (!script->name().IsUndefined()) {
-      std::unique_ptr<char[]> name = String::cast(script->name()).ToCString();
+    if (!IsUndefined(script->name(), isolate)) {
+      std::unique_ptr<char[]> name = Cast<String>(script->name())->ToCString();
       url = name.get();
     }
 
     Script::PositionInfo position_info;
-    Script::GetPositionInfo(script, location.start_pos(), &position_info, Script::WITH_OFFSET);
+    Script::GetPositionInfo(script, location.start_pos(), &position_info, Script::OffsetFlag::kWithOffset);
   }
 
   Factory* factory = isolate->factory();

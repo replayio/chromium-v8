@@ -1509,6 +1509,20 @@ static const char* allowed_getters[] = {
 bool doesAttributeHaveObservableSideEffectOnGet(v8::Local<v8::Context> context,
                                                 v8::Local<v8::Object> object,
                                                 v8::Local<v8::Name> name) {
+  if (v8::recordreplay::HasDivergedFromRecording()) {
+    // Disallow most getters during Pause, since they cause unwanted crashes.
+    // -> https://linear.app/replay/issue/RUN-1478
+    if (name->IsString()) {
+      v8::String::Utf8Value nameRaw(v8::Isolate::GetCurrent(),
+                                    name.As<v8::String>());
+      for (auto allowed : allowed_getters) {
+        if (!strcmp(allowed, *nameRaw)) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
   // TODO(dgozman): we should remove this, annotate more embedder properties as
   // side-effect free, and call all getters which do not produce side effects.
   if (!name->IsString()) return false;

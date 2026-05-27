@@ -159,12 +159,12 @@ void UnoptimizedCompileFlags::SetFlagsForFunctionFromScript(
   set_block_coverage_enabled(block_coverage_enabled() &&
                              script->IsUserJavaScript());
 
-  if (!RecordReplayHasRegisteredScript(script)) {
+  if (!RecordReplayHasRegisteredScript(*script)) {
     set_record_replay_ignore(true);
   } else if (recordreplay::IsRecordingOrReplaying()) {
     std::string url;
-    if (!script->name().IsUndefined()) {
-      std::unique_ptr<char[]> name = Cast<String>(script->name()).ToCString();
+    if (!IsUndefined(script->name())) {
+      std::unique_ptr<char[]> name = Cast<String>(script->name())->ToCString();
       url = name.get();
     }
     if (RecordReplayAssertValues(url)) {
