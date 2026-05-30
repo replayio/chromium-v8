@@ -66,8 +66,12 @@ static ThreadLocal<LocalHeap*>& CurrentLocalHeap() {
 // Workaround thread_local not supported on linux when recording/replaying.
 #define g_current_local_heap_ (*CurrentLocalHeap())
 
-V8_TLS_DEFINE_GETTER(LocalHeap::TryGetCurrent, LocalHeap*,
-                     g_current_local_heap_)
+// Replay intervention: out-of-line getter matching the non-Windows decl in
+// local-heap.h. Defined here (after the `#define`) so `g_current_local_heap_`
+// expands to the `.cc`-local `(*CurrentLocalHeap())`. This replaces the
+// V8_TLS_DEFINE_GETTER path, which on non-Windows would inline the getter into
+// the header where the macro/helpers are out of scope (undefined symbol).
+LocalHeap* LocalHeap::TryGetCurrent() { return g_current_local_heap_; }
 
 #endif // !V8_OS_WIN
 
