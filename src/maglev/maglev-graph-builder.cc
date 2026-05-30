@@ -17103,51 +17103,56 @@ ReduceResult MaglevGraphBuilder::VisitIncBlockCounter() {
 
 ReduceResult MaglevGraphBuilder::VisitRecordReplayIncExecutionProgressCounter() {
   ValueNode* closure = GetClosure();
-  BuildCallRuntime(Runtime::kRecordReplayAssertExecutionProgress, {closure});
+  RETURN_IF_ABORT(BuildCallRuntime(
+      Runtime::kRecordReplayAssertExecutionProgress, {closure}));
   return ReduceResult::Done();
 }
 
 ReduceResult MaglevGraphBuilder::VisitRecordReplayNotifyActivity() {
-  BuildCallRuntime(Runtime::kRecordReplayNotifyActivity, {});
+  RETURN_IF_ABORT(BuildCallRuntime(Runtime::kRecordReplayNotifyActivity, {}));
   return ReduceResult::Done();
 }
 
 ReduceResult MaglevGraphBuilder::VisitRecordReplayInstrumentation() {
   ValueNode* closure = GetClosure();
-  ValueNode* index = GetSmiConstant(iterator_.GetIndexOperand(0));
-  BuildCallRuntime(Runtime::kRecordReplayInstrumentation, {closure, index});
+  ValueNode* index = GetSmiConstant(iterator_.GetConstantPoolIndexOperand(0));
+  RETURN_IF_ABORT(BuildCallRuntime(Runtime::kRecordReplayInstrumentation,
+                                   {closure, index}));
   return ReduceResult::Done();
 }
 
 ReduceResult MaglevGraphBuilder::VisitRecordReplayInstrumentationGenerator() {
   ValueNode* closure = GetClosure();
-  ValueNode* index = GetSmiConstant(iterator_.GetIndexOperand(0));
-  ValueNode* generator_object = LoadRegisterTagged(1);
-  BuildCallRuntime(Runtime::kRecordReplayInstrumentationGenerator,
-                   {closure, index, generator_object});
+  ValueNode* index = GetSmiConstant(iterator_.GetConstantPoolIndexOperand(0));
+  ValueNode* generator_object = LoadRegister(1);
+  RETURN_IF_ABORT(
+      BuildCallRuntime(Runtime::kRecordReplayInstrumentationGenerator,
+                       {closure, index, generator_object}));
   return ReduceResult::Done();
 }
 
 ReduceResult MaglevGraphBuilder::VisitRecordReplayInstrumentationReturn() {
   ValueNode* closure = GetClosure();
-  ValueNode* index = GetSmiConstant(iterator_.GetIndexOperand(0));
-  ValueNode* return_value = LoadRegisterTagged(1);
-  BuildCallRuntime(Runtime::kRecordReplayInstrumentationReturn,
-                   {closure, index, return_value});
+  ValueNode* index = GetSmiConstant(iterator_.GetConstantPoolIndexOperand(0));
+  ValueNode* return_value = LoadRegister(1);
+  RETURN_IF_ABORT(BuildCallRuntime(Runtime::kRecordReplayInstrumentationReturn,
+                                   {closure, index, return_value}));
   return ReduceResult::Done();
 }
 
 ReduceResult MaglevGraphBuilder::VisitRecordReplayAssertValue() {
   ValueNode* closure = GetClosure();
-  ValueNode* index = GetSmiConstant(iterator_.GetIndexOperand(0));
+  ValueNode* index = GetSmiConstant(iterator_.GetConstantPoolIndexOperand(0));
   ValueNode* value = GetAccumulator();
-  BuildCallRuntime(Runtime::kRecordReplayAssertValue, {closure, index, value});
+  RETURN_IF_ABORT(BuildCallRuntime(Runtime::kRecordReplayAssertValue,
+                                   {closure, index, value}));
   return ReduceResult::Done();
 }
 
 ReduceResult MaglevGraphBuilder::VisitRecordReplayTrackObjectId() {
-  ValueNode* object = LoadRegisterTagged(0);
-  BuildCallRuntime(Runtime::kRecordReplayTrackObjectId, {object});
+  ValueNode* object = LoadRegister(0);
+  RETURN_IF_ABORT(
+      BuildCallRuntime(Runtime::kRecordReplayTrackObjectId, {object}));
   return ReduceResult::Done();
 }
 

@@ -3220,7 +3220,7 @@ IGNITION_HANDLER(RecordReplayNotifyActivity, InterpreterAssembler) {
 IGNITION_HANDLER(RecordReplayInstrumentation, InterpreterAssembler) {
   TNode<Context> context = GetContext();
   TNode<Object> closure = LoadRegister(Register::function_closure());
-  TNode<Smi> index = BytecodeOperandIdxSmi(0);
+  TNode<Smi> index = BytecodeOperandConstantPoolIndexSmi(0);
   CallRuntime(Runtime::kRecordReplayInstrumentation, context, closure, index);
   Dispatch();
 }
@@ -3228,7 +3228,7 @@ IGNITION_HANDLER(RecordReplayInstrumentation, InterpreterAssembler) {
 IGNITION_HANDLER(RecordReplayInstrumentationGenerator, InterpreterAssembler) {
   TNode<Context> context = GetContext();
   TNode<Object> closure = LoadRegister(Register::function_closure());
-  TNode<Smi> index = BytecodeOperandIdxSmi(0);
+  TNode<Smi> index = BytecodeOperandConstantPoolIndexSmi(0);
   TNode<Object> generator = LoadRegisterAtOperandIndex(1);
   CallRuntime(Runtime::kRecordReplayInstrumentationGenerator,
               context, closure, index, generator);
@@ -3238,7 +3238,7 @@ IGNITION_HANDLER(RecordReplayInstrumentationGenerator, InterpreterAssembler) {
 IGNITION_HANDLER(RecordReplayInstrumentationReturn, InterpreterAssembler) {
   TNode<Context> context = GetContext();
   TNode<Object> closure = LoadRegister(Register::function_closure());
-  TNode<Smi> index = BytecodeOperandIdxSmi(0);
+  TNode<Smi> index = BytecodeOperandConstantPoolIndexSmi(0);
   TNode<Object> return_value = LoadRegisterAtOperandIndex(1);
   CallRuntime(Runtime::kRecordReplayInstrumentationReturn,
               context, closure, index, return_value);
@@ -3248,7 +3248,7 @@ IGNITION_HANDLER(RecordReplayInstrumentationReturn, InterpreterAssembler) {
 IGNITION_HANDLER(RecordReplayAssertValue, InterpreterAssembler) {
   TNode<Context> context = GetContext();
   TNode<Object> closure = LoadRegister(Register::function_closure());
-  TNode<Smi> index = BytecodeOperandIdxSmi(0);
+  TNode<Smi> index = BytecodeOperandConstantPoolIndexSmi(0);
   TNode<Object> value = GetAccumulator();
   TNode<Object> result = CallRuntime(Runtime::kRecordReplayAssertValue,
                                      context, closure, index, value);
