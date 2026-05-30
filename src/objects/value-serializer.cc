@@ -589,9 +589,10 @@ void ValueSerializer::WriteString(DirectHandle<String> string) {
     // as two bytes to ensure serialized buffers have a consistent size.
     if (recordreplay::IsRecordingOrReplaying("values", "ValueSerializer::WriteString")) {
       auto new_chars = base::OwnedVector<base::uc16>::NewForOverwrite(chars.length());
-      for (size_t i = 0; i < chars.length(); i++)
+      for (int i = 0; i < chars.length(); i++)
         new_chars[i] = chars[i];
-      uint32_t byte_length = new_chars.size() * sizeof(base::uc16);
+      uint32_t byte_length =
+          static_cast<uint32_t>(new_chars.size() * sizeof(base::uc16));
       // The existing reading code expects 16-byte strings to be aligned.
       if ((buffer_size_ + 1 + BytesNeededForVarint(byte_length)) & 1)
         WriteTag(SerializationTag::kPadding);

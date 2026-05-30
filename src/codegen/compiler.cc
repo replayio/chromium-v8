@@ -86,7 +86,7 @@ extern Handle<Script> GetScript(Isolate* isolate, int script_id);
 extern int gReplaceSourceContentsScriptId;
 
 extern MaybeHandle<String>
-ReplayingReplaceScriptContents(Isolate* isolate, Handle<String> source);
+ReplayingReplaceScriptContents(Isolate* isolate, DirectHandle<String> source);
 
 namespace {
 
@@ -1751,9 +1751,9 @@ BackgroundCompileTask::BackgroundCompileTask(
   DCHECK(!is_streaming_compilation());
 
   std::string url;
-  Handle<Script> script(Script::cast(shared_info->script()), isolate);
-  if (!script->name().IsUndefined()) {
-    std::unique_ptr<char[]> name = String::cast(script->name()).ToCString();
+  Handle<Script> script(Cast<Script>(shared_info->script()), isolate);
+  if (!IsUndefined(script->name(), isolate)) {
+    std::unique_ptr<char[]> name = Cast<String>(script->name())->ToCString();
     url = name.get();
   }
   SetRecordReplayFlags(flags_, url);
@@ -3506,7 +3506,7 @@ MaybeDirectHandle<JSFunction> Compiler::GetFunctionFromEval(
   MaybeHandle<String> new_source = ReplayingReplaceScriptContents(isolate, source);
   if (!new_source.is_null()) {
     MaybeHandle<ScopeInfo> maybe_outer_scope_info;
-    if (!context->IsNativeContext()) {
+    if (!IsNativeContext(*context)) {
       maybe_outer_scope_info = handle(context->scope_info(), isolate);
     }
 

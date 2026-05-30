@@ -2614,7 +2614,7 @@ namespace internal {
 int gReplaceSourceContentsScriptId;
 
 MaybeHandle<String>
-ReplayingReplaceScriptContents(Isolate* isolate, Handle<String> source) {
+ReplayingReplaceScriptContents(Isolate* isolate, DirectHandle<String> source) {
   if (!recordreplay::IsReplaying() || !IsMainThread()) {
     return MaybeHandle<String>();
   }
@@ -13785,7 +13785,7 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
     i::v8_flags.parallel_marking = false;
     i::v8_flags.parallel_pointer_update = false;
     i::v8_flags.parallel_scavenge = false;
-    i::v8_flags.scavenge_task = false;
+    i::v8_flags.minor_gc_task = false;
     i::v8_flags.incremental_marking = false;
   }
 
@@ -13815,7 +13815,7 @@ extern "C" void V8InitializeNotRecordingOrReplaying() {
   // These flags are necessary to avoid hangs in some situations, for unknown
   // reasons. See https://linear.app/replay/issue/RUN-1071
   internal::v8_flags.sparkplug = false;
-  internal::FLAG_incremental_marking_task = false;
+  internal::v8_flags.incremental_marking_task = false;
 }
 
 extern "C" DLLEXPORT bool V8IsMainThread() {

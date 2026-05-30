@@ -105,9 +105,9 @@ Handle<JSMessageObject> MessageHandler::MakeMessageObject(
       isolate->clear_exception();
       gCurrentException = &exception;
     }
-    Handle<Object> message;
+    Handle<Object> pending_message;
     if (isolate->has_pending_message()) {
-      message = Handle<Object>(isolate->pending_message(), isolate);
+      pending_message = Handle<Object>(isolate->pending_message(), isolate);
       isolate->clear_pending_message();
     }
     record_replay_bookmark = (int)V8RecordReplayNewBookmark();
@@ -116,8 +116,8 @@ Handle<JSMessageObject> MessageHandler::MakeMessageObject(
     if (!exception.is_null()) {
       isolate->set_exception(*exception);
     }
-    if (!message.is_null()) {
-      isolate->set_pending_message(*message);
+    if (!pending_message.is_null()) {
+      isolate->set_pending_message(*pending_message);
     }
   }
 
@@ -424,7 +424,7 @@ MaybeDirectHandle<Object> ErrorUtils::FormatStackTrace(
     }
   }
 
-  MaybeHandle<String> rv = builder.Finish();
+  MaybeDirectHandle<String> rv = builder.Finish();
   if (recordreplay::IsRecordingOrReplaying("ErrorUtils::FormatStackTrace") &&
       !recordreplay::AreEventsDisallowed()) {
     // [PRO-1150] Replay Error.stack

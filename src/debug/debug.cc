@@ -3996,7 +3996,7 @@ static Handle<Object> RecordReplayConvertFunctionOffsetToLocation(
   return rv;
 }
 
-bool RecordReplayHasRegisteredScript(Script script);
+bool RecordReplayHasRegisteredScript(Tagged<Script> script);
 
 static Handle<Object> RecordReplayCountStackFrames(Isolate* isolate,
                                                    Handle<Object> params) {
@@ -4009,13 +4009,12 @@ static Handle<Object> RecordReplayCountStackFrames(Isolate* isolate,
     if (!frame->is_javascript()) {
       continue;
     }
-    std::vector<FrameSummary> frames;
-    CommonFrame::cast(frame)->Summarize(&frames);
+    FrameSummaries summaries = CommonFrame::cast(frame)->Summarize();
 
     // We don't strictly need to iterate the frames in reverse order, but it
     // helps when logging the stack contents for debugging.
-    for (int i = (int)frames.size() - 1; i >= 0; i--) {
-      const auto& summary = frames[i];
+    for (int i = (int)summaries.size() - 1; i >= 0; i--) {
+      const auto& summary = summaries.frames[i];
       CHECK(summary.IsJavaScript());
       const auto& js = summary.AsJavaScript();
 
@@ -4026,7 +4025,7 @@ static Handle<Object> RecordReplayCountStackFrames(Isolate* isolate,
         continue;
       }
 
-      Handle<Script> script(Script::cast(shared->script()), isolate);
+      Handle<Script> script(Cast<Script>(shared->script()), isolate);
       if (script->id() && RecordReplayHasRegisteredScript(*script)) {
         count++;
       }
@@ -4149,19 +4148,19 @@ extern bool RecordReplayHasDefaultContext();
 typedef std::unordered_set<int> ScriptIdSet;
 static ScriptIdSet* gRegisteredScripts;
 
-bool RecordReplayHasRegisteredScript(Script script) {
+bool RecordReplayHasRegisteredScript(Tagged<Script> script) {
   return IsMainThread() &&
     gRegisteredScripts &&
-    gRegisteredScripts->find(script.id()) != gRegisteredScripts->end();
+    gRegisteredScripts->find(script->id()) != gRegisteredScripts->end();
 }
 
 bool RecordReplayIsDivergentUserJSWithoutPause(
     Tagged<SharedFunctionInfo> shared) {
   return recordreplay::AreEventsDisallowed() &&
          !recordreplay::HasDivergedFromRecording() &&
-         shared->script().IsScript() &&
+         IsScript(shared->script()) &&
          RecordReplayHasRegisteredScript(
-             Script::cast(shared->script()));
+             Cast<Script>(shared->script()));
 }
 
 typedef std::vector<std::pair<Eternal<Value>*, bool>> NewScriptHandlerVector;
@@ -4207,7 +4206,7 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
   Handle<String> idStr = GetProtocolSourceId(isolate, script);
   std::unique_ptr<char[]> id = Cast<String>(*idStr)->ToCString();
 
-  if (script->type() == Script::TYPE_WASM) {
+  if (script->type() == Script::Type::kWasm) {
     return;
   }
 
@@ -4216,7 +4215,7 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
   }
 
   std::string url;
-  if (!script->name().IsUndefined()) {
+  if (!IsUndefined(script->name(), isolate)) {
     std::unique_ptr<char[]> name = Cast<String>(script->name())->ToCString();
     url = name.get();
   }
@@ -4266,13 +4265,16 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
       Local<v8::Value> handlerValue = handlerEternalValue->Get((v8::Isolate*)isolate);
       Handle<Object> handler = Utils::OpenHandle(*handlerValue);
 
-      Handle<Object> callArgs[3];
+      // Execution::Call now takes `base::Vector<const DirectHandle<Object>>`
+      // instead of `(int argc, Handle<Object>* argv)`, so the args array must be
+      // re-typed to DirectHandle<Object> and passed via base::VectorOf.
+      DirectHandle<Object> callArgs[3];
       callArgs[0] = idStr;
-      callArgs[1] = Handle<Object>(script->GetNameOrSourceURL(), isolate);
-      callArgs[2] = Handle<Object>(script->source_mapping_url(), isolate);
+      callArgs[1] = DirectHandle<Object>(script->GetNameOrSourceURL(), isolate);
+      callArgs[2] = DirectHandle<Object>(script->source_mapping_url(), isolate);
 
       Handle<Object> undefined = isolate->factory()->undefined_value();
-      MaybeHandle<Object> rv = Execution::Call(isolate, handler, undefined, 3, callArgs);
+      MaybeHandle<Object> rv = Execution::Call(isolate, handler, undefined, base::VectorOf(callArgs));
       CHECK(!rv.is_null());
     }
   }
@@ -4354,7 +4356,7 @@ char* CommandCallback(const char* command, const char* params) {
   Handle<Object> undefined = isolate->factory()->undefined_value();
   Handle<String> paramsStr = CStringToHandle(isolate, params);
 
-  MaybeHandle<Object> maybeParams = JsonParser<uint8_t>::Parse(isolate, paramsStr, undefined);
+  MaybeHandle<Object> maybeParams = JsonParser<uint8_t>::Parse(isolate, paramsStr, undefined, {});
   if (maybeParams.is_null()) {
     recordreplay::Diagnostic("Error: CommandCallback Parse %s failed", params);
     IMMEDIATE_CRASH();
@@ -4376,10 +4378,13 @@ char* CommandCallback(const char* command, const char* params) {
     Local<v8::Value> callbackValue = gCommandCallback->Get((v8::Isolate*)isolate);
     Handle<Object> callback = Utils::OpenHandle(*callbackValue);
 
-    Handle<Object> callArgs[2];
+    // Execution::Call now takes `base::Vector<const DirectHandle<Object>>`
+    // instead of `(int argc, Handle<Object>* argv)`, so the args array must be
+    // re-typed to DirectHandle<Object> and passed via base::VectorOf.
+    DirectHandle<Object> callArgs[2];
     callArgs[0] = CStringToHandle(isolate, command);
     callArgs[1] = paramsObj;
-    rv = Execution::Call(isolate, callback, undefined, 2, callArgs);
+    rv = Execution::Call(isolate, callback, undefined, base::VectorOf(callArgs));
     if (rv.is_null()) {
       recordreplay::Diagnostic("Error: CommandCallback generic command %s failed", command);
       IMMEDIATE_CRASH();
@@ -4387,7 +4392,14 @@ char* CommandCallback(const char* command, const char* params) {
   }
 
   Handle<Object> result = rv.ToHandleChecked();
-  Handle<Object> rvStr = JsonStringify(isolate, result, undefined, undefined).ToHandleChecked();
+  // JsonStringify now takes `Handle<JSAny>` for object+replacer and returns
+  // MaybeDirectHandle<Object>; cast object/replacer to JSAny, pass undefined gap,
+  // and hold the result in a DirectHandle (ToHandleChecked→DirectHandle, which is
+  // NOT implicitly convertible to Handle). rvStr is only used deref'd below.
+  DirectHandle<Object> rvStr =
+      JsonStringify(isolate, Cast<JSAny>(result), Cast<JSAny>(undefined),
+                    isolate->factory()->undefined_value())
+          .ToHandleChecked();
   std::unique_ptr<char[]> rvCStr = Cast<String>(*rvStr)->ToCString();
 
   if (startProgressCounter < *gProgressCounter && !recordreplay::HasDivergedFromRecording()) {
@@ -4423,7 +4435,9 @@ void ClearPauseDataCallback() {
   Handle<Object> callback = Utils::OpenHandle(*callbackValue);
 
   Handle<Object> undefined = isolate->factory()->undefined_value();
-  MaybeHandle<Object> rv = Execution::Call(isolate, callback, undefined, 0, nullptr);
+  // Execution::Call now takes `base::Vector<const DirectHandle<Object>>`
+  // instead of `(int argc, Handle<Object>* argv)`; no args → empty vector `{}`.
+  MaybeHandle<Object> rv = Execution::Call(isolate, callback, undefined, {});
   CHECK(!rv.is_null());
 }
 
@@ -4499,10 +4513,10 @@ int RecordReplayObjectId(v8::Isolate* v8_isolate, v8::Local<v8::Context> cx,
   if (gRecordReplayObjectIds) {
     for (const auto& entry : *gRecordReplayObjectIds) {
       Local<v8::Value> object_ids_val = entry.object_ids_.Get(v8_isolate);
-      Handle<JSWeakMap> object_ids = Handle<JSWeakMap>::cast(Utils::OpenHandle(*object_ids_val));
+      Handle<JSWeakMap> object_ids = Cast<JSWeakMap>(Utils::OpenHandle(*object_ids_val));
 
-      Handle<Object> existing(EphemeronHashTable::cast(object_ids->table()).Lookup(object), isolate);
-      if (!existing->IsTheHole(isolate)) {
+      Handle<Object> existing(Cast<EphemeronHashTable>(object_ids->table())->Lookup(object), isolate);
+      if (!IsTheHole(*existing, isolate)) {
         v8::Local<v8::Value> id_value = v8::Utils::ToLocal(existing);
         if (id_value->IsInt32()) {
           int id = id_value.As<v8::Int32>()->Value();
@@ -4527,10 +4541,10 @@ int RecordReplayObjectId(v8::Isolate* v8_isolate, v8::Local<v8::Context> cx,
 
   Local<Value> id_value = v8::Integer::New(v8_isolate, id);
 
-  int32_t hash = object->GetOrCreateHash(isolate).value();
+  int32_t hash = Object::GetOrCreateHash(*object, isolate).value();
 
   Local<v8::Value> object_ids_val = GetObjectIdMapForContext(v8_isolate, cx);
-  Handle<JSWeakMap> object_ids = Handle<JSWeakMap>::cast(Utils::OpenHandle(*object_ids_val));
+  Handle<JSWeakMap> object_ids = Cast<JSWeakMap>(Utils::OpenHandle(*object_ids_val));
   JSWeakCollection::Set(object_ids, object, Utils::OpenHandle(*id_value), hash);
 
   return id;
@@ -4604,8 +4618,8 @@ static std::string ToReadableString(const char* str) {
 // Get a string describing a value which can be used in assertions.
 // Only basic information about the value is obtained, to keep things fast.
 std::string RecordReplayBasicValueContents(Handle<Object> value) {
-  if (value->IsNumber()) {
-    double num = value->Number();
+  if (IsNumber(*value)) {
+    double num = Object::NumberValue(*value);
     if (std::isnan(num)) {
       return "NaN";
     }
@@ -4616,19 +4630,19 @@ std::string RecordReplayBasicValueContents(Handle<Object> value) {
     return StringPrintf("Number %d %llu", num2, *(uint64_t*)&num);
   }
 
-  if (value->IsBoolean()) {
-    return StringPrintf("Boolean %d", value->IsTrue());
+  if (IsBoolean(*value)) {
+    return StringPrintf("Boolean %d", IsTrue(*value));
   }
 
-  if (value->IsUndefined()) {
+  if (IsUndefined(*value)) {
     return "Undefined";
   }
 
-  if (value->IsNull()) {
+  if (IsNull(*value)) {
     return "Null";
   }
 
-  if (value->IsString()) {
+  if (IsString(*value)) {
     Tagged<String> str = Cast<String>(*value);
     if (str->length() <= 200) {
       std::unique_ptr<char[]> name = str->ToCString();
@@ -4638,13 +4652,13 @@ std::string RecordReplayBasicValueContents(Handle<Object> value) {
     return StringPrintf("LongString %d", str->length());
   }
 
-  if (value->IsJSObject()) {
+  if (IsJSObject(*value)) {
     v8::Isolate* isolate = v8::Isolate::GetCurrent();
     v8::Local<v8::Context> cx = isolate->GetCurrentContext();
     int object_id = RecordReplayObjectId(isolate, cx, v8::Utils::ToLocal(value),
                                          /* allow_create */ true);
 
-    InstanceType type = JSObject::cast(*value).map().instance_type();
+    InstanceType type = Cast<JSObject>(*value)->map()->instance_type();
     const char* typeStr;
     switch (type) {
 #define STRINGIFY_TYPE(TYPE) case TYPE: typeStr = #TYPE; break;
@@ -4654,8 +4668,8 @@ std::string RecordReplayBasicValueContents(Handle<Object> value) {
       typeStr = "<unknown>";
     }
     if (!strcmp(typeStr, "JS_DATE_TYPE")) {
-      JSDate date = JSDate::cast(*value);
-      double time = date.value().Number();
+      Tagged<JSDate> date = Cast<JSDate>(*value);
+      double time = date->value();
       return StringPrintf("Date %d %.2f", object_id, time);
     }
     if (!strcmp(typeStr, "JS_TYPED_ARRAY_TYPE")) {
@@ -4669,7 +4683,7 @@ std::string RecordReplayBasicValueContents(Handle<Object> value) {
     return StringPrintf("Object %d %s", object_id, typeStr);
   }
 
-  if (value->IsJSProxy()) {
+  if (IsJSProxy(*value)) {
     return "Proxy";
   }
 
@@ -4692,7 +4706,7 @@ typedef std::unordered_map<int32_t, PromiseDependencyGraphData> PromiseDependenc
 static PromiseDependencyGraphDataMap* gPromiseDependencyGraphDataMap;
 
 static PromiseDependencyGraphData&
-GetOrCreatePromiseDependencyGraphData(Isolate* isolate, Handle<Object> promise) {
+GetOrCreatePromiseDependencyGraphData(Isolate* isolate, DirectHandle<Object> promise) {
   v8::Isolate* v8_isolate = (v8::Isolate*) isolate;
   int promise_persistent_id =
     RecordReplayObjectId(v8_isolate, v8_isolate->GetCurrentContext(),
@@ -4713,7 +4727,7 @@ GetOrCreatePromiseDependencyGraphData(Isolate* isolate, Handle<Object> promise) 
   return iter->second;
 }
 
-void AddPromiseDependencyGraphAdoption(Isolate* isolate, Handle<Object> promise, Handle<Object> adopted) {
+void AddPromiseDependencyGraphAdoption(Isolate* isolate, DirectHandle<Object> promise, DirectHandle<Object> adopted) {
   PromiseDependencyGraphData& data = GetOrCreatePromiseDependencyGraphData(isolate, promise);
   PromiseDependencyGraphData& adopted_data = GetOrCreatePromiseDependencyGraphData(isolate, adopted);
 
@@ -4740,7 +4754,7 @@ bool RecordReplayShouldCallOnPromiseHook() {
 }
 
 void RecordReplayOnPromiseHook(Isolate* isolate, PromiseHookType type,
-                               Handle<JSPromise> promise, Handle<Object> parent) {
+                               DirectHandle<JSPromise> promise, DirectHandle<Object> parent) {
   if (!gRecordReplayEnableDependencyGraph) {
     return;
   }
@@ -4763,7 +4777,7 @@ void RecordReplayOnPromiseHook(Isolate* isolate, PromiseHookType type,
       std::string new_node_str = StringPrintf("{\"kind\":\"newPromise\",\"persistentId\":%d}",
                                                data.persistent_id);
       data.new_node_id = recordreplay::NewDependencyGraphNode(new_node_str.c_str());
-      if (!parent->IsUndefined()) {
+      if (!IsUndefined(*parent, isolate)) {
         PromiseDependencyGraphData& parent_data =
           GetOrCreatePromiseDependencyGraphData(isolate, parent);
         if (parent_data.new_node_id) {

@@ -4715,7 +4715,7 @@ Handle<Object> JSPromise::Reject(DirectHandle<JSPromise> promise,
 }
 
 extern bool RecordReplayShouldCallOnPromiseHook();
-void AddPromiseDependencyGraphAdoption(Isolate* isolate, Handle<Object> promise, Handle<Object> adoption);
+void AddPromiseDependencyGraphAdoption(Isolate* isolate, DirectHandle<Object> promise, DirectHandle<Object> adoption);
 
 // https://tc39.es/ecma262/#sec-promise-resolve-functions
 // static
@@ -4796,7 +4796,7 @@ MaybeHandle<Object> JSPromise::Resolve(DirectHandle<JSPromise> promise,
   if (RecordReplayShouldCallOnPromiseHook()) {
     // Fulfillment of this promise is delayed by adopted resolution.
     // Ref: Promise/A+ 2.3.2
-    AddPromiseDependencyGraphAdoption(isolate, Handle<Object>::cast(promise), resolution);
+    AddPromiseDependencyGraphAdoption(isolate, Cast<Object>(promise), resolution_obj);
   }
 
   // 13. Let job be NewPromiseResolveThenableJob(promise, resolution,
