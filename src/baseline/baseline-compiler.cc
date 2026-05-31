@@ -2654,19 +2654,13 @@ void BaselineCompiler::VisitRecordReplayIncExecutionProgressCounter() {
                 __ FunctionOperand());
   } else {
     /*
-    BaselineAssembler::ScratchRegisterScope scratch_scope(&basm_);
-    Register reg1 = scratch_scope.AcquireScratch();
-    Register reg2 = scratch_scope.AcquireScratch();
-    __ Move(reg1, ExternalReference::record_replay_progress_counter());
-    __ Move(reg2, MemOperand(reg1, 0));
-    __ AddPointer(reg2, Immediate(1));
-    __ Move(MemOperand(reg1, 0), reg2);
-    __ Move(reg1, ExternalReference::record_replay_target_progress());
-    __ ComparePointer(reg2, MemOperand(reg1, 0));
-    Label done;
-    __ JumpIf(Condition::kNotEqual, &done, Label::kNear);
-    CallRuntime(Runtime::kRecordReplayTargetProgressReached);
-    __ Bind(&done);
+    // The previously disabled optimized path inlined the progress-counter
+    // increment via ExternalReference accessors record_replay_progress_counter
+    // / record_replay_target_progress. Those extrefs were removed from
+    // EXTERNAL_REFERENCE_LIST (they baked a serialize-vs-runtime divergent
+    // (idx,encoded) dedup pair into the static snapshot, crashing startup
+    // deserialization), so the optimized path is gone for good.
+    // See https://linear.app/replay/issue/RUN-744
     */
   }
 }
