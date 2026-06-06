@@ -505,6 +505,7 @@
   V(FastApiCall)                            \
   V(FindOrderedHashMapEntry)                \
   V(FindOrderedHashMapEntryForInt32Key)     \
+  V(IncrementAndCheckProgressCounter)       \
   V(FindOrderedHashSetEntry)                \
   V(WeakCollectionGet)                      \
   V(InitializeImmutableInObject)            \

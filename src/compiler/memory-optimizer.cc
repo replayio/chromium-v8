@@ -251,6 +251,10 @@ void MemoryOptimizer::VisitNode(Node* node, AllocationState const* state,
       return VisitStoreField(node, state, effect_chain);
     case IrOpcode::kStore:
       return VisitStore(node, state, effect_chain);
+    case IrOpcode::kIncrementAndCheckProgressCounter:
+      // Note: this is the default behavior in VisitCall when allocations are
+      // possible.
+      return EnqueueUses(node, empty_state(), effect_chain);
     case IrOpcode::kStorePair:
       // Store pairing should happen after this pass.
       UNREACHABLE();

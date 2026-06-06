@@ -1154,7 +1154,8 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
       DirectHandle<SharedFunctionInfo> shared_info, int bytecode_offset,
       DirectHandle<Script> script,
       DirectHandle<StackTraceInfo> stack_trace =
-          DirectHandle<StackTraceInfo>::null());
+          DirectHandle<StackTraceInfo>::null(),
+      int record_replay_bookmark = 0);
 
   Handle<DebugInfo> NewDebugInfo(DirectHandle<SharedFunctionInfo> shared);
 

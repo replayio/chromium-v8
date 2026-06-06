@@ -534,6 +534,8 @@ class V8_EXPORT_PRIVATE Debug {
                    bool is_stack_overflow = false);
 
   void ProcessCompileEvent(bool has_compile_error, DirectHandle<Script> script);
+  void DoProcessCompileEvent(bool has_compile_error,
+                             DirectHandle<Script> script);
 
   // Find the closest source position for a break point for a given position.
   int FindBreakablePosition(Handle<DebugInfo> debug_info, int source_position);

@@ -15,6 +15,7 @@
 #include "src/base/platform/mutex.h"
 #include "src/base/platform/semaphore.h"
 #include "src/base/platform/time.h"
+#include "src/base/replayio.h"
 #include "src/codegen/compiler.h"
 #include "src/compiler/wasm-compiler.h"
 #include "src/debug/debug.h"
@@ -1527,6 +1528,8 @@ void TransitiveTypeFeedbackProcessor::ProcessFunction(int func_index) {
 void TriggerTierUp(Isolate* isolate,
                    Tagged<WasmTrustedInstanceData> trusted_instance_data,
                    int func_index) {
+  replayio::AutoDisallowEvents disallow("wasm::TriggerTierUp");
+
   NativeModule* native_module = trusted_instance_data->native_module();
   CompilationStateImpl* compilation_state =
       Impl(native_module->compilation_state());

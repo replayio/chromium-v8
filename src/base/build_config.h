@@ -34,7 +34,10 @@
 #else
 #define V8_HAS_PKU_SUPPORT 0
 #endif
-#define V8_HAS_PKU_JIT_WRITE_PROTECT V8_HAS_PKU_SUPPORT
+// [replay] disable this to avoid dealing w/ dlsym
+// see https://linear.app/replay/issue/RUN-1085/chromium-108-crash-getkeypermission
+// #define V8_HAS_PKU_JIT_WRITE_PROTECT V8_HAS_PKU_SUPPORT
+#define V8_HAS_PKU_JIT_WRITE_PROTECT 0
 
 // pthread_jit_write_protect is only available on arm64 Mac.
 #if defined(V8_HOST_ARCH_ARM64) && defined(V8_OS_MACOS)
