@@ -3630,7 +3630,7 @@ static void ForEachInstrumentationOp(Isolate* isolate, Handle<Script> script,
         if (bytecode == interpreter::Bytecode::kRecordReplayInstrumentation ||
             bytecode == interpreter::Bytecode::kRecordReplayInstrumentationGenerator ||
             bytecode == interpreter::Bytecode::kRecordReplayInstrumentationReturn) {
-          int index = it.GetIndexOperand(0);
+          int index = it.GetUnsignedImmediateOperand(0);
           aCallback(candidate, index);
         }
       }
