@@ -2778,13 +2778,6 @@ bool Debug::AllFramesOnStackAreBlackboxed() {
   return true;
 }
 
-  if (recordreplay::IsReplaying() && recordreplay::AreEventsDisallowed()) {
-    // TODO: IsInReplayCode (RUN-1502)
-    // Always allow Replay code.
-    // https://linear.app/replay/issue/RUN-1908/fix-devtools-crashes
-    return true;
-  }
-
 bool Debug::CanBreakAtEntry(DirectHandle<SharedFunctionInfo> shared) {
   RCS_SCOPE(isolate_, RuntimeCallCounterId::kDebugger);
   // Allow break at entry for builtin functions.
@@ -3479,14 +3472,15 @@ static Handle<String> CStringToHandle(Isolate* isolate, const char* str) {
 
 static Handle<Object> GetProperty(Isolate* isolate,
                                   Handle<Object> obj, const char* property) {
-  return Object::GetProperty(isolate, obj, CStringToHandle(isolate, property))
+  return Object::GetProperty(isolate, Cast<JSAny>(obj),
+                             CStringToHandle(isolate, property))
     .ToHandleChecked();
 }
 
 static void SetProperty(Isolate* isolate,
                         Handle<Object> obj, const char* property,
                         Handle<Object> value) {
-  Object::SetProperty(isolate, obj,
+  Object::SetProperty(isolate, Cast<JSAny>(obj),
                       CStringToHandle(isolate, property), value).Check();
 }
 
@@ -3553,7 +3547,7 @@ Handle<Object> RecordReplayGetSourceContents(Isolate* isolate, Handle<Object> pa
   recordreplay::Diagnostic("RecordReplayGetSourceContents #2");
 
   Script::PositionInfo info;
-  Script::GetPositionInfo(script, 0, &info, Script::WITH_OFFSET);
+  Script::GetPositionInfo(script, 0, &info, Script::OffsetFlag::kWithOffset);
 
   // Pad the start of the source with lines to adjust for its starting position.
   // Note that we don't pad the starting line with blank spaces so that columns
@@ -3687,7 +3681,7 @@ static void GetInstrumentationSiteLocation(Handle<Script> script, int instrument
                                            int* pline, int* pcolumn) {
   int source_position = InstrumentationSiteSourcePosition(instrumentation_index);
   Script::PositionInfo info;
-  Script::GetPositionInfo(script, source_position, &info, Script::WITH_OFFSET);
+  Script::GetPositionInfo(script, source_position, &info, Script::OffsetFlag::kWithOffset);
 
   // Use 1-indexed lines instead of 0-indexed.
   *pline = info.line + 1;
@@ -3990,7 +3984,7 @@ static Handle<Object> RecordReplayConvertFunctionOffsetToLocation(
   // see GetInstrumentationSiteLocation.
   if (!line) {
     Script::PositionInfo info;
-    Script::GetPositionInfo(script, function_source_position, &info, Script::WITH_OFFSET);
+    Script::GetPositionInfo(script, function_source_position, &info, Script::OffsetFlag::kWithOffset);
 
     // Use 1-indexed lines instead of 0-indexed.
     line = info.line + 1;
@@ -4247,7 +4241,7 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
   // to distinguish these cases: if the starting position is anything other
   // than line zero / column zero, the script must be inlined into another file.
   Script::PositionInfo start_info;
-  Script::GetPositionInfo(script, 0, &start_info, Script::WITH_OFFSET);
+  Script::GetPositionInfo(script, 0, &start_info, Script::OffsetFlag::kWithOffset);
 
   // [RUN-2172] Blink-internal scripts sometimes might have line or column, but 
   // no URL. Since the backend requires inlineScripts to have a URL, don't flag 

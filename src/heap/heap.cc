@@ -7760,6 +7760,8 @@ int Heap::NextScriptId() {
         Cast<Smi>(last_script_id_slot.Relaxed_CompareAndSwap(last_id, new_id));
   } while (last_id != last_id_before_cas);
 
+  recordreplay::OrderedUnlock(script_ordered_lock_id_);
+  recordreplay::Assert("Heap::NextScriptId %d", new_id.value());
   return new_id.value();
 }
 
