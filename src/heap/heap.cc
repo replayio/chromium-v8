@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "src/heap/heap.h"
+#include "include/replayio.h"
 
 #include <algorithm>
 #include <atomic>
@@ -3881,6 +3882,11 @@ void Heap::NotifyObjectLayoutChange(
     const Address clear_range_end = object.address() + new_size;
 
     if (incremental_marking()->IsMarking()) {
+      // Replay: relocated from the removed
+      // IncrementalMarking::MarkBlackAndVisitObjectDueToLayoutChange hook. The
+      // marking-time layout-change bookkeeping must not emit record/replay
+      // events. (TODO: confirm scope during deterministic-replay validation.)
+      replayio::AutoDisallowEvents disallow("Heap::NotifyObjectLayoutChange");
       ObjectLock::Lock(isolate(), object);
       DCHECK_EQ(pending_layout_change_object_address, kNullAddress);
       pending_layout_change_object_address = object.address();

@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "src/debug/debug.h"
+#include "include/replayio.h"
 
 #include <memory>
 #include <optional>

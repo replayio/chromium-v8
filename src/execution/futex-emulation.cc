@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "src/execution/futex-emulation.h"
+#include "include/replayio.h"
 
 #include <limits>
 

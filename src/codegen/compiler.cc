@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "src/codegen/compiler.h"
+#include "include/replayio.h"
 
 #include <algorithm>
 #include <memory>
