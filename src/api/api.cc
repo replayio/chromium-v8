@@ -12968,7 +12968,7 @@ void recordreplay::Assert(const char* format, ...) {
   }
 }
 
-extern "C" void V8RecordReplayAssert(const char* format, ...) {
+extern "C" DLLEXPORT void V8RecordReplayAssert(const char* format, ...) {
   if (recordreplay::HasAsserts()) {
     va_list ap;
     va_start(ap, format);
