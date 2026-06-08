@@ -20,6 +20,8 @@
 #include "src/debug/liveedit.h"
 #include "src/deoptimizer/deoptimizer.h"
 #include "src/execution/execution.h"
+#include "src/json/json-parser.h"
+#include "src/json/json-stringifier.h"
 #include "src/execution/frames-inl.h"
 #include "src/execution/frames.h"
 #include "src/execution/isolate-inl.h"
@@ -4271,13 +4273,14 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
       Local<v8::Value> handlerValue = handlerEternalValue->Get((v8::Isolate*)isolate);
       Handle<Object> handler = Utils::OpenHandle(*handlerValue);
 
-      Handle<Object> callArgs[3];
+      DirectHandle<Object> callArgs[3];
       callArgs[0] = idStr;
       callArgs[1] = Handle<Object>(script->GetNameOrSourceURL(), isolate);
       callArgs[2] = Handle<Object>(script->source_mapping_url(), isolate);
 
       Handle<Object> undefined = isolate->factory()->undefined_value();
-      MaybeHandle<Object> rv = Execution::Call(isolate, handler, undefined, 3, callArgs);
+      MaybeHandle<Object> rv =
+          Execution::Call(isolate, handler, undefined, base::VectorOf(callArgs));
       CHECK(!rv.is_null());
     }
   }
@@ -4359,7 +4362,8 @@ char* CommandCallback(const char* command, const char* params) {
   Handle<Object> undefined = isolate->factory()->undefined_value();
   Handle<String> paramsStr = CStringToHandle(isolate, params);
 
-  MaybeHandle<Object> maybeParams = JsonParser<uint8_t>::Parse(isolate, paramsStr, undefined);
+  MaybeHandle<Object> maybeParams =
+      JsonParser<uint8_t>::Parse(isolate, paramsStr, undefined, std::nullopt);
   if (maybeParams.is_null()) {
     recordreplay::Diagnostic("Error: CommandCallback Parse %s failed", params);
     IMMEDIATE_CRASH();
@@ -4381,10 +4385,10 @@ char* CommandCallback(const char* command, const char* params) {
     Local<v8::Value> callbackValue = gCommandCallback->Get((v8::Isolate*)isolate);
     Handle<Object> callback = Utils::OpenHandle(*callbackValue);
 
-    Handle<Object> callArgs[2];
+    DirectHandle<Object> callArgs[2];
     callArgs[0] = CStringToHandle(isolate, command);
     callArgs[1] = paramsObj;
-    rv = Execution::Call(isolate, callback, undefined, 2, callArgs);
+    rv = Execution::Call(isolate, callback, undefined, base::VectorOf(callArgs));
     if (rv.is_null()) {
       recordreplay::Diagnostic("Error: CommandCallback generic command %s failed", command);
       IMMEDIATE_CRASH();
@@ -4392,8 +4396,11 @@ char* CommandCallback(const char* command, const char* params) {
   }
 
   Handle<Object> result = rv.ToHandleChecked();
-  Handle<Object> rvStr = JsonStringify(isolate, result, undefined, undefined).ToHandleChecked();
-  std::unique_ptr<char[]> rvCStr = String::cast(*rvStr).ToCString();
+  DirectHandle<Object> rvStr =
+      JsonStringify(isolate, Cast<JSAny>(result), Cast<JSAny>(undefined),
+                    undefined)
+          .ToHandleChecked();
+  std::unique_ptr<char[]> rvCStr = Cast<String>(*rvStr)->ToCString();
 
   if (startProgressCounter < *gProgressCounter && !recordreplay::HasDivergedFromRecording()) {
     // [RUN-1988] Our command handler incremented the PC by accidentally calling
@@ -4428,7 +4435,7 @@ void ClearPauseDataCallback() {
   Handle<Object> callback = Utils::OpenHandle(*callbackValue);
 
   Handle<Object> undefined = isolate->factory()->undefined_value();
-  MaybeHandle<Object> rv = Execution::Call(isolate, callback, undefined, 0, nullptr);
+  MaybeHandle<Object> rv = Execution::Call(isolate, callback, undefined, {});
   CHECK(!rv.is_null());
 }
 
