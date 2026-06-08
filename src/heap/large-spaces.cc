@@ -121,6 +121,11 @@ AllocationResult OldLargeObjectSpace::AllocateRaw(LocalHeap* local_heap,
   if (!heap()->ShouldExpandOldGenerationOnSlowAllocation(
           local_heap, AllocationOrigin::kRuntime) ||
       !heap()->CanExpandOldGeneration(object_size)) {
+    recordreplay::Diagnostic(
+        "[RUN-851] OldLargeObjectSpace::AllocateRaw Failed %d %d",
+        heap()->ShouldExpandOldGenerationOnSlowAllocation(
+            local_heap, AllocationOrigin::kRuntime),
+        heap()->CanExpandOldGeneration(object_size));
     return AllocationResult::Failure();
   }
 

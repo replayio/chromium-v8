@@ -51,7 +51,18 @@ bool RecursiveMutex::TryLock() {
   return false;
 }
 
-Mutex::Mutex() {
+Mutex::Mutex(const char* ordered_name) {
+  // record/replay: The original hook registered the underlying pthread mutex
+  // with the replay backend via V8RecordReplayAddOrderedPthreadMutex() so that
+  // lock/unlock ordering could be made deterministic. In this V8 the platform
+  // mutex is backed by absl::Mutex (native_handle_), which does not expose a
+  // pthread_mutex_t and is not implemented in terms of one, so there is no
+  // valid pthread_mutex_t* to register. Reinterpreting &native_handle_ as a
+  // pthread_mutex_t* would feed the backend a non-pthread object and cause
+  // divergence/crashes, so the registration is intentionally skipped here.
+  // The constructor still accepts |ordered_name| to stay ABI/source compatible
+  // with the ported header and call sites that pass a name.
+  USE(ordered_name);
 #ifdef DEBUG
   level_ = 0;
 #endif

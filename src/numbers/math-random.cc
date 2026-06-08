@@ -4,6 +4,7 @@
 
 #include "src/numbers/math-random.h"
 
+#include "include/v8.h"
 #include "src/base/utils/random-number-generator.h"
 #include "src/common/assert-scope.h"
 #include "src/execution/isolate.h"
@@ -77,7 +78,14 @@ Address MathRandom::InitializeAndMaybeRefillCache(Isolate* isolate,
     // Generate random numbers using xorshift128+.
     uint64_t random =
         base::RandomNumberGenerator::XorShift128(&state.s0, &state.s1);
-    cache->set(i, base::RandomNumberGenerator::ToDouble(random));
+    double v = base::RandomNumberGenerator::ToDouble(random);
+
+    // The RNG can be used at non-deterministic points within the VM,
+    // so we ensure that we're getting the same values whenever refilling
+    // the cache used for Math.random().
+    recordreplay::RecordReplayBytes("MathRandom", &v, sizeof(v));
+
+    cache->set(i, v);
   }
   pod->set(0, state);
 
