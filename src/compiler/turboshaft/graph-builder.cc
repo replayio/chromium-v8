@@ -2812,6 +2812,12 @@ OpIndex GraphBuilder::Process(
 
 #endif  // V8_ENABLE_SANDBOX_HARDWARE_SUPPORT
 
+    // Replay-injected progress-counter instrumentation: effectful no-op marker
+    // with no real lowering. Returning
+    // OpIndex::Invalid() matches the other effectful, value-output-less arms.
+    case IrOpcode::kIncrementAndCheckProgressCounter:
+      return OpIndex::Invalid();
+
     default:
       std::cerr << "unsupported node type: " << *node->op() << "\n";
       node->Print(std::cerr);
