@@ -7,8 +7,8 @@
 #include <map>
 #include <numeric>
 #include <unordered_map>
-#include <unordered_set>
 
+#include "absl/container/flat_hash_set.h"
 #include "include/cppgc/macros.h"
 #include "src/heap/cppgc/compaction-worklists.h"
 #include "src/heap/cppgc/globals.h"
@@ -39,13 +39,14 @@ class MovableReferences final {
   using MovableReference = CompactionWorklists::MovableReference;
 
  public:
-  explicit MovableReferences(HeapBase& heap) : heap_(heap) {}
+  explicit MovableReferences(HeapBase& heap)
+      : heap_(heap), heap_has_move_listeners_(heap.HasMoveListeners()) {}
 
   // Adds a slot for compaction. Filters slots in dead objects.
   void AddOrFilter(MovableReference*);
 
   // Relocates a backing store |from| -> |to|.
-  void Relocate(Address from, Address to);
+  void Relocate(Address from, Address to, size_t size_including_header);
 
   // Relocates interior slots in a backing store that is moved |from| -> |to|.
   void RelocateInteriorReferences(Address from, Address to, size_t size);
@@ -70,10 +71,12 @@ class MovableReferences final {
   // - Upon moving an object this value is adjusted accordingly.
   std::map<MovableReference*, Address> interior_movable_references_;
 
+  const bool heap_has_move_listeners_;
+
 #if DEBUG
   // The following two collections are used to allow refer back from a slot to
   // an already moved object.
-  std::unordered_set<const void*> moved_objects_;
+  absl::flat_hash_set<const void*> moved_objects_;
   std::unordered_map<MovableReference*, MovableReference>
       interior_slot_to_object_;
 #endif  // DEBUG
@@ -134,10 +137,17 @@ void MovableReferences::AddOrFilter(MovableReference* slot) {
 #endif  // DEBUG
 }
 
-void MovableReferences::Relocate(Address from, Address to) {
+void MovableReferences::Relocate(Address from, Address to,
+                                 size_t size_including_header) {
 #if DEBUG
   moved_objects_.insert(from);
 #endif  // DEBUG
+
+  if (V8_UNLIKELY(heap_has_move_listeners_)) {
+    heap_.CallMoveListeners(from - sizeof(HeapObjectHeader),
+                            to - sizeof(HeapObjectHeader),
+                            size_including_header);
+  }
 
   // Interior slots always need to be processed for moved objects.
   // Consider an object A with slot A.x pointing to value B where A is
@@ -198,7 +208,7 @@ void MovableReferences::RelocateInteriorReferences(Address from, Address to,
   while (offset < size) {
     if (!interior_it->second) {
       // Update the interior reference value, so that when the object the slot
-      // is pointing to is moved, it can re-use this value.
+      // is pointing to is moved, it can reuse this value.
       Address reference = to + offset;
       interior_it->second = reference;
 
@@ -257,7 +267,8 @@ class CompactionState final {
       else
         memcpy(compact_frontier, header, size);
       movable_references_.Relocate(header + sizeof(HeapObjectHeader),
-                                   compact_frontier + sizeof(HeapObjectHeader));
+                                   compact_frontier + sizeof(HeapObjectHeader),
+                                   size);
     }
     current_page_->object_start_bitmap().SetBit(compact_frontier);
     used_bytes_in_current_page_ += size;
@@ -273,8 +284,7 @@ class CompactionState final {
       ReturnCurrentPageToSpace();
     }
 
-    // Return remaining available pages to the free page pool, decommitting
-    // them from the pagefile.
+    // Return remaining available pages back to the backend.
     for (NormalPage* page : available_pages_) {
       SetMemoryInaccessible(page->PayloadStart(), page->PayloadSize());
       NormalPage::Destroy(page);
@@ -320,11 +330,6 @@ class CompactionState final {
   // Additional pages in the current space that can be used as compaction
   // targets. Pages that remain available at the compaction can be released.
   Pages available_pages_;
-};
-
-enum class StickyBits : uint8_t {
-  kDisabled,
-  kEnabled,
 };
 
 void CompactPage(NormalPage* page, CompactionState& compaction_state,
@@ -425,6 +430,7 @@ void CompactSpace(NormalPageSpace* space, MovableReferences& movable_references,
 
   CompactionState compaction_state(space, movable_references);
   for (BasePage* page : pages) {
+    page->ResetMarkedBytes();
     // Large objects do not belong to this arena.
     CompactPage(NormalPage::From(page), compaction_state, sticky_bits);
   }
@@ -512,12 +518,10 @@ Compactor::CompactableSpaceHandling Compactor::CompactSpacesIfEnabled() {
   }
   compaction_worklists_.reset();
 
-  const bool young_gen_enabled = heap_.heap()->generational_gc_supported();
+  const StickyBits sticky_bits = heap_.heap()->sticky_bits();
 
   for (NormalPageSpace* space : compactable_spaces_) {
-    CompactSpace(
-        space, movable_references,
-        young_gen_enabled ? StickyBits::kEnabled : StickyBits::kDisabled);
+    CompactSpace(space, movable_references, sticky_bits);
   }
 
   enable_for_next_gc_for_testing_ = false;

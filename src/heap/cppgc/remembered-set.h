@@ -5,6 +5,8 @@
 #ifndef V8_HEAP_CPPGC_REMEMBERED_SET_H_
 #define V8_HEAP_CPPGC_REMEMBERED_SET_H_
 
+#include "include/v8config.h"
+
 #if defined(CPPGC_YOUNG_GENERATION)
 
 #include <set>
@@ -42,10 +44,13 @@ class V8_EXPORT_PRIVATE OldToNewRememberedSet final {
   void AddSourceObject(HeapObjectHeader& source_hoh);
   void AddWeakCallback(WeakCallbackItem);
 
+  // Remembers an in-construction object to be retraced on the next minor GC.
+  void AddInConstructionObjectToBeRetraced(HeapObjectHeader&);
+
   void InvalidateRememberedSlotsInRange(void* begin, void* end);
   void InvalidateRememberedSourceObject(HeapObjectHeader& source_hoh);
 
-  void Visit(Visitor&, MutatorMarkingState&);
+  void Visit(Visitor&, ConservativeTracingVisitor&, MutatorMarkingState&);
 
   void ExecuteCustomCallbacks(LivenessBroker);
   void ReleaseCustomCallbacks();
@@ -56,6 +61,14 @@ class V8_EXPORT_PRIVATE OldToNewRememberedSet final {
 
  private:
   friend class MinorGCTest;
+
+  // The class keeps track of inconstruction objects that should be revisited.
+  struct RememberedInConstructionObjects final {
+    void Reset();
+
+    std::set<HeapObjectHeader*> previous;
+    std::set<HeapObjectHeader*> current;
+  };
 
   static constexpr struct {
     bool operator()(const WeakCallbackItem& lhs,
@@ -72,6 +85,7 @@ class V8_EXPORT_PRIVATE OldToNewRememberedSet final {
   // whereas uncompressed are stored in std::set.
   std::set<void*> remembered_uncompressed_slots_;
   std::set<void*> remembered_slots_for_verification_;
+  RememberedInConstructionObjects remembered_in_construction_objects_;
 };
 
 }  // namespace internal

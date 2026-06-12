@@ -24,7 +24,7 @@ class JSReceiver;
 class DebugPropertyIterator final : public debug::PropertyIterator {
  public:
   V8_WARN_UNUSED_RESULT static std::unique_ptr<DebugPropertyIterator> Create(
-      Isolate* isolate, Handle<JSReceiver> receiver, bool skip_indices,
+      Isolate* isolate, DirectHandle<JSReceiver> receiver, bool skip_indices,
       const v8::KeyIterationParams* params = v8::KeyIterationParams::Default());
   ~DebugPropertyIterator() override = default;
   DebugPropertyIterator(const DebugPropertyIterator&) = delete;
@@ -44,14 +44,14 @@ class DebugPropertyIterator final : public debug::PropertyIterator {
   bool is_array_index() override;
 
  private:
-  DebugPropertyIterator(Isolate* isolate, Handle<JSReceiver> receiver,
+  DebugPropertyIterator(Isolate* isolate, DirectHandle<JSReceiver> receiver,
                         bool skip_indices,
                         const v8::KeyIterationParams* params = v8::KeyIterationParams::Default());
 
   V8_WARN_UNUSED_RESULT bool FillKeysForCurrentPrototypeAndStage();
   bool should_move_to_next_stage() const;
   void CalculateNativeAccessorFlags();
-  Handle<Name> raw_name() const;
+  DirectHandle<Name> raw_name() const;
   void AdvanceToPrototype();
   V8_WARN_UNUSED_RESULT bool AdvanceInternal();
 

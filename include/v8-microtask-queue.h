@@ -118,7 +118,7 @@ class V8_EXPORT V8_NODISCARD MicrotasksScope {
  public:
   enum Type { kRunMicrotasks, kDoNotRunMicrotasks };
 
-  MicrotasksScope(Isolate* isolate, Type type);
+  MicrotasksScope(Local<Context> context, Type type);
   MicrotasksScope(Isolate* isolate, MicrotaskQueue* microtask_queue, Type type);
   ~MicrotasksScope();
 

@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Flags: --experimental-wasm-gc --experimental-wasm-typed-funcref
 // Flags: --experimental-wasm-type-reflection
 
 utils.load('test/inspector/wasm-inspector-test.js');
@@ -66,20 +65,23 @@ async function printPauseLocationsAndContinue(msg) {
 
 async function instantiateWasm() {
   var builder = new WasmModuleBuilder();
+  builder.startRecGroup();
   let struct_type = builder.addStruct([makeField(kWasmI32, false)]);
   let array_type = builder.addArray(kWasmI32);
   let imported_ref_table =
-      builder.addImportedTable('import', 'any_table', 3, 3, kWasmAnyRef);
+      builder.addImportedTable('import', 'any_table', 4, 4, kWasmAnyRef);
   let imported_func_table =
       builder.addImportedTable('import', 'func_table', 3, 3, kWasmFuncRef);
   let ref_table = builder.addTable(kWasmAnyRef, 4)
                          .exportAs('exported_ref_table');
   let func_table = builder.addTable(kWasmFuncRef, 3)
                          .exportAs('exported_func_table');
+  let i31ref_table = builder.addTable(kWasmI31Ref, 3)
+                         .exportAs('exported_i31_table');
 
   let func = builder.addFunction('my_func', kSig_v_v).addBody([kExprNop]);
   // Make the function "declared".
-  builder.addGlobal(kWasmFuncRef, false, [kExprRefFunc, func.index]);
+  builder.addGlobal(kWasmFuncRef, false, false, [kExprRefFunc, func.index]);
 
   builder.addFunction('fill_tables', kSig_v_v)
     .addBody([
@@ -88,17 +90,16 @@ async function instantiateWasm() {
       ...wasmI32Const(1), ...wasmI32Const(20), ...wasmI32Const(21),
       kGCPrefix, kExprArrayNewFixed, array_type, 2,
       kExprTableSet, ref_table.index,
-      // TODO(7748): Reactivate this test when JS interop between i31refs and
-      // JS SMIs is fixed. The problem right now is the 33-bit shift for i31ref
-      // values on non-pointer-compressed platforms, which means i31refs and
-      // Smis have different encodings there but it's impossible to tell them
-      // apart.
-      // ...wasmI32Const(2), ...wasmI32Const(30),
-      // kGCPrefix, kExprI31New, kExprTableSet, ref_table.index,
+      ...wasmI32Const(2), ...wasmI32Const(30),
+      kGCPrefix, kExprRefI31, kExprTableSet, ref_table.index,
 
       // Fill imported any table.
       ...wasmI32Const(1),
       ...wasmI32Const(123), kGCPrefix, kExprStructNew, struct_type,
+      kExprTableSet, imported_ref_table,
+
+      ...wasmI32Const(1),
+      ...wasmI32Const(321), kGCPrefix, kExprRefI31,
       kExprTableSet, imported_ref_table,
 
       // Fill imported func table.
@@ -110,6 +111,15 @@ async function instantiateWasm() {
       ...wasmI32Const(1),
       kExprRefFunc, func.index,
       kExprTableSet, func_table.index,
+
+      // Fill i31 table.
+      ...wasmI32Const(0),
+      ...wasmI32Const(123456), kGCPrefix, kExprRefI31,
+      kExprTableSet, i31ref_table.index,
+
+      ...wasmI32Const(1),
+      ...wasmI32Const(-123), kGCPrefix, kExprRefI31,
+      kExprTableSet, i31ref_table.index,
     ]).exportFunc();
 
   let body = [
@@ -121,12 +131,9 @@ async function instantiateWasm() {
     ...wasmI32Const(21),
     kGCPrefix, kExprArrayNewFixed, array_type, 1,
     kExprLocalSet, 1,
-    // Set local anyref_local_i31.
-    // TODO(7748): Reactivate this test when JS interop between i31refs and JS
-    // SMIs is fixed (same issue as above).
-    // ...wasmI32Const(30),
-    // kGCPrefix, kExprI31New,
-    // kExprLocalSet, 2,
+    ...wasmI32Const(30),
+    kGCPrefix, kExprRefI31,
+    kExprLocalSet, 2,
     kExprNop,
   ];
   let main = builder.addFunction('main', kSig_v_v)
@@ -136,7 +143,7 @@ async function instantiateWasm() {
       .addLocals(kWasmAnyRef, 1, ['anyref_local_null'])
       .addBody(body)
       .exportFunc();
-
+  builder.endRecGroup();
   var module_bytes = builder.toArray();
   breakpointLocation = main.body_offset + body.length - 1;
 
@@ -144,7 +151,7 @@ async function instantiateWasm() {
   let imports = `{'import' : {
       'any_table': (() => {
         let js_table =
-            new WebAssembly.Table({element: 'anyref', initial: 3, maximum: 3});
+            new WebAssembly.Table({element: 'anyref', initial: 4, maximum: 4});
         js_table.set(0, ['JavaScript', 'value']);
         return js_table;
       })(),

@@ -2,7 +2,17 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-FlagInfo = provider(fields = ["value"])
+"""
+This module contains helper functions to compile V8.
+"""
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc/common:cc_common.bzl", "cc_common")
+load("@rules_cc//cc/common:cc_info.bzl", "CcInfo")
+
+FlagInfo = provider("The value of an option.",
+fields = ["value"])
 
 def _options_impl(ctx):
     return FlagInfo(value = ctx.build_setting_value)
@@ -87,13 +97,13 @@ v8_config = rule(
 
 def _default_args():
     return struct(
-        deps = [":define_flags"],
+        deps = [":define_flags", "@libcxx//:libc++"],
         defines = select({
             "@v8//bazel/config:is_windows": [
                 "UNICODE",
                 "_UNICODE",
                 "_CRT_RAND_S",
-                "_WIN32_WINNT=0x0602",  # Override bazel default to Windows 8
+                "_WIN32_WINNT=0x0A00",  # Override bazel default to Windows 10
             ],
             "//conditions:default": [],
         }),
@@ -101,9 +111,12 @@ def _default_args():
             "@v8//bazel/config:is_posix": [
                 "-fPIC",
                 "-fno-strict-aliasing",
+                "-fconstexpr-steps=2000000",
                 "-Werror",
                 "-Wextra",
-                "-Wno-unknown-warning-option",
+                "-Wno-unneeded-internal-declaration",
+                "-Wno-unknown-warning-option", # b/330781959
+                "-Wno-cast-function-type-mismatch",  # b/330781959
                 "-Wno-bitwise-instead-of-logical",
                 "-Wno-builtin-assume-aligned-alignment",
                 "-Wno-unused-parameter",
@@ -116,7 +129,9 @@ def _default_args():
         }) + select({
             "@v8//bazel/config:is_clang": [
                 "-Wno-invalid-offsetof",
-                "-std=c++17",
+                "-Wno-deprecated-this-capture",
+                "-Wno-deprecated-declarations",
+                "-std=c++20",
             ],
             "@v8//bazel/config:is_gcc": [
                 "-Wno-extra",
@@ -131,12 +146,13 @@ def _default_args():
                 "-Wno-redundant-move",
                 "-Wno-return-type",
                 "-Wno-stringop-overflow",
+                "-Wno-deprecated-this-capture",
                 # Use GNU dialect, because GCC doesn't allow using
                 # ##__VA_ARGS__ when in standards-conforming mode.
-                "-std=gnu++17",
+                "-std=gnu++2a",
             ],
             "@v8//bazel/config:is_windows": [
-                "/std:c++17",
+                "/std:c++20",
             ],
             "//conditions:default": [],
         }) + select({
@@ -151,13 +167,12 @@ def _default_args():
                 "-fno-integrated-as",
             ],
             "//conditions:default": [],
-        }) + select({
-            "@v8//bazel/config:is_debug":[
-                "-fvisibility=default",
-            ],
-            "//conditions:default": [
+        }) +  select({
+            "@v8//bazel/config:is_opt_android": [
                 "-fvisibility=hidden",
                 "-fvisibility-inlines-hidden",
+            ],
+            "//conditions:default": [
             ],
         }),
         includes = ["include"],
@@ -168,7 +183,7 @@ def _default_args():
                 "Advapi32.lib",
             ],
             "@v8//bazel/config:is_macos": ["-pthread"],
-            "//conditions:default": ["-Wl,--no-as-needed -ldl -pthread"],
+            "//conditions:default": ["-Wl,--no-as-needed -ldl -latomic -pthread"],
         }) + select({
             ":should_add_rdynamic": ["-rdynamic"],
             "//conditions:default": [],
@@ -183,47 +198,53 @@ ENABLE_I18N_SUPPORT_DEFINES = [
     "-DUNISTR_FROM_CHAR_EXPLICIT=",
 ]
 
-def _should_emit_noicu_and_icu(noicu_srcs, noicu_deps, icu_srcs, icu_deps):
-    return noicu_srcs != [] or noicu_deps != [] or icu_srcs != [] or icu_deps != []
+def _should_emit_noicu_and_icu(noicu_srcs, noicu_deps, noicu_defines, icu_srcs, icu_deps, icu_defines):
+     return noicu_srcs != [] or noicu_deps != [] or noicu_defines != [] or icu_srcs != [] or icu_deps != [] or icu_defines != []
 
 # buildifier: disable=function-docstring
 def v8_binary(
         name,
         srcs,
         deps = [],
+        defines = [],
         includes = [],
         copts = [],
         linkopts = [],
         noicu_srcs = [],
         noicu_deps = [],
+        noicu_defines = [],
         icu_srcs = [],
         icu_deps = [],
+        icu_defines = [],
         **kwargs):
     default = _default_args()
-    if _should_emit_noicu_and_icu(noicu_srcs, noicu_deps, icu_srcs, icu_deps):
-        native.cc_binary(
+    if _should_emit_noicu_and_icu(noicu_srcs, noicu_deps, noicu_defines, icu_srcs, icu_deps, icu_defines):
+        cc_binary(
             name = "noicu/" + name,
             srcs = srcs + noicu_srcs,
             deps = deps + noicu_deps + default.deps,
-            includes = includes + default.includes,
+            defines = defines + noicu_defines + default.defines,
+            includes = includes + ["noicu/"] + default.includes,
             copts = copts + default.copts,
             linkopts = linkopts + default.linkopts,
             **kwargs
         )
-        native.cc_binary(
+        cc_binary(
             name = "icu/" + name,
             srcs = srcs + icu_srcs,
             deps = deps + icu_deps + default.deps,
-            includes = includes + default.includes,
+            includes = includes + ["icu/"] + default.includes,
+            defines = defines + icu_defines + default.defines,
             copts = copts + default.copts + ENABLE_I18N_SUPPORT_DEFINES,
             linkopts = linkopts + default.linkopts,
             **kwargs
         )
     else:
-        native.cc_binary(
+        cc_binary(
             name = name,
             srcs = srcs,
             deps = deps + default.deps,
+            defines = defines + default.defines,
             includes = includes + default.includes,
             copts = copts + default.copts,
             linkopts = linkopts + default.linkopts,
@@ -240,16 +261,18 @@ def v8_library(
         linkopts = [],
         noicu_srcs = [],
         noicu_deps = [],
+        noicu_defines = [],
         icu_srcs = [],
         icu_deps = [],
+        icu_defines = [],
         **kwargs):
     default = _default_args()
-    if _should_emit_noicu_and_icu(noicu_srcs, noicu_deps, icu_srcs, icu_deps):
-        native.cc_library(
+    if _should_emit_noicu_and_icu(noicu_srcs, noicu_deps, noicu_defines, icu_srcs, icu_deps, icu_defines):
+        cc_library(
             name = name + "_noicu",
             srcs = srcs + noicu_srcs,
             deps = deps + noicu_deps + default.deps,
-            includes = includes + default.includes,
+            includes = includes + ["noicu/"] + default.includes,
             copts = copts + default.copts,
             linkopts = linkopts + default.linkopts,
             alwayslink = 1,
@@ -264,11 +287,11 @@ def v8_library(
             name = "noicu/" + name,
             actual = name + "_noicu",
         )
-        native.cc_library(
+        cc_library(
             name = name + "_icu",
             srcs = srcs + icu_srcs,
             deps = deps + icu_deps + default.deps,
-            includes = includes + default.includes,
+            includes = includes + ["icu/"] + default.includes,
             copts = copts + default.copts + ENABLE_I18N_SUPPORT_DEFINES,
             linkopts = linkopts + default.linkopts,
             alwayslink = 1,
@@ -284,7 +307,7 @@ def v8_library(
             actual = name + "_icu",
         )
     else:
-        native.cc_library(
+        cc_library(
             name = name,
             srcs = srcs,
             deps = deps + default.deps,
@@ -296,11 +319,15 @@ def v8_library(
             **kwargs
         )
 
-def _torque_impl(ctx):
-    if ctx.workspace_name == "v8":
+# Use a single generator target for torque definitions and initializers. We can
+# split the set of outputs by using OutputGroupInfo, that way we do not need to
+# run the torque generator twice.
+def _torque_files_impl(ctx):
+    # Allow building V8 as a dependency: workspace_root points to external/v8
+    # when building V8 from a different repository and empty otherwise.
+    v8root = ctx.label.workspace_root
+    if v8root == "":
         v8root = "."
-    else:
-        v8root = "external/v8"
 
     # Arguments
     args = []
@@ -315,37 +342,48 @@ def _torque_impl(ctx):
     args += [f.path for f in ctx.files.srcs]
 
     # Generate/declare output files
-    outs = []
+    defs = []
+    inits = []
     for src in ctx.files.srcs:
-        root, period, ext = src.path.rpartition(".")
+        root, _period, _ext = src.path.rpartition(".")
 
         # Strip v8root
         if root[:len(v8root)] == v8root:
             root = root[len(v8root):]
         file = ctx.attr.prefix + "/torque-generated/" + root
-        outs.append(ctx.actions.declare_file(file + "-tq-csa.cc"))
-        outs.append(ctx.actions.declare_file(file + "-tq-csa.h"))
-        outs.append(ctx.actions.declare_file(file + "-tq-inl.inc"))
-        outs.append(ctx.actions.declare_file(file + "-tq.inc"))
-        outs.append(ctx.actions.declare_file(file + "-tq.cc"))
-    outs += [ctx.actions.declare_file(ctx.attr.prefix + "/torque-generated/" + f) for f in ctx.attr.extras]
+        defs.append(ctx.actions.declare_file(file + "-tq-inl.inc"))
+        defs.append(ctx.actions.declare_file(file + "-tq.inc"))
+        defs.append(ctx.actions.declare_file(file + "-tq.cc"))
+        inits.append(ctx.actions.declare_file(file + "-tq-csa.cc"))
+        inits.append(ctx.actions.declare_file(file + "-tq-csa.h"))
+
+    defs += [ctx.actions.declare_file(ctx.attr.prefix + "/torque-generated/" + f) for f in ctx.attr.definition_extras]
+    inits += [ctx.actions.declare_file(ctx.attr.prefix + "/torque-generated/" + f) for f in ctx.attr.initializer_extras]
+    outs = defs + inits
     ctx.actions.run(
         outputs = outs,
         inputs = ctx.files.srcs,
         arguments = args,
         executable = ctx.executable.tool,
-        mnemonic = "GenTorque",
+        mnemonic = "GenTorqueFiles",
         progress_message = "Generating Torque files",
     )
-    return [DefaultInfo(files = depset(outs))]
+    return [
+        DefaultInfo(files = depset(outs)),
+        OutputGroupInfo(
+            initializers = depset(inits),
+            definitions = depset(defs),
+        ),
+    ]
 
-_v8_torque = rule(
-    implementation = _torque_impl,
+_v8_torque_files = rule(
+    implementation = _torque_files_impl,
     # cfg = v8_target_cpu_transition,
     attrs = {
         "prefix": attr.string(mandatory = True),
         "srcs": attr.label_list(allow_files = True, mandatory = True),
-        "extras": attr.string_list(),
+        "definition_extras": attr.string_list(),
+        "initializer_extras": attr.string_list(),
         "tool": attr.label(
             allow_files = True,
             executable = True,
@@ -355,35 +393,39 @@ _v8_torque = rule(
     },
 )
 
-def v8_torque(name, noicu_srcs, icu_srcs, args, extras):
-    _v8_torque(
+def v8_torque_files(name, noicu_srcs, icu_srcs, args, definition_extras, initializer_extras):
+    _v8_torque_files(
         name = "noicu/" + name,
         prefix = "noicu",
         srcs = noicu_srcs,
         args = args,
-        extras = extras,
+        definition_extras = definition_extras,
+        initializer_extras = initializer_extras,
         tool = select({
-            "@v8//bazel/config:v8_target_is_32_bits": ":torque_non_pointer_compression",
-            "//conditions:default": ":torque",
+            "@v8//bazel/config:v8_target_is_32_bits": ":noicu/torque_non_pointer_compression",
+            "//conditions:default": ":noicu/torque",
         }),
     )
-    _v8_torque(
+    _v8_torque_files(
         name = "icu/" + name,
         prefix = "icu",
         srcs = icu_srcs,
         args = args,
-        extras = extras,
+        definition_extras = definition_extras,
+        initializer_extras = initializer_extras,
         tool = select({
-            "@v8//bazel/config:v8_target_is_32_bits": ":torque_non_pointer_compression",
-            "//conditions:default": ":torque",
+            "@v8//bazel/config:v8_target_is_32_bits": ":icu/torque_non_pointer_compression",
+            "//conditions:default": ":icu/torque",
         }),
     )
 
-def _v8_target_cpu_transition_impl(settings, attr):
+def _v8_target_cpu_transition_impl(settings,
+                                   attr, # @unused
+                                  ):
     # Check for an existing v8_target_cpu flag.
     if "@v8//bazel/config:v8_target_cpu" in settings:
         if settings["@v8//bazel/config:v8_target_cpu"] != "none":
-            return
+            return {}
 
     # Auto-detect target architecture based on the --cpu flag.
     mapping = {
@@ -424,6 +466,7 @@ def _mksnapshot(ctx):
     ctx.actions.run(
         outputs = outs,
         inputs = [],
+        mnemonic = "V8Mksnapshot",
         arguments = [
             "--embedded_variant=Default",
             "--target_os",
@@ -449,9 +492,6 @@ _v8_mksnapshot = rule(
             cfg = "exec",
         ),
         "target_os": attr.string(mandatory = True),
-        "_allowlist_function_transition": attr.label(
-            default = "@bazel_tools//tools/allowlists/function_transition_allowlist",
-        ),
         "prefix": attr.string(mandatory = True),
         "suffix": attr.string(mandatory = True),
     },
@@ -467,6 +507,7 @@ def v8_mksnapshot(name, args, suffix = ""):
         suffix = suffix,
         target_os = select({
             "@v8//bazel/config:is_macos": "mac",
+            "@v8//bazel/config:is_windows": "win",
             "//conditions:default": "",
         }),
     )
@@ -478,6 +519,7 @@ def v8_mksnapshot(name, args, suffix = ""):
         suffix = suffix,
         target_os = select({
             "@v8//bazel/config:is_macos": "mac",
+            "@v8//bazel/config:is_windows": "win",
             "//conditions:default": "",
         }),
     )
@@ -500,45 +542,77 @@ def _json(kv_pairs):
     return content
 
 def build_config_content(cpu, icu):
+    arch = cpu
+    if cpu == 'x86':
+        arch = 'ia32'
     return _json([
+        ("arch", arch),
+        ("asan", "false"),
+        ("atomic_object_field_writes", "false"),
+        ("cet_shadow_stack", "false"),
+        ("cfi", "false"),
+        ("clang_coverage", "false"),
+        ("clang", "true"),
+        ("code_comments", "false"),
+        ("component_build", "false"),
+        ("concurrent_marking", "false"),
         ("current_cpu", cpu),
         ("dcheck_always_on", "false"),
+        ("debug_code", "false"),
+        ("DEBUG_defined", "false"),
+        ("debugging_features", "false"),
+        ("dict_property_const_tracking", "false"),
+        ("direct_handle", "false"),
+        ("disassembler", "false"),
+        ("dumpling", "false"),
+        ("full_debug", "false"),
+        ("gdbjit", "false"),
+        ("has_jitless", "false"),
+        ("has_maglev", "true"),
+        ("has_turbofan", "true"),
+        ("has_webassembly", "false"),
+        ("has_wasm_interpreter", "false"),
+        ("i18n", icu),
         ("is_android", "false"),
-        ("is_asan", "false"),
-        ("is_cfi", "false"),
-        ("is_clang", "true"),
-        ("is_component_build", "false"),
-        ("is_debug", "false"),
-        ("is_full_debug", "false"),
-        ("is_gcov_coverage", "false"),
-        ("is_msan", "false"),
-        ("is_tsan", "false"),
-        ("is_ubsan_vptr", "false"),
+        ("is_ios", "false"),
+        ("js_shared_memory", "false"),
+        ("leaptiering", "true"),
+        ("lite_mode", "false"),
+        ("local_off_stack_check", "false"),
+        ("lower_limits_mode", "false"),
+        ("memory_corruption_api", "false"),
+        ("mips_arch_variant", '""'),
+        ("mips_use_msa", "false"),
+        ("msan", "false"),
+        ("official_build", "false"),
+        ("pointer_compression_shared_cage", "false"),
+        ("pointer_compression", "true"),
+        ("runtime_call_stats", "false"),
+        ("sandbox", "false"),
+        ("sandbox_hardware_support", "false"),
+        ("shared_ro_heap", "false"),
+        ("simd_mips", "false"),
+        ("simulator_run", "false"),
+        ("single_generation", "false"),
+        ("slow_dchecks", "false"),
         ("target_cpu", cpu),
+        ("tsan", "false"),
+        ("ubsan", "false"),
+        ("use_sanitizer", "false"),
+        ("v8_cfi", "false"),
         ("v8_current_cpu", cpu),
-        ("v8_dict_property_const_tracking", "false"),
-        ("v8_enable_atomic_object_field_writes", "false"),
-        ("v8_enable_concurrent_marking", "false"),
-        ("v8_enable_i18n_support", icu),
-        ("v8_enable_verify_predictable", "false"),
-        ("v8_enable_verify_csa", "false"),
-        ("v8_enable_lite_mode", "false"),
-        ("v8_enable_runtime_call_stats", "false"),
-        ("v8_enable_pointer_compression", "true"),
-        ("v8_enable_pointer_compression_shared_cage", "false"),
-        ("v8_enable_third_party_heap", "false"),
-        ("v8_enable_webassembly", "false"),
-        ("v8_control_flow_integrity", "false"),
-        ("v8_enable_single_generation", "false"),
-        ("v8_enable_sandbox", "false"),
-        ("v8_enable_shared_ro_heap", "false"),
         ("v8_target_cpu", cpu),
+        ("verify_csa", "false"),
+        ("verify_heap", "false"),
+        ("verify_predictable", "false"),
+        ("wasm_random_fuzzers", "false"),
+        ("write_barriers", "false"),
     ])
 
 # TODO(victorgomes): Create a rule (instead of a macro), that can
 # dynamically populate the build config.
-def v8_build_config(name):
-    cpu = _quote("x64")
+def v8_build_config(name, arch):
+    cpu = '"' + arch + '"'
     native.genrule(
         name = "noicu/" + name,
         outs = ["noicu/" + name + ".json"],

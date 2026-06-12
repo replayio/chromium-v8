@@ -32,7 +32,9 @@
 
 #include <vector>
 
+#include "include/cppgc/allocation.h"
 #include "include/v8-context.h"
+#include "include/v8-cppgc.h"
 #include "include/v8-local-handle.h"
 #include "include/v8-microtask-queue.h"
 #include "include/v8-platform.h"
@@ -44,6 +46,7 @@
 #include "src/inspector/v8-console-message.h"
 #include "src/inspector/v8-console.h"
 #include "src/inspector/v8-debugger-agent-impl.h"
+#include "src/inspector/v8-debugger-barrier.h"
 #include "src/inspector/v8-debugger-id.h"
 #include "src/inspector/v8-debugger.h"
 #include "src/inspector/v8-inspector-session-impl.h"
@@ -67,10 +70,10 @@ V8InspectorImpl::V8InspectorImpl(v8::Isolate* isolate,
       m_client(client),
       m_debugger(new V8Debugger(isolate, this)),
       m_lastExceptionId(0),
-      m_lastContextId(0),
-      m_isolateId(generateUniqueId()) {
+      m_lastContextId(0) {
   v8::debug::SetInspector(m_isolate, this);
   v8::debug::SetConsoleDelegate(m_isolate, console());
+  v8::debug::SetIsolateId(m_isolate, generateUniqueId());
 }
 
 V8InspectorImpl::~V8InspectorImpl() {
@@ -99,18 +102,16 @@ v8::MaybeLocal<v8::Value> V8InspectorImpl::compileAndRunInternalScript(
   if (!v8::debug::CompileInspectorScript(m_isolate, source)
            .ToLocal(&unboundScript))
     return v8::MaybeLocal<v8::Value>();
-  v8::MicrotasksScope microtasksScope(m_isolate,
+  v8::MicrotasksScope microtasksScope(context,
                                       v8::MicrotasksScope::kDoNotRunMicrotasks);
   v8::Context::Scope contextScope(context);
-  v8::Isolate::SafeForTerminationScope allowTermination(m_isolate);
   return unboundScript->BindToCurrentContext()->Run(context);
 }
 
 v8::MaybeLocal<v8::Script> V8InspectorImpl::compileScript(
     v8::Local<v8::Context> context, const String16& code,
     const String16& fileName) {
-  v8::ScriptOrigin origin(m_isolate, toV8String(m_isolate, fileName), 0, 0,
-                          false);
+  v8::ScriptOrigin origin(toV8String(m_isolate, fileName), 0, 0, false);
   v8::ScriptCompiler::Source source(toV8String(m_isolate, code), origin);
   return v8::ScriptCompiler::Compile(context, &source,
                                      v8::ScriptCompiler::kNoCompileOptions);
@@ -147,25 +148,99 @@ std::unique_ptr<V8StackTrace> V8InspectorImpl::createStackTrace(
   return m_debugger->createStackTrace(stackTrace);
 }
 
+namespace {
+
+// Wrapper to make Channel look like a ManagedChannel so we can just use
+// ManagedChannel in V8InspectorSessionImpl.
+class ChannelWrapper : public V8Inspector::ManagedChannel {
+ public:
+  explicit ChannelWrapper(V8Inspector::Channel* channel) : channel_(channel) {}
+  ~ChannelWrapper() override = default;
+
+  void sendResponse(int callId,
+                    std::unique_ptr<StringBuffer> message) override {
+    channel_->sendResponse(callId, std::move(message));
+  }
+
+  void sendNotification(std::unique_ptr<StringBuffer> message) override {
+    channel_->sendNotification(std::move(message));
+  }
+
+  void flushProtocolNotifications() override {
+    channel_->flushProtocolNotifications();
+  }
+
+ private:
+  V8Inspector::Channel* channel_;
+};
+
+}  // namespace
+
 std::unique_ptr<V8InspectorSession> V8InspectorImpl::connect(
     int contextGroupId, V8Inspector::Channel* channel, StringView state,
-    ClientTrustLevel client_trust_level) {
+    ClientTrustLevel client_trust_level, SessionPauseState pause_state) {
+  ChannelWrapper* wrappedChannel = cppgc::MakeGarbageCollected<ChannelWrapper>(
+      m_isolate->GetCppHeap()->GetAllocationHandle(), channel);
+  return std::unique_ptr<V8InspectorSession>(connectImpl(
+      contextGroupId, wrappedChannel, state, client_trust_level, pause_state));
+}
+
+std::shared_ptr<V8InspectorSession> V8InspectorImpl::connectShared(
+    int contextGroupId, V8Inspector::Channel* channel, StringView state,
+    ClientTrustLevel client_trust_level, SessionPauseState pause_state) {
+  ChannelWrapper* wrappedChannel = cppgc::MakeGarbageCollected<ChannelWrapper>(
+      m_isolate->GetCppHeap()->GetAllocationHandle(), channel);
+  return connectShared(contextGroupId, wrappedChannel, state,
+                       client_trust_level, pause_state);
+}
+
+std::shared_ptr<V8InspectorSession> V8InspectorImpl::connectShared(
+    int contextGroupId, V8Inspector::ManagedChannel* channel, StringView state,
+    ClientTrustLevel client_trust_level, SessionPauseState pause_state) {
+  std::shared_ptr<V8InspectorSessionImpl> session(connectImpl(
+      contextGroupId, channel, state, client_trust_level, pause_state));
+  // TODO(crbug.com/40071155): Move to V8InspectorSessionImpl::create once the
+  // unique_ptr version is no longer required.
+  session->setWeakThis(session);
+  return session;
+}
+
+V8InspectorSessionImpl* V8InspectorImpl::connectImpl(
+    int contextGroupId, V8Inspector::ManagedChannel* channel, StringView state,
+    ClientTrustLevel client_trust_level, SessionPauseState pause_state) {
   int sessionId = ++m_lastSessionId;
-  std::unique_ptr<V8InspectorSessionImpl> session =
-      V8InspectorSessionImpl::create(this, contextGroupId, sessionId, channel,
-                                     state, client_trust_level);
-  m_sessions[contextGroupId][sessionId] = session.get();
-  return std::move(session);
+  std::shared_ptr<V8DebuggerBarrier> debuggerBarrier;
+  if (pause_state == kWaitingForDebugger) {
+    auto it = m_debuggerBarriers.find(contextGroupId);
+    if (it != m_debuggerBarriers.end()) {
+      // Note this will be empty in case a pre-existent barrier is already
+      // released. This is by design, as a released throttle is no longer
+      // efficient.
+      debuggerBarrier = it->second.lock();
+    } else {
+      debuggerBarrier =
+          std::make_shared<V8DebuggerBarrier>(m_client, contextGroupId);
+      m_debuggerBarriers.insert(it, {contextGroupId, debuggerBarrier});
+    }
+  }
+  V8InspectorSessionImpl* session = V8InspectorSessionImpl::create(
+      this, contextGroupId, sessionId, channel, state, client_trust_level,
+      std::move(debuggerBarrier));
+  m_sessions[contextGroupId][sessionId] = session;
+  return session;
 }
 
 void V8InspectorImpl::disconnect(V8InspectorSessionImpl* session) {
   auto& map = m_sessions[session->contextGroupId()];
   map.erase(session->sessionId());
-  if (map.empty()) m_sessions.erase(session->contextGroupId());
+  if (map.empty()) {
+    m_sessions.erase(session->contextGroupId());
+    m_debuggerBarriers.erase(session->contextGroupId());
+  }
 }
 
-InspectedContext* V8InspectorImpl::getContext(int groupId,
-                                              int contextId) const {
+std::shared_ptr<InspectedContext> V8InspectorImpl::getContext(
+    int groupId, int contextId) const {
   if (!groupId || !contextId) return nullptr;
 
   auto contextGroupIt = m_contexts.find(groupId);
@@ -184,24 +259,29 @@ InspectedContext* V8InspectorImpl::getContext(int groupId,
     return nullptr;
   }
 
-  return contextIt->second.get();
+  return contextIt->second;
 }
 
-InspectedContext* V8InspectorImpl::getContext(int contextId) const {
+std::shared_ptr<InspectedContext> V8InspectorImpl::getContext(
+    int contextId) const {
   return getContext(contextGroupId(contextId), contextId);
 }
 
 v8::MaybeLocal<v8::Context> V8InspectorImpl::contextById(int contextId) {
-  InspectedContext* context = getContext(contextId);
+  std::shared_ptr<InspectedContext> context = getContext(contextId);
   return context ? context->context() : v8::MaybeLocal<v8::Context>();
 }
 
 V8DebuggerId V8InspectorImpl::uniqueDebuggerId(int contextId) {
-  InspectedContext* context = getContext(contextId);
+  std::shared_ptr<InspectedContext> context = getContext(contextId);
   internal::V8DebuggerId unique_id;
   if (context) unique_id = m_debugger->debuggerIdFor(context->contextGroupId());
 
   return unique_id.toV8DebuggerId();
+}
+
+uint64_t V8InspectorImpl::isolateId() {
+  return v8::debug::GetIsolateId(m_isolate);
 }
 
 void V8InspectorImpl::contextCreated(const V8ContextInfo& info) {
@@ -249,11 +329,13 @@ void V8InspectorImpl::contextCollected(int groupId, int contextId) {
   if (storageIt != m_consoleStorageMap.end())
     storageIt->second->contextDestroyed(contextId);
 
-  InspectedContext* inspectedContext = getContext(groupId, contextId);
+  std::shared_ptr<InspectedContext> inspectedContext =
+      getContext(groupId, contextId);
   if (!inspectedContext) return;
 
   forEachSession(groupId, [&inspectedContext](V8InspectorSessionImpl* session) {
-    session->runtimeAgent()->reportExecutionContextDestroyed(inspectedContext);
+    session->runtimeAgent()->reportExecutionContextDestroyed(
+        inspectedContext.get());
   });
   discardInspectedContext(groupId, contextId);
 }
@@ -380,7 +462,7 @@ v8::MaybeLocal<v8::Context> V8InspectorImpl::exceptionMetaDataContext() {
 
 void V8InspectorImpl::discardInspectedContext(int contextGroupId,
                                               int contextId) {
-  auto* context = getContext(contextGroupId, contextId);
+  auto context = getContext(contextGroupId, contextId);
   if (!context) return;
   v8::recordreplay::Trace(
       "[RUN-2042-2109] V8InspectorImpl::discardInspectedContext %d %d %zu %zu",
@@ -450,9 +532,7 @@ int64_t V8InspectorImpl::generateUniqueId() {
 
 V8InspectorImpl::EvaluateScope::EvaluateScope(
     const InjectedScript::Scope& scope)
-    : m_scope(scope),
-      m_isolate(scope.inspector()->isolate()),
-      m_safeForTerminationScope(m_isolate) {}
+    : m_scope(scope), m_isolate(scope.inspector()->isolate()) {}
 
 struct V8InspectorImpl::EvaluateScope::CancelToken {
   v8::base::Mutex m_mutex;
@@ -493,7 +573,8 @@ protocol::Response V8InspectorImpl::EvaluateScope::setTimeout(double timeout) {
     return protocol::Response::ServerError("Execution was terminated");
   }
   m_cancelToken.reset(new CancelToken());
-  v8::debug::GetCurrentPlatform()->CallDelayedOnWorkerThread(
+  v8::debug::GetCurrentPlatform()->PostDelayedTaskOnWorkerThread(
+      v8::TaskPriority::kUserVisible,
       std::make_unique<TerminateTask>(m_isolate, m_cancelToken), timeout);
   return protocol::Response::Success();
 }
@@ -560,7 +641,7 @@ V8InspectorImpl::getAssociatedExceptionDataForProtocol(
   if (!exceptionMetaDataContext().ToLocal(&context)) return nullptr;
 
   v8::TryCatch tryCatch(m_isolate);
-  v8::MicrotasksScope microtasksScope(m_isolate,
+  v8::MicrotasksScope microtasksScope(context,
                                       v8::MicrotasksScope::kDoNotRunMicrotasks);
   v8::Context::Scope contextScope(context);
   std::unique_ptr<protocol::DictionaryValue> jsonObject;

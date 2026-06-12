@@ -2,7 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Flags: --experimental-wasm-gc --experimental-wasm-stringref
+// Flags: --wasm-staging
+
 d8.file.execute("test/mjsunit/wasm/wasm-module-builder.js");
 
 // Test type checks when creating a global with a value imported from a global
@@ -12,34 +13,33 @@ d8.file.execute("test/mjsunit/wasm/wasm-module-builder.js");
 
   let exporting_instance = (function() {
     let builder = new WasmModuleBuilder();
-    builder.setSingletonRecGroups();
     let type_super = builder.addStruct([makeField(kWasmI32, false)]);
     let type_sub =
         builder.addStruct([makeField(kWasmI32, false)], type_super);
     let type_other = builder.addStruct([makeField(kWasmI64, false)]);
 
-    builder.addGlobal(wasmRefType(type_super), false,
+    builder.addGlobal(wasmRefType(type_super), false, false,
                       [kExprI32Const, 42,
                        kGCPrefix, kExprStructNew, type_super])
            .exportAs("super");
-    builder.addGlobal(wasmRefType(type_sub), false,
+    builder.addGlobal(wasmRefType(type_sub), false, false,
                       [kExprI32Const, 42,
                        kGCPrefix, kExprStructNew, type_sub])
            .exportAs("sub");
-    builder.addGlobal(wasmRefType(type_other), false,
+    builder.addGlobal(wasmRefType(type_other), false, false,
             [kExprI64Const, 42,
              kGCPrefix, kExprStructNew, type_other])
            .exportAs("other");
     // null variants
-    builder.addGlobal(wasmRefNullType(type_super), false,
+    builder.addGlobal(wasmRefNullType(type_super), false, false,
                       [kExprI32Const, 42,
                        kGCPrefix, kExprStructNew, type_super])
            .exportAs("super_nullable");
-    builder.addGlobal(wasmRefNullType(type_sub), false,
+    builder.addGlobal(wasmRefNullType(type_sub), false, false,
                       [kExprI32Const, 42,
                        kGCPrefix, kExprStructNew, type_sub])
            .exportAs("sub_nullable");
-    builder.addGlobal(wasmRefNullType(type_other), false,
+    builder.addGlobal(wasmRefNullType(type_other), false, false,
             [kExprI64Const, 42,
              kGCPrefix, kExprStructNew, type_other])
            .exportAs("other_nullable");
@@ -63,7 +63,6 @@ d8.file.execute("test/mjsunit/wasm/wasm-module-builder.js");
   for (let[expected_valid, type, global] of tests) {
     print(`test ${type} imports ${global}`);
     let builder = new WasmModuleBuilder();
-    builder.setSingletonRecGroups();
     let type_super = builder.addStruct([makeField(kWasmI32, false)]);
     let type_sub =
       builder.addStruct([makeField(kWasmI32, false)], type_super);
@@ -104,7 +103,6 @@ d8.file.execute("test/mjsunit/wasm/wasm-module-builder.js");
 
   let exporting_instance = (function() {
     let builder = new WasmModuleBuilder();
-    builder.setSingletonRecGroups();
     let type_super = builder.addStruct([makeField(kWasmI32, false)]);
     let type_sub =
         builder.addStruct([makeField(kWasmI32, false)], type_super);
@@ -114,24 +112,24 @@ d8.file.execute("test/mjsunit/wasm/wasm-module-builder.js");
     .addBody([
       kExprI32Const, 42,
       kGCPrefix, kExprStructNew, type_super,
-      kGCPrefix, kExprExternExternalize])
+      kGCPrefix, kExprExternConvertAny])
     .exportFunc();
     builder.addFunction("create_sub", makeSig([], [kWasmExternRef]))
     .addBody([
       kExprI32Const, 42,
       kGCPrefix, kExprStructNew, type_sub,
-      kGCPrefix, kExprExternExternalize])
+      kGCPrefix, kExprExternConvertAny])
     .exportFunc();
     builder.addFunction("create_other", makeSig([], [kWasmExternRef]))
     .addBody([
       kExprI64Const, 42,
       kGCPrefix, kExprStructNew, type_other,
-      kGCPrefix, kExprExternExternalize])
+      kGCPrefix, kExprExternConvertAny])
     .exportFunc();
     builder.addFunction("create_null", makeSig([], [kWasmExternRef]))
     .addBody([
       kExprRefNull, kNullRefCode,
-      kGCPrefix, kExprExternExternalize])
+      kGCPrefix, kExprExternConvertAny])
     .exportFunc();
 
     return builder.instantiate({});
@@ -155,7 +153,6 @@ d8.file.execute("test/mjsunit/wasm/wasm-module-builder.js");
   for (let[expected_valid, type, imported_value] of tests) {
     print(`test ${type} imports ${imported_value}`);
     let builder = new WasmModuleBuilder();
-    builder.setSingletonRecGroups();
     let type_super = builder.addStruct([makeField(kWasmI32, false)]);
     let type_sub =
       builder.addStruct([makeField(kWasmI32, false)], type_super);
@@ -213,7 +210,6 @@ d8.file.execute("test/mjsunit/wasm/wasm-module-builder.js");
   print(arguments.callee.name);
   let exporting_instance = (function() {
     let builder = new WasmModuleBuilder();
-    builder.setSingletonRecGroups();
     let type_struct = builder.addStruct([makeField(kWasmI32, false)]);
     let type_array = builder.addArray(kWasmI32);
 
@@ -221,13 +217,13 @@ d8.file.execute("test/mjsunit/wasm/wasm-module-builder.js");
     .addBody([
       kExprI32Const, 42,
       kGCPrefix, kExprStructNew, type_struct,
-      kGCPrefix, kExprExternExternalize])
+      kGCPrefix, kExprExternConvertAny])
     .exportFunc();
     builder.addFunction("create_array", makeSig([], [kWasmExternRef]))
     .addBody([
       kExprI32Const, 42,
       kGCPrefix, kExprArrayNewFixed, type_array, 1,
-      kGCPrefix, kExprExternExternalize])
+      kGCPrefix, kExprExternConvertAny])
     .exportFunc();
     return builder.instantiate({});
   })();
@@ -243,6 +239,7 @@ d8.file.execute("test/mjsunit/wasm/wasm-module-builder.js");
   builder.addImportedGlobal("imports", "eq2", kWasmEqRef, false);
   builder.addImportedGlobal("imports", "eq3", kWasmEqRef, false);
   builder.addImportedGlobal("imports", "array", kWasmArrayRef, false);
+  builder.addImportedGlobal("imports", "i31ref", kWasmI31Ref, false);
   builder.instantiate({imports : {
     any1: exporting_instance.exports.create_struct(),
     any2: exporting_instance.exports.create_array(),
@@ -253,6 +250,7 @@ d8.file.execute("test/mjsunit/wasm/wasm-module-builder.js");
     eq2: exporting_instance.exports.create_array(),
     eq3: exporting_instance.exports.create_struct(),
     array: exporting_instance.exports.create_array(),
+    i31ref: -123,
   }});
 })();
 
@@ -264,13 +262,13 @@ d8.file.execute("test/mjsunit/wasm/wasm-module-builder.js");
   builder.addImportedGlobal("imports", "any", kWasmAnyRef, false);
 
   builder.addFunction("get_string1", makeSig([], [kWasmExternRef]))
-  .addBody([kExprGlobalGet, 0, kGCPrefix, kExprExternExternalize])
+  .addBody([kExprGlobalGet, 0, kGCPrefix, kExprExternConvertAny])
   .exportFunc();
   builder.addFunction("get_string2", makeSig([], [kWasmExternRef]))
-  .addBody([kExprGlobalGet, 1, kGCPrefix, kExprExternExternalize])
+  .addBody([kExprGlobalGet, 1, kGCPrefix, kExprExternConvertAny])
   .exportFunc();
   builder.addFunction("get_any", makeSig([], [kWasmExternRef]))
-  .addBody([kExprGlobalGet, 2, kGCPrefix, kExprExternExternalize])
+  .addBody([kExprGlobalGet, 2, kGCPrefix, kExprExternConvertAny])
   .exportFunc();
 
   let instance = builder.instantiate({imports : {
@@ -296,12 +294,11 @@ d8.file.execute("test/mjsunit/wasm/wasm-module-builder.js");
   let array_type = builder.addArray(kWasmI32);
 
   builder.addFunction("get_extern", makeSig([], [kWasmExternRef]))
-  .addBody([kExprGlobalGet, 0, kGCPrefix, kExprExternExternalize])
+  .addBody([kExprGlobalGet, 0, kGCPrefix, kExprExternConvertAny])
   .exportFunc();
   builder.addFunction("get_struct_val", makeSig([], [kWasmI32]))
   .addBody([
     kExprGlobalGet, 0,
-    kGCPrefix, kExprRefAsData,
     kGCPrefix, kExprRefCast, struct_type,
     kGCPrefix, kExprStructGet, struct_type, 0,
   ])
@@ -309,7 +306,6 @@ d8.file.execute("test/mjsunit/wasm/wasm-module-builder.js");
   builder.addFunction("get_array_val", makeSig([], [kWasmI32]))
   .addBody([
     kExprGlobalGet, 0,
-    kGCPrefix, kExprRefAsData,
     kGCPrefix, kExprRefCast, array_type,
     kExprI32Const, 0,
     kGCPrefix, kExprArrayGet, array_type,
@@ -319,13 +315,13 @@ d8.file.execute("test/mjsunit/wasm/wasm-module-builder.js");
   .addBody([
     kExprLocalGet, 0,
     kGCPrefix, kExprStructNew, struct_type,
-    kGCPrefix, kExprExternExternalize])
+    kGCPrefix, kExprExternConvertAny])
   .exportFunc();
   builder.addFunction("create_array", makeSig([kWasmI32], [kWasmExternRef]))
   .addBody([
     kExprLocalGet, 0,
     kGCPrefix, kExprArrayNewFixed, array_type, 1,
-    kGCPrefix, kExprExternExternalize])
+    kGCPrefix, kExprExternConvertAny])
   .exportFunc();
 
   let instance = builder.instantiate({imports : {anyref_global}});
@@ -364,12 +360,11 @@ d8.file.execute("test/mjsunit/wasm/wasm-module-builder.js");
   let array_type = builder.addArray(kWasmI32);
 
   builder.addFunction("get_extern", makeSig([], [kWasmExternRef]))
-  .addBody([kExprGlobalGet, 0, kGCPrefix, kExprExternExternalize])
+  .addBody([kExprGlobalGet, 0, kGCPrefix, kExprExternConvertAny])
   .exportFunc();
   builder.addFunction("get_struct_val", makeSig([], [kWasmI32]))
   .addBody([
     kExprGlobalGet, 0,
-    kGCPrefix, kExprRefAsData,
     kGCPrefix, kExprRefCast, struct_type,
     kGCPrefix, kExprStructGet, struct_type, 0,
   ])
@@ -377,7 +372,6 @@ d8.file.execute("test/mjsunit/wasm/wasm-module-builder.js");
   builder.addFunction("get_array_val", makeSig([], [kWasmI32]))
   .addBody([
     kExprGlobalGet, 0,
-    kGCPrefix, kExprRefAsData,
     kGCPrefix, kExprRefCast, array_type,
     kExprI32Const, 0,
     kGCPrefix, kExprArrayGet, array_type,
@@ -387,13 +381,13 @@ d8.file.execute("test/mjsunit/wasm/wasm-module-builder.js");
   .addBody([
     kExprLocalGet, 0,
     kGCPrefix, kExprStructNew, struct_type,
-    kGCPrefix, kExprExternExternalize])
+    kGCPrefix, kExprExternConvertAny])
   .exportFunc();
   builder.addFunction("create_array", makeSig([kWasmI32], [kWasmExternRef]))
   .addBody([
     kExprLocalGet, 0,
     kGCPrefix, kExprArrayNewFixed, array_type, 1,
-    kGCPrefix, kExprExternExternalize])
+    kGCPrefix, kExprExternConvertAny])
   .exportFunc();
 
   let instance = builder.instantiate({imports : {eqref_global}});
@@ -414,59 +408,48 @@ d8.file.execute("test/mjsunit/wasm/wasm-module-builder.js");
   assertThrows(() => eqref_global.value = "string", TypeError);
 })();
 
-(function TestDataRefGlobalFromJS() {
+(function TestStructRefGlobalFromJS() {
   print(arguments.callee.name);
-  let dataref_global = new WebAssembly.Global(
-      { value: "dataref", mutable: true }, null);
-  assertNull(dataref_global.value);
+  let structref_global = new WebAssembly.Global(
+      { value: "structref", mutable: true }, null);
+  assertNull(structref_global.value);
 
   let builder = new WasmModuleBuilder();
-  builder.addImportedGlobal("imports", "dataref_global", kWasmDataRef, true);
+  builder.addImportedGlobal("imports", "structref_global", kWasmStructRef, true);
   let struct_type = builder.addStruct([makeField(kWasmI32, false)]);
   let array_type = builder.addArray(kWasmI32);
 
   builder.addFunction("get_struct_val", makeSig([], [kWasmI32]))
   .addBody([
     kExprGlobalGet, 0,
-    kGCPrefix, kExprRefAsData,
     kGCPrefix, kExprRefCast, struct_type,
     kGCPrefix, kExprStructGet, struct_type, 0,
-  ])
-  .exportFunc();
-  builder.addFunction("get_array_val", makeSig([], [kWasmI32]))
-  .addBody([
-    kExprGlobalGet, 0,
-    kGCPrefix, kExprRefAsData,
-    kGCPrefix, kExprRefCast, array_type,
-    kExprI32Const, 0,
-    kGCPrefix, kExprArrayGet, array_type,
   ])
   .exportFunc();
   builder.addFunction("create_struct", makeSig([kWasmI32], [kWasmExternRef]))
   .addBody([
     kExprLocalGet, 0,
     kGCPrefix, kExprStructNew, struct_type,
-    kGCPrefix, kExprExternExternalize])
+    kGCPrefix, kExprExternConvertAny])
   .exportFunc();
   builder.addFunction("create_array", makeSig([kWasmI32], [kWasmExternRef]))
   .addBody([
     kExprLocalGet, 0,
     kGCPrefix, kExprArrayNewFixed, array_type, 1,
-    kGCPrefix, kExprExternExternalize])
+    kGCPrefix, kExprExternConvertAny])
   .exportFunc();
 
-  let instance = builder.instantiate({imports : {dataref_global}});
+  let instance = builder.instantiate({imports : {structref_global}});
   let wasm = instance.exports;
 
-  dataref_global.value = wasm.create_struct(42);
+  structref_global.value = wasm.create_struct(42);
   assertEquals(42, wasm.get_struct_val());
-  dataref_global.value = wasm.create_array(43);
-  assertEquals(43, wasm.get_array_val());
-  dataref_global.value = null;
-  assertEquals(null, dataref_global.value);
+  structref_global.value = null;
+  assertEquals(null, structref_global.value);
 
-  assertThrows(() => dataref_global.value = undefined, TypeError);
-  assertThrows(() => dataref_global.value = "string", TypeError);
+  assertThrows(() => structref_global.value = undefined, TypeError);
+  assertThrows(() => structref_global.value = "string", TypeError);
+  assertThrows(() => structref_global.value = wasm.create_array(1), TypeError);
 })();
 
 (function TestArrayRefGlobalFromJS() {
@@ -483,7 +466,6 @@ d8.file.execute("test/mjsunit/wasm/wasm-module-builder.js");
   builder.addFunction("get_array_val", makeSig([], [kWasmI32]))
   .addBody([
     kExprGlobalGet, 0,
-    kGCPrefix, kExprRefAsData,
     kGCPrefix, kExprRefCast, array_type,
     kExprI32Const, 0,
     kGCPrefix, kExprArrayGet, array_type,
@@ -493,13 +475,13 @@ d8.file.execute("test/mjsunit/wasm/wasm-module-builder.js");
   .addBody([
     kExprLocalGet, 0,
     kGCPrefix, kExprStructNew, struct_type,
-    kGCPrefix, kExprExternExternalize])
+    kGCPrefix, kExprExternConvertAny])
   .exportFunc();
   builder.addFunction("create_array", makeSig([kWasmI32], [kWasmExternRef]))
   .addBody([
     kExprLocalGet, 0,
     kGCPrefix, kExprArrayNewFixed, array_type, 1,
-    kGCPrefix, kExprExternExternalize])
+    kGCPrefix, kExprExternConvertAny])
   .exportFunc();
 
   let instance = builder.instantiate({imports : {arrayref_global}});
@@ -513,4 +495,44 @@ d8.file.execute("test/mjsunit/wasm/wasm-module-builder.js");
   assertThrows(() => arrayref_global.value = undefined, TypeError);
   assertThrows(() => arrayref_global.value = "string", TypeError);
   assertThrows(() => arrayref_global.value = wasm.create_struct(1), TypeError);
+})();
+
+(function TestI31RefGlobalFromJS() {
+  print(arguments.callee.name);
+  let i31ref_global = new WebAssembly.Global(
+      { value: "i31ref", mutable: true }, 123);
+  assertEquals(123, i31ref_global.value);
+
+  let builder = new WasmModuleBuilder();
+  builder.addImportedGlobal("imports", "i31ref_global", kWasmI31Ref, true);
+  let struct_type = builder.addStruct([makeField(kWasmI32, false)]);
+
+  builder.addFunction("get_i31", makeSig([], [kWasmI32]))
+  .addBody([
+    kExprGlobalGet, 0,
+    kGCPrefix, kExprI31GetS
+  ])
+  .exportFunc();
+  builder.addFunction("create_struct",
+                      makeSig([kWasmI32], [wasmRefType(struct_type)]))
+  .addBody([
+    kExprLocalGet, 0,
+    kGCPrefix, kExprStructNew, struct_type,
+  ])
+  .exportFunc();
+
+  let instance = builder.instantiate({imports : {i31ref_global}});
+  let wasm = instance.exports;
+  assertEquals(123, i31ref_global.value);
+
+  i31ref_global.value = 42;
+  assertEquals(42, i31ref_global.value);
+  assertEquals(42, wasm.get_i31());
+  i31ref_global.value = null;
+  assertEquals(null, i31ref_global.value);
+
+  assertThrows(() => i31ref_global.value = undefined, TypeError);
+  assertThrows(() => i31ref_global.value = "string", TypeError);
+  assertThrows(() => i31ref_global.value = wasm.create_struct(1), TypeError);
+  assertThrows(() => i31ref_global.value = Math.pow(2, 33), TypeError);
 })();

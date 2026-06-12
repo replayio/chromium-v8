@@ -19,9 +19,9 @@
 #include "src/compiler/backend/loong64/instruction-codes-loong64.h"
 #elif V8_TARGET_ARCH_X64
 #include "src/compiler/backend/x64/instruction-codes-x64.h"
-#elif V8_TARGET_ARCH_PPC || V8_TARGET_ARCH_PPC64
+#elif V8_TARGET_ARCH_PPC64
 #include "src/compiler/backend/ppc/instruction-codes-ppc.h"
-#elif V8_TARGET_ARCH_S390
+#elif V8_TARGET_ARCH_S390X
 #include "src/compiler/backend/s390/instruction-codes-s390.h"
 #elif V8_TARGET_ARCH_RISCV32 || V8_TARGET_ARCH_RISCV64
 #include "src/compiler/backend/riscv/instruction-codes-riscv.h"
@@ -31,6 +31,7 @@
 #endif
 #include "src/base/bit-field.h"
 #include "src/codegen/atomic-memory-order.h"
+#include "src/compiler/globals.h"
 #include "src/compiler/write-barrier-kind.h"
 
 namespace v8 {
@@ -41,6 +42,7 @@ namespace compiler {
 enum class RecordWriteMode {
   kValueIsMap,
   kValueIsPointer,
+  kValueIsIndirectPointer,
   kValueIsEphemeronKey,
   kValueIsAny,
 };
@@ -52,6 +54,8 @@ inline RecordWriteMode WriteBarrierKindToRecordWriteMode(
       return RecordWriteMode::kValueIsMap;
     case kPointerWriteBarrier:
       return RecordWriteMode::kValueIsPointer;
+    case kIndirectPointerWriteBarrier:
+      return RecordWriteMode::kValueIsIndirectPointer;
     case kEphemeronKeyWriteBarrier:
       return RecordWriteMode::kValueIsEphemeronKey;
     case kFullWriteBarrier:
@@ -70,11 +74,13 @@ inline RecordWriteMode WriteBarrierKindToRecordWriteMode(
   V(AtomicExchangeInt16)                                   \
   V(AtomicExchangeUint16)                                  \
   V(AtomicExchangeWord32)                                  \
+  V(AtomicExchangeWithWriteBarrier)                        \
   V(AtomicCompareExchangeInt8)                             \
   V(AtomicCompareExchangeUint8)                            \
   V(AtomicCompareExchangeInt16)                            \
   V(AtomicCompareExchangeUint16)                           \
   V(AtomicCompareExchangeWord32)                           \
+  V(AtomicCompareExchangeWithWriteBarrier)                 \
   V(AtomicAddInt8)                                         \
   V(AtomicAddUint8)                                        \
   V(AtomicAddInt16)                                        \
@@ -102,6 +108,10 @@ inline RecordWriteMode WriteBarrierKindToRecordWriteMode(
   V(AtomicXorWord32)                                       \
   V(ArchStoreWithWriteBarrier)                             \
   V(ArchAtomicStoreWithWriteBarrier)                       \
+  V(ArchStoreIndirectWithWriteBarrier)                     \
+  V(ArchStoreSkippedWriteBarrier)                          \
+  V(ArchAtomicStoreSkippedWriteBarrier)                    \
+  V(ArchStoreIndirectSkippedWriteBarrier)                  \
   V(AtomicLoadInt8)                                        \
   V(AtomicLoadUint8)                                       \
   V(AtomicLoadInt16)                                       \
@@ -120,30 +130,37 @@ inline RecordWriteMode WriteBarrierKindToRecordWriteMode(
   V(ArchTailCallCodeObject)                                                \
   V(ArchTailCallAddress)                                                   \
   IF_WASM(V, ArchTailCallWasm)                                             \
+  IF_WASM(V, ArchTailCallWasmIndirect)                                     \
   /* Update IsTailCall if further TailCall opcodes are added */            \
                                                                            \
   V(ArchCallCodeObject)                                                    \
   V(ArchCallJSFunction)                                                    \
   IF_WASM(V, ArchCallWasmFunction)                                         \
+  IF_WASM(V, ArchCallWasmFunctionIndirect)                                 \
+  V(ArchCallCFunction)                                                     \
   V(ArchCallBuiltinPointer)                                                \
   /* Update IsCallWithDescriptorFlags if further Call opcodes are added */ \
                                                                            \
   V(ArchPrepareCallCFunction)                                              \
   V(ArchSaveCallerRegisters)                                               \
   V(ArchRestoreCallerRegisters)                                            \
-  V(ArchCallCFunction)                                                     \
   V(ArchPrepareTailCall)                                                   \
   V(ArchJmp)                                                               \
   V(ArchBinarySearchSwitch)                                                \
   V(ArchTableSwitch)                                                       \
   V(ArchNop)                                                               \
+  V(ArchPause)                                                             \
   V(ArchAbortCSADcheck)                                                    \
   V(ArchDebugBreak)                                                        \
+  IF_HARDWARE_SANDBOX(V, ArchSwitchSandboxMode)                            \
   V(ArchComment)                                                           \
-  V(ArchThrowTerminator)                                                   \
   V(ArchDeoptimize)                                                        \
+  IF_WASM(V, ArchTrap)                                                     \
   V(ArchRet)                                                               \
   V(ArchFramePointer)                                                      \
+  V(ArchRootPointer)                                                       \
+  IF_WASM(V, ArchStackPointer)                                             \
+  IF_WASM(V, ArchSetStackPointer)                                          \
   V(ArchParentFramePointer)                                                \
   V(ArchTruncateDoubleToI)                                                 \
   V(ArchStackSlot)                                                         \
@@ -216,13 +233,15 @@ enum FlagsMode {
   kFlags_set = 3,
   kFlags_trap = 4,
   kFlags_select = 5,
+  kFlags_conditional_trap = 6,
+  kFlags_conditional_branch = 7,
 };
 
 V8_EXPORT_PRIVATE std::ostream& operator<<(std::ostream& os,
                                            const FlagsMode& fm);
 
 // The condition of flags continuation (see below).
-enum FlagsCondition {
+enum FlagsCondition : uint8_t {
   kEqual,
   kNotEqual,
   kSignedLessThan,
@@ -246,7 +265,9 @@ enum FlagsCondition {
   kOverflow,
   kNotOverflow,
   kPositiveOrZero,
-  kNegative
+  kNegative,
+  kIsNaN,
+  kIsNotNaN,
 };
 
 static constexpr FlagsCondition kStackPointerGreaterThanCondition =
@@ -263,7 +284,8 @@ V8_EXPORT_PRIVATE std::ostream& operator<<(std::ostream& os,
 
 enum MemoryAccessMode {
   kMemoryAccessDirect = 0,
-  kMemoryAccessProtected = 1,
+  kMemoryAccessProtectedMemOutOfBounds = 1,
+  kMemoryAccessProtectedNullDereference = 2,
 };
 
 enum class AtomicWidth { kWord32, kWord64 };
@@ -278,36 +300,119 @@ inline size_t AtomicWidthSize(AtomicWidth width) {
   UNREACHABLE();
 }
 
-// The InstructionCode is an opaque, target-specific integer that encodes
-// what code to emit for an instruction in the code generator. It is not
-// interesting to the register allocator, as the inputs and flags on the
-// instructions specify everything of interest.
+static constexpr int kLazyDeoptOnThrowSentinel = -1;
+
+// The InstructionCode is an opaque, target-specific integer that encodes what
+// code to emit for an instruction in the code generator. It is not interesting
+// to the register allocator, as the inputs and flags on the instructions
+// specify everything of interest.
 using InstructionCode = uint32_t;
 
 // Helpers for encoding / decoding InstructionCode into the fields needed
-// for code generation. We encode the instruction, addressing mode, and flags
-// continuation into a single InstructionCode which is stored as part of
+// for code generation. We encode the instruction, addressing mode, flags, and
+// other information into a single InstructionCode which is stored as part of
 // the instruction.
+//
+// All instructions have the first five fields, using up the lower 22 bits.
+// The remaining 10 bits are accessible in the MiscField, which the other
+// instructions types can overlay specific data:
+// -- Generic
+// Field                        | Bits
+// ArchOpcode                   | 9
+// AddressingMode               | 5
+// FlagsMode                    | 3
+// FlagsCondition               | 5
+// Misc                         | 10
+//
+// So, the following instruction types use the MiscField in the following ways:
+// -- Atomics
+// Field                        | Bits
+// AtomicWidth                  | 2
+// AtomicMemoryOrder            | 2
+// AtomicStoreRecordWriteMode   | 4
+// AccessMode                   | 2
+//
+// -- Write barriers
+// Field                        | Bits
+// RecordWriteMode              | 4
+// Undefined                    | 4
+// AccessMode                   | 2
+//
+// -- X64 vectors
+// Field                        | Bits
+// LaneSize                     | 2
+// VectorLength                 | 2
+// Undefined                    | 4
+// AccessMode                   | 2
+//
+// -- Everyone else vectors
+// Field                        | Bits
+// LaneSize                     | 8
+// AccessMode                   | 2
+//
+// -- Deopts
+// Field                        | Bits
+// DeoptImmedArgsCount          | 2
+// DeoptFrameStateOffset        | 8
+//
+// -- Non-deopt branches
+// Field                        | Bits
+// StackCheck                   | 2
+// BranchHint                   | 1
+// Undefined                    | 7
+//
 using ArchOpcodeField = base::BitField<ArchOpcode, 0, 9>;
 static_assert(ArchOpcodeField::is_valid(kLastArchOpcode),
               "All opcodes must fit in the 9-bit ArchOpcodeField.");
-using AddressingModeField = base::BitField<AddressingMode, 9, 5>;
+using AddressingModeField = ArchOpcodeField::Next<AddressingMode, 5>;
 static_assert(
     AddressingModeField::is_valid(kLastAddressingMode),
     "All addressing modes must fit in the 5-bit AddressingModeField.");
-using FlagsModeField = base::BitField<FlagsMode, 14, 3>;
-using FlagsConditionField = base::BitField<FlagsCondition, 17, 5>;
-using MiscField = base::BitField<int, 22, 10>;
+using FlagsModeField = AddressingModeField::Next<FlagsMode, 3>;
+using FlagsConditionField = FlagsModeField::Next<FlagsCondition, 5>;
 
-// {MiscField} is used for a variety of things, depending on the opcode.
-// TODO(turbofan): There should be an abstraction that ensures safe encoding and
-// decoding. {HasMemoryAccessMode} and its uses are a small step in that
-// direction.
+// AtomicWidthField is used for the various Atomic opcodes. Only used on 64bit
+// architectures. All atomic instructions on 32bit architectures are assumed to
+// be 32bit wide.
+using AtomicWidthField = FlagsConditionField::Next<AtomicWidth, 2>;
+// AtomicMemoryOrderField is used for the various Atomic opcodes. This field is
+// not used on all architectures. It is used on architectures where the codegen
+// for kSeqCst and kAcqRel differ only by emitting fences.
+using AtomicMemoryOrderField = AtomicWidthField::Next<AtomicMemoryOrder, 2>;
+using AtomicStoreRecordWriteModeField =
+    AtomicMemoryOrderField::Next<RecordWriteMode, 4>;
+
+// Write modes for writes with barrier.
+using RecordWriteModeField = FlagsConditionField::Next<RecordWriteMode, 3>;
 
 // LaneSizeField and AccessModeField are helper types to encode/decode a lane
 // size, an access mode, or both inside the overlapping MiscField.
-using LaneSizeField = base::BitField<int, 22, 8>;
-using AccessModeField = base::BitField<MemoryAccessMode, 30, 1>;
+#ifdef V8_TARGET_ARCH_X64
+enum LaneSize { kL8 = 0, kL16 = 1, kL32 = 2, kL64 = 3 };
+enum VectorLength { kV128 = 0, kV256 = 1, kV512 = 3 };
+using LaneSizeField = FlagsConditionField::Next<LaneSize, 2>;
+using VectorLengthField = LaneSizeField::Next<VectorLength, 2>;
+#else
+using LaneSizeField = FlagsConditionField::Next<int, 8>;
+#endif  // V8_TARGET_ARCH_X64
+
+// Denotes whether the instruction needs to emit an accompanying landing pad for
+// the trap handler.
+using AccessModeField =
+    AtomicStoreRecordWriteModeField::Next<MemoryAccessMode, 2>;
+
+// Since AccessModeField is defined in terms of atomics, this assert ensures it
+// does not overlap with other fields it is used with.
+static_assert(AtomicStoreRecordWriteModeField::kLastUsedBit >=
+              RecordWriteModeField::kLastUsedBit);
+#ifdef V8_TARGET_ARCH_X64
+static_assert(AtomicStoreRecordWriteModeField::kLastUsedBit >=
+              VectorLengthField::kLastUsedBit);
+#else
+static_assert(AtomicStoreRecordWriteModeField::kLastUsedBit >=
+              LaneSizeField::kLastUsedBit);
+#endif
+
 // TODO(turbofan): {HasMemoryAccessMode} is currently only used to guard
 // decoding (in CodeGenerator and InstructionScheduler). Encoding (in
 // InstructionSelector) is not yet guarded. There are in fact instructions for
@@ -332,28 +437,24 @@ inline bool HasMemoryAccessMode(ArchOpcode opcode) {
 #endif
 }
 
-using DeoptImmedArgsCountField = base::BitField<int, 22, 2>;
-using DeoptFrameStateOffsetField = base::BitField<int, 24, 8>;
+using DeoptImmedArgsCountField = FlagsConditionField::Next<int, 2>;
+using DeoptFrameStateOffsetField = DeoptImmedArgsCountField::Next<int, 8>;
 
-// AtomicWidthField overlaps with MiscField and is used for the various Atomic
-// opcodes. Only used on 64bit architectures. All atomic instructions on 32bit
-// architectures are assumed to be 32bit wide.
-using AtomicWidthField = base::BitField<AtomicWidth, 22, 2>;
+// ParamField and FPParamField represent the general purpose and floating point
+// parameter counts of a direct call into C and are given 5 bits each, which
+// allow storing a number up to the current maximum parameter count, which is 20
+// (see kMaxCParameters defined in macro-assembler.h).
+using ParamField = FlagsConditionField::Next<int, 5>;
+using FPParamField = ParamField::Next<int, 5>;
 
-// AtomicMemoryOrderField overlaps with MiscField and is used for the various
-// Atomic opcodes. This field is not used on all architectures. It is used on
-// architectures where the codegen for kSeqCst and kAcqRel differ only by
-// emitting fences.
-using AtomicMemoryOrderField = base::BitField<AtomicMemoryOrder, 24, 2>;
-using AtomicStoreRecordWriteModeField = base::BitField<RecordWriteMode, 26, 4>;
+// {MiscField} is used for a variety of things, depending on the opcode.
+// TODO(turbofan): There should be an abstraction that ensures safe encoding and
+// decoding. {HasMemoryAccessMode} and its uses are a small step in that
+// direction.
+using MiscField = FlagsConditionField::Next<int, 10>;
 
-// ParamField and FPParamField overlap with MiscField, as the latter is never
-// used for Call instructions. These 2 fields represent the general purpose
-// and floating point parameter counts of a direct call into C and are given 5
-// bits each, which allow storing a number up to the current maximum parameter
-// count, which is 20 (see kMaxCParameters defined in macro-assembler.h).
-using ParamField = base::BitField<int, 22, 5>;
-using FPParamField = base::BitField<int, 27, 5>;
+using StackCheckField = FlagsConditionField::Next<StackCheckKind, 2>;
+using BranchHintField = StackCheckField::Next<bool, 1>;
 
 // This static assertion serves as an early warning if we are about to exhaust
 // the available opcode space. If we are about to exhaust it, we should start
@@ -363,7 +464,7 @@ using FPParamField = base::BitField<int, 27, 5>;
 // back fixes that add new opcodes.
 // It is OK to temporarily reduce the required slack if we have a tracking bug
 // to reduce the number of used opcodes again.
-static_assert(ArchOpcodeField::kMax - kLastArchOpcode >= 16,
+static_assert(ArchOpcodeField::kMax - kLastArchOpcode >= 14,
               "We are running close to the number of available opcodes.");
 
 }  // namespace compiler

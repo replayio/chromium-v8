@@ -36,7 +36,8 @@ InspectorTest.logMessage = function(originalMessage) {
   const nonStableFields = new Set([
     'objectId', 'scriptId', 'exceptionId', 'timestamp', 'executionContextId',
     'callFrameId', 'breakpointId', 'bindRemoteObjectFunctionId',
-    'formatterObjectId', 'debuggerId', 'bodyGetterId', 'uniqueId'
+    'formatterObjectId', 'debuggerId', 'bodyGetterId', 'uniqueId',
+    'executionContextUniqueId'
   ]);
   const message = JSON.parse(JSON.stringify(originalMessage, replacer.bind(null, Symbol(), nonStableFields)));
   if (message.id)
@@ -142,6 +143,12 @@ InspectorTest.ContextGroup = class {
     this.id = utils.createContextGroup();
   }
 
+  waitForDebugger() {
+    return new Promise(resolve => {
+      utils.waitForDebugger(this.id, resolve);
+    });
+  }
+
   createContext(name) {
     utils.createContext(this.id, name || '');
   }
@@ -172,8 +179,8 @@ InspectorTest.ContextGroup = class {
     this.addScript(utils.read(fileName));
   }
 
-  connect() {
-    return new InspectorTest.Session(this);
+  connect(isFullyTrusted = true) {
+    return new InspectorTest.Session(this, Boolean(isFullyTrusted));
   }
 
   reset() {
@@ -227,14 +234,15 @@ InspectorTest.ContextGroup = class {
 };
 
 InspectorTest.Session = class {
-  constructor(contextGroup) {
+  constructor(contextGroup, isFullyTrusted) {
     this.contextGroup = contextGroup;
     this._dispatchTable = new Map();
     this._eventHandlers = new Map();
     this._requestId = 0;
+    this._isFullyTrusted = isFullyTrusted;
     this.Protocol = this._setupProtocol();
     InspectorTest._sessions.add(this);
-    this.id = utils.connectSession(contextGroup.id, '', this._dispatchMessage.bind(this));
+    this.id = utils.connectSession(contextGroup.id, '', this._dispatchMessage.bind(this), isFullyTrusted);
   }
 
   disconnect() {
@@ -244,7 +252,7 @@ InspectorTest.Session = class {
 
   reconnect() {
     var state = utils.disconnectSession(this.id);
-    this.id = utils.connectSession(this.contextGroup.id, state, this._dispatchMessage.bind(this));
+    this.id = utils.connectSession(this.contextGroup.id, state, this._dispatchMessage.bind(this), this._isFullyTrusted);
   }
 
   async addInspectedObject(serializable) {
@@ -256,6 +264,10 @@ InspectorTest.Session = class {
       utils.print("frontend: " + command);
     this._dispatchTable.set(requestId, handler);
     utils.sendMessageToBackend(this.id, command);
+  }
+
+  stop() {
+    utils.stop(this.id);
   }
 
   setupScriptMap() {

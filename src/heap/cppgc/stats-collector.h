@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <algorithm>
 #include <atomic>
 #include <vector>
 
@@ -44,6 +45,7 @@ namespace internal {
   V(MarkOnAllocation)                       \
   V(MarkProcessBailOutObjects)              \
   V(MarkProcessMarkingWorklist)             \
+  V(MarkProcessRetraceWorklist)             \
   V(MarkProcessWriteBarrierWorklist)        \
   V(MarkProcessNotFullyconstructedWorklist) \
   V(MarkProcessEphemerons)                  \
@@ -53,19 +55,30 @@ namespace internal {
   V(MarkVisitCrossThreadPersistents)        \
   V(MarkVisitStack)                         \
   V(MarkVisitRememberedSets)                \
+  V(WeakContainerCallbacksProcessing)       \
+  V(CustomCallbacksProcessing)              \
+  V(SweepEmptyPages)                        \
+  V(SweepFinish)                            \
+  V(SweepFinalizeEmptyPages)                \
+  V(SweepFinalizeSweptPages)                \
   V(SweepFinishIfOutOfWork)                 \
   V(SweepInvokePreFinalizers)               \
+  V(SweepInLowPriorityTask)                 \
   V(SweepInTask)                            \
   V(SweepInTaskForStatistics)               \
   V(SweepOnAllocation)                      \
-  V(SweepFinalize)
+  V(SweepPages)
 
 #define CPPGC_FOR_ALL_HISTOGRAM_CONCURRENT_SCOPES(V) \
   V(ConcurrentMark)                                  \
   V(ConcurrentSweep)                                 \
   V(ConcurrentWeakCallback)
 
-#define CPPGC_FOR_ALL_CONCURRENT_SCOPES(V) V(ConcurrentMarkProcessEphemerons)
+#define CPPGC_FOR_ALL_CONCURRENT_SCOPES(V)            \
+  V(ConcurrentMarkProcessEphemeronWorklist)           \
+  V(ConcurrentMarkProcessMarkingWorklist)             \
+  V(ConcurrentMarkProcessNotFullyconstructedWorklist) \
+  V(ConcurrentMarkProcessWriteBarrierWorklist)
 
 // Sink for various time and memory statistics.
 class V8_EXPORT_PRIVATE StatsCollector final {
@@ -105,7 +118,7 @@ class V8_EXPORT_PRIVATE StatsCollector final {
     V8_EXPORT_PRIVATE explicit Event();
 
     v8::base::TimeDelta scope_data[kNumHistogramScopeIds];
-    v8::base::Atomic32 concurrent_scope_data[kNumHistogramConcurrentScopeIds]{
+    v8::base::AtomicWord concurrent_scope_data[kNumHistogramConcurrentScopeIds]{
         0};
 
     size_t epoch = -1;
@@ -258,6 +271,10 @@ class V8_EXPORT_PRIVATE StatsCollector final {
   // reasonably interesting sizes.
   static constexpr size_t kAllocationThresholdBytes = 1024;
 
+  static void Note(const char* note) {
+    TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cppgc"), note);
+  }
+
   explicit StatsCollector(Platform*);
   StatsCollector(const StatsCollector&) = delete;
   StatsCollector& operator=(const StatsCollector&) = delete;
@@ -274,7 +291,11 @@ class V8_EXPORT_PRIVATE StatsCollector final {
 
   void NotifySafePointForTesting();
 
-  // Indicates a new garbage collection cycle.
+  // Indicates a new garbage collection cycle. The phase is optional and is only
+  // used for major GC when generational GC is enabled.
+  void NotifyUnmarkingStarted(CollectionType);
+  // Indicates a new minor garbage collection cycle or a major, if generational
+  // GC is not enabled.
   void NotifyMarkingStarted(CollectionType, MarkingType, IsForcedGC);
   // Indicates that marking of the current garbage collection cycle is
   // completed.
@@ -323,6 +344,7 @@ class V8_EXPORT_PRIVATE StatsCollector final {
  private:
   enum class GarbageCollectionState : uint8_t {
     kNotRunning,
+    kUnmarking,
     kMarking,
     kSweeping
   };
@@ -421,16 +443,14 @@ void StatsCollector::InternalScope<trace_category, scope_category>::StartTrace(
                           ? static_cast<int>(kNumHistogramScopeIds)
                           : static_cast<int>(kNumHistogramConcurrentScopeIds)),
                  trace_category == StatsCollector::TraceCategory::kEnabled);
-  if (trace_category == StatsCollector::TraceCategory::kEnabled)
-    StartTraceImpl(args...);
+  StartTraceImpl(args...);
 }
 
 template <StatsCollector::TraceCategory trace_category,
           StatsCollector::ScopeContext scope_category>
 void StatsCollector::InternalScope<trace_category,
                                    scope_category>::StopTrace() {
-  if (trace_category == StatsCollector::TraceCategory::kEnabled)
-    StopTraceImpl();
+  StopTraceImpl();
 }
 
 template <StatsCollector::TraceCategory trace_category,
@@ -495,12 +515,11 @@ void StatsCollector::InternalScope<trace_category,
     return;
   }
   // scope_category == StatsCollector::ScopeContext::kConcurrentThread
-  using Atomic32 = v8::base::Atomic32;
+  using AtomicWord = v8::base::AtomicWord;
   const int64_t us = time.InMicroseconds();
-  DCHECK_LE(us, std::numeric_limits<Atomic32>::max());
   v8::base::Relaxed_AtomicIncrement(
       &stats_collector_->current_.concurrent_scope_data[scope_id_],
-      static_cast<Atomic32>(us));
+      static_cast<AtomicWord>(us));
 }
 
 }  // namespace internal

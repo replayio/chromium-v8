@@ -12,7 +12,6 @@
 #include "include/cppgc/platform.h"
 #include "src/base/bounded-page-allocator.h"
 #include "src/base/lazy-instance.h"
-#include "src/base/platform/mutex.h"
 #include "src/heap/cppgc/globals.h"
 #include "src/heap/cppgc/virtual-memory.h"
 
@@ -29,19 +28,22 @@ class V8_EXPORT_PRIVATE CagedHeap final {
 
   template <typename RetType = uintptr_t>
   static RetType OffsetFromAddress(const void* address) {
-    static_assert(
-        std::numeric_limits<RetType>::max() >= (kCagedHeapReservationSize - 1),
-        "The return type should be large enough");
+    static_assert(std::numeric_limits<RetType>::max() >=
+                      (api_constants::kCagedHeapMaxReservationSize - 1),
+                  "The return type should be large enough");
     return reinterpret_cast<uintptr_t>(address) &
-           (kCagedHeapReservationAlignment - 1);
+           (api_constants::kCagedHeapReservationAlignment - 1);
   }
 
   static uintptr_t BaseFromAddress(const void* address) {
     return reinterpret_cast<uintptr_t>(address) &
-           ~(kCagedHeapReservationAlignment - 1);
+           ~(api_constants::kCagedHeapReservationAlignment - 1);
   }
 
-  static void InitializeIfNeeded(PageAllocator&);
+  static void InitializeIfNeeded(PageAllocator& platform_allocator,
+                                 size_t desired_heap_size);
+
+  static void CommitAgeTable(PageAllocator& platform_allocator);
 
   static CagedHeap& Instance();
 
@@ -54,23 +56,31 @@ class V8_EXPORT_PRIVATE CagedHeap final {
   }
 
   bool IsOnHeap(const void* address) const {
-    DCHECK_EQ(reserved_area_.address(),
+    DCHECK_EQ(reservation_.memory.address(),
               reinterpret_cast<void*>(CagedHeapBase::GetBase()));
     return reinterpret_cast<void*>(BaseFromAddress(address)) ==
-           reserved_area_.address();
+           reservation_.memory.address();
   }
 
-  void* base() const { return reserved_area_.address(); }
+  void* base() const { return reservation_.memory.address(); }
 
  private:
   friend class v8::base::LeakyObject<CagedHeap>;
   friend class testing::TestWithHeap;
 
-  explicit CagedHeap(PageAllocator& platform_allocator);
+  struct Reservation {
+    VirtualMemory memory;
+    size_t offset_into_cage_start = 0;
+  };
+
+  static Reservation ReserveCagedHeap(PageAllocator& page_allocator);
+
+  explicit CagedHeap(PageAllocator& platform_allocator,
+                     size_t desired_heap_size);
 
   static CagedHeap* instance_;
 
-  const VirtualMemory reserved_area_;
+  const Reservation reservation_;
   // BoundedPageAllocator is thread-safe, no need to use external
   // synchronization.
   std::unique_ptr<AllocatorType> page_bounded_allocator_;

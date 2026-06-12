@@ -1,6 +1,7 @@
 // Copyright 2020 the V8 project authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+
 #ifndef V8_OBJECTS_JS_SEGMENT_ITERATOR_H_
 #define V8_OBJECTS_JS_SEGMENT_ITERATOR_H_
 
@@ -11,6 +12,7 @@
 #include "src/base/bit-field.h"
 #include "src/execution/isolate.h"
 #include "src/heap/factory.h"
+#include "src/objects/intl-objects.h"
 #include "src/objects/js-segmenter.h"
 #include "src/objects/managed.h"
 #include "src/objects/objects.h"
@@ -18,11 +20,6 @@
 
 // Has to be the last include (doesn't have include guards):
 #include "src/objects/object-macros.h"
-
-namespace U_ICU_NAMESPACE {
-class BreakIterator;
-class UnicodeString;
-}  // namespace U_ICU_NAMESPACE
 
 namespace v8 {
 namespace internal {
@@ -32,20 +29,23 @@ namespace internal {
 class JSSegmentIterator
     : public TorqueGeneratedJSSegmentIterator<JSSegmentIterator, JSObject> {
  public:
-  // ecma402 #sec-CreateSegmentIterator
-  V8_WARN_UNUSED_RESULT static MaybeHandle<JSSegmentIterator> Create(
-      Isolate* isolate, icu::BreakIterator* icu_break_iterator,
+  // https://tc39.es/ecma402/#sec-CreateSegmentIterator
+  V8_WARN_UNUSED_RESULT static MaybeDirectHandle<JSSegmentIterator> Create(
+      Isolate* isolate, DirectHandle<String> input_string,
+      const icu::BreakIterator& incoming_break_iterator,
       JSSegmenter::Granularity granularity);
 
-  // ecma402 #sec-segment-iterator-prototype-next
-  V8_WARN_UNUSED_RESULT static MaybeHandle<JSReceiver> Next(
-      Isolate* isolate, Handle<JSSegmentIterator> segment_iterator_holder);
+  // https://tc39.es/ecma402/#sec-segment-iterator-prototype-next
+  V8_WARN_UNUSED_RESULT static MaybeDirectHandle<JSReceiver> Next(
+      Isolate* isolate,
+      DirectHandle<JSSegmentIterator> segment_iterator_holder);
 
   Handle<String> GranularityAsString(Isolate* isolate) const;
 
   // SegmentIterator accessors.
-  DECL_ACCESSORS(icu_break_iterator, Managed<icu::BreakIterator>)
-  DECL_ACCESSORS(unicode_string, Managed<icu::UnicodeString>)
+  DECL_ACCESSORS(icu_iterator_with_text,
+                 Tagged<Managed<IcuBreakIteratorWithText>>)
+  DECL_ACCESSORS(raw_string, Tagged<String>)
 
   DECL_PRINTER(JSSegmentIterator)
 
@@ -55,11 +55,26 @@ class JSSegmentIterator
   // Bit positions in |flags|.
   DEFINE_TORQUE_GENERATED_JS_SEGMENT_ITERATOR_FLAGS()
 
-  static_assert(JSSegmenter::Granularity::GRAPHEME <= GranularityBits::kMax);
-  static_assert(JSSegmenter::Granularity::WORD <= GranularityBits::kMax);
-  static_assert(JSSegmenter::Granularity::SENTENCE <= GranularityBits::kMax);
+  static_assert(GranularityBits::is_valid(JSSegmenter::Granularity::GRAPHEME));
+  static_assert(GranularityBits::is_valid(JSSegmenter::Granularity::WORD));
+  static_assert(GranularityBits::is_valid(JSSegmenter::Granularity::SENTENCE));
 
   TQ_OBJECT_CONSTRUCTORS(JSSegmentIterator)
+};
+
+class JSSegmentDataObject
+    : public TorqueGeneratedJSSegmentDataObject<JSSegmentDataObject, JSObject> {
+ public:
+ private:
+  TQ_OBJECT_CONSTRUCTORS(JSSegmentDataObject)
+};
+
+class JSSegmentDataObjectWithIsWordLike
+    : public TorqueGeneratedJSSegmentDataObjectWithIsWordLike<
+          JSSegmentDataObjectWithIsWordLike, JSSegmentDataObject> {
+ public:
+ private:
+  TQ_OBJECT_CONSTRUCTORS(JSSegmentDataObjectWithIsWordLike)
 };
 
 }  // namespace internal

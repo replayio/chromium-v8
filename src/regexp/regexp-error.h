@@ -38,13 +38,15 @@ namespace internal {
   T(DuplicateCaptureGroupName, "Duplicate capture group name")            \
   T(InvalidNamedReference, "Invalid named reference")                     \
   T(InvalidNamedCaptureReference, "Invalid named capture referenced")     \
-  T(InvalidClassEscape, "Invalid class escape")                           \
   T(InvalidClassPropertyName, "Invalid property name in character class") \
   T(InvalidCharacterClass, "Invalid character class")                     \
   T(UnterminatedCharacterClass, "Unterminated character class")           \
   T(OutOfOrderCharacterClass, "Range out of order in character class")    \
   T(InvalidClassSetOperation, "Invalid set operation in character class") \
-  T(InvalidCharacterInClass, "Invalid character in character class")
+  T(InvalidCharacterInClass, "Invalid character in character class")      \
+  T(NegatedCharacterClassWithStrings,                                     \
+    "Negated character class may contain strings")                        \
+  T(UnsupportedBytecode, "Unsupported Bytecode")
 
 enum class RegExpError : uint32_t {
 #define TEMPLATE(NAME, STRING) k##NAME,
@@ -57,7 +59,8 @@ V8_EXPORT_PRIVATE const char* RegExpErrorString(RegExpError error);
 
 inline constexpr bool RegExpErrorIsStackOverflow(RegExpError error) {
   return error == RegExpError::kStackOverflow ||
-         error == RegExpError::kAnalysisStackOverflow;
+         error == RegExpError::kAnalysisStackOverflow ||
+         error == RegExpError::kTooLarge;
 }
 
 }  // namespace internal

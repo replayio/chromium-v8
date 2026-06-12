@@ -7,9 +7,12 @@
 
 #include "src/base/macros.h"
 #include "src/baseline/baseline-assembler.h"
+#include "src/codegen/assembler.h"
+#include "src/codegen/x64/assembler-x64.h"
 #include "src/codegen/x64/register-x64.h"
 #include "src/objects/feedback-vector.h"
 #include "src/objects/literal-objects-inl.h"
+#include "src/roots/static-roots.h"
 
 namespace v8 {
 namespace internal {
@@ -46,32 +49,6 @@ class BaselineAssembler::ScratchRegisterScope {
   int registers_used_;
 };
 
-// TODO(v8:11461): Unify condition names in the MacroAssembler.
-enum class Condition : uint32_t {
-  kEqual = equal,
-  kNotEqual = not_equal,
-
-  kLessThan = less,
-  kGreaterThan = greater,
-  kLessThanEqual = less_equal,
-  kGreaterThanEqual = greater_equal,
-
-  kUnsignedLessThan = below,
-  kUnsignedGreaterThan = above,
-  kUnsignedLessThanEqual = below_equal,
-  kUnsignedGreaterThanEqual = above_equal,
-
-  kOverflow = overflow,
-  kNoOverflow = no_overflow,
-
-  kZero = zero,
-  kNotZero = not_zero,
-};
-
-inline internal::Condition AsMasmCondition(Condition cond) {
-  return static_cast<internal::Condition>(cond);
-}
-
 namespace detail {
 
 #define __ masm_->
@@ -96,11 +73,14 @@ void BaselineAssembler::RegisterFrameAddress(
 MemOperand BaselineAssembler::FeedbackVectorOperand() {
   return MemOperand(rbp, BaselineFrameConstants::kFeedbackVectorFromFp);
 }
+MemOperand BaselineAssembler::FeedbackCellOperand() {
+  return MemOperand(rbp, BaselineFrameConstants::kFeedbackCellFromFp);
+}
 
 void BaselineAssembler::Bind(Label* label) { __ bind(label); }
 
 void BaselineAssembler::JumpTarget() {
-  // NOP on x64.
+  __ endbr64();
 }
 
 void BaselineAssembler::Jump(Label* target, Label::Distance distance) {
@@ -130,21 +110,48 @@ void BaselineAssembler::TestAndBranch(Register value, int mask, Condition cc,
   } else {
     __ testl(value, Immediate(mask));
   }
-  __ j(AsMasmCondition(cc), target, distance);
+  __ j(cc, target, distance);
 }
 
 void BaselineAssembler::JumpIf(Condition cc, Register lhs, const Operand& rhs,
                                Label* target, Label::Distance distance) {
   __ cmpq(lhs, rhs);
-  __ j(AsMasmCondition(cc), target, distance);
+  __ j(cc, target, distance);
 }
+
+#if V8_STATIC_ROOTS_BOOL
+void BaselineAssembler::JumpIfJSAnyIsPrimitive(Register heap_object,
+                                               Label* target,
+                                               Label::Distance distance) {
+  __ AssertNotSmi(heap_object);
+  ScratchRegisterScope temps(this);
+  Register scratch = temps.AcquireScratch();
+  __ JumpIfJSAnyIsPrimitive(heap_object, scratch, target, distance);
+}
+#endif  // V8_STATIC_ROOTS_BOOL
+
+void BaselineAssembler::JumpIfObjectTypeFast(Condition cc, Register object,
+                                             InstanceType instance_type,
+                                             Label* target,
+                                             Label::Distance distance) {
+  __ AssertNotSmi(object);
+  ScratchRegisterScope temps(this);
+  Register scratch = temps.AcquireScratch();
+  if (cc == Condition::kEqual || cc == Condition::kNotEqual) {
+    __ IsObjectType(object, instance_type, scratch);
+  } else {
+    __ CmpObjectType(object, instance_type, scratch);
+  }
+  __ j(cc, target, distance);
+}
+
 void BaselineAssembler::JumpIfObjectType(Condition cc, Register object,
                                          InstanceType instance_type,
                                          Register map, Label* target,
                                          Label::Distance distance) {
   __ AssertNotSmi(object);
   __ CmpObjectType(object, instance_type, map);
-  __ j(AsMasmCondition(cc), target, distance);
+  __ j(cc, target, distance);
 }
 void BaselineAssembler::JumpIfInstanceType(Condition cc, Register map,
                                            InstanceType instance_type,
@@ -156,30 +163,30 @@ void BaselineAssembler::JumpIfInstanceType(Condition cc, Register map,
     __ Assert(equal, AbortReason::kUnexpectedValue);
   }
   __ CmpInstanceType(map, instance_type);
-  __ j(AsMasmCondition(cc), target, distance);
+  __ j(cc, target, distance);
 }
 void BaselineAssembler::JumpIfPointer(Condition cc, Register value,
                                       MemOperand operand, Label* target,
                                       Label::Distance distance) {
   __ cmpq(value, operand);
-  __ j(AsMasmCondition(cc), target, distance);
+  __ j(cc, target, distance);
 }
-void BaselineAssembler::JumpIfSmi(Condition cc, Register lhs, Smi smi,
+void BaselineAssembler::JumpIfSmi(Condition cc, Register lhs, Tagged<Smi> smi,
                                   Label* target, Label::Distance distance) {
   __ SmiCompare(lhs, smi);
-  __ j(AsMasmCondition(cc), target, distance);
+  __ j(cc, target, distance);
 }
 void BaselineAssembler::JumpIfSmi(Condition cc, Register lhs, Register rhs,
                                   Label* target, Label::Distance distance) {
   __ SmiCompare(lhs, rhs);
-  __ j(AsMasmCondition(cc), target, distance);
+  __ j(cc, target, distance);
 }
 
 void BaselineAssembler::JumpIfImmediate(Condition cc, Register left, int right,
                                         Label* target,
                                         Label::Distance distance) {
   __ cmpq(left, Immediate(right));
-  __ j(AsMasmCondition(cc), target, distance);
+  __ j(cc, target, distance);
 }
 
 // cmp_tagged
@@ -187,24 +194,56 @@ void BaselineAssembler::JumpIfTagged(Condition cc, Register value,
                                      MemOperand operand, Label* target,
                                      Label::Distance distance) {
   __ cmp_tagged(value, operand);
-  __ j(AsMasmCondition(cc), target, distance);
+  __ j(cc, target, distance);
 }
 void BaselineAssembler::JumpIfTagged(Condition cc, MemOperand operand,
                                      Register value, Label* target,
                                      Label::Distance distance) {
   __ cmp_tagged(operand, value);
-  __ j(AsMasmCondition(cc), target, distance);
+  __ j(cc, target, distance);
 }
+
+#ifdef V8_STATIC_ROOTS
+void BaselineAssembler::JumpIfStaticRootToBoolean(
+    Register value, Label* true_target, Label::Distance true_distance,
+    Label* false_target, Label::Distance false_distance) {
+  ASM_CODE_COMMENT(masm_);
+  static_assert(StaticReadOnlyRoot::kFirstAllocatedRoot ==
+                StaticReadOnlyRoot::kUndefinedValue);
+  static_assert(StaticReadOnlyRoot::kUndefinedValue + sizeof(Undefined) ==
+                StaticReadOnlyRoot::kNullValue);
+  static_assert(StaticReadOnlyRoot::kNullValue + sizeof(Null) ==
+                StaticReadOnlyRoot::kempty_string);
+  static_assert(StaticReadOnlyRoot::kempty_string +
+                    SeqOneByteString::SizeFor(0) ==
+                StaticReadOnlyRoot::kFalseValue);
+  static_assert(StaticReadOnlyRoot::kFalseValue + sizeof(False) ==
+                StaticReadOnlyRoot::kTrueValue);
+
+  // Smi zero is falsey.
+  __ Cmp(value, Smi::zero());
+  __ j(kEqual, false_target, false_distance);
+  // Other Smis are true.
+  __ JumpIfSmi(value, true_target, true_distance);
+  // The falsey static roots are at the start of the cage, just before the true
+  // value.
+  __ cmp_tagged(value, Immediate(StaticReadOnlyRoot::kTrueValue));
+  __ j(kUnsignedLessThan, false_target, false_distance);
+  __ j(kEqual, true_target, true_distance);
+  // Fallthrough for more complex cases.
+}
+#endif
+
 void BaselineAssembler::JumpIfByte(Condition cc, Register value, int32_t byte,
                                    Label* target, Label::Distance distance) {
   __ cmpb(value, Immediate(byte));
-  __ j(AsMasmCondition(cc), target, distance);
+  __ j(cc, target, distance);
 }
 
 void BaselineAssembler::Move(interpreter::Register output, Register source) {
   return __ movq(RegisterFrameOperand(output), source);
 }
-void BaselineAssembler::Move(Register output, TaggedIndex value) {
+void BaselineAssembler::Move(Register output, Tagged<TaggedIndex> value) {
   __ Move(output, value);
 }
 void BaselineAssembler::Move(MemOperand output, Register source) {
@@ -231,10 +270,12 @@ inline void PushSingle(MacroAssembler* masm, RootIndex source) {
   masm->PushRoot(source);
 }
 inline void PushSingle(MacroAssembler* masm, Register reg) { masm->Push(reg); }
-inline void PushSingle(MacroAssembler* masm, TaggedIndex value) {
+inline void PushSingle(MacroAssembler* masm, Tagged<TaggedIndex> value) {
   masm->Push(value);
 }
-inline void PushSingle(MacroAssembler* masm, Smi value) { masm->Push(value); }
+inline void PushSingle(MacroAssembler* masm, Tagged<Smi> value) {
+  masm->Push(value);
+}
 inline void PushSingle(MacroAssembler* masm, Handle<HeapObject> object) {
   masm->Push(object);
 }
@@ -313,9 +354,9 @@ void BaselineAssembler::Pop(T... registers) {
   (__ Pop(registers), ...);
 }
 
-void BaselineAssembler::LoadTaggedPointerField(Register output, Register source,
-                                               int offset) {
-  __ LoadTaggedPointerField(output, FieldOperand(source, offset));
+void BaselineAssembler::LoadTaggedField(Register output, Register source,
+                                        int offset) {
+  __ LoadTaggedField(output, FieldOperand(source, offset));
 }
 void BaselineAssembler::LoadTaggedSignedField(Register output, Register source,
                                               int offset) {
@@ -326,10 +367,6 @@ void BaselineAssembler::LoadTaggedSignedFieldAndUntag(Register output,
                                                       int offset) {
   __ SmiUntagField(output, FieldOperand(source, offset));
 }
-void BaselineAssembler::LoadTaggedAnyField(Register output, Register source,
-                                           int offset) {
-  __ LoadAnyTaggedField(output, FieldOperand(source, offset));
-}
 void BaselineAssembler::LoadWord16FieldZeroExtend(Register output,
                                                   Register source, int offset) {
   __ movzxwq(output, FieldOperand(source, offset));
@@ -339,7 +376,7 @@ void BaselineAssembler::LoadWord8Field(Register output, Register source,
   __ movb(output, FieldOperand(source, offset));
 }
 void BaselineAssembler::StoreTaggedSignedField(Register target, int offset,
-                                               Smi value) {
+                                               Tagged<Smi> value) {
   __ StoreTaggedSignedField(FieldOperand(target, offset), value);
 }
 void BaselineAssembler::StoreTaggedFieldWithWriteBarrier(Register target,
@@ -357,45 +394,33 @@ void BaselineAssembler::StoreTaggedFieldNoWriteBarrier(Register target,
   __ StoreTaggedField(FieldOperand(target, offset), value);
 }
 
-void BaselineAssembler::LoadTaggedPointerField(TaggedRegister output,
-                                               Register source, int offset) {
-  __ LoadTaggedPointerField(output, FieldOperand(source, offset));
+void BaselineAssembler::LoadTaggedField(TaggedRegister output, Register source,
+                                        int offset) {
+  __ LoadTaggedField(output, FieldOperand(source, offset));
 }
 
-void BaselineAssembler::LoadTaggedPointerField(TaggedRegister output,
-                                               TaggedRegister source,
-                                               int offset) {
-  __ LoadTaggedPointerField(output, FieldOperand(source, offset));
+void BaselineAssembler::LoadTaggedField(TaggedRegister output,
+                                        TaggedRegister source, int offset) {
+  __ LoadTaggedField(output, FieldOperand(source, offset));
 }
 
-void BaselineAssembler::LoadTaggedPointerField(Register output,
-                                               TaggedRegister source,
-                                               int offset) {
-  __ LoadTaggedPointerField(output, FieldOperand(source, offset));
-}
-
-void BaselineAssembler::LoadTaggedAnyField(Register output,
-                                           TaggedRegister source, int offset) {
-  __ LoadAnyTaggedField(output, FieldOperand(source, offset));
-}
-
-void BaselineAssembler::LoadTaggedAnyField(TaggedRegister output,
-                                           TaggedRegister source, int offset) {
-  __ LoadAnyTaggedField(output, FieldOperand(source, offset));
+void BaselineAssembler::LoadTaggedField(Register output, TaggedRegister source,
+                                        int offset) {
+  __ LoadTaggedField(output, FieldOperand(source, offset));
 }
 
 void BaselineAssembler::LoadFixedArrayElement(Register output,
                                               TaggedRegister array,
                                               int32_t index) {
-  LoadTaggedAnyField(output, array,
-                     FixedArray::kHeaderSize + index * kTaggedSize);
+  LoadTaggedField(output, array,
+                  OFFSET_OF_DATA_START(FixedArray) + index * kTaggedSize);
 }
 
 void BaselineAssembler::LoadFixedArrayElement(TaggedRegister output,
                                               TaggedRegister array,
                                               int32_t index) {
-  LoadTaggedAnyField(output, array,
-                     FixedArray::kHeaderSize + index * kTaggedSize);
+  LoadTaggedField(output, array,
+                  OFFSET_OF_DATA_START(FixedArray) + index * kTaggedSize);
 }
 
 void BaselineAssembler::TryLoadOptimizedOsrCode(Register scratch_and_result,
@@ -403,24 +428,9 @@ void BaselineAssembler::TryLoadOptimizedOsrCode(Register scratch_and_result,
                                                 FeedbackSlot slot,
                                                 Label* on_result,
                                                 Label::Distance distance) {
-  Label fallthrough;
-  LoadTaggedPointerField(scratch_and_result, feedback_vector,
-                         FeedbackVector::OffsetOfElementAt(slot.ToInt()));
-  __ LoadWeakValue(scratch_and_result, &fallthrough);
-
-  // Is it marked_for_deoptimization? If yes, clear the slot.
-  {
-    DCHECK(!AreAliased(scratch_and_result, kScratchRegister));
-    __ TestCodeTIsMarkedForDeoptimization(scratch_and_result, kScratchRegister);
-    __ j(equal, on_result, distance);
-    __ StoreTaggedField(
-        FieldOperand(feedback_vector,
-                     FeedbackVector::OffsetOfElementAt(slot.ToInt())),
-        __ ClearedValue());
-  }
-
-  __ bind(&fallthrough);
-  __ Move(scratch_and_result, 0);
+  __ MacroAssembler::TryLoadOptimizedOsrCode(scratch_and_result,
+                                             CodeKind::MAGLEV, feedback_vector,
+                                             slot, on_result, distance);
 }
 
 void BaselineAssembler::AddToInterruptBudgetAndJumpIfNotExceeded(
@@ -428,12 +438,8 @@ void BaselineAssembler::AddToInterruptBudgetAndJumpIfNotExceeded(
   ASM_CODE_COMMENT(masm_);
   ScratchRegisterScope scratch_scope(this);
   Register feedback_cell = scratch_scope.AcquireScratch();
-  LoadFunction(feedback_cell);
-  // Decompresses pointer by complex addressing mode when necessary.
-  TaggedRegister tagged(feedback_cell);
-  LoadTaggedPointerField(tagged, feedback_cell,
-                         JSFunction::kFeedbackCellOffset);
-  __ addl(FieldOperand(tagged, FeedbackCell::kInterruptBudgetOffset),
+  LoadFeedbackCell(feedback_cell);
+  __ addl(FieldOperand(feedback_cell, FeedbackCell::kInterruptBudgetOffset),
           Immediate(weight));
   if (skip_interrupt_label) {
     DCHECK_LT(weight, 0);
@@ -446,48 +452,50 @@ void BaselineAssembler::AddToInterruptBudgetAndJumpIfNotExceeded(
   ASM_CODE_COMMENT(masm_);
   ScratchRegisterScope scratch_scope(this);
   Register feedback_cell = scratch_scope.AcquireScratch();
-  LoadFunction(feedback_cell);
-  // Decompresses pointer by complex addressing mode when necessary.
-  TaggedRegister tagged(feedback_cell);
-  LoadTaggedPointerField(tagged, feedback_cell,
-                         JSFunction::kFeedbackCellOffset);
-  __ addl(FieldOperand(tagged, FeedbackCell::kInterruptBudgetOffset), weight);
+  LoadFeedbackCell(feedback_cell);
+  __ addl(FieldOperand(feedback_cell, FeedbackCell::kInterruptBudgetOffset),
+          weight);
   if (skip_interrupt_label) __ j(greater_equal, skip_interrupt_label);
 }
 
-void BaselineAssembler::LdaContextSlot(Register context, uint32_t index,
-                                       uint32_t depth) {
+void BaselineAssembler::LdaContextSlotNoCell(Register context, uint32_t index,
+                                             uint32_t depth,
+                                             CompressionMode compression_mode) {
   // [context] is coming from interpreter frame so it is already decompressed
   // when pointer compression is enabled. In order to make use of complex
   // addressing mode, any intermediate context pointer is loaded in compressed
   // form.
   if (depth == 0) {
-    LoadTaggedAnyField(kInterpreterAccumulatorRegister, context,
-                       Context::OffsetOfElementAt(index));
+    LoadTaggedField(kInterpreterAccumulatorRegister, context,
+                    Context::OffsetOfElementAt(index));
   } else {
     TaggedRegister tagged(context);
-    LoadTaggedPointerField(tagged, context, Context::kPreviousOffset);
+    LoadTaggedField(tagged, context, Context::kPreviousOffset);
     --depth;
     for (; depth > 0; --depth) {
-      LoadTaggedPointerField(tagged, tagged, Context::kPreviousOffset);
+      LoadTaggedField(tagged, tagged, Context::kPreviousOffset);
     }
-    LoadTaggedAnyField(kInterpreterAccumulatorRegister, tagged,
-                       Context::OffsetOfElementAt(index));
+    LoadTaggedField(kInterpreterAccumulatorRegister, tagged,
+                    Context::OffsetOfElementAt(index));
+    if (COMPRESS_POINTERS_BOOL &&
+        compression_mode == CompressionMode::kForceDecompression) {
+      __ addq(tagged.reg(), kPtrComprCageBaseRegister);
+    }
   }
 }
 
-void BaselineAssembler::StaContextSlot(Register context, Register value,
-                                       uint32_t index, uint32_t depth) {
+void BaselineAssembler::StaContextSlotNoCell(Register context, Register value,
+                                             uint32_t index, uint32_t depth) {
   // [context] is coming from interpreter frame so it is already decompressed
   // when pointer compression is enabled. In order to make use of complex
   // addressing mode, any intermediate context pointer is loaded in compressed
   // form.
   if (depth > 0) {
     TaggedRegister tagged(context);
-    LoadTaggedPointerField(tagged, context, Context::kPreviousOffset);
+    LoadTaggedField(tagged, context, Context::kPreviousOffset);
     --depth;
     for (; depth > 0; --depth) {
-      LoadTaggedPointerField(tagged, tagged, Context::kPreviousOffset);
+      LoadTaggedField(tagged, tagged, Context::kPreviousOffset);
     }
     if (COMPRESS_POINTERS_BOOL) {
       // Decompress tagged pointer.
@@ -505,29 +513,26 @@ void BaselineAssembler::LdaModuleVariable(Register context, int cell_index,
   // enabled, any intermediate context pointer is loaded in compressed form.
   TaggedRegister tagged(context);
   if (depth == 0) {
-    LoadTaggedPointerField(tagged, context, Context::kExtensionOffset);
+    LoadTaggedField(tagged, context, Context::kExtensionOffset);
   } else {
-    LoadTaggedPointerField(tagged, context, Context::kPreviousOffset);
+    LoadTaggedField(tagged, context, Context::kPreviousOffset);
     --depth;
     for (; depth > 0; --depth) {
-      LoadTaggedPointerField(tagged, tagged, Context::kPreviousOffset);
+      LoadTaggedField(tagged, tagged, Context::kPreviousOffset);
     }
-    LoadTaggedPointerField(tagged, tagged, Context::kExtensionOffset);
+    LoadTaggedField(tagged, tagged, Context::kExtensionOffset);
   }
   if (cell_index > 0) {
-    LoadTaggedPointerField(tagged, tagged,
-                           SourceTextModule::kRegularExportsOffset);
+    LoadTaggedField(tagged, tagged, SourceTextModule::kRegularExportsOffset);
     // The actual array index is (cell_index - 1).
     cell_index -= 1;
   } else {
-    LoadTaggedPointerField(tagged, tagged,
-                           SourceTextModule::kRegularImportsOffset);
+    LoadTaggedField(tagged, tagged, SourceTextModule::kRegularImportsOffset);
     // The actual array index is (-cell_index - 1).
     cell_index = -cell_index - 1;
   }
   LoadFixedArrayElement(tagged, tagged, cell_index);
-  LoadTaggedAnyField(kInterpreterAccumulatorRegister, tagged,
-                     Cell::kValueOffset);
+  LoadTaggedField(kInterpreterAccumulatorRegister, tagged, Cell::kValueOffset);
 }
 
 void BaselineAssembler::StaModuleVariable(Register context, Register value,
@@ -537,17 +542,16 @@ void BaselineAssembler::StaModuleVariable(Register context, Register value,
   // enabled, any intermediate context pointer is loaded in compressed form.
   TaggedRegister tagged(context);
   if (depth == 0) {
-    LoadTaggedPointerField(tagged, context, Context::kExtensionOffset);
+    LoadTaggedField(tagged, context, Context::kExtensionOffset);
   } else {
-    LoadTaggedPointerField(tagged, context, Context::kPreviousOffset);
+    LoadTaggedField(tagged, context, Context::kPreviousOffset);
     --depth;
     for (; depth > 0; --depth) {
-      LoadTaggedPointerField(tagged, tagged, Context::kPreviousOffset);
+      LoadTaggedField(tagged, tagged, Context::kPreviousOffset);
     }
-    LoadTaggedPointerField(tagged, tagged, Context::kExtensionOffset);
+    LoadTaggedField(tagged, tagged, Context::kExtensionOffset);
   }
-  LoadTaggedPointerField(tagged, tagged,
-                         SourceTextModule::kRegularExportsOffset);
+  LoadTaggedField(tagged, tagged, SourceTextModule::kRegularExportsOffset);
 
   // The actual array index is (cell_index - 1).
   cell_index -= 1;
@@ -555,16 +559,8 @@ void BaselineAssembler::StaModuleVariable(Register context, Register value,
   StoreTaggedFieldWithWriteBarrier(context, Cell::kValueOffset, value);
 }
 
-void BaselineAssembler::AddSmi(Register lhs, Smi rhs) {
-  if (rhs.value() == 0) return;
-  if (SmiValuesAre31Bits()) {
-    __ addl(lhs, Immediate(rhs));
-  } else {
-    ScratchRegisterScope scratch_scope(this);
-    Register rhs_reg = scratch_scope.AcquireScratch();
-    __ Move(rhs_reg, rhs);
-    __ addq(lhs, rhs_reg);
-  }
+void BaselineAssembler::IncrementSmi(MemOperand lhs) {
+  __ SmiAddConstant(lhs, Smi::FromInt(1));
 }
 
 void BaselineAssembler::AddPointer(Register output, Immediate value) {
@@ -582,6 +578,14 @@ void BaselineAssembler::Switch(Register reg, int case_value_base,
   ScratchRegisterScope scope(this);
   __ Switch(scope.AcquireScratch(), reg, case_value_base, labels, num_labels);
 }
+
+#ifdef V8_ENABLE_CET_SHADOW_STACK
+void BaselineAssembler::MaybeEmitPlaceHolderForDeopt() {
+  if (v8_flags.cet_compatible) {
+    __ Nop(Assembler::kIntraSegmentJmpInstrSize);
+  }
+}
+#endif  // V8_ENABLE_CET_SHADOW_STACK
 
 #undef __
 #define __ basm.
@@ -616,25 +620,20 @@ void BaselineAssembler::EmitReturn(MacroAssembler* masm) {
   Register scratch = scope.AcquireScratch();
 
   Register actual_params_size = scratch;
-  // Compute the size of the actual parameters + receiver (in bytes).
+  // Compute the size of the actual parameters + receiver.
   __ masm()->movq(actual_params_size,
                   MemOperand(rbp, StandardFrameConstants::kArgCOffset));
 
   // If actual is bigger than formal, then we should use it to free up the stack
   // arguments.
-  Label corrected_args_count;
   __ masm()->cmpq(params_size, actual_params_size);
-  __ masm()->j(greater_equal, &corrected_args_count);
-  __ masm()->movq(params_size, actual_params_size);
-  __ Bind(&corrected_args_count);
+  __ masm()->cmovq(kLessThan, params_size, actual_params_size);
 
   // Leave the frame (also dropping the register file).
   __ masm()->LeaveFrame(StackFrame::BASELINE);
 
   // Drop receiver + arguments.
-  __ masm()->DropArguments(params_size, scratch,
-                           TurboAssembler::kCountIsInteger,
-                           TurboAssembler::kCountIncludesReceiver);
+  __ masm()->DropArguments(params_size, scratch);
   __ masm()->Ret();
 }
 

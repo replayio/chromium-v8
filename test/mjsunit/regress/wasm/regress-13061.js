@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Flags: --experimental-wasm-gc --no-liftoff
+// Flags: --no-liftoff
 
 d8.file.execute("test/mjsunit/wasm/wasm-module-builder.js");
 
@@ -10,7 +10,7 @@ let builder = new WasmModuleBuilder();
 
 builder.addFunction('repro', kSig_v_v)
   .exportFunc()
-  .addLocals(wasmRefNullType(kWasmDataRef), 1)
+  .addLocals(wasmRefNullType(kWasmStructRef), 1)
   .addBody([
     kExprI32Const, 0,
     kExprIf, kWasmVoid,

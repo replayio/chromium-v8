@@ -5,13 +5,16 @@
 #include "src/profiler/sampling-heap-profiler.h"
 
 #include <stdint.h>
+
 #include <memory>
 
 #include "src/api/api-inl.h"
 #include "src/base/ieee754.h"
+#include "src/base/iterator.h"
 #include "src/base/utils/random-number-generator.h"
 #include "src/execution/frames-inl.h"
 #include "src/execution/isolate.h"
+#include "src/heap/heap-layout-inl.h"
 #include "src/heap/heap.h"
 #include "src/profiler/strings-storage.h"
 
@@ -75,13 +78,20 @@ void SamplingHeapProfiler::SampleObject(Address soon_object, size_t size) {
   DisallowGarbageCollection no_gc;
 
   // Check if the area is iterable by confirming that it starts with a map.
-  DCHECK(HeapObject::FromAddress(soon_object).map(isolate_).IsMap(isolate_));
+  DCHECK(IsMap(HeapObject::FromAddress(soon_object)->map(isolate_), isolate_));
 
   HandleScope scope(isolate_);
-  HeapObject heap_object = HeapObject::FromAddress(soon_object);
+  Tagged<HeapObject> heap_object = HeapObject::FromAddress(soon_object);
   Handle<Object> obj(heap_object, isolate_);
 
-  Local<v8::Value> loc = v8::Utils::ToLocal(obj);
+  // Since soon_object can be in code space or trusted space we can't use
+  // v8::Utils::ToLocal.
+  DCHECK(obj.is_null() ||
+         (IsSmi(*obj) ||
+          (V8_EXTERNAL_CODE_SPACE_BOOL &&
+           TrustedHeapLayout::InCodeSpace(heap_object)) ||
+          TrustedHeapLayout::InTrustedSpace(heap_object) || !IsTheHole(*obj)));
+  auto loc = Local<v8::Value>::FromSlot(obj.location());
 
   AllocationNode* node = AddStack();
   node->allocations_[size]++;
@@ -144,8 +154,8 @@ SamplingHeapProfiler::AllocationNode* SamplingHeapProfiler::FindOrAddChildNode(
 SamplingHeapProfiler::AllocationNode* SamplingHeapProfiler::AddStack() {
   AllocationNode* node = &profile_root_;
 
-  std::vector<SharedFunctionInfo> stack;
-  JavaScriptFrameIterator frame_it(isolate_);
+  std::vector<Tagged<SharedFunctionInfo>> stack;
+  JavaScriptStackFrameIterator frame_it(isolate_);
   int frames_captured = 0;
   bool found_arguments_marker_frames = false;
   while (!frame_it.done() && frames_captured < stack_depth_) {
@@ -155,8 +165,8 @@ SamplingHeapProfiler::AllocationNode* SamplingHeapProfiler::AddStack() {
     // closure on the stack. Skip over any such frames (they'll be
     // in the top frames of the stack). The allocations made in this
     // sensitive moment belong to the formerly optimized frame anyway.
-    if (frame->unchecked_function().IsJSFunction()) {
-      SharedFunctionInfo shared = frame->function().shared();
+    if (IsJSFunction(frame->unchecked_function())) {
+      Tagged<SharedFunctionInfo> shared = frame->function()->shared();
       stack.push_back(shared);
       frames_captured++;
     } else {
@@ -186,6 +196,12 @@ SamplingHeapProfiler::AllocationNode* SamplingHeapProfiler::AddStack() {
       case EXTERNAL:
         name = "(EXTERNAL)";
         break;
+      case LOGGING:
+        name = "(LOGGING)";
+        break;
+      case IDLE_EXTERNAL:
+        name = "(IDLE_EXTERNAL)";
+        break;
       case IDLE:
         name = "(IDLE)";
         break;
@@ -201,15 +217,14 @@ SamplingHeapProfiler::AllocationNode* SamplingHeapProfiler::AddStack() {
 
   // We need to process the stack in reverse order as the top of the stack is
   // the first element in the list.
-  for (auto it = stack.rbegin(); it != stack.rend(); ++it) {
-    SharedFunctionInfo shared = *it;
-    const char* name = this->names()->GetCopy(shared.DebugNameCStr().get());
+  for (Tagged<SharedFunctionInfo> shared : base::Reversed(stack)) {
+    const char* name = this->names()->GetCopy(shared->DebugNameCStr().get());
     int script_id = v8::UnboundScript::kNoScriptId;
-    if (shared.script().IsScript()) {
-      Script script = Script::cast(shared.script());
-      script_id = script.id();
+    if (IsScript(shared->script())) {
+      Tagged<Script> script = Cast<Script>(shared->script());
+      script_id = script->id();
     }
-    node = FindOrAddChildNode(node, name, script_id, shared.StartPosition());
+    node = FindOrAddChildNode(node, name, script_id, shared->StartPosition());
   }
 
   if (found_arguments_marker_frames) {
@@ -235,14 +250,16 @@ v8::AllocationProfile::Node* SamplingHeapProfiler::TranslateAllocationNode(
   if (node->script_id_ != v8::UnboundScript::kNoScriptId) {
     auto script_iterator = scripts.find(node->script_id_);
     if (script_iterator != scripts.end()) {
-      Handle<Script> script = script_iterator->second;
-      if (script->name().IsName()) {
-        Name name = Name::cast(script->name());
+      DirectHandle<Script> script = script_iterator->second;
+      if (IsName(script->name())) {
+        Tagged<Name> name = Cast<Name>(script->name());
         script_name = ToApiHandle<v8::String>(
             isolate_->factory()->InternalizeUtf8String(names_->GetName(name)));
       }
-      line = 1 + Script::GetLineNumber(script, node->script_position_);
-      column = 1 + Script::GetColumnNumber(script, node->script_position_);
+      Script::PositionInfo pos_info;
+      Script::GetPositionInfo(script, node->script_position_, &pos_info);
+      line = pos_info.line + 1;
+      column = pos_info.column + 1;
     }
   }
   for (auto alloc : node->allocations_) {
@@ -270,16 +287,16 @@ v8::AllocationProfile::Node* SamplingHeapProfiler::TranslateAllocationNode(
 v8::AllocationProfile* SamplingHeapProfiler::GetAllocationProfile() {
   if (flags_ & v8::HeapProfiler::kSamplingForceGC) {
     isolate_->heap()->CollectAllGarbage(
-        Heap::kNoGCFlags, GarbageCollectionReason::kSamplingProfiler);
+        GCFlag::kNoFlags, GarbageCollectionReason::kSamplingProfiler);
   }
   // To resolve positions to line/column numbers, we will need to look up
   // scripts. Build a map to allow fast mapping from script id to script.
   std::map<int, Handle<Script>> scripts;
   {
     Script::Iterator iterator(isolate_);
-    for (Script script = iterator.Next(); !script.is_null();
+    for (Tagged<Script> script = iterator.Next(); !script.is_null();
          script = iterator.Next()) {
-      scripts[script.id()] = handle(script, isolate_);
+      scripts[script->id()] = handle(script, isolate_);
     }
   }
   auto profile = new v8::internal::AllocationProfile();

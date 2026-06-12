@@ -16,6 +16,18 @@ namespace internal {
 // The layout of an EntryFrame is as follows:
 //            TOP OF THE STACK     LOWEST ADDRESS
 //         +---------------------+-----------------------
+//   -6    |  outermost marker   |
+//         |- - - - - - - - - - -|
+//   -5    |   fast api call pc  |
+//         |- - - - - - - - - - -|
+//   -4    |   fast api call fp  |
+//         |- - - - - - - - - - -|
+//   -3    |      centry fp      |
+//         |- - - - - - - - - - -|
+//   -2    | stack frame marker  |
+//         |- - - - - - - - - - -|
+//   -1    | stack frame marker  |
+//         |- - - - - - - - - - -|
 //   0     |   saved fp (r11)    |  <-- frame ptr
 //         |- - - - - - - - - - -|
 //   1     |   saved lr (r14)    |
@@ -33,7 +45,12 @@ class EntryFrameConstants : public AllStatic {
  public:
   // This is the offset to where JSEntry pushes the current value of
   // Isolate::c_entry_fp onto the stack.
-  static constexpr int kCallerFPOffset = -3 * kSystemPointerSize;
+  static constexpr int kNextExitFrameFPOffset = -3 * kSystemPointerSize;
+
+  static constexpr int kNextFastCallFrameFPOffset =
+      kNextExitFrameFPOffset - kSystemPointerSize;
+  static constexpr int kNextFastCallFramePCOffset =
+      kNextFastCallFrameFPOffset - kSystemPointerSize;
 
   // Stack offsets for arguments passed to JSEntry.
   static constexpr int kArgcOffset = +0 * kSystemPointerSize;
@@ -55,7 +72,7 @@ class EntryFrameConstants : public AllStatic {
       (kNumCalleeSaved - 1) * kSystemPointerSize;
 };
 
-class WasmCompileLazyFrameConstants : public TypedFrameConstants {
+class WasmLiftoffSetupFrameConstants : public TypedFrameConstants {
  public:
   // Number of gp parameters, without the instance.
   static constexpr int kNumberOfSavedGpParamRegs = 3;
@@ -65,18 +82,25 @@ class WasmCompileLazyFrameConstants : public TypedFrameConstants {
   // We spill:
   //   r3: param0 = instance
   //   r0, r2, r6: param1, param2, param3
-  // in the following FP-relative order: [r6, r3, r2, r0].
+  //   lr (== r14): internal usage of the caller
+  // in the following FP-relative order: [lr, r6, r3, r2, r0].
   static constexpr int kInstanceSpillOffset =
-      TYPED_FRAME_PUSHED_VALUE_OFFSET(1);
+      TYPED_FRAME_PUSHED_VALUE_OFFSET(2);
 
   static constexpr int kParameterSpillsOffset[] = {
-      TYPED_FRAME_PUSHED_VALUE_OFFSET(3), TYPED_FRAME_PUSHED_VALUE_OFFSET(2),
-      TYPED_FRAME_PUSHED_VALUE_OFFSET(0)};
+      TYPED_FRAME_PUSHED_VALUE_OFFSET(4), TYPED_FRAME_PUSHED_VALUE_OFFSET(3),
+      TYPED_FRAME_PUSHED_VALUE_OFFSET(1)};
 
   // SP-relative.
-  static constexpr int kWasmInstanceOffset = 2 * kSystemPointerSize;
-  static constexpr int kFunctionIndexOffset = 1 * kSystemPointerSize;
+  static constexpr int kWasmInstanceDataOffset = 2 * kSystemPointerSize;
+  static constexpr int kDeclaredFunctionIndexOffset = 1 * kSystemPointerSize;
   static constexpr int kNativeModuleOffset = 0;
+};
+
+class WasmLiftoffFrameConstants : public TypedFrameConstants {
+ public:
+  static constexpr int kFeedbackVectorOffset = 3 * kSystemPointerSize;
+  static constexpr int kInstanceDataOffset = 2 * kSystemPointerSize;
 };
 
 // Frame constructed by the {WasmDebugBreak} builtin.

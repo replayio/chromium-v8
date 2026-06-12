@@ -4,10 +4,10 @@
 
 #include "src/builtins/builtins-utils-inl.h"
 #include "src/builtins/builtins.h"
-#include "src/heap/heap-inl.h"  // For ToBoolean.
 #include "src/logging/counters.h"
 #include "src/objects/call-site-info-inl.h"
 #include "src/objects/objects-inl.h"
+#include "src/roots/roots-inl.h"
 
 namespace v8 {
 namespace internal {
@@ -23,12 +23,17 @@ namespace internal {
         NewTypeError(MessageTemplate::kCallSiteMethod,                        \
                      isolate->factory()->NewStringFromAsciiChecked(method))); \
   }                                                                           \
-  Handle<CallSiteInfo> frame = Handle<CallSiteInfo>::cast(it.GetDataValue())
+  auto frame = Cast<CallSiteInfo>(it.GetDataValue())
+
 namespace {
 
-Object PositiveNumberOrNull(int value, Isolate* isolate) {
+Tagged<Object> PositiveNumberOrNull(int value, Isolate* isolate) {
   if (value > 0) return *isolate->factory()->NewNumberFromInt(value);
   return ReadOnlyRoots(isolate).null_value();
+}
+
+bool NativeContextIsForShadowRealm(Tagged<NativeContext> native_context) {
+  return native_context->scope_info()->scope_type() == SHADOW_REALM_SCOPE;
 }
 
 }  // namespace
@@ -66,11 +71,25 @@ BUILTIN(CallSitePrototypeGetFileName) {
 }
 
 BUILTIN(CallSitePrototypeGetFunction) {
+  static const char method_name[] = "getFunction";
   HandleScope scope(isolate);
-  CHECK_CALLSITE(frame, "getFunction");
+  CHECK_CALLSITE(frame, method_name);
+  // ShadowRealms have a boundary: references to outside objects must not exist
+  // in the ShadowRealm, and references to ShadowRealm objects must not exist
+  // outside the ShadowRealm.
+  if (NativeContextIsForShadowRealm(isolate->raw_native_context()) ||
+      (IsJSFunction(frame->function()) &&
+       NativeContextIsForShadowRealm(
+           Cast<JSFunction>(frame->function())->native_context()))) {
+    THROW_NEW_ERROR_RETURN_FAILURE(
+        isolate,
+        NewTypeError(
+            MessageTemplate::kCallSiteMethodUnsupportedInShadowRealm,
+            isolate->factory()->NewStringFromAsciiChecked(method_name)));
+  }
   if (frame->IsStrict() ||
-      (frame->function().IsJSFunction() &&
-       JSFunction::cast(frame->function()).shared().is_toplevel())) {
+      (IsJSFunction(frame->function()) &&
+       Cast<JSFunction>(frame->function())->shared()->is_toplevel())) {
     return ReadOnlyRoots(isolate).undefined_value();
   }
   isolate->CountUsage(v8::Isolate::kCallSiteAPIGetFunctionSloppyCall);
@@ -124,13 +143,30 @@ BUILTIN(CallSitePrototypeGetScriptNameOrSourceURL) {
 }
 
 BUILTIN(CallSitePrototypeGetThis) {
+  static const char method_name[] = "getThis";
   HandleScope scope(isolate);
-  CHECK_CALLSITE(frame, "getThis");
+  CHECK_CALLSITE(frame, method_name);
+  // ShadowRealms have a boundary: references to outside objects must not exist
+  // in the ShadowRealm, and references to ShadowRealm objects must not exist
+  // outside the ShadowRealm.
+  if (NativeContextIsForShadowRealm(isolate->raw_native_context()) ||
+      (IsJSFunction(frame->function()) &&
+       NativeContextIsForShadowRealm(
+           Cast<JSFunction>(frame->function())->native_context()))) {
+    THROW_NEW_ERROR_RETURN_FAILURE(
+        isolate,
+        NewTypeError(
+            MessageTemplate::kCallSiteMethodUnsupportedInShadowRealm,
+            isolate->factory()->NewStringFromAsciiChecked(method_name)));
+  }
   if (frame->IsStrict()) return ReadOnlyRoots(isolate).undefined_value();
   isolate->CountUsage(v8::Isolate::kCallSiteAPIGetThisSloppyCall);
 #if V8_ENABLE_WEBASSEMBLY
   if (frame->IsAsmJsWasm()) {
-    return frame->GetWasmInstance().native_context().global_proxy();
+    return frame->GetWasmInstance()
+        ->trusted_data(isolate)
+        ->native_context()
+        ->global_proxy();
   }
 #endif  // V8_ENABLE_WEBASSEMBLY
   return frame->receiver_or_instance();
@@ -145,37 +181,37 @@ BUILTIN(CallSitePrototypeGetTypeName) {
 BUILTIN(CallSitePrototypeIsAsync) {
   HandleScope scope(isolate);
   CHECK_CALLSITE(frame, "isAsync");
-  return isolate->heap()->ToBoolean(frame->IsAsync());
+  return ReadOnlyRoots(isolate).boolean_value(frame->IsAsync());
 }
 
 BUILTIN(CallSitePrototypeIsConstructor) {
   HandleScope scope(isolate);
   CHECK_CALLSITE(frame, "isConstructor");
-  return isolate->heap()->ToBoolean(frame->IsConstructor());
+  return ReadOnlyRoots(isolate).boolean_value(frame->IsConstructor());
 }
 
 BUILTIN(CallSitePrototypeIsEval) {
   HandleScope scope(isolate);
   CHECK_CALLSITE(frame, "isEval");
-  return isolate->heap()->ToBoolean(frame->IsEval());
+  return ReadOnlyRoots(isolate).boolean_value(frame->IsEval());
 }
 
 BUILTIN(CallSitePrototypeIsNative) {
   HandleScope scope(isolate);
   CHECK_CALLSITE(frame, "isNative");
-  return isolate->heap()->ToBoolean(frame->IsNative());
+  return ReadOnlyRoots(isolate).boolean_value(frame->IsNative());
 }
 
 BUILTIN(CallSitePrototypeIsPromiseAll) {
   HandleScope scope(isolate);
   CHECK_CALLSITE(frame, "isPromiseAll");
-  return isolate->heap()->ToBoolean(frame->IsPromiseAll());
+  return ReadOnlyRoots(isolate).boolean_value(frame->IsPromiseAll());
 }
 
 BUILTIN(CallSitePrototypeIsToplevel) {
   HandleScope scope(isolate);
   CHECK_CALLSITE(frame, "isToplevel");
-  return isolate->heap()->ToBoolean(frame->IsToplevel());
+  return ReadOnlyRoots(isolate).boolean_value(frame->IsToplevel());
 }
 
 BUILTIN(CallSitePrototypeToString) {

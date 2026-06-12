@@ -150,6 +150,7 @@ namespace compiler {
   V(Mips64BitcastLD)                  \
   V(Mips64Float64ExtractLowWord32)    \
   V(Mips64Float64ExtractHighWord32)   \
+  V(Mips64Float64FromWord32Pair)      \
   V(Mips64Float64InsertLowWord32)     \
   V(Mips64Float64InsertHighWord32)    \
   V(Mips64Float32Max)                 \
@@ -416,8 +417,9 @@ namespace compiler {
 // MRR = [register + register]
 // TODO(plind): Add the new r6 address modes.
 #define TARGET_ADDRESSING_MODE_LIST(V) \
-  V(MRI) /* [%r0 + K] */               \
-  V(MRR) /* [%r0 + %r1] */
+  V(MRI)  /* [%r0 + K] */              \
+  V(MRR)  /* [%r0 + %r1] */            \
+  V(Root) /* [%rr + K] */
 
 }  // namespace compiler
 }  // namespace internal

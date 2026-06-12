@@ -28,14 +28,6 @@ namespace ieee754 {
 
 namespace {
 
-/* Disable "potential divide by 0" warning in Visual Studio compiler. */
-
-#if V8_CC_MSVC
-
-#pragma warning(disable : 4723)
-
-#endif
-
 /*
  * The original fdlibm code used statements like:
  *  n0 = ((*(int*)&one)>>29)^1;   * index of high word *
@@ -105,9 +97,9 @@ namespace {
   } while (false)
 
 int32_t __ieee754_rem_pio2(double x, double* y) V8_WARN_UNUSED_RESULT;
-double __kernel_cos(double x, double y) V8_WARN_UNUSED_RESULT;
 int __kernel_rem_pio2(double* x, double* y, int e0, int nx, int prec,
                       const int32_t* ipio2) V8_WARN_UNUSED_RESULT;
+double __kernel_cos(double x, double y) V8_WARN_UNUSED_RESULT;
 double __kernel_sin(double x, double y, int iy) V8_WARN_UNUSED_RESULT;
 
 /* __ieee754_rem_pio2(x,y)
@@ -707,7 +699,7 @@ V8_INLINE double __kernel_sin(double x, double y, int iy) {
  * Algorithm
  *      1. Since tan(-x) = -tan(x), we need only to consider positive x.
  *      2. if x < 2^-28 (hx<0x3E300000 0), return x with inexact if x!=0.
- *      3. tan(x) is approximated by a odd polynomial of degree 27 on
+ *      3. tan(x) is approximated by an odd polynomial of degree 27 on
  *         [0,0.67434]
  *                               3             27
  *              tan(x) ~ x + T1*x + ... + T13*x
@@ -1348,7 +1340,11 @@ double atan2(double y, double x) {
  * Accuracy:
  *      TRIG(x) returns trig(x) nearly rounded
  */
+#if defined(V8_USE_LIBM_TRIG_FUNCTIONS)
+double fdlibm_cos(double x) {
+#else
 double cos(double x) {
+#endif
   double y[2], z = 0.0;
   int32_t n, ix;
 
@@ -2440,7 +2436,11 @@ double cbrt(double x) {
  * Accuracy:
  *      TRIG(x) returns trig(x) nearly rounded
  */
+#if defined(V8_USE_LIBM_TRIG_FUNCTIONS)
+double fdlibm_sin(double x) {
+#else
 double sin(double x) {
+#endif
   double y[2], z = 0.0;
   int32_t n, ix;
 
@@ -2586,6 +2586,7 @@ double cosh(double x) {
   return huge * huge;
 }
 
+namespace legacy {
 /*
  * ES2019 Draft 2019-01-02 12.6.4
  * Math.pow & Exponentiation Operator
@@ -2738,7 +2739,7 @@ double pow(double x, double y) {
   /* special value of x */
   if (lx == 0) {
     if (ix == 0x7ff00000 || ix == 0 || ix == 0x3ff00000) {
-      z = ax;                         /*x is +-0,+-inf,+-1*/
+      z = ax;                               /*x is +-0,+-inf,+-1*/
       if (hy < 0) z = base::Divide(one, z); /* z = (1/|x|) */
       if (hx < 0) {
         if (((ix - 0x3ff00000) | yisint) == 0) {
@@ -2897,6 +2898,8 @@ double pow(double x, double y) {
   return s * z;
 }
 
+}  // namespace legacy
+
 /*
  * ES6 draft 09-27-13, section 20.2.2.30.
  * Math.sinh
@@ -3014,6 +3017,11 @@ double tanh(double x) {
 #undef INSERT_WORDS
 #undef SET_HIGH_WORD
 #undef SET_LOW_WORD
+
+#if defined(V8_USE_LIBM_TRIG_FUNCTIONS) && defined(BUILDING_V8_BASE_SHARED)
+double libm_sin(double x) { return glibc_sin(x); }
+double libm_cos(double x) { return glibc_cos(x); }
+#endif
 
 }  // namespace ieee754
 }  // namespace base
