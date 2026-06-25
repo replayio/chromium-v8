@@ -11070,12 +11070,13 @@ void RecordReplayOnTargetProgressReached() {
 
 bool RecordReplayHasDefaultContext();
 
-// Same gate the bytecode emitter uses to decide whether to emit progress
-// opcodes (bytecode-array-builder.cc). Non-JS callers (e.g. Blink C++ bindings)
-// have no emission step, so they must consult this gate at increment time.
+// Progress-advance gate for non-JS callers (no bytecode-emission step).
 static bool RecordReplayShouldEmitProgress() {
   return recordreplay::IsRecordingOrReplaying("emit-opcodes") &&
-         RecordReplayHasDefaultContext() && IsMainThread();
+         RecordReplayHasDefaultContext() && IsMainThread() &&
+         gRecordReplayHasCheckpoint &&
+         (!recordreplay::AreEventsDisallowed() ||
+          recordreplay::HasDivergedFromRecording());
 }
 
 // Advance the execution progress counter from outside the JS interpreter,
