@@ -11068,6 +11068,25 @@ void RecordReplayOnTargetProgressReached() {
   gRecordReplayProgressReached();
 }
 
+bool RecordReplayHasDefaultContext();
+
+// Same gate the bytecode emitter uses to decide whether to emit progress
+// opcodes (bytecode-array-builder.cc). Non-JS callers (e.g. Blink C++ bindings)
+// have no emission step, so they must consult this gate at increment time.
+static bool RecordReplayShouldEmitProgress() {
+  return recordreplay::IsRecordingOrReplaying("emit-opcodes") &&
+         RecordReplayHasDefaultContext() && IsMainThread();
+}
+
+// Advance the execution progress counter from outside the JS interpreter,
+// mirroring Runtime_RecordReplayAssertExecutionProgress.
+extern "C" void V8RecordReplayAdvanceProgressCounter() {
+  if (!RecordReplayShouldEmitProgress()) return;
+  if (++*gProgressCounter == gTargetProgress) {
+    RecordReplayOnTargetProgressReached();
+  }
+}
+
 static void RecordReplayProgressInterruptCallback() {
   CHECK(IsMainThread());
   Isolate* isolate = Isolate::Current();
