@@ -1007,7 +1007,7 @@ std::string GetScriptLocationString(int script_id, int start_position) {
   Script::GetPositionInfo(script, start_position, &info, Script::WITH_OFFSET);
 
   std::ostringstream os;
-  os << script_id << ":" << script_name << ":" << info.line + 1 << ":" << info.column;
+  os << script_id << ":" << script_name << ":" << info.line + 1 << ":" << info.column + 1;
   return os.str();
 }
 
@@ -1018,26 +1018,67 @@ static std::string GetScriptProgressEntryString(uint64_t v) {
   return GetScriptLocationString(script_id, start_position);
 }
 
-// Produce a string explaining a JS mismatch during an Assert call when a C++
-// mismatch was detected. It includes the first mismatching replayed PC (if
-// there is any). That PC is the current PC minus the index of the mismatching
-// replayed entry, since every PC update before the current Assert added one
-// JS mismatch entry.
-// See https://linear.app/replay/issue/RUN-2096#comment-a334b15f
-static char* GetProgressMismatchMessage(size_t replayedIndex, uint64_t recordedEntry,
-                                        uint64_t replayedEntry) {
-  std::string recorded_text = recordedEntry
-                                  ? GetScriptProgressEntryString(recordedEntry)
-                                  : "<assertion>";
-  std::string replayed_text = replayedEntry
-                                  ? GetScriptProgressEntryString(replayedEntry)
-                                  : "<assertion>";
+// Escape a string for embedding as a JSON string value.
+static std::string JsonEscape(const std::string& s) {
   std::ostringstream os;
-  os << "{ \"recorded\": \"" << recorded_text 
-     << "\", \"replayed\": \"" << replayed_text
-     << "\", \"progress\": " << (*gProgressCounter - replayedIndex);
-  os << "\" }";
-  
+  for (char c : s) {
+    switch (c) {
+      case '"': os << "\\\""; break;
+      case '\\': os << "\\\\"; break;
+      case '\b': os << "\\b"; break;
+      case '\f': os << "\\f"; break;
+      case '\n': os << "\\n"; break;
+      case '\r': os << "\\r"; break;
+      case '\t': os << "\\t"; break;
+      default:
+        if (static_cast<unsigned char>(c) < 0x20) {
+          char buf[8];
+          snprintf(buf, sizeof(buf), "\\u%04x", c);
+          os << buf;
+        } else {
+          os << c;
+        }
+    }
+  }
+  return os.str();
+}
+
+// Replayed buffer ends at the Assert progress; one entry per progress update.
+// Same axis for both sides (lockstep prefix anchors the recorded buffer).
+static uint64_t ProgressAt(int64_t k, size_t replayed_size) {
+  return *gProgressCounter + k - (static_cast<int64_t>(replayed_size) - 1);
+}
+
+// Emit one array of frame strings: every entry from the first divergent index
+// d through the Assert progress. No per-entry progress; each entry k sits at
+// lastDeterministicProgress + (k - (d - 1)). A side that ran out at d yields [].
+static void AppendDivergentFrames(std::ostringstream& os, const uint64_t* entries,
+                                  size_t size, size_t d) {
+  os << "[";
+  for (size_t k = d; k < size; k++) {
+    if (k > d) os << ", ";
+    os << "\"" << JsonEscape(GetScriptProgressEntryString(entries[k])) << "\"";
+  }
+  os << "]";
+}
+
+// `lastDeterministicProgress` is the progress of the last entry that matched in
+// lockstep (index d-1), i.e. the last progress where both sides provably agreed.
+// The divergence occurred between it and the next progress. `recorded`/`replayed`
+// are arrays of the divergent frames from d onward on each side; they are
+// independent unaligned sequences, not aligned pairs.
+// See https://linear.app/replay/issue/RUN-2096#comment-a334b15f
+static char* GetProgressMismatchMessage(const uint64_t* recorded, size_t recorded_size,
+                                        const uint64_t* replayed, size_t replayed_size,
+                                        size_t d) {
+  std::ostringstream os;
+  os << "{ \"lastDeterministicProgress\": " << ProgressAt(static_cast<int64_t>(d) - 1, replayed_size)
+     << ", \"recorded\": ";
+  AppendDivergentFrames(os, recorded, recorded_size, d);
+  os << ", \"replayed\": ";
+  AppendDivergentFrames(os, replayed, replayed_size, d);
+  os << " }";
+
   return strdup(os.str().c_str());
 }
 
@@ -1066,29 +1107,20 @@ char* RecordReplayCallbackAssertOnDataMismatch(void* recorded_buf, size_t record
   const uint64_t* replayed = reinterpret_cast<const uint64_t*>(replayed_buf);
   size_t replayed_size = replayed_buf_size / sizeof(uint64_t);
 
-  for (size_t i = 0; i < std::min<size_t>(recorded_size, replayed_size); i++) {
-    if (recorded[i] == replayed[i]) {
-      std::string text = GetScriptProgressEntryString(recorded[i]);
-      RecordReplayDescribeAssertData(text.c_str());
-    } else {
-      return GetProgressMismatchMessage(replayed_size - i - 1, recorded[i], replayed[i]);
-    }
+  // Find the first divergent index. Equal entries up to here ran in lockstep.
+  size_t firstDivergentIndex = 0;
+  size_t common = std::min<size_t>(recorded_size, replayed_size);
+  while (firstDivergentIndex < common &&
+         recorded[firstDivergentIndex] == replayed[firstDivergentIndex]) {
+    std::string text = GetScriptProgressEntryString(recorded[firstDivergentIndex]);
+    RecordReplayDescribeAssertData(text.c_str());
+    firstDivergentIndex++;
   }
 
-  if (recorded_size < replayed_size) {
-    // We are missing recorded entries. Report the first extra replayed entry.
-    return GetProgressMismatchMessage(
-      replayed_size - recorded_size - 1, 0, replayed[recorded_size]);
-  }
-
-  if (replayed_size < recorded_size) {
-    // We are missing replayed entries. Report the first extra recorded entry.
-    return GetProgressMismatchMessage(
-      0, recorded[replayed_size], 0);
-  }
-
-  // Everything is equal.
-  return GetProgressMismatchMessage(0, 0, 0);
+  // Divergence is at firstDivergentIndex: either a differing entry, or one side
+  // ran out (the shorter side has no entry there, so its array ends up empty).
+  return GetProgressMismatchMessage(recorded, recorded_size, replayed, replayed_size,
+                                    firstDivergentIndex);
 }
 
 void RecordReplayCallbackAssertDescribeData(void* buf, size_t buf_size) {
