@@ -129,6 +129,7 @@ static void OrderedUnlock(int lock);
 
 static void InvalidateRecording(const char* why);
 static void NewCheckpoint();
+static void NewCheckpointFlushed();
 
 static void BeginPassThroughEvents();
 static void EndPassThroughEvents();
