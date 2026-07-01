@@ -11069,26 +11069,6 @@ void RecordReplayOnTargetProgressReached() {
   gRecordReplayProgressReached();
 }
 
-bool RecordReplayHasDefaultContext();
-
-// Progress-advance gate for non-JS callers (no bytecode-emission step).
-static bool RecordReplayShouldEmitProgress() {
-  return recordreplay::IsRecordingOrReplaying("emit-opcodes") &&
-         RecordReplayHasDefaultContext() && IsMainThread() &&
-         gRecordReplayHasCheckpoint &&
-         (!recordreplay::AreEventsDisallowed() ||
-          recordreplay::HasDivergedFromRecording());
-}
-
-// Advance the execution progress counter from outside the JS interpreter,
-// mirroring Runtime_RecordReplayAssertExecutionProgress.
-extern "C" void V8RecordReplayAdvanceProgressCounter() {
-  if (!RecordReplayShouldEmitProgress()) return;
-  if (++*gProgressCounter == gTargetProgress) {
-    RecordReplayOnTargetProgressReached();
-  }
-}
-
 static void RecordReplayProgressInterruptCallback() {
   CHECK(IsMainThread());
   Isolate* isolate = Isolate::Current();
