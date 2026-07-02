@@ -1051,17 +1051,22 @@ static uint64_t ProgressAt(int64_t k, size_t replayed_size) {
 
 static const size_t kMaxDivergentFrames = 10;
 
-// Emits up to kMaxDivergentFrames entries from d; returns count omitted.
-static size_t AppendDivergentFrames(std::ostringstream& os, const uint64_t* entries,
-                                    size_t size, size_t d) {
+// Emits up to kMaxDivergentFrames entries from d; appends a truncation note
+// as a trailing array entry if any were omitted.
+static void AppendDivergentFrames(std::ostringstream& os, const uint64_t* entries,
+                                  size_t size, size_t d) {
   size_t end = std::min(size, d + kMaxDivergentFrames);
   os << "[";
   for (size_t k = d; k < end; k++) {
     if (k > d) os << ", ";
     os << "\"" << JsonEscape(GetScriptProgressEntryString(entries[k])) << "\"";
   }
+  size_t omitted = size - end;
+  if (omitted) {
+    if (end > d) os << ", ";
+    os << "\"...truncated " << omitted << " more\"";
+  }
   os << "]";
-  return size - end;
 }
 
 // `lastDeterministicProgress` is the progress of the last entry that matched in
@@ -1076,15 +1081,9 @@ static char* GetProgressMismatchMessage(const uint64_t* recorded, size_t recorde
   std::ostringstream os;
   os << "{ \"lastDeterministicProgress\": " << ProgressAt(static_cast<int64_t>(d) - 1, replayed_size)
      << ", \"recorded\": ";
-  size_t recordedTruncated = AppendDivergentFrames(os, recorded, recorded_size, d);
+  AppendDivergentFrames(os, recorded, recorded_size, d);
   os << ", \"replayed\": ";
-  size_t replayedTruncated = AppendDivergentFrames(os, replayed, replayed_size, d);
-  if (recordedTruncated) {
-    os << ", \"recordedTruncated\": " << recordedTruncated;
-  }
-  if (replayedTruncated) {
-    os << ", \"replayedTruncated\": " << replayedTruncated;
-  }
+  AppendDivergentFrames(os, replayed, replayed_size, d);
   os << " }";
 
   return strdup(os.str().c_str());
