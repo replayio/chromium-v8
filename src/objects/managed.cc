@@ -4,6 +4,7 @@
 
 #include "src/objects/managed.h"
 
+#include "include/v8.h"  // For replay.
 #include "src/handles/global-handles-inl.h"
 
 namespace v8 {
@@ -34,6 +35,10 @@ void ManagedObjectFinalizer(const v8::WeakCallbackInfo<void>& data) {
   // it can trigger garbage collection. The first pass callbacks
   // are not allowed to invoke V8 API.
   data.SetSecondPassCallback(&ManagedObjectFinalizerSecondPass);
+}
+
+void AssertManagedDestructorRefcount(long use_count) {
+  recordreplay::Assert("Managed::Destructor %ld", use_count);
 }
 
 }  // namespace internal
