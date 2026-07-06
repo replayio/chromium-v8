@@ -102,6 +102,7 @@ class Managed : public Foreign {
   // to actually delete the shared pointer and decrement the shared refcount.
   static void Destructor(void* ptr) {
     auto shared_ptr_ptr = reinterpret_cast<std::shared_ptr<CppType>*>(ptr);
+    recordreplay::Assert("Managed::Destructor %ld", shared_ptr_ptr->use_count());
     delete shared_ptr_ptr;
   }
 };
