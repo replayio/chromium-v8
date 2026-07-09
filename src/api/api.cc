@@ -10848,6 +10848,7 @@ typedef char* (CommandCallbackRaw)(const char* params);
   Macro(RecordReplayOrderedUnlock, (int lock))                                \
   Macro(RecordReplayInvalidateRecording, (const char* format, ...))           \
   Macro(RecordReplayNewCheckpoint, ())                                        \
+  Macro(RecordReplayNewCheckpointFlushed, ())                                 \
   Macro(RecordReplayRegisterPointerWithName,                                  \
         (const char* name, const void* ptr))                                  \
   Macro(RecordReplayUnregisterPointer, (const void* ptr))                     \
@@ -11066,26 +11067,6 @@ void RecordReplayOnTargetProgressReached() {
     return;
   }
   gRecordReplayProgressReached();
-}
-
-bool RecordReplayHasDefaultContext();
-
-// Progress-advance gate for non-JS callers (no bytecode-emission step).
-static bool RecordReplayShouldEmitProgress() {
-  return recordreplay::IsRecordingOrReplaying("emit-opcodes") &&
-         RecordReplayHasDefaultContext() && IsMainThread() &&
-         gRecordReplayHasCheckpoint &&
-         (!recordreplay::AreEventsDisallowed() ||
-          recordreplay::HasDivergedFromRecording());
-}
-
-// Advance the execution progress counter from outside the JS interpreter,
-// mirroring Runtime_RecordReplayAssertExecutionProgress.
-extern "C" void V8RecordReplayAdvanceProgressCounter() {
-  if (!RecordReplayShouldEmitProgress()) return;
-  if (++*gProgressCounter == gTargetProgress) {
-    RecordReplayOnTargetProgressReached();
-  }
 }
 
 static void RecordReplayProgressInterruptCallback() {
@@ -11674,6 +11655,19 @@ void recordreplay::NewCheckpoint() {
 
 extern "C" DLLEXPORT void V8RecordReplayNewCheckpoint() {
   recordreplay::NewCheckpoint();
+}
+
+void recordreplay::NewCheckpointFlushed() {
+  // We can only create checkpoints if a context has been created. A context is
+  // needed to process commands which we might get from the driver.
+  if (IsRecordingOrReplaying() && IsMainThread() && internal::gDefaultContext) {
+    internal::gRecordReplayHasCheckpoint = true;
+    gRecordReplayNewCheckpointFlushed();
+  }
+}
+
+extern "C" DLLEXPORT void V8RecordReplayNewCheckpointFlushed() {
+  recordreplay::NewCheckpointFlushed();
 }
 
 // The BrowserEvent callback junction is a support for communicating
