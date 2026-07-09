@@ -1049,15 +1049,22 @@ static uint64_t ProgressAt(int64_t k, size_t replayed_size) {
   return *gProgressCounter + k - (static_cast<int64_t>(replayed_size) - 1);
 }
 
-// Emit one array of frame strings: every entry from the first divergent index
-// d through the Assert progress. No per-entry progress; each entry k sits at
-// lastDeterministicProgress + (k - (d - 1)). A side that ran out at d yields [].
+static const size_t kMaxDivergentFrames = 10;
+
+// Emits up to kMaxDivergentFrames entries from d; appends a truncation note
+// as a trailing array entry if any were omitted.
 static void AppendDivergentFrames(std::ostringstream& os, const uint64_t* entries,
                                   size_t size, size_t d) {
+  size_t end = std::min(size, d + kMaxDivergentFrames);
   os << "[";
-  for (size_t k = d; k < size; k++) {
+  for (size_t k = d; k < end; k++) {
     if (k > d) os << ", ";
     os << "\"" << JsonEscape(GetScriptProgressEntryString(entries[k])) << "\"";
+  }
+  size_t omitted = size - end;
+  if (omitted) {
+    if (end > d) os << ", ";
+    os << "\"...truncated " << omitted << " more\"";
   }
   os << "]";
 }
