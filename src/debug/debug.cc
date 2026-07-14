@@ -3863,6 +3863,34 @@ static void EnsureIsolateContext(Isolate* isolate, base::Optional<SaveAndSwitchC
   }
 }
 
+namespace {
+
+// Bypass Trusted Types for runtime-owned command evals.
+// Same approach as V8 Inspector InjectedScript::Scope::allowCodeGenerationFromStrings:
+// AllowCodeGenerationFromStrings(true) short-circuits before the TT callback.
+struct AutoAllowCodeGenerationFromStrings {
+  Handle<Context> context_;
+  bool need_restore_;
+
+  explicit AutoAllowCodeGenerationFromStrings(Isolate* isolate)
+      : context_(handle(isolate->context(), isolate)),
+        need_restore_(
+            context_->allow_code_gen_from_strings().IsFalse(isolate)) {
+    if (need_restore_) {
+      context_->set_allow_code_gen_from_strings(
+          ReadOnlyRoots(isolate).true_value());
+    }
+  }
+
+  ~AutoAllowCodeGenerationFromStrings() {
+    if (need_restore_) {
+      context_->set_allow_code_gen_from_strings(
+          ReadOnlyRoots(context_->GetIsolate()).false_value());
+    }
+  }
+};
+
+}  // namespace
 
 char* CommandCallback(const char* command, const char* params) {
   CHECK(IsMainThread());
@@ -3875,6 +3903,7 @@ char* CommandCallback(const char* command, const char* params) {
   EnsureIsolateContext(isolate, ssc);
 
   HandleScope scope(isolate);
+  AutoAllowCodeGenerationFromStrings allow_codegen(isolate);
 
   if (recordreplay::HasDivergedFromRecording()) {
     v8_inspector::V8Inspector* inspectorRaw = v8::debug::GetInspector((v8::Isolate*)isolate);
