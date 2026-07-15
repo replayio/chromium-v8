@@ -5,6 +5,7 @@
 #include "src/debug/debug.h"
 
 #include <memory>
+#include <string>
 #include <unordered_set>
 
 #include "src/api/api-inl.h"
@@ -23,6 +24,7 @@
 #include "src/execution/isolate-inl.h"
 #include "src/execution/v8threads.h"
 #include "src/handles/global-handles-inl.h"
+#include "src/heap/combined-heap.h"
 #include "src/heap/heap-inl.h"  // For NextDebuggingId.
 #include "src/init/bootstrapper.h"
 #include "src/inspector/v8-debugger-agent-impl.h"
@@ -3848,19 +3850,41 @@ static InternalCommandCallback gInternalCommandCallbacks[] = {
 static Eternal<Value>* gCommandCallback;
 
 extern "C" void V8RecordReplayGetDefaultContext(v8::Isolate* isolate, v8::Local<v8::Context>* cx);
+std::string RecordReplayContextAddressToken(v8::Isolate* isolate, uintptr_t ctxAddr);
 extern uint64_t* gProgressCounter;
 extern int gRecordReplayCheckProgress;
-static int gPauseContextGroupId = 0;
+int gPauseContextGroupId = 0;
 
 // Make sure that the isolate has a context by switching to the default
 // context if necessary.
 static void EnsureIsolateContext(Isolate* isolate, base::Optional<SaveAndSwitchContext>& ssc) {
+  const char* source = "slot";
   if (isolate->context().is_null()) {
+    source = "default";
     Local<v8::Context> v8_context;
     V8RecordReplayGetDefaultContext((v8::Isolate*)isolate, &v8_context);
     Handle<Context> context = Utils::OpenHandle(*v8_context);
     ssc.emplace(isolate, *context);
   }
+
+  Context ctx = isolate->context();
+  static Address gLastCommandContext = kNullAddress;
+  if (ctx.ptr() != gLastCommandContext) {
+    recordreplay::Print(
+        "ReplayScript COMMAND_CONTEXT_CHANGE %s %s group=%d win=? frame=?",
+        source,
+        RecordReplayContextAddressToken(
+            reinterpret_cast<v8::Isolate*>(isolate), ctx.ptr()).c_str(),
+        gPauseContextGroupId);
+    gLastCommandContext = ctx.ptr();
+  }
+
+  CHECK(isolate);
+  CHECK(isolate->heap());
+  CHECK(!ctx.is_null());
+  CHECK(ctx.IsHeapObject());
+  CHECK(IsValidHeapObject(isolate->heap(), HeapObject::cast(ctx)));
+  CHECK(ctx.IsContext());
 }
 
 namespace {

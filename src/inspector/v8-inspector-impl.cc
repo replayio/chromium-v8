@@ -30,6 +30,7 @@
 
 #include "src/inspector/v8-inspector-impl.h"
 
+#include <string>
 #include <vector>
 
 #include "include/v8-context.h"
@@ -53,6 +54,13 @@
 #include "src/inspector/value-mirror.h"
 
 #include "v8.h"
+
+extern "C" uintptr_t V8RecordReplayGetDefaultContextAddress(v8::Isolate* isolate);
+namespace v8 {
+namespace internal {
+std::string RecordReplayContextAddressToken(v8::Isolate* isolate, uintptr_t ctxAddr);
+}
+}
 
 namespace v8_inspector {
 
@@ -171,16 +179,22 @@ InspectedContext* V8InspectorImpl::getContext(int groupId,
   auto contextGroupIt = m_contexts.find(groupId);
   if (contextGroupIt == m_contexts.end()) {
     v8::recordreplay::CommandDiagnostic(
-        "[RUN-2486-2537] V8InspectorImpl::getContext A %d %d %zu", contextId,
-        groupId, m_contexts.size());
+        "[RUN-2486-2537] V8InspectorImpl::getContext A %d %d %zu %s", contextId,
+        groupId, m_contexts.size(),
+        v8::internal::RecordReplayContextAddressToken(
+            m_isolate, V8RecordReplayGetDefaultContextAddress(m_isolate))
+            .c_str());
     return nullptr;
   }
 
   auto contextIt = contextGroupIt->second->find(contextId);
   if (contextIt == contextGroupIt->second->end()) {
     v8::recordreplay::CommandDiagnostic(
-        "[RUN-2486-2537] V8InspectorImpl::getContext B %d %d %zu", contextId,
-        groupId, contextGroupIt->second->size());
+        "[RUN-2486-2537] V8InspectorImpl::getContext B %d %d %zu %s", contextId,
+        groupId, contextGroupIt->second->size(),
+        v8::internal::RecordReplayContextAddressToken(
+            m_isolate, V8RecordReplayGetDefaultContextAddress(m_isolate))
+            .c_str());
     return nullptr;
   }
 
