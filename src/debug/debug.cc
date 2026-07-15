@@ -4,6 +4,7 @@
 
 #include "src/debug/debug.h"
 
+#include <cinttypes>
 #include <memory>
 #include <unordered_set>
 
@@ -23,6 +24,7 @@
 #include "src/execution/isolate-inl.h"
 #include "src/execution/v8threads.h"
 #include "src/handles/global-handles-inl.h"
+#include "src/heap/combined-heap.h"
 #include "src/heap/heap-inl.h"  // For NextDebuggingId.
 #include "src/init/bootstrapper.h"
 #include "src/inspector/v8-debugger-agent-impl.h"
@@ -3855,12 +3857,30 @@ static int gPauseContextGroupId = 0;
 // Make sure that the isolate has a context by switching to the default
 // context if necessary.
 static void EnsureIsolateContext(Isolate* isolate, base::Optional<SaveAndSwitchContext>& ssc) {
+  const char* source = "slot";
   if (isolate->context().is_null()) {
+    source = "default";
     Local<v8::Context> v8_context;
     V8RecordReplayGetDefaultContext((v8::Isolate*)isolate, &v8_context);
     Handle<Context> context = Utils::OpenHandle(*v8_context);
     ssc.emplace(isolate, *context);
   }
+
+  Context ctx = isolate->context();
+  static Address gLastCommandContext = kNullAddress;
+  if (ctx.ptr() != gLastCommandContext) {
+    recordreplay::Print(
+        "ReplayScript COMMAND_CONTEXT_CHANGE %s iso=%" PRIxPTR " ctx=%" PRIxPTR " group=%d",
+        source, reinterpret_cast<uintptr_t>(isolate), ctx.ptr(), gPauseContextGroupId);
+    gLastCommandContext = ctx.ptr();
+  }
+
+  CHECK(isolate);
+  CHECK(isolate->heap());
+  CHECK(!ctx.is_null());
+  CHECK(ctx.IsHeapObject());
+  CHECK(IsValidHeapObject(isolate->heap(), HeapObject::cast(ctx)));
+  CHECK(ctx.IsContext());
 }
 
 namespace {
