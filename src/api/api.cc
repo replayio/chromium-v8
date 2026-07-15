@@ -5,7 +5,9 @@
 #include "src/api/api.h"
 
 #include <algorithm>  // For min
+#include <cinttypes>
 #include <cmath>      // For isnan.
+#include <cstdio>
 #include <limits>
 #include <sstream>
 #include <string>
@@ -11226,6 +11228,24 @@ extern "C" void V8RecordReplayGetDefaultContext(v8::Isolate* isolate, v8::Local<
 
 bool RecordReplayHasDefaultContext() {
   return !!gDefaultContext;
+}
+
+// Tagged pointer of the DefaultContext for `isolate`, or 0 if none. Deref-free:
+// survives a garbage current Context, so safe from command/teardown diagnostics.
+extern "C" uintptr_t V8RecordReplayGetDefaultContextAddress(v8::Isolate* isolate) {
+  if (!IsMainThread() || !gDefaultContext) return 0;
+  v8::Local<v8::Context> cx = gDefaultContext->Get(isolate);
+  return *reinterpret_cast<internal::Address*>(*cx);
+}
+
+// Canonical ContextAddress token "iso=.. ctx=..". `isolate` and `ctxAddr` must
+// be a coherent pair (same isolate the ctx was materialized against).
+std::string RecordReplayContextAddressToken(v8::Isolate* isolate,
+                                            uintptr_t ctxAddr) {
+  char buf[64];
+  snprintf(buf, sizeof(buf), "iso=%" PRIxPTR " ctx=%" PRIxPTR,
+           reinterpret_cast<uintptr_t>(isolate), ctxAddr);
+  return buf;
 }
 
 extern void RecordReplayInitInstrumentationState();
