@@ -430,7 +430,14 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
     return MaybeHandle<Object>();
   }
   if (!DumpOnJavascriptExecution::IsAllowed(isolate)) {
-    V8::GetCurrentPlatform()->DumpWithoutCrashing();
+    // Under record/replay, AutoDisallowEvents uses DUMP_ON_FAILURE to block
+    // C++→JS without throwing (throws would propagate and diverge).
+    if (recordreplay::IsRecordingOrReplaying()) {
+      recordreplay::Print(
+          "DisallowJavascriptExecution: blocked C++→JS entry (DUMP_ON_FAILURE)");
+    } else {
+      V8::GetCurrentPlatform()->DumpWithoutCrashing();
+    }
     return isolate->factory()->undefined_value();
   }
   isolate->IncrementJavascriptExecutionCounter();
