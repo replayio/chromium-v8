@@ -17,13 +17,14 @@ namespace v8 {
 namespace replayio {
 
 struct AutoMaybeDisallowEvents {
-  AutoMaybeDisallowEvents(bool disallowEvents, const char* label) {
+  AutoMaybeDisallowEvents(bool disallowEvents, v8::Isolate* isolate,
+                          const char* label) {
     if (disallowEvents) {
-      disallow.emplace(label);
+      disallow.emplace(label, isolate);
     }
   }
-  
-private:
+
+ private:
   v8::base::Optional<v8::replayio::AutoDisallowEvents> disallow;
 };
 

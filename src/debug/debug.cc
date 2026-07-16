@@ -3810,7 +3810,7 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
       AutoMarkReplayCode amrc;
       base::Optional<replayio::AutoDisallowEvents> disallow;
       if (disallowEvents) {
-        disallow.emplace("RecordReplayRegisterScript");
+        disallow.emplace("RecordReplayRegisterScript", (v8::Isolate*)isolate);
       }
 
       Local<v8::Value> handlerValue = handlerEternalValue->Get((v8::Isolate*)isolate);
@@ -3822,6 +3822,7 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
       callArgs[2] = Handle<Object>(script->source_mapping_url(), isolate);
 
       Handle<Object> undefined = isolate->factory()->undefined_value();
+      v8::Isolate::AllowJavascriptExecutionScope allow_js((v8::Isolate*)isolate);
       MaybeHandle<Object> rv = Execution::Call(isolate, handler, undefined, 3, callArgs);
       CHECK(!rv.is_null());
     }
@@ -3892,12 +3893,14 @@ namespace {
 // Bypass Trusted Types for runtime-owned command evals.
 // Same approach as V8 Inspector InjectedScript::Scope::allowCodeGenerationFromStrings:
 // AllowCodeGenerationFromStrings(true) short-circuits before the TT callback.
+// Must target native_context: CompileGlobalEval validates against that, and
+// allow_code_gen_from_strings accessors DCHECK(IsNativeContext()).
 struct AutoAllowCodeGenerationFromStrings {
   Handle<Context> context_;
   bool need_restore_;
 
   explicit AutoAllowCodeGenerationFromStrings(Isolate* isolate)
-      : context_(handle(isolate->context(), isolate)),
+      : context_(handle(isolate->context().native_context(), isolate)),
         need_restore_(
             context_->allow_code_gen_from_strings().IsFalse(isolate)) {
     if (need_restore_) {
@@ -3920,14 +3923,15 @@ char* CommandCallback(const char* command, const char* params) {
   CHECK(IsMainThread());
   AutoMarkReplayCode amrc;
   uint64_t startProgressCounter = *gProgressCounter;
-  replayio::AutoDisallowEvents disallow("CommandCallback");
 
   Isolate* isolate = Isolate::Current();
+  replayio::AutoDisallowEvents disallow("CommandCallback", (v8::Isolate*)isolate);
   base::Optional<SaveAndSwitchContext> ssc;
   EnsureIsolateContext(isolate, ssc);
 
   HandleScope scope(isolate);
   AutoAllowCodeGenerationFromStrings allow_codegen(isolate);
+  v8::Isolate::AllowJavascriptExecutionScope allow_js((v8::Isolate*)isolate);
 
   if (recordreplay::HasDivergedFromRecording()) {
     v8_inspector::V8Inspector* inspectorRaw = v8::debug::GetInspector((v8::Isolate*)isolate);
@@ -4008,17 +4012,19 @@ static Eternal<Value>* gClearPauseDataCallback;
 void ClearPauseDataCallback() {
   CHECK(IsMainThread());
   AutoMarkReplayCode amrc;
-  replayio::AutoDisallowEvents disallow("ClearPauseDataCallback");
 
   if (!gClearPauseDataCallback) {
     return;
   }
 
   Isolate* isolate = Isolate::Current();
+  replayio::AutoDisallowEvents disallow("ClearPauseDataCallback",
+                                        (v8::Isolate*)isolate);
   base::Optional<SaveAndSwitchContext> ssc;
   EnsureIsolateContext(isolate, ssc);
 
   HandleScope scope(isolate);
+  v8::Isolate::AllowJavascriptExecutionScope allow_js((v8::Isolate*)isolate);
 
   Local<v8::Value> callbackValue = gClearPauseDataCallback->Get((v8::Isolate*)isolate);
   Handle<Object> callback = Utils::OpenHandle(*callbackValue);
