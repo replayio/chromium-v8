@@ -3822,7 +3822,7 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
       callArgs[2] = Handle<Object>(script->source_mapping_url(), isolate);
 
       Handle<Object> undefined = isolate->factory()->undefined_value();
-      AllowJavascriptExecution allow_js(isolate);
+      v8::Isolate::AllowJavascriptExecutionScope allow_js((v8::Isolate*)isolate);
       MaybeHandle<Object> rv = Execution::Call(isolate, handler, undefined, 3, callArgs);
       CHECK(!rv.is_null());
     }
@@ -3931,7 +3931,7 @@ char* CommandCallback(const char* command, const char* params) {
 
   HandleScope scope(isolate);
   AutoAllowCodeGenerationFromStrings allow_codegen(isolate);
-  AllowJavascriptExecution allow_js(isolate);
+  v8::Isolate::AllowJavascriptExecutionScope allow_js((v8::Isolate*)isolate);
 
   if (recordreplay::HasDivergedFromRecording()) {
     v8_inspector::V8Inspector* inspectorRaw = v8::debug::GetInspector((v8::Isolate*)isolate);
@@ -4024,7 +4024,7 @@ void ClearPauseDataCallback() {
   EnsureIsolateContext(isolate, ssc);
 
   HandleScope scope(isolate);
-  AllowJavascriptExecution allow_js(isolate);
+  v8::Isolate::AllowJavascriptExecutionScope allow_js((v8::Isolate*)isolate);
 
   Local<v8::Value> callbackValue = gClearPauseDataCallback->Get((v8::Isolate*)isolate);
   Handle<Object> callback = Utils::OpenHandle(*callbackValue);
