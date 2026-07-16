@@ -290,6 +290,7 @@ void V8InspectorImpl::resetContextGroup(int contextGroupId) {
       "[RUN-2042-2109] V8InspectorImpl::resetContextGroup %d %zu %zu",
       contextGroupId, m_sessions.size(), mapSize);
   if (contextsIt != m_contexts.end()) {
+    v8::HandleScope scope(m_isolate);
     for (const auto& map_entry : *contextsIt->second) {
       InspectedContext* inspected = map_entry.second.get();
       v8::recordreplay::Trace(
@@ -416,13 +417,17 @@ void V8InspectorImpl::discardInspectedContext(int contextGroupId,
                                               int contextId) {
   auto* context = getContext(contextGroupId, contextId);
   if (!context) return;
-  v8::recordreplay::Trace(
-      "[RUN-2042-2109] V8InspectorImpl::discardInspectedContext %d %d %zu %zu %s",
-      contextId, contextGroupId, m_sessions.size(),
-      m_contexts[contextGroupId]->size(),
-      v8::internal::RecordReplayContextAddressToken(
-          m_isolate, ContextTaggedAddress(context->context()), true)
-          .c_str());
+  {
+    v8::HandleScope scope(m_isolate);
+    v8::recordreplay::Trace(
+        "[RUN-2042-2109] V8InspectorImpl::discardInspectedContext %d %d %zu "
+        "%zu %s",
+        contextId, contextGroupId, m_sessions.size(),
+        m_contexts[contextGroupId]->size(),
+        v8::internal::RecordReplayContextAddressToken(
+            m_isolate, ContextTaggedAddress(context->context()), true)
+            .c_str());
+  }
 
   m_uniqueIdToContextId.erase(context->uniqueId().pair());
   m_contexts[contextGroupId]->erase(contextId);

@@ -11234,6 +11234,7 @@ bool RecordReplayHasDefaultContext() {
 // survives a garbage current Context, so safe from command/teardown diagnostics.
 extern "C" uintptr_t V8RecordReplayGetDefaultContextAddress(v8::Isolate* isolate) {
   if (!IsMainThread() || !gDefaultContext) return 0;
+  v8::HandleScope scope(isolate);
   v8::Local<v8::Context> cx = gDefaultContext->Get(isolate);
   return *reinterpret_cast<internal::Address*>(*cx);
 }
