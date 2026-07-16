@@ -58,9 +58,17 @@
 extern "C" uintptr_t V8RecordReplayGetDefaultContextAddress(v8::Isolate* isolate);
 namespace v8 {
 namespace internal {
-std::string RecordReplayContextAddressToken(v8::Isolate* isolate, uintptr_t ctxAddr);
+std::string RecordReplayContextAddressToken(v8::Isolate* isolate,
+                                            uintptr_t ctxAddr, bool includeId);
 }
 }
+
+namespace {
+uintptr_t ContextTaggedAddress(v8::Local<v8::Context> context) {
+  if (context.IsEmpty()) return 0;
+  return *reinterpret_cast<v8::internal::Address*>(*context);
+}
+}  // namespace
 
 namespace v8_inspector {
 
@@ -182,7 +190,7 @@ InspectedContext* V8InspectorImpl::getContext(int groupId,
         "[RUN-2486-2537] V8InspectorImpl::getContext A %d %d %zu %s", contextId,
         groupId, m_contexts.size(),
         v8::internal::RecordReplayContextAddressToken(
-            m_isolate, V8RecordReplayGetDefaultContextAddress(m_isolate))
+            m_isolate, V8RecordReplayGetDefaultContextAddress(m_isolate), true)
             .c_str());
     return nullptr;
   }
@@ -193,7 +201,7 @@ InspectedContext* V8InspectorImpl::getContext(int groupId,
         "[RUN-2486-2537] V8InspectorImpl::getContext B %d %d %zu %s", contextId,
         groupId, contextGroupIt->second->size(),
         v8::internal::RecordReplayContextAddressToken(
-            m_isolate, V8RecordReplayGetDefaultContextAddress(m_isolate))
+            m_isolate, V8RecordReplayGetDefaultContextAddress(m_isolate), true)
             .c_str());
     return nullptr;
   }
@@ -238,8 +246,11 @@ void V8InspectorImpl::contextCreated(const V8ContextInfo& info) {
   const auto& contextById = contextIt->second;
 
   v8::recordreplay::Trace(
-      "[RUN-2042-2109] V8InspectorImpl::contextCreated %d %d %zu %zu", contextId,
-      info.contextGroupId, m_sessions.size(), contextById->size());
+      "[RUN-2042-2109] V8InspectorImpl::contextCreated %d %d %zu %zu %s",
+      contextId, info.contextGroupId, m_sessions.size(), contextById->size(),
+      v8::internal::RecordReplayContextAddressToken(
+          m_isolate, ContextTaggedAddress(info.context), true)
+          .c_str());
 
   DCHECK(contextById->find(contextId) == contextById->cend());
   (*contextById)[contextId].reset(context);
@@ -273,15 +284,25 @@ void V8InspectorImpl::contextCollected(int groupId, int contextId) {
 }
 
 void V8InspectorImpl::resetContextGroup(int contextGroupId) {
+  auto contextsIt = m_contexts.find(contextGroupId);
+  size_t mapSize = contextsIt != m_contexts.end() ? contextsIt->second->size() : 0;
   v8::recordreplay::Trace(
       "[RUN-2042-2109] V8InspectorImpl::resetContextGroup %d %zu %zu",
-      contextGroupId, m_sessions.size(),
-      m_contexts.find(contextGroupId) != m_contexts.end()
-          ? m_contexts.find(contextGroupId)->second->size()
-          : 0);
+      contextGroupId, m_sessions.size(), mapSize);
+  if (contextsIt != m_contexts.end()) {
+    v8::HandleScope scope(m_isolate);
+    for (const auto& map_entry : *contextsIt->second) {
+      InspectedContext* inspected = map_entry.second.get();
+      v8::recordreplay::Trace(
+          "[RUN-2042-2109] V8InspectorImpl::resetContextGroup.entry %d %d %s",
+          inspected->contextId(), contextGroupId,
+          v8::internal::RecordReplayContextAddressToken(
+              m_isolate, ContextTaggedAddress(inspected->context()), true)
+              .c_str());
+    }
+  }
   m_consoleStorageMap.erase(contextGroupId);
   m_muteExceptionsMap.erase(contextGroupId);
-  auto contextsIt = m_contexts.find(contextGroupId);
   // Context might have been removed already by discardContextScript()
   if (contextsIt != m_contexts.end()) {
     for (const auto& map_entry : *contextsIt->second)
@@ -396,10 +417,17 @@ void V8InspectorImpl::discardInspectedContext(int contextGroupId,
                                               int contextId) {
   auto* context = getContext(contextGroupId, contextId);
   if (!context) return;
-  v8::recordreplay::Trace(
-      "[RUN-2042-2109] V8InspectorImpl::discardInspectedContext %d %d %zu %zu",
-      contextId, contextGroupId, m_sessions.size(),
-      m_contexts[contextGroupId]->size());
+  {
+    v8::HandleScope scope(m_isolate);
+    v8::recordreplay::Trace(
+        "[RUN-2042-2109] V8InspectorImpl::discardInspectedContext %d %d %zu "
+        "%zu %s",
+        contextId, contextGroupId, m_sessions.size(),
+        m_contexts[contextGroupId]->size(),
+        v8::internal::RecordReplayContextAddressToken(
+            m_isolate, ContextTaggedAddress(context->context()), true)
+            .c_str());
+  }
 
   m_uniqueIdToContextId.erase(context->uniqueId().pair());
   m_contexts[contextGroupId]->erase(contextId);

@@ -3851,7 +3851,8 @@ static InternalCommandCallback gInternalCommandCallbacks[] = {
 static Eternal<Value>* gCommandCallback;
 
 extern "C" void V8RecordReplayGetDefaultContext(v8::Isolate* isolate, v8::Local<v8::Context>* cx);
-std::string RecordReplayContextAddressToken(v8::Isolate* isolate, uintptr_t ctxAddr);
+std::string RecordReplayContextAddressToken(v8::Isolate* isolate,
+                                            uintptr_t ctxAddr, bool includeId);
 extern uint64_t* gProgressCounter;
 extern int gRecordReplayCheckProgress;
 int gPauseContextGroupId = 0;
@@ -3871,12 +3872,15 @@ static void EnsureIsolateContext(Isolate* isolate, base::Optional<SaveAndSwitchC
   Context ctx = isolate->context();
   static Address gLastCommandContext = kNullAddress;
   if (ctx.ptr() != gLastCommandContext) {
+    v8::Isolate* v8_isolate = reinterpret_cast<v8::Isolate*>(isolate);
     recordreplay::Print(
         "ReplayScript COMMAND_CONTEXT_CHANGE %s %s group=%d win=? frame=?",
         source,
-        RecordReplayContextAddressToken(
-            reinterpret_cast<v8::Isolate*>(isolate), ctx.ptr()).c_str(),
+        RecordReplayContextAddressToken(v8_isolate, ctx.ptr(), false).c_str(),
         gPauseContextGroupId);
+    recordreplay::Print(
+        "ReplayScript COMMAND_CONTEXT_ID %s",
+        RecordReplayContextAddressToken(v8_isolate, ctx.ptr(), true).c_str());
     gLastCommandContext = ctx.ptr();
   }
 

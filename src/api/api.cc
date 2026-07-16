@@ -11234,17 +11234,28 @@ bool RecordReplayHasDefaultContext() {
 // survives a garbage current Context, so safe from command/teardown diagnostics.
 extern "C" uintptr_t V8RecordReplayGetDefaultContextAddress(v8::Isolate* isolate) {
   if (!IsMainThread() || !gDefaultContext) return 0;
+  v8::HandleScope scope(isolate);
   v8::Local<v8::Context> cx = gDefaultContext->Get(isolate);
   return *reinterpret_cast<internal::Address*>(*cx);
 }
 
-// Canonical ContextAddress token "iso=.. ctx=..". `isolate` and `ctxAddr` must
-// be a coherent pair (same isolate the ctx was materialized against).
+// [crash-0017] Trace Context identities through the execution.
+// ContextAddress token "iso=.. ctx=.."[, " id=.."].
+// includeId adds a debug_context_id deref; can fault on a garbage Context.
 std::string RecordReplayContextAddressToken(v8::Isolate* isolate,
-                                            uintptr_t ctxAddr) {
-  char buf[64];
-  snprintf(buf, sizeof(buf), "iso=%" PRIxPTR " ctx=%" PRIxPTR,
-           reinterpret_cast<uintptr_t>(isolate), ctxAddr);
+                                            uintptr_t ctxAddr,
+                                            bool includeId) {
+  char buf[96];
+  if (!includeId || ctxAddr == 0) {
+    snprintf(buf, sizeof(buf), "iso=%" PRIxPTR " ctx=%" PRIxPTR,
+             reinterpret_cast<uintptr_t>(isolate), ctxAddr);
+    return buf;
+  }
+  Object value =
+      Context::cast(Object(static_cast<Address>(ctxAddr))).debug_context_id();
+  int id = value.IsSmi() ? Smi::ToInt(value) : 0;
+  snprintf(buf, sizeof(buf), "iso=%" PRIxPTR " ctx=%" PRIxPTR " id=%d",
+           reinterpret_cast<uintptr_t>(isolate), ctxAddr, id);
   return buf;
 }
 
