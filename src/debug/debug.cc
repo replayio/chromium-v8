@@ -3860,29 +3860,38 @@ int gPauseContextGroupId = 0;
 // Make sure that the isolate has a context by switching to the default
 // context if necessary.
 static void EnsureIsolateContext(Isolate* isolate, base::Optional<SaveAndSwitchContext>& ssc) {
-  const char* source = "slot";
-  if (isolate->context().is_null()) {
-    source = "default";
+  Context ctx = isolate->context();
+  v8::Isolate* v8_isolate = reinterpret_cast<v8::Isolate*>(isolate);
+  bool had_slot = !ctx.is_null();
+  const char* source = had_slot ? "slot" : "default";
+
+  if (!had_slot) {
     Local<v8::Context> v8_context;
-    V8RecordReplayGetDefaultContext((v8::Isolate*)isolate, &v8_context);
+    V8RecordReplayGetDefaultContext(v8_isolate, &v8_context);
     Handle<Context> context = Utils::OpenHandle(*v8_context);
     ssc.emplace(isolate, *context);
+    ctx = isolate->context();
   }
 
-  Context ctx = isolate->context();
-  static Address gLastCommandContext = kNullAddress;
-  if (ctx.ptr() != gLastCommandContext) {
-    v8::Isolate* v8_isolate = reinterpret_cast<v8::Isolate*>(isolate);
-    recordreplay::Print(
-        "ReplayScript COMMAND_CONTEXT_CHANGE %s %s group=%d win=? frame=?",
-        source,
-        RecordReplayContextAddressToken(v8_isolate, ctx.ptr(), false).c_str(),
-        gPauseContextGroupId);
-    recordreplay::Print(
-        "ReplayScript COMMAND_CONTEXT_ID %s",
-        RecordReplayContextAddressToken(v8_isolate, ctx.ptr(), true).c_str());
-    gLastCommandContext = ctx.ptr();
+  // includeId=false: address trail before any Context field access below.
+  recordreplay::Print(
+      "ReplayScript COMMAND_CONTEXT_CHANGE %s %s group=%d",
+      source,
+      RecordReplayContextAddressToken(v8_isolate, ctx.ptr(), false).c_str(),
+      gPauseContextGroupId);
+
+  if (had_slot) {
+    NativeContext nc = isolate->raw_native_context();
+    if (ctx != nc) {
+      source = "native";
+      ssc.emplace(isolate, nc);
+      ctx = nc;
+    }
   }
+
+  recordreplay::Print(
+      "ReplayScript COMMAND_CONTEXT_ID %s %s", source,
+      RecordReplayContextAddressToken(v8_isolate, ctx.ptr(), true).c_str());
 
   CHECK(isolate);
   CHECK(isolate->heap());

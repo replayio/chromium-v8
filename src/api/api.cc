@@ -11241,19 +11241,30 @@ extern "C" uintptr_t V8RecordReplayGetDefaultContextAddress(v8::Isolate* isolate
 
 // [crash-0017] Trace Context identities through the execution.
 // ContextAddress token "iso=.. ctx=.."[, " id=.."].
-// includeId adds a debug_context_id deref; can fault on a garbage Context.
+// includeId=true embeds id in the returned token (deref can fault first).
+// includeId=false returns address-only, but still logs id separately after
+// printing the address — so a corrupt Context still leaves an address trail.
 std::string RecordReplayContextAddressToken(v8::Isolate* isolate,
                                             uintptr_t ctxAddr,
                                             bool includeId) {
   char buf[96];
-  if (!includeId || ctxAddr == 0) {
-    snprintf(buf, sizeof(buf), "iso=%" PRIxPTR " ctx=%" PRIxPTR,
-             reinterpret_cast<uintptr_t>(isolate), ctxAddr);
+  snprintf(buf, sizeof(buf), "iso=%" PRIxPTR " ctx=%" PRIxPTR,
+           reinterpret_cast<uintptr_t>(isolate), ctxAddr);
+  if (ctxAddr == 0) {
     return buf;
+  }
+  if (!includeId) {
+    recordreplay::Print("ReplayScript CONTEXT_ADDRESS %s", buf);
   }
   Object value =
       Context::cast(Object(static_cast<Address>(ctxAddr))).debug_context_id();
   int id = value.IsSmi() ? Smi::ToInt(value) : 0;
+  if (!includeId) {
+    recordreplay::Print(
+        "ReplayScript CONTEXT_ID iso=%" PRIxPTR " ctx=%" PRIxPTR " id=%d",
+        reinterpret_cast<uintptr_t>(isolate), ctxAddr, id);
+    return buf;
+  }
   snprintf(buf, sizeof(buf), "iso=%" PRIxPTR " ctx=%" PRIxPTR " id=%d",
            reinterpret_cast<uintptr_t>(isolate), ctxAddr, id);
   return buf;
