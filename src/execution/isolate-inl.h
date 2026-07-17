@@ -33,8 +33,7 @@ void Isolate::set_context(Context context) {
   DCHECK(context.is_null() || context.IsContext());
   Context previous = thread_local_top()->context_;
   thread_local_top()->context_ = context;
-  if (previous.ptr() != context.ptr() &&
-      recordreplay::AreEventsDisallowed()) {
+  if (previous.ptr() != context.ptr()) {
     v8::Isolate* v8_isolate = reinterpret_cast<v8::Isolate*>(this);
     std::string from = RecordReplayContextAddressToken(
         v8_isolate, previous.ptr(), false);
