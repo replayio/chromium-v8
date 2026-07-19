@@ -3873,7 +3873,7 @@ static void EnsureIsolateContext(Isolate* isolate, base::Optional<SaveAndSwitchC
     ctx = isolate->context();
   }
 
-  // includeId=false: address trail before any Context field access below.
+  // includeId=false: address-only, no heap deref.
   recordreplay::Print(
       "ReplayScript COMMAND_CONTEXT_CHANGE %s %s group=%d",
       source,
@@ -3881,6 +3881,10 @@ static void EnsureIsolateContext(Isolate* isolate, base::Optional<SaveAndSwitchC
       gPauseContextGroupId);
 
   if (had_slot) {
+    // [CRASH-0020] Isoluate::context() sometimes gets corrupted and this will trigger a crash.
+    CHECK(ctx.IsHeapObject());
+    CHECK(IsValidHeapObject(isolate->heap(), HeapObject::cast(ctx)));
+    CHECK(ctx.IsContext());
     NativeContext nc = isolate->raw_native_context();
     if (ctx != nc) {
       source = "native";
