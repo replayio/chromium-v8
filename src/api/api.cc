@@ -11239,20 +11239,26 @@ extern "C" uintptr_t V8RecordReplayGetDefaultContextAddress(v8::Isolate* isolate
   return *reinterpret_cast<internal::Address*>(*cx);
 }
 
-// [crash-0017] Trace Context identities through the execution.
-// ContextAddress token "iso=.. ctx=.."[, " id=.."].
-// includeId adds a debug_context_id deref; can fault on a garbage Context.
+// [crash-0017] ContextAddress token: "iso=.. ctx=.."[, " id=.."].
+// includeId=false: address-only, no heap deref.
+// includeId=true: embeds debug_context_id (NativeContext-only; can fault).
+// Max token length on 64-bit: "iso="(4)+16+" ctx="(5)+16+" id="(4)+11+NUL < 64.
 std::string RecordReplayContextAddressToken(v8::Isolate* isolate,
                                             uintptr_t ctxAddr,
                                             bool includeId) {
-  char buf[96];
+  char buf[64];
   if (!includeId || ctxAddr == 0) {
     snprintf(buf, sizeof(buf), "iso=%" PRIxPTR " ctx=%" PRIxPTR,
              reinterpret_cast<uintptr_t>(isolate), ctxAddr);
     return buf;
   }
-  Object value =
-      Context::cast(Object(static_cast<Address>(ctxAddr))).debug_context_id();
+  Object obj(static_cast<Address>(ctxAddr));
+  if (!obj.IsContext() || !Context::cast(obj).IsNativeContext()) {
+    snprintf(buf, sizeof(buf), "iso=%" PRIxPTR " ctx=%" PRIxPTR,
+             reinterpret_cast<uintptr_t>(isolate), ctxAddr);
+    return buf;
+  }
+  Object value = Context::cast(obj).debug_context_id();
   int id = value.IsSmi() ? Smi::ToInt(value) : 0;
   snprintf(buf, sizeof(buf), "iso=%" PRIxPTR " ctx=%" PRIxPTR " id=%d",
            reinterpret_cast<uintptr_t>(isolate), ctxAddr, id);
