@@ -179,6 +179,7 @@ RUNTIME_FUNCTION(Runtime_ThrowWasmStackOverflow) {
   ClearThreadInWasmScope clear_wasm_flag(isolate);
   SealHandleScope shs(isolate);
   DCHECK_LE(0, args.length());
+  recordreplay::InvalidateRecording("Stack overflow");
   return isolate->StackOverflow();
 }
 

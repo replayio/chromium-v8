@@ -1429,18 +1429,16 @@ void BytecodeGenerator::GenerateBytecodeBody() {
   // Emit tracing call if requested to do so.
   if (v8_flags.trace) builder()->CallRuntime(Runtime::kTraceEnter);
 
-  if (recordreplay::IsRecordingOrReplaying("emit-opcodes")) {
-    builder()->RecordReplayOnProgress();
+  builder()->RecordReplayOnProgress();
 
-    if (IsResumableFunction(literal->kind())) {
-      builder()->RecordReplayInstrumentationGenerator("generator", generator_object());
-    } else {
-      builder()->RecordReplayInstrumentation("main");
-    }
-
-    // Reset for each function.
-    record_replay_has_track_this_ = false;
+  if (IsResumableFunction(literal->kind())) {
+    builder()->ReplayOnFrameEnterGenerator(generator_object());
+  } else {
+    builder()->ReplayOnFrameEnter();
   }
+
+  // Reset for each function.
+  record_replay_has_track_this_ = false;
 
   // Increment the function-scope block coverage counter.
   BuildIncrementBlockCoverageCounterIfEnabled(literal, SourceRangeKind::kBody);
@@ -3745,11 +3743,11 @@ void BytecodeGenerator::BuildReturn(int source_position) {
   }
   builder()->SetStatementPosition(source_position,
                                   /* record_replay_breakpoint */ false);
-  if (builder()->EmitRecordReplayInstrumentationOpcodes()) {
+  {
     RegisterAllocationScope register_scope(this);
     Register return_value = register_allocator()->NewRegister();
     builder()->StoreAccumulatorInRegister(return_value);
-    builder()->RecordReplayInstrumentationReturn("exit", return_value);
+    builder()->ReplayOnFrameReturn(return_value);
   }
   builder()->Return();
 }
@@ -4762,7 +4760,7 @@ void BytecodeGenerator::BuildSuspendPoint(int position) {
 
   RegisterList registers = register_allocator()->AllLiveRegisters();
 
-  builder()->RecordReplayInstrumentation("exit");
+  builder()->ReplayOnFrameExit();
 
   // Save context, registers, and state. This bytecode then returns the value
   // in the accumulator.
@@ -4777,7 +4775,7 @@ void BytecodeGenerator::BuildSuspendPoint(int position) {
   builder()->ResumeGenerator(generator_object(), registers);
 
   builder()->RecordReplayOnProgress();
-  builder()->RecordReplayInstrumentationGenerator("entry", generator_object());
+  builder()->ReplayOnFrameEnterGenerator(generator_object());
 }
 
 void BytecodeGenerator::VisitYield(Yield* expr) {

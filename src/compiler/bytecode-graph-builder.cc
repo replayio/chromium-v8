@@ -3618,6 +3618,16 @@ void BytecodeGraphBuilder::VisitRecordReplayIncExecutionProgressCounter() {
   CHECK(needs_eager_checkpoint());
 }
 
+void BytecodeGraphBuilder::VisitReplayIncJsFrameDepth() {
+  Node* node = NewNode(simplified()->ReplayIncrementAndCheckJsFrameDepth());
+  environment()->RecordAfterState(node, Environment::kAttachFrameState);
+}
+
+void BytecodeGraphBuilder::VisitReplayDecJsFrameDepth() {
+  Node* node = NewNode(simplified()->ReplayDecrementJsFrameDepth());
+  environment()->RecordAfterState(node, Environment::kAttachFrameState);
+}
+
 void BytecodeGraphBuilder::VisitRecordReplayNotifyActivity() {
   PrepareEagerCheckpoint();
   const Operator* op = javascript()->CallRuntime(Runtime::kRecordReplayNotifyActivity);

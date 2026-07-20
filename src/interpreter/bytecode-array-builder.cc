@@ -1462,6 +1462,40 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayTrackObjectId(Register o
   return *this;
 }
 
+BytecodeArrayBuilder& BytecodeArrayBuilder::ReplayOnFrameEnter() {
+  if (emit_record_replay_opcodes_) {
+    OutputReplayIncJsFrameDepth();
+  }
+  RecordReplayInstrumentation("main");
+  return *this;
+}
+
+BytecodeArrayBuilder& BytecodeArrayBuilder::ReplayOnFrameEnterGenerator(
+    Register generator_object) {
+  if (emit_record_replay_opcodes_) {
+    OutputReplayIncJsFrameDepth();
+  }
+  RecordReplayInstrumentationGenerator("generator", generator_object);
+  return *this;
+}
+
+BytecodeArrayBuilder& BytecodeArrayBuilder::ReplayOnFrameExit() {
+  if (emit_record_replay_opcodes_) {
+    OutputReplayDecJsFrameDepth();
+  }
+  RecordReplayInstrumentation("exit");
+  return *this;
+}
+
+BytecodeArrayBuilder& BytecodeArrayBuilder::ReplayOnFrameReturn(
+    Register return_value) {
+  if (emit_record_replay_opcodes_) {
+    OutputReplayDecJsFrameDepth();
+  }
+  RecordReplayInstrumentationReturn("exit", return_value);
+  return *this;
+}
+
 BytecodeArrayBuilder& BytecodeArrayBuilder::ForInEnumerate(Register receiver) {
   OutputForInEnumerate(receiver);
   return *this;

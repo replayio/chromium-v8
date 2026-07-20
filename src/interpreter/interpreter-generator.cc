@@ -23,6 +23,7 @@
 #include "src/objects/oddball.h"
 #include "src/objects/shared-function-info.h"
 #include "src/objects/source-text-module.h"
+#include "src/execution/thread-local-top.h"
 #include "src/utils/ostreams.h"
 #include "torque-generated/exported-macros-assembler.h"
 
@@ -2851,6 +2852,41 @@ IGNITION_HANDLER(RecordReplayIncExecutionProgressCounter, InterpreterAssembler) 
   TNode<Context> context = GetContext();
   TNode<Object> closure = LoadRegister(Register::function_closure());
   CallRuntime(Runtime::kRecordReplayAssertExecutionProgress, context, closure);
+  Dispatch();
+}
+
+IGNITION_HANDLER(ReplayIncJsFrameDepth, InterpreterAssembler) {
+  TNode<ExternalReference> depth_addr = ExternalConstant(
+      ExternalReference::Create(IsolateAddressId::kReplayJsFrameDepthAddress,
+                                isolate()));
+  TNode<Int32T> depth =
+      UncheckedCast<Int32T>(Load(MachineType::Int32(), depth_addr));
+  TNode<Int32T> new_depth = Int32Add(depth, Int32Constant(1));
+  StoreNoWriteBarrier(MachineRepresentation::kWord32, depth_addr, new_depth);
+
+  Label ok(this), overflow(this, Label::kDeferred);
+  GotoIf(Int32GreaterThanOrEqual(
+             new_depth, Int32Constant(ThreadLocalTop::kReplayMaxJsFrameDepth)),
+         &overflow);
+  Goto(&ok);
+
+  BIND(&overflow);
+  CallRuntime(Runtime::kThrowStackOverflow, GetContext());
+  Abort(AbortReason::kUnexpectedReturnFromThrow);
+  Unreachable();
+
+  BIND(&ok);
+  Dispatch();
+}
+
+IGNITION_HANDLER(ReplayDecJsFrameDepth, InterpreterAssembler) {
+  TNode<ExternalReference> depth_addr = ExternalConstant(
+      ExternalReference::Create(IsolateAddressId::kReplayJsFrameDepthAddress,
+                                isolate()));
+  TNode<Int32T> depth =
+      UncheckedCast<Int32T>(Load(MachineType::Int32(), depth_addr));
+  TNode<Int32T> new_depth = Int32Sub(depth, Int32Constant(1));
+  StoreNoWriteBarrier(MachineRepresentation::kWord32, depth_addr, new_depth);
   Dispatch();
 }
 

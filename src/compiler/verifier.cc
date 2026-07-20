@@ -1644,6 +1644,8 @@ void Verifier::Visitor::Check(Node* node, const AllNodes& all) {
       CheckTypeIs(node, Type::Number());
       break;
     case IrOpcode::kIncrementAndCheckProgressCounter:
+    case IrOpcode::kReplayIncrementAndCheckJsFrameDepth:
+    case IrOpcode::kReplayDecrementJsFrameDepth:
       CHECK_EQ(0, value_count);
       CheckTypeIs(node, Type::Any());
       break;

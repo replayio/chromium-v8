@@ -478,6 +478,11 @@ class V8_EXPORT_PRIVATE BytecodeArrayBuilder final {
                                                           int source_position = kNoSourcePosition);
   BytecodeArrayBuilder& RecordReplayTrackObjectId(Register object);
 
+  BytecodeArrayBuilder& ReplayOnFrameEnter();
+  BytecodeArrayBuilder& ReplayOnFrameEnterGenerator(Register generator_object);
+  BytecodeArrayBuilder& ReplayOnFrameExit();
+  BytecodeArrayBuilder& ReplayOnFrameReturn(Register return_value);
+
   bool EmitRecordReplayInstrumentationOpcodes() const;
 
   // Complex flow control.
