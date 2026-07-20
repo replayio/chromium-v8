@@ -1974,7 +1974,8 @@ static void ReplaySyncJsFrameDepth(Isolate* isolate) {
   if (!recordreplay::IsRecordingOrReplaying("emit-opcodes")) return;
 
   HandleScope scope(isolate);
-  int skip = isolate->thread_local_top()->num_frames_above_pending_handler_;
+  int skip = static_cast<int>(
+      isolate->thread_local_top()->num_frames_above_pending_handler_);
   int depth = 0;
   int index = 0;
   for (StackFrameIterator it(isolate); !it.done(); it.Advance(), index++) {
