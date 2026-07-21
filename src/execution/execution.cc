@@ -372,20 +372,6 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
     }
 #endif
 
-    if (RecordReplayIsDivergentUserJSWithoutPause(function->shared())) {
-      // User JS should not get executed in divergent code paths,
-      // unless we have paused.
-      // → Print log and prevent execution.
-      std::string location = GetFunctionLocationInfo(isolate, function);
-      std::stringstream stack;
-      isolate->PrintCurrentStackTrace(stack);
-
-      recordreplay::Warning(
-          "JS Invoke: Non-deterministic user JS PC=%zu %s stack=%s",
-          *gProgressCounter, location.c_str(), stack.str().c_str());
-      return isolate->factory()->undefined_value();
-    }
-
     if (recordreplay::IsReplaying() &&
         IsMainThread() &&
         gRecordReplayEnableDependencyGraph &&
@@ -440,6 +426,21 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
     }
     return isolate->factory()->undefined_value();
   }
+
+  // User JS must not run on divergent paths unless paused.
+  if (params.target->IsJSFunction()) {
+    Handle<JSFunction> function = Handle<JSFunction>::cast(params.target);
+    if (RecordReplayIsDivergentUserJSWithoutPause(function->shared())) {
+      std::string location = GetFunctionLocationInfo(isolate, function);
+      std::stringstream stack;
+      isolate->PrintCurrentStackTrace(stack);
+      recordreplay::Warning(
+          "JS Invoke: Non-deterministic user JS PC=%zu %s stack=%s",
+          *gProgressCounter, location.c_str(), stack.str().c_str());
+      return isolate->factory()->undefined_value();
+    }
+  }
+
   isolate->IncrementJavascriptExecutionCounter();
 
   if (params.execution_target == Execution::Target::kCallable) {
