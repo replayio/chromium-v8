@@ -3705,6 +3705,7 @@ bool RecordReplayHasRegisteredScript(Script script) {
     gRegisteredScripts->find(script.id()) != gRegisteredScripts->end();
 }
 
+// Whether we are divergently calling into user JS without having paused first.
 bool RecordReplayIsDivergentUserJSWithoutPause(
     const SharedFunctionInfo& shared) {
   return recordreplay::AreEventsDisallowed() &&
@@ -3863,7 +3864,6 @@ static void EnsureIsolateContext(Isolate* isolate, base::Optional<SaveAndSwitchC
   Context ctx = isolate->context();
   v8::Isolate* v8_isolate = reinterpret_cast<v8::Isolate*>(isolate);
   bool had_slot = !ctx.is_null();
-  const char* source = had_slot ? "slot" : "default";
 
   if (!had_slot) {
     Local<v8::Context> v8_context;
@@ -3873,13 +3873,6 @@ static void EnsureIsolateContext(Isolate* isolate, base::Optional<SaveAndSwitchC
     ctx = isolate->context();
   }
 
-  // includeId=false: address-only, no heap deref.
-  recordreplay::Print(
-      "ReplayScript COMMAND_CONTEXT_CHANGE %s %s group=%d",
-      source,
-      RecordReplayContextAddressToken(v8_isolate, ctx.ptr(), false).c_str(),
-      gPauseContextGroupId);
-
   if (had_slot) {
     // [CRASH-0020] Isoluate::context() sometimes gets corrupted and this will trigger a crash.
     CHECK(ctx.IsHeapObject());
@@ -3887,15 +3880,10 @@ static void EnsureIsolateContext(Isolate* isolate, base::Optional<SaveAndSwitchC
     CHECK(ctx.IsContext());
     NativeContext nc = isolate->raw_native_context();
     if (ctx != nc) {
-      source = "native";
       ssc.emplace(isolate, nc);
       ctx = nc;
     }
   }
-
-  recordreplay::Print(
-      "ReplayScript COMMAND_CONTEXT_ID %s %s", source,
-      RecordReplayContextAddressToken(v8_isolate, ctx.ptr(), true).c_str());
 
   CHECK(isolate);
   CHECK(isolate->heap());

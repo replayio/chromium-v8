@@ -1063,8 +1063,6 @@ MaybeHandle<Object> ErrorUtils::GetFormattedStack(
   if (error_stack->IsErrorStackData()) {
     Handle<ErrorStackData> error_stack_data =
         Handle<ErrorStackData>::cast(error_stack);
-    REPLAY_ASSERT(
-      "[PRO-2368] ErrorUtils::GetFormattedStack A %d", (int)error_stack_data->HasFormattedStack());
     if (error_stack_data->HasFormattedStack()) {
       return handle(error_stack_data->formatted_stack(), isolate);
     }
