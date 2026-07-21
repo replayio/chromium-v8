@@ -24,6 +24,7 @@
 #include "src/codegen/macro-assembler-inl.h"
 #include "src/common/globals.h"
 #include "src/execution/frame-constants.h"
+#include "src/execution/thread-local-top.h"
 #include "src/heap/local-factory-inl.h"
 #include "src/interpreter/bytecode-array-iterator.h"
 #include "src/interpreter/bytecode-flags.h"
@@ -2308,6 +2309,38 @@ void BaselineCompiler::VisitRecordReplayIncExecutionProgressCounter() {
     __ Bind(&done);
     */
   }
+}
+
+void BaselineCompiler::VisitReplayIncJsFrameDepth() {
+#if V8_TARGET_ARCH_X64
+  BaselineAssembler::ScratchRegisterScope scratch_scope(&basm_);
+  Register scratch = scratch_scope.AcquireScratch();
+  ExternalReference depth_ref = ExternalReference::Create(
+      IsolateAddressId::kReplayJsFrameDepthAddress, masm_.isolate());
+  Operand depth = masm_.ExternalReferenceAsOperand(depth_ref, scratch);
+  masm_.incl(depth);
+  masm_.cmpl(depth, Immediate(ThreadLocalTop::kReplayMaxJsFrameDepth));
+  Label done;
+  masm_.j(less, &done);
+  CallRuntime(Runtime::kThrowStackOverflow);
+  __ Trap();
+  __ Bind(&done);
+#else
+  FATAL("ReplayIncJsFrameDepth Baseline lowering is x64 only");
+#endif
+}
+
+void BaselineCompiler::VisitReplayDecJsFrameDepth() {
+#if V8_TARGET_ARCH_X64
+  BaselineAssembler::ScratchRegisterScope scratch_scope(&basm_);
+  Register scratch = scratch_scope.AcquireScratch();
+  ExternalReference depth_ref = ExternalReference::Create(
+      IsolateAddressId::kReplayJsFrameDepthAddress, masm_.isolate());
+  Operand depth = masm_.ExternalReferenceAsOperand(depth_ref, scratch);
+  masm_.decl(depth);
+#else
+  FATAL("ReplayDecJsFrameDepth Baseline lowering is x64 only");
+#endif
 }
 
 void BaselineCompiler::VisitRecordReplayNotifyActivity() {

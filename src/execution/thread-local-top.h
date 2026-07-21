@@ -29,7 +29,8 @@ class ThreadLocalTop {
   // TODO(all): This is not particularly beautiful. We should probably
   // refactor this to really consist of just Addresses and 32-bit
   // integer fields.
-  static constexpr uint32_t kSizeInBytes = 25 * kSystemPointerSize;
+  static constexpr uint32_t kSizeInBytes = 26 * kSystemPointerSize;
+  static constexpr int kReplayMaxJsFrameDepth = 1024;
 
   // Does early low-level initialization that does not depend on the
   // isolate being present.
@@ -146,7 +147,11 @@ class ThreadLocalTop {
 
   // Address of the thread-local "thread in wasm" flag.
   Address thread_in_wasm_flag_address_;
+
+  int replay_js_frame_depth_;
 };
+
+static_assert(ThreadLocalTop::kSizeInBytes == sizeof(ThreadLocalTop));
 
 }  // namespace internal
 }  // namespace v8

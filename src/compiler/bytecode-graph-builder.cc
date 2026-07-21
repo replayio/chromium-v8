@@ -5,6 +5,7 @@
 #include "src/compiler/bytecode-graph-builder.h"
 
 #include "src/ast/ast.h"
+#include "src/codegen/external-reference.h"
 #include "src/codegen/source-position-table.h"
 #include "src/codegen/tick-counter.h"
 #include "src/common/assert-scope.h"
@@ -20,6 +21,7 @@
 #include "src/compiler/operator-properties.h"
 #include "src/compiler/simplified-operator.h"
 #include "src/compiler/state-values-utils.h"
+#include "src/execution/thread-local-top.h"
 #include "src/interpreter/bytecode-array-iterator.h"
 #include "src/interpreter/bytecode-flags.h"
 #include "src/interpreter/bytecodes.h"
@@ -3616,6 +3618,44 @@ void BytecodeGraphBuilder::VisitRecordReplayIncExecutionProgressCounter() {
     environment()->RecordAfterState(node, Environment::kAttachFrameState);
   }
   CHECK(needs_eager_checkpoint());
+}
+
+void BytecodeGraphBuilder::VisitReplayIncJsFrameDepth() {
+  // SoftSO before TempSchedule so IfException attaches to ThrowCall.
+  // Simplified ops only — machine value ops are Typer UNREACHABLE.
+  FieldAccess depth_access(kUntaggedBase, 0, MaybeHandle<Name>(),
+                           MaybeHandle<Map>(), Type::Signed32(),
+                           MachineType::Int32(), kNoWriteBarrier,
+                           "ReplayJsFrameDepth");
+  Node* depth_addr = jsgraph()->ExternalConstant(ExternalReference::Create(
+      IsolateAddressId::kReplayJsFrameDepthAddress, isolate()));
+  Node* depth = NewNode(simplified()->LoadField(depth_access), depth_addr);
+  Node* incremented =
+      NewNode(simplified()->NumberAdd(), depth, jsgraph()->SmiConstant(1));
+  NewNode(simplified()->StoreField(depth_access), depth_addr, incremented);
+
+  Node* overflow = NewNode(
+      simplified()->NumberLessThanOrEqual(),
+      jsgraph()->SmiConstant(ThreadLocalTop::kReplayMaxJsFrameDepth),
+      incremented);
+  NewBranch(overflow, BranchHint::kFalse);
+  {
+    SubEnvironment sub_environment(this);
+    NewIfTrue();
+    BuildLoopExitsForFunctionExit(bytecode_analysis().GetInLivenessFor(
+        bytecode_iterator().current_offset()));
+    Node* throw_call =
+        NewNode(javascript()->CallRuntime(Runtime::kThrowStackOverflow));
+    environment()->RecordAfterState(throw_call, Environment::kAttachFrameState);
+    Node* control = NewNode(common()->Throw());
+    MergeControlToLeaveFunction(control);
+  }
+  NewIfFalse();
+}
+
+void BytecodeGraphBuilder::VisitReplayDecJsFrameDepth() {
+  Node* node = NewNode(simplified()->ReplayDecrementJsFrameDepth());
+  environment()->RecordAfterState(node, Environment::kAttachFrameState);
 }
 
 void BytecodeGraphBuilder::VisitRecordReplayNotifyActivity() {

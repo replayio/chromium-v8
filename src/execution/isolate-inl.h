@@ -5,9 +5,6 @@
 #ifndef V8_EXECUTION_ISOLATE_INL_H_
 #define V8_EXECUTION_ISOLATE_INL_H_
 
-#include <string>
-
-#include "include/v8.h"  // For replay.
 #include "src/execution/isolate.h"
 #include "src/objects/contexts-inl.h"
 #include "src/objects/js-function.h"
@@ -26,22 +23,9 @@
 namespace v8 {
 namespace internal {
 
-std::string RecordReplayContextAddressToken(v8::Isolate* isolate,
-                                            uintptr_t ctxAddr, bool includeId);
-
 void Isolate::set_context(Context context) {
   DCHECK(context.is_null() || context.IsContext());
-  Context previous = thread_local_top()->context_;
   thread_local_top()->context_ = context;
-  if (previous.ptr() != context.ptr()) {
-    v8::Isolate* v8_isolate = reinterpret_cast<v8::Isolate*>(this);
-    std::string from = RecordReplayContextAddressToken(
-        v8_isolate, previous.ptr(), false);
-    std::string to =
-        RecordReplayContextAddressToken(v8_isolate, context.ptr(), false);
-    recordreplay::Print("ReplayScript ISOLATE_CONTEXT_CHANGE from=%s to=%s",
-                        from.c_str(), to.c_str());
-  }
 }
 
 Handle<NativeContext> Isolate::native_context() {

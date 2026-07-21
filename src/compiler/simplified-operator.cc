@@ -2049,6 +2049,12 @@ const Operator* SimplifiedOperatorBuilder::IncrementAndCheckProgressCounter() {
                                0, 1, 0, 1, 1, 0);
 }
 
+const Operator* SimplifiedOperatorBuilder::ReplayDecrementJsFrameDepth() {
+  return zone()->New<Operator>(IrOpcode::kReplayDecrementJsFrameDepth,
+                               Operator::kNoDeopt | Operator::kNoThrow,
+                               "ReplayDecrementJsFrameDepth", 0, 1, 0, 1, 1, 0);
+}
+
 const Operator* SimplifiedOperatorBuilder::FastApiCall(
     const FastApiCallFunctionVector& c_functions,
     FeedbackSource const& feedback, CallDescriptor* descriptor) {

@@ -3386,6 +3386,14 @@ void MaglevGraphBuilder::VisitRecordReplayIncExecutionProgressCounter() {
   BuildCallRuntime(Runtime::kRecordReplayAssertExecutionProgress, {closure});
 }
 
+void MaglevGraphBuilder::VisitReplayIncJsFrameDepth() {
+  AddNewNode<ReplayIncrementAndCheckJsFrameDepth>({});
+}
+
+void MaglevGraphBuilder::VisitReplayDecJsFrameDepth() {
+  AddNewNode<ReplayDecrementJsFrameDepth>({});
+}
+
 void MaglevGraphBuilder::VisitRecordReplayNotifyActivity() {
   BuildCallRuntime(Runtime::kRecordReplayNotifyActivity, {});
 }

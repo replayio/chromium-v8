@@ -37,6 +37,7 @@ void ThreadLocalTop::Clear() {
   current_embedder_state_ = nullptr;
   failed_access_check_callback_ = nullptr;
   thread_in_wasm_flag_address_ = kNullAddress;
+  replay_js_frame_depth_ = 0;
 }
 
 void ThreadLocalTop::Initialize(Isolate* isolate) {

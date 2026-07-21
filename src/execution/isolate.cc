@@ -1590,8 +1590,6 @@ bool Isolate::MayAccess(Handle<Context> accessing_context,
 static bool gHasPrintedStack = false;
 
 Object Isolate::StackOverflow() {
-  recordreplay::InvalidateRecording("Stack overflow");
-
   if (recordreplay::IsRecordingOrReplaying() && !gHasPrintedStack) {
     gHasPrintedStack = true;
     std::stringstream stack;
@@ -1972,6 +1970,31 @@ class SetThreadInWasmFlagScope {
 #endif  // V8_ENABLE_WEBASSEMBLY
 }  // namespace
 
+static void ReplaySyncJsFrameDepth(Isolate* isolate) {
+  if (!recordreplay::IsRecordingOrReplaying("emit-opcodes")) return;
+
+  HandleScope scope(isolate);
+  int skip = static_cast<int>(
+      isolate->thread_local_top()->num_frames_above_pending_handler_);
+  int depth = 0;
+  int index = 0;
+  for (StackFrameIterator it(isolate); !it.done(); it.Advance(), index++) {
+    if (index < skip) continue;
+    StackFrame* frame = it.frame();
+    if (!frame->is_java_script()) continue;
+    std::vector<FrameSummary> summaries;
+    CommonFrame::cast(frame)->Summarize(&summaries);
+    if (summaries.empty()) {
+      depth += 1;  // SyncEmptyCount
+    } else {
+      for (const FrameSummary& summary : summaries) {
+        if (summary.IsJavaScript()) depth++;
+      }
+    }
+  }
+  isolate->set_replay_js_frame_depth(depth);
+}
+
 Object Isolate::UnwindAndFindHandler() {
   // TODO(v8:12676): Fix gcmole failures in this function.
   DisableGCMole no_gcmole;
@@ -2005,6 +2028,8 @@ Object Isolate::UnwindAndFindHandler() {
     thread_local_top()->pending_handler_sp_ = handler_sp;
     thread_local_top()->num_frames_above_pending_handler_ =
         num_frames_above_handler;
+
+    ReplaySyncJsFrameDepth(this);
 
     // Return and clear pending exception. The contract is that:
     // (1) the pending exception is stored in one place (no duplication), and

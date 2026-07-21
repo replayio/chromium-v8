@@ -23,11 +23,14 @@
 #include "src/compiler/node-properties.h"
 #include "src/compiler/node.h"
 #include "src/compiler/schedule.h"
+#include "src/codegen/external-reference.h"
+#include "src/execution/thread-local-top.h"
 #include "src/heap/factory-inl.h"
 #include "src/objects/heap-number.h"
 #include "src/objects/oddball.h"
 #include "src/objects/ordered-hash-table.h"
 #include "src/objects/turbofan-types.h"
+#include "src/runtime/runtime.h"
 
 namespace v8 {
 namespace internal {
@@ -197,6 +200,7 @@ class EffectControlLinearizer {
   Node* LowerLoadFieldByIndex(Node* node);
   Node* LowerLoadMessage(Node* node);
   Node* LowerIncrementAndCheckProgressCounter(Node* node);
+  Node* LowerReplayDecrementJsFrameDepth(Node* node);
   Node* AdaptFastCallTypedArrayArgument(Node* node,
                                         ElementsKind expected_elements_kind,
                                         GraphAssemblerLabel<0>* bailout);
@@ -1328,6 +1332,9 @@ bool EffectControlLinearizer::TryWireInStateEffect(Node* node,
       break;
     case IrOpcode::kIncrementAndCheckProgressCounter:
       result = LowerIncrementAndCheckProgressCounter(node);
+      break;
+    case IrOpcode::kReplayDecrementJsFrameDepth:
+      result = LowerReplayDecrementJsFrameDepth(node);
       break;
     case IrOpcode::kStoreMessage:
       LowerStoreMessage(node);
@@ -5044,6 +5051,16 @@ Node* EffectControlLinearizer::LowerIncrementAndCheckProgressCounter(Node* node)
   __ Bind(&done);
 
   // It's not clear how to mark this node as not having any outputs...
+  return __ Int32Constant(0);
+}
+
+Node* EffectControlLinearizer::LowerReplayDecrementJsFrameDepth(Node* node) {
+  Node* depth_addr = __ ExternalConstant(ExternalReference::Create(
+      IsolateAddressId::kReplayJsFrameDepthAddress, isolate()));
+  Node* depth = __ Load(MachineType::Int32(), depth_addr, 0);
+  Node* decremented = __ Int32Sub(depth, __ Int32Constant(1));
+  __ Store(StoreRepresentation(MachineRepresentation::kWord32, kNoWriteBarrier),
+           depth_addr, 0, decremented);
   return __ Int32Constant(0);
 }
 

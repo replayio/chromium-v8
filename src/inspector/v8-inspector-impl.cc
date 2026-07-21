@@ -63,13 +63,6 @@ std::string RecordReplayContextAddressToken(v8::Isolate* isolate,
 }
 }
 
-namespace {
-uintptr_t ContextTaggedAddress(v8::Local<v8::Context> context) {
-  if (context.IsEmpty()) return 0;
-  return *reinterpret_cast<v8::internal::Address*>(*context);
-}
-}  // namespace
-
 namespace v8_inspector {
 
 std::unique_ptr<V8Inspector> V8Inspector::create(v8::Isolate* isolate,
@@ -245,13 +238,6 @@ void V8InspectorImpl::contextCreated(const V8ContextInfo& info) {
                     .first;
   const auto& contextById = contextIt->second;
 
-  v8::recordreplay::Trace(
-      "[RUN-2042-2109] V8InspectorImpl::contextCreated %d %d %zu %zu %s",
-      contextId, info.contextGroupId, m_sessions.size(), contextById->size(),
-      v8::internal::RecordReplayContextAddressToken(
-          m_isolate, ContextTaggedAddress(info.context), true)
-          .c_str());
-
   DCHECK(contextById->find(contextId) == contextById->cend());
   (*contextById)[contextId].reset(context);
   forEachSession(
@@ -285,22 +271,6 @@ void V8InspectorImpl::contextCollected(int groupId, int contextId) {
 
 void V8InspectorImpl::resetContextGroup(int contextGroupId) {
   auto contextsIt = m_contexts.find(contextGroupId);
-  size_t mapSize = contextsIt != m_contexts.end() ? contextsIt->second->size() : 0;
-  v8::recordreplay::Trace(
-      "[RUN-2042-2109] V8InspectorImpl::resetContextGroup %d %zu %zu",
-      contextGroupId, m_sessions.size(), mapSize);
-  if (contextsIt != m_contexts.end()) {
-    v8::HandleScope scope(m_isolate);
-    for (const auto& map_entry : *contextsIt->second) {
-      InspectedContext* inspected = map_entry.second.get();
-      v8::recordreplay::Trace(
-          "[RUN-2042-2109] V8InspectorImpl::resetContextGroup.entry %d %d %s",
-          inspected->contextId(), contextGroupId,
-          v8::internal::RecordReplayContextAddressToken(
-              m_isolate, ContextTaggedAddress(inspected->context()), true)
-              .c_str());
-    }
-  }
   m_consoleStorageMap.erase(contextGroupId);
   m_muteExceptionsMap.erase(contextGroupId);
   // Context might have been removed already by discardContextScript()
@@ -417,17 +387,6 @@ void V8InspectorImpl::discardInspectedContext(int contextGroupId,
                                               int contextId) {
   auto* context = getContext(contextGroupId, contextId);
   if (!context) return;
-  {
-    v8::HandleScope scope(m_isolate);
-    v8::recordreplay::Trace(
-        "[RUN-2042-2109] V8InspectorImpl::discardInspectedContext %d %d %zu "
-        "%zu %s",
-        contextId, contextGroupId, m_sessions.size(),
-        m_contexts[contextGroupId]->size(),
-        v8::internal::RecordReplayContextAddressToken(
-            m_isolate, ContextTaggedAddress(context->context()), true)
-            .c_str());
-  }
 
   m_uniqueIdToContextId.erase(context->uniqueId().pair());
   m_contexts[contextGroupId]->erase(contextId);
