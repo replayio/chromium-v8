@@ -2049,13 +2049,6 @@ const Operator* SimplifiedOperatorBuilder::IncrementAndCheckProgressCounter() {
                                0, 1, 0, 1, 1, 0);
 }
 
-const Operator* SimplifiedOperatorBuilder::ReplayIncrementAndCheckJsFrameDepth() {
-  return zone()->New<Operator>(IrOpcode::kReplayIncrementAndCheckJsFrameDepth,
-                               Operator::kNoDeopt | Operator::kNoThrow,
-                               "ReplayIncrementAndCheckJsFrameDepth", 0, 1, 1, 1, 1,
-                               1);
-}
-
 const Operator* SimplifiedOperatorBuilder::ReplayDecrementJsFrameDepth() {
   return zone()->New<Operator>(IrOpcode::kReplayDecrementJsFrameDepth,
                                Operator::kNoDeopt | Operator::kNoThrow,

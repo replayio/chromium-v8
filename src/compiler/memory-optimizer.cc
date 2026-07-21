@@ -234,7 +234,6 @@ void MemoryOptimizer::VisitNode(Node* node, AllocationState const* state) {
     case IrOpcode::kStore:
       return VisitStore(node, state);
     case IrOpcode::kIncrementAndCheckProgressCounter:
-    case IrOpcode::kReplayIncrementAndCheckJsFrameDepth:
     case IrOpcode::kReplayDecrementJsFrameDepth:
       // Note: this is the default behavior in VisitCall when allocations are possible.
       return EnqueueUses(node, empty_state());

@@ -4033,7 +4033,6 @@ class RepresentationSelector {
         VisitInputs<T>(node);
         return SetOutput<T>(node, MachineRepresentation::kTagged);
       case IrOpcode::kIncrementAndCheckProgressCounter:
-      case IrOpcode::kReplayIncrementAndCheckJsFrameDepth:
       case IrOpcode::kReplayDecrementJsFrameDepth:
         return;
       case IrOpcode::kFrameState:

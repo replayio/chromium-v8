@@ -432,7 +432,6 @@
   V(FindOrderedHashMapEntry)            \
   V(FindOrderedHashMapEntryForInt32Key) \
   V(IncrementAndCheckProgressCounter)   \
-  V(ReplayIncrementAndCheckJsFrameDepth)      \
   V(ReplayDecrementJsFrameDepth)              \
   V(FindOrderedHashSetEntry)            \
   V(InitializeImmutableInObject)        \

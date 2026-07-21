@@ -1085,7 +1085,6 @@ class V8_EXPORT_PRIVATE SimplifiedOperatorBuilder final
 
   const Operator* DateNow();
   const Operator* IncrementAndCheckProgressCounter();
-  const Operator* ReplayIncrementAndCheckJsFrameDepth();
   const Operator* ReplayDecrementJsFrameDepth();
   // Unsigned32Divide is a special operator to express the division of two
   // Unsigned32 inputs and truncating the result to Unsigned32. It's semantics
