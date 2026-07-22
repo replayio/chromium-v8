@@ -154,6 +154,9 @@ V8InspectorSessionImpl::V8InspectorSessionImpl(
     if (m_heapProfilerAgent) m_heapProfilerAgent->restore();
     m_profilerAgent->restore();
     m_consoleAgent->restore();
+  } else {
+    using v8::recordreplay;
+    REPLAY_ASSERT_MAYBE_EVENTS_DISALLOWED("V8RuntimeAgentImpl::restore %d", 0);
   }
 }
 
