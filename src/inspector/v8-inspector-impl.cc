@@ -409,7 +409,12 @@ V8Console* V8InspectorImpl::console() {
 void V8InspectorImpl::forEachContext(
     int contextGroupId,
     const std::function<void(InspectedContext*)>& callback) {
+  using v8::recordreplay;
   auto it = m_contexts.find(contextGroupId);
+  int hasGroup = it != m_contexts.end();
+  size_t n = hasGroup ? it->second->size() : 0;
+  REPLAY_ASSERT_MAYBE_EVENTS_DISALLOWED(
+      "V8InspectorImpl::forEachContext %d %zu", hasGroup, n);
   if (it == m_contexts.end()) return;
   std::vector<int> ids;
   ids.reserve(it->second->size());
@@ -418,7 +423,12 @@ void V8InspectorImpl::forEachContext(
   // Retrieve by ids each time since |callback| may destroy some contexts.
   for (auto& contextId : ids) {
     it = m_contexts.find(contextGroupId);
-    if (it == m_contexts.end()) continue;
+    int hasGroupNow = it != m_contexts.end();
+    int found =
+        hasGroupNow && it->second->find(contextId) != it->second->end();
+    REPLAY_ASSERT_MAYBE_EVENTS_DISALLOWED(
+        "V8InspectorImpl::forEachContext item %d %d", hasGroupNow, found);
+    if (!hasGroupNow) continue;
     auto contextIt = it->second->find(contextId);
     if (contextIt != it->second->end()) callback(contextIt->second.get());
   }
