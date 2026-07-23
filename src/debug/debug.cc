@@ -3751,9 +3751,6 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
   (*gRecordReplayScripts)[script->id()] =
     Eternal<Value>((v8::Isolate*)isolate, v8::Utils::ToLocal(script));
 
-  REPLAY_ASSERT(
-      "RecordReplayRegisterScript %d %d", script->id(),
-      RecordReplayHasDefaultContext());
   if (!RecordReplayHasDefaultContext()) {
     return;
   }
