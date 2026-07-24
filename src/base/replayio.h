@@ -16,6 +16,23 @@
 namespace v8 {
 namespace replayio {
 
+inline bool CheckReplayOwned() {
+  return v8::recordreplay::IsInReplayCode();
+}
+
+// Marks nested code as replay-owned (IsInReplayCode). Independent of
+// AutoMaybeDisallowEvents; divergent replay-owned paths use both.
+struct AutoMaybeMarkReplayCode {
+  explicit AutoMaybeMarkReplayCode(bool markReplayCode) {
+    if (markReplayCode) {
+      mark.emplace();
+    }
+  }
+
+ private:
+  v8::base::Optional<v8::replayio::AutoMarkReplayCode> mark;
+};
+
 struct AutoMaybeDisallowEvents {
   AutoMaybeDisallowEvents(bool disallowEvents, v8::Isolate* isolate,
                           const char* label) {

@@ -27,6 +27,7 @@
 #include "src/inspector/v8-schema-agent-impl.h"
 
 #include "replayio.h"
+#include "src/base/replayio.h"
 
 namespace v8_inspector {
 namespace {
@@ -116,7 +117,8 @@ V8InspectorSessionImpl::V8InspectorSessionImpl(
       m_profilerAgent(nullptr),
       m_consoleAgent(nullptr),
       m_schemaAgent(nullptr),
-      m_clientTrustLevel(clientTrustLevel) {
+      m_clientTrustLevel(clientTrustLevel),
+      m_replay_owned(v8::replayio::CheckReplayOwned()) {
   m_state->getBoolean("use_binary_protocol", &use_binary_protocol_);
 
   v8::recordreplay::CommandDiagnosticTrace(
@@ -289,6 +291,9 @@ void V8InspectorSessionImpl::FlushProtocolNotifications() {
 }
 
 void V8InspectorSessionImpl::reset() {
+  v8::replayio::AutoMaybeMarkReplayCode mark(m_replay_owned);
+  v8::replayio::AutoMaybeDisallowEvents disallow(
+      m_replay_owned, m_inspector->isolate(), "V8InspectorSessionImpl::reset");
   m_debuggerAgent->reset();
   m_runtimeAgent->reset();
   discardInjectedScripts();
@@ -343,6 +348,10 @@ void V8InspectorSessionImpl::releaseObjectGroup(StringView objectGroup) {
 }
 
 void V8InspectorSessionImpl::releaseObjectGroup(const String16& objectGroup) {
+  v8::replayio::AutoMaybeMarkReplayCode mark(m_replay_owned);
+  v8::replayio::AutoMaybeDisallowEvents disallow(
+      m_replay_owned, m_inspector->isolate(),
+      "V8InspectorSessionImpl::releaseObjectGroup");
   int sessionId = m_sessionId;
   m_inspector->forEachContext(
       m_contextGroupId, [&objectGroup, &sessionId](InspectedContext* context) {

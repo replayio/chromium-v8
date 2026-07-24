@@ -48,6 +48,7 @@ class V8InspectorSessionImpl : public V8InspectorSession,
   V8RuntimeAgentImpl* runtimeAgent() { return m_runtimeAgent.get(); }
   int contextGroupId() const { return m_contextGroupId; }
   int sessionId() const { return m_sessionId; }
+  bool replayOwned() const { return m_replay_owned; }
 
   std::unique_ptr<V8InspectorSession::CommandLineAPIScope>
   initializeCommandLineAPIScope(int executionContextId) override;
@@ -150,6 +151,14 @@ class V8InspectorSessionImpl : public V8InspectorSession,
       m_inspectedObjects;
   bool use_binary_protocol_ = false;
   V8Inspector::ClientTrustLevel m_clientTrustLevel = V8Inspector::kUntrusted;
+  // Replay-only ownership:
+  // - Creation of a Replay-owned object: capture from stack
+  //   (CheckReplayOwned / IsInReplayCode) into m_replay_owned.
+  // - Calls on that object later: Propagate from m_replay_owned
+  //   (AutoMaybeMarkReplayCode + AutoMaybeDisallowEvents).
+  // Shared inspector entry points (e.g. contextCreated) use the stack only;
+  // do not infer ownership from "a Replay session shares this context group".
+  bool m_replay_owned;
 };
 
 }  // namespace v8_inspector

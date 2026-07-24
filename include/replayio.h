@@ -21,6 +21,14 @@ struct AutoPassThroughEvents {
   ~AutoPassThroughEvents() { v8::recordreplay::EndPassThroughEvents(); }
 };
 
+struct AutoMarkReplayCode {
+  AutoMarkReplayCode() { v8::recordreplay::EnterReplayCode(); }
+  ~AutoMarkReplayCode() { v8::recordreplay::ExitReplayCode(); }
+
+  AutoMarkReplayCode(const AutoMarkReplayCode&) = delete;
+  AutoMarkReplayCode& operator=(const AutoMarkReplayCode&) = delete;
+};
+
 struct AutoDisallowEvents {
   AutoDisallowEvents() { Begin(nullptr, nullptr); }
   explicit AutoDisallowEvents(const char* label, v8::Isolate* isolate = nullptr) {

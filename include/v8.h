@@ -147,6 +147,9 @@ static bool AreEventsDisallowed(const char* why = nullptr);
 // resulting from this check.
 static bool IsInReplayCode(const char* why = nullptr);
 
+static void EnterReplayCode();
+static void ExitReplayCode();
+
 static bool HasDivergedFromRecording();
 static bool AllowSideEffects();
 
