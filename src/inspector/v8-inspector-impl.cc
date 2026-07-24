@@ -234,8 +234,9 @@ bool V8InspectorImpl::contextGroupIsReplayOwned(int contextGroupId) const {
 
 void V8InspectorImpl::contextCreated(const V8ContextInfo& info) {
   const bool replay_owned = contextGroupIsReplayOwned(info.contextGroupId);
+  v8::replayio::AutoMaybeMarkReplayCode mark(replay_owned);
   v8::replayio::AutoMaybeDisallowEvents disallow(
-      replay_owned, replay_owned, m_isolate, "V8InspectorImpl::contextCreated");
+      replay_owned, m_isolate, "V8InspectorImpl::contextCreated");
   int contextId = ++m_lastContextId;
   auto* context = new InspectedContext(this, info, contextId);
   m_contextIdToGroupIdMap[contextId] = info.contextGroupId;
@@ -288,9 +289,9 @@ void V8InspectorImpl::contextCollected(int groupId, int contextId) {
 void V8InspectorImpl::resetContextGroup(int contextGroupId) {
   using v8::recordreplay;
   const bool replay_owned = contextGroupIsReplayOwned(contextGroupId);
+  v8::replayio::AutoMaybeMarkReplayCode mark(replay_owned);
   v8::replayio::AutoMaybeDisallowEvents disallow(
-      replay_owned, replay_owned, m_isolate,
-      "V8InspectorImpl::resetContextGroup");
+      replay_owned, m_isolate, "V8InspectorImpl::resetContextGroup");
   auto contextsIt = m_contexts.find(contextGroupId);
   REPLAY_ASSERT_MAYBE_EVENTS_DISALLOWED(
       "V8InspectorImpl::resetContextGroup consoleStorage %d",

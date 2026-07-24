@@ -291,9 +291,9 @@ void V8InspectorSessionImpl::FlushProtocolNotifications() {
 }
 
 void V8InspectorSessionImpl::reset() {
+  v8::replayio::AutoMaybeMarkReplayCode mark(m_replay_owned);
   v8::replayio::AutoMaybeDisallowEvents disallow(
-      m_replay_owned, m_replay_owned, m_inspector->isolate(),
-      "V8InspectorSessionImpl::reset");
+      m_replay_owned, m_inspector->isolate(), "V8InspectorSessionImpl::reset");
   m_debuggerAgent->reset();
   m_runtimeAgent->reset();
   discardInjectedScripts();
@@ -348,8 +348,9 @@ void V8InspectorSessionImpl::releaseObjectGroup(StringView objectGroup) {
 }
 
 void V8InspectorSessionImpl::releaseObjectGroup(const String16& objectGroup) {
+  v8::replayio::AutoMaybeMarkReplayCode mark(m_replay_owned);
   v8::replayio::AutoMaybeDisallowEvents disallow(
-      m_replay_owned, m_replay_owned, m_inspector->isolate(),
+      m_replay_owned, m_inspector->isolate(),
       "V8InspectorSessionImpl::releaseObjectGroup");
   int sessionId = m_sessionId;
   m_inspector->forEachContext(

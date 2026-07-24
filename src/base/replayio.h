@@ -20,21 +20,28 @@ inline bool CheckReplayOwned() {
   return v8::recordreplay::IsInReplayCode();
 }
 
-// `markReplayCode` and `disallowEvents` are independent. Replay-owned inspector
-// paths typically enable both.
-struct AutoMaybeDisallowEvents {
-  AutoMaybeDisallowEvents(bool markReplayCode, bool disallowEvents,
-                          v8::Isolate* isolate, const char* label) {
+// Marks nested code as replay-owned (IsInReplayCode). Independent of
+// AutoMaybeDisallowEvents; divergent replay-owned paths use both.
+struct AutoMaybeMarkReplayCode {
+  explicit AutoMaybeMarkReplayCode(bool markReplayCode) {
     if (markReplayCode) {
       mark.emplace();
     }
+  }
+
+ private:
+  v8::base::Optional<v8::replayio::AutoMarkReplayCode> mark;
+};
+
+struct AutoMaybeDisallowEvents {
+  AutoMaybeDisallowEvents(bool disallowEvents, v8::Isolate* isolate,
+                          const char* label) {
     if (disallowEvents) {
       disallow.emplace(label, isolate);
     }
   }
 
  private:
-  v8::base::Optional<v8::replayio::AutoMarkReplayCode> mark;
   v8::base::Optional<v8::replayio::AutoDisallowEvents> disallow;
 };
 
