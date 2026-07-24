@@ -220,20 +220,8 @@ V8DebuggerId V8InspectorImpl::uniqueDebuggerId(int contextId) {
   return unique_id.toV8DebuggerId();
 }
 
-bool V8InspectorImpl::contextGroupIsReplayOwned(int contextGroupId) const {
-  auto sessionsIt = m_sessions.find(contextGroupId);
-  if (sessionsIt != m_sessions.end()) {
-    for (const auto& sessionIt : sessionsIt->second) {
-      if (sessionIt.second->replayOwned()) return true;
-    }
-  }
-  auto storageIt = m_consoleStorageMap.find(contextGroupId);
-  return storageIt != m_consoleStorageMap.end() &&
-         storageIt->second->replayOwned();
-}
-
 void V8InspectorImpl::contextCreated(const V8ContextInfo& info) {
-  const bool replay_owned = contextGroupIsReplayOwned(info.contextGroupId);
+  const bool replay_owned = v8::replayio::CheckReplayOwned();
   v8::replayio::AutoMaybeMarkReplayCode mark(replay_owned);
   v8::replayio::AutoMaybeDisallowEvents disallow(
       replay_owned, m_isolate, "V8InspectorImpl::contextCreated");
@@ -288,7 +276,7 @@ void V8InspectorImpl::contextCollected(int groupId, int contextId) {
 
 void V8InspectorImpl::resetContextGroup(int contextGroupId) {
   using v8::recordreplay;
-  const bool replay_owned = contextGroupIsReplayOwned(contextGroupId);
+  const bool replay_owned = v8::replayio::CheckReplayOwned();
   v8::replayio::AutoMaybeMarkReplayCode mark(replay_owned);
   v8::replayio::AutoMaybeDisallowEvents disallow(
       replay_owned, m_isolate, "V8InspectorImpl::resetContextGroup");

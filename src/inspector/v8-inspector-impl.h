@@ -156,8 +156,6 @@ class V8InspectorImpl : public V8Inspector {
   };
 
  private:
-  bool contextGroupIsReplayOwned(int contextGroupId) const;
-
   v8::Isolate* m_isolate;
   V8InspectorClient* m_client;
   std::unique_ptr<V8Debugger> m_debugger;

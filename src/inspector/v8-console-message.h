@@ -113,7 +113,6 @@ class V8ConsoleMessageStorage {
   ~V8ConsoleMessageStorage();
 
   int contextGroupId() { return m_contextGroupId; }
-  bool replayOwned() const { return m_replay_owned; }
   const std::deque<std::unique_ptr<V8ConsoleMessage>>& messages() const {
     return m_messages;
   }
@@ -133,11 +132,7 @@ class V8ConsoleMessageStorage {
  private:
   V8InspectorImpl* m_inspector;
   int m_contextGroupId;
-  // Whether this storage is replaying specific, and should not interact with
-  // the recording.
-  bool m_replay_owned;
-  int m_estimatedSize = 0;
-  std::deque<std::unique_ptr<V8ConsoleMessage>> m_messages;
+  int m_estimatedSize = 0;  std::deque<std::unique_ptr<V8ConsoleMessage>> m_messages;
 
   struct PerContextData {
     std::set<String16> m_reportedDeprecationMessages;

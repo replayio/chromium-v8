@@ -151,8 +151,13 @@ class V8InspectorSessionImpl : public V8InspectorSession,
       m_inspectedObjects;
   bool use_binary_protocol_ = false;
   V8Inspector::ClientTrustLevel m_clientTrustLevel = V8Inspector::kUntrusted;
-  // Whether this session is replaying specific, and should not interact with
-  // the recording.
+  // Replay-only ownership:
+  // - Creation of a Replay-owned object: capture from stack
+  //   (CheckReplayOwned / IsInReplayCode) into m_replay_owned.
+  // - Calls on that object later: Propagate from m_replay_owned
+  //   (AutoMaybeMarkReplayCode + AutoMaybeDisallowEvents).
+  // Shared inspector entry points (e.g. contextCreated) use the stack only;
+  // do not infer ownership from "a Replay session shares this context group".
   bool m_replay_owned;
 };
 
