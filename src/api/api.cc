@@ -12421,13 +12421,21 @@ extern "C" DLLEXPORT bool V8RecordReplayIsInReplayCode(const char* why) {
   return recordreplay::IsInReplayCode(why);
 }
 
-extern "C" DLLEXPORT void V8RecordReplayEnterReplayCode() {
+void recordreplay::EnterReplayCode() {
   CHECK(IsMainThread());
   gInReplayCode++;
 }
 
-extern "C" DLLEXPORT void V8RecordReplayExitReplayCode() {
+void recordreplay::ExitReplayCode() {
   gInReplayCode--;
+}
+
+extern "C" DLLEXPORT void V8RecordReplayEnterReplayCode() {
+  recordreplay::EnterReplayCode();
+}
+
+extern "C" DLLEXPORT void V8RecordReplayExitReplayCode() {
+  recordreplay::ExitReplayCode();
 }
 
 

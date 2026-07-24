@@ -16,21 +16,25 @@
 namespace v8 {
 namespace replayio {
 
-inline bool ComputeReplayOwned() {
-  return (!v8::recordreplay::FeatureEnabled("replay-only-command-handling") ||
-          v8::recordreplay::IsReplaying()) &&
-         v8::recordreplay::AreEventsDisallowed();
+inline bool CheckReplayOwned() {
+  return v8::recordreplay::IsInReplayCode();
 }
 
+// `markReplayCode` and `disallowEvents` are independent. Replay-owned inspector
+// paths typically enable both.
 struct AutoMaybeDisallowEvents {
-  AutoMaybeDisallowEvents(bool disallowEvents, v8::Isolate* isolate,
-                          const char* label) {
+  AutoMaybeDisallowEvents(bool markReplayCode, bool disallowEvents,
+                          v8::Isolate* isolate, const char* label) {
+    if (markReplayCode) {
+      mark.emplace();
+    }
     if (disallowEvents) {
       disallow.emplace(label, isolate);
     }
   }
 
  private:
+  v8::base::Optional<v8::replayio::AutoMarkReplayCode> mark;
   v8::base::Optional<v8::replayio::AutoDisallowEvents> disallow;
 };
 

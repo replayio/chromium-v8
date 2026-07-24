@@ -533,7 +533,7 @@ V8ConsoleMessageStorage::V8ConsoleMessageStorage(V8InspectorImpl* inspector,
                                                  int contextGroupId)
     : m_inspector(inspector),
       m_contextGroupId(contextGroupId),
-      m_replay_owned(v8::replayio::ComputeReplayOwned()) {}
+      m_replay_owned(v8::replayio::CheckReplayOwned()) {}
 
 V8ConsoleMessageStorage::~V8ConsoleMessageStorage() { clear(); }
 
@@ -616,7 +616,8 @@ void V8ConsoleMessageStorage::addMessage(
 
 void V8ConsoleMessageStorage::clear() {
   v8::replayio::AutoMaybeDisallowEvents disallow(
-      m_replay_owned, m_inspector->isolate(), "V8ConsoleMessageStorage::clear");
+      m_replay_owned, m_replay_owned, m_inspector->isolate(),
+      "V8ConsoleMessageStorage::clear");
   m_messages.clear();
   m_estimatedSize = 0;
   m_inspector->forEachSession(m_contextGroupId,

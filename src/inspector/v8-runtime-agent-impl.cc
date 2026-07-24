@@ -256,7 +256,7 @@ V8RuntimeAgentImpl::V8RuntimeAgentImpl(
       m_frontend(FrontendChannel),
       m_inspector(session->inspector()),
       m_enabled(false),
-      m_replay_owned(v8::replayio::ComputeReplayOwned()) {}
+      m_replay_owned(session->replayOwned()) {}
 
 V8RuntimeAgentImpl::~V8RuntimeAgentImpl() = default;
 
@@ -872,7 +872,7 @@ void V8RuntimeAgentImpl::bindingCalled(const String16& name,
                                        const String16& payload,
                                        int executionContextId) {
   v8::replayio::AutoMaybeDisallowEvents disallow(
-      m_replay_owned, m_inspector->isolate(),
+      m_replay_owned, m_replay_owned, m_inspector->isolate(),
       "V8RuntimeAgentImpl::bindingCalled");
 
   if (!m_activeBindings.count(name)) return;
@@ -903,7 +903,8 @@ void V8RuntimeAgentImpl::addBindings(InspectedContext* context) {
 void V8RuntimeAgentImpl::restore() {
   using v8::recordreplay;
   v8::replayio::AutoMaybeDisallowEvents disallow(
-      m_replay_owned, m_inspector->isolate(), "V8RuntimeAgentImpl::restore");
+      m_replay_owned, m_replay_owned, m_inspector->isolate(),
+      "V8RuntimeAgentImpl::restore");
 
   int runtimeEnabled = m_state->booleanProperty(
       V8RuntimeAgentImplState::runtimeEnabled, false);
@@ -970,7 +971,8 @@ Response V8RuntimeAgentImpl::disable() {
 
 void V8RuntimeAgentImpl::reset() {
   v8::replayio::AutoMaybeDisallowEvents disallow(
-      m_replay_owned, m_inspector->isolate(), "V8RuntimeAgentImpl::reset");
+      m_replay_owned, m_replay_owned, m_inspector->isolate(),
+      "V8RuntimeAgentImpl::reset");
 
   m_compiledScripts.clear();
   if (m_enabled) {
@@ -986,7 +988,7 @@ void V8RuntimeAgentImpl::reset() {
 void V8RuntimeAgentImpl::reportExecutionContextCreated(
     InspectedContext* context) {
   v8::replayio::AutoMaybeDisallowEvents disallow(
-      m_replay_owned, m_inspector->isolate(),
+      m_replay_owned, m_replay_owned, m_inspector->isolate(),
       "V8RuntimeAgentImpl::reportExecutionContextCreated");
 
   if (!m_enabled) return;
@@ -1012,7 +1014,7 @@ void V8RuntimeAgentImpl::reportExecutionContextCreated(
 void V8RuntimeAgentImpl::reportExecutionContextDestroyed(
     InspectedContext* context) {
   v8::replayio::AutoMaybeDisallowEvents disallow(
-      m_replay_owned, m_inspector->isolate(),
+      m_replay_owned, m_replay_owned, m_inspector->isolate(),
       "V8RuntimeAgentImpl::reportExecutionContextDestroyed");
 
   if (m_enabled && context->isReported(m_session->sessionId())) {
@@ -1025,7 +1027,8 @@ void V8RuntimeAgentImpl::inspect(
     std::unique_ptr<protocol::Runtime::RemoteObject> objectToInspect,
     std::unique_ptr<protocol::DictionaryValue> hints, int executionContextId) {
   v8::replayio::AutoMaybeDisallowEvents disallow(
-      m_replay_owned, m_inspector->isolate(), "V8RuntimeAgentImpl::inspect");
+      m_replay_owned, m_replay_owned, m_inspector->isolate(),
+      "V8RuntimeAgentImpl::inspect");
 
   if (m_enabled)
     m_frontend.inspectRequested(std::move(objectToInspect), std::move(hints),
@@ -1039,7 +1042,7 @@ void V8RuntimeAgentImpl::messageAdded(V8ConsoleMessage* message) {
 bool V8RuntimeAgentImpl::reportMessage(V8ConsoleMessage* message,
                                        bool generatePreview) {
   v8::replayio::AutoMaybeDisallowEvents disallow(
-      m_replay_owned, m_inspector->isolate(),
+      m_replay_owned, m_replay_owned, m_inspector->isolate(),
       "V8RuntimeAgentImpl::reportMessage");
 
   message->reportToFrontend(&m_frontend, m_session, generatePreview);
