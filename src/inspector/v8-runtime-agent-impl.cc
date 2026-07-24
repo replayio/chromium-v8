@@ -256,10 +256,7 @@ V8RuntimeAgentImpl::V8RuntimeAgentImpl(
       m_frontend(FrontendChannel),
       m_inspector(session->inspector()),
       m_enabled(false),
-      m_replay_owned(
-          (!v8::recordreplay::FeatureEnabled("replay-only-command-handling") ||
-           v8::recordreplay::IsReplaying()) &&
-          v8::recordreplay::AreEventsDisallowed()) {}
+      m_replay_owned(v8::replayio::ComputeReplayOwned()) {}
 
 V8RuntimeAgentImpl::~V8RuntimeAgentImpl() = default;
 

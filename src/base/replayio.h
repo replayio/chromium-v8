@@ -16,6 +16,12 @@
 namespace v8 {
 namespace replayio {
 
+inline bool ComputeReplayOwned() {
+  return (!v8::recordreplay::FeatureEnabled("replay-only-command-handling") ||
+          v8::recordreplay::IsReplaying()) &&
+         v8::recordreplay::AreEventsDisallowed();
+}
+
 struct AutoMaybeDisallowEvents {
   AutoMaybeDisallowEvents(bool disallowEvents, v8::Isolate* isolate,
                           const char* label) {

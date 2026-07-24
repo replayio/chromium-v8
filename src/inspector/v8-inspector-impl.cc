@@ -53,6 +53,7 @@
 #include "src/inspector/v8-stack-trace-impl.h"
 #include "src/inspector/value-mirror.h"
 
+#include "src/base/replayio.h"
 #include "v8.h"
 
 extern "C" uintptr_t V8RecordReplayGetDefaultContextAddress(v8::Isolate* isolate);
@@ -219,7 +220,22 @@ V8DebuggerId V8InspectorImpl::uniqueDebuggerId(int contextId) {
   return unique_id.toV8DebuggerId();
 }
 
+bool V8InspectorImpl::contextGroupIsReplayOwned(int contextGroupId) const {
+  auto sessionsIt = m_sessions.find(contextGroupId);
+  if (sessionsIt != m_sessions.end()) {
+    for (const auto& sessionIt : sessionsIt->second) {
+      if (sessionIt.second->replayOwned()) return true;
+    }
+  }
+  auto storageIt = m_consoleStorageMap.find(contextGroupId);
+  return storageIt != m_consoleStorageMap.end() &&
+         storageIt->second->replayOwned();
+}
+
 void V8InspectorImpl::contextCreated(const V8ContextInfo& info) {
+  v8::replayio::AutoMaybeDisallowEvents disallow(
+      contextGroupIsReplayOwned(info.contextGroupId), m_isolate,
+      "V8InspectorImpl::contextCreated");
   int contextId = ++m_lastContextId;
   auto* context = new InspectedContext(this, info, contextId);
   m_contextIdToGroupIdMap[contextId] = info.contextGroupId;
@@ -271,6 +287,9 @@ void V8InspectorImpl::contextCollected(int groupId, int contextId) {
 
 void V8InspectorImpl::resetContextGroup(int contextGroupId) {
   using v8::recordreplay;
+  v8::replayio::AutoMaybeDisallowEvents disallow(
+      contextGroupIsReplayOwned(contextGroupId), m_isolate,
+      "V8InspectorImpl::resetContextGroup");
   auto contextsIt = m_contexts.find(contextGroupId);
   REPLAY_ASSERT_MAYBE_EVENTS_DISALLOWED(
       "V8InspectorImpl::resetContextGroup consoleStorage %d",
