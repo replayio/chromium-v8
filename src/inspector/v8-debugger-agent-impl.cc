@@ -373,6 +373,7 @@ V8DebuggerAgentImpl::V8DebuggerAgentImpl(
       m_debugger(m_inspector->debugger()),
       m_session(session),
       m_enabled(false),
+      m_replay_owned(session->replayOwned()),
       m_state(state),
       m_frontend(frontendChannel),
       m_isolate(m_inspector->isolate()) {}

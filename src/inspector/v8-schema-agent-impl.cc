@@ -12,7 +12,9 @@ namespace v8_inspector {
 V8SchemaAgentImpl::V8SchemaAgentImpl(V8InspectorSessionImpl* session,
                                      protocol::FrontendChannel* frontendChannel,
                                      protocol::DictionaryValue* state)
-    : m_session(session), m_frontend(frontendChannel) {}
+    : m_session(session),
+      m_frontend(frontendChannel),
+      m_replay_owned(session->replayOwned()) {}
 
 V8SchemaAgentImpl::~V8SchemaAgentImpl() = default;
 

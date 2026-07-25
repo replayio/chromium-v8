@@ -188,6 +188,7 @@ V8HeapProfilerAgentImpl::V8HeapProfilerAgentImpl(
       m_frontend(frontendChannel),
       m_state(state),
       m_hasTimer(false),
+      m_replay_owned(session->replayOwned()),
       m_async_gc(std::make_shared<AsyncGC>()) {}
 
 V8HeapProfilerAgentImpl::~V8HeapProfilerAgentImpl() {

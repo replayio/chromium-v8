@@ -43,6 +43,7 @@ class V8DebuggerAgentImpl : public protocol::Debugger::Backend {
   V8DebuggerAgentImpl(const V8DebuggerAgentImpl&) = delete;
   V8DebuggerAgentImpl& operator=(const V8DebuggerAgentImpl&) = delete;
   void restore();
+  bool replayOwned() const { return m_replay_owned; }
 
   // Part of the protocol.
   Response enable(Maybe<double> maxScriptsCacheSize,
@@ -243,6 +244,7 @@ class V8DebuggerAgentImpl : public protocol::Debugger::Backend {
   V8Debugger* m_debugger;
   V8InspectorSessionImpl* m_session;
   bool m_enabled;
+  bool m_replay_owned;
   protocol::DictionaryValue* m_state;
   protocol::Debugger::Frontend m_frontend;
   v8::Isolate* m_isolate;

@@ -172,7 +172,8 @@ V8ProfilerAgentImpl::V8ProfilerAgentImpl(
     : m_session(session),
       m_isolate(m_session->inspector()->isolate()),
       m_state(state),
-      m_frontend(frontendChannel) {}
+      m_frontend(frontendChannel),
+      m_replay_owned(session->replayOwned()) {}
 
 V8ProfilerAgentImpl::~V8ProfilerAgentImpl() {
   if (m_profiler) m_profiler->Dispose();

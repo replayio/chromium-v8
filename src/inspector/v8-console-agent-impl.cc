@@ -22,7 +22,8 @@ V8ConsoleAgentImpl::V8ConsoleAgentImpl(
     : m_session(session),
       m_state(state),
       m_frontend(frontendChannel),
-      m_enabled(false) {}
+      m_enabled(false),
+      m_replay_owned(session->replayOwned()) {}
 
 V8ConsoleAgentImpl::~V8ConsoleAgentImpl() = default;
 
