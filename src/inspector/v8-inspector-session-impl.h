@@ -156,7 +156,8 @@ class V8InspectorSessionImpl : public V8InspectorSession,
   //   (CheckReplayOwned / IsInReplayCode) into m_replay_owned.
   // - Calls on that object later: Propagate from m_replay_owned
   //   (AutoMaybeMarkReplayCode + AutoMaybeDisallowEvents).
-  // Shared inspector entry points (e.g. contextCreated) use the stack only;
+  // forEachSession: propagate per-session m_replay_owned.
+  // Other shared entry points (e.g. contextCreated): stack CheckReplayOwned only;
   // do not infer ownership from "a Replay session shares this context group".
   bool m_replay_owned;
 };
