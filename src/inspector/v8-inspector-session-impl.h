@@ -138,6 +138,8 @@ class V8InspectorSessionImpl : public V8InspectorSession,
   V8Inspector::Channel* m_channel;
   bool m_customObjectFormatterEnabled;
   // Seeded at connect: true for ReplaySession (under AutoDisallowEvents).
+  // Owned-session work sites key AutoMaybeMarkReplayCode +
+  // AutoMaybeDisallowEvents off this flag.
   bool m_replay_owned;
 
   protocol::UberDispatcher m_dispatcher;

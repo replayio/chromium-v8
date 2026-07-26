@@ -460,13 +460,13 @@ void V8InspectorImpl::forEachSession(
   for (auto& sessionId : ids) {
     using v8::recordreplay;
     V8InspectorSessionImpl* session = sessionById(contextGroupId, sessionId);
-    // Skip assert for ReplaySession: its presence in m_sessions is an allowed
-    // divergence. Do not RAII the whole session callback.
-    if (!session || !session->replayOwned()) {
-      REPLAY_ASSERT_MAYBE_EVENTS_DISALLOWED(
-          "V8InspectorImpl::forEachSession sessionId=%d hasGroup=%d", sessionId,
-          m_sessions.find(contextGroupId) != m_sessions.end());
-    }
+    const bool replay_owned = session && session->replayOwned();
+    v8::replayio::AutoMaybeMarkReplayCode mark(replay_owned);
+    v8::replayio::AutoMaybeDisallowEvents disallow(
+        replay_owned, m_isolate, "V8InspectorImpl::forEachSession");
+    REPLAY_ASSERT_MAYBE_EVENTS_DISALLOWED(
+        "V8InspectorImpl::forEachSession sessionId=%d hasGroup=%d", sessionId,
+        m_sessions.find(contextGroupId) != m_sessions.end());
     if (session) callback(session);
   }
 }

@@ -51,6 +51,7 @@
 #include "src/inspector/v8-stack-trace-impl.h"
 #include "src/inspector/v8-value-utils.h"
 #include "src/inspector/value-mirror.h"
+#include "src/base/replayio.h"
 
 #include "v8.h"
 
@@ -230,6 +231,11 @@ class InjectedScript::ProtocolPromiseHandler {
     V8InspectorSessionImpl* session =
         m_inspector->sessionById(m_contextGroupId, m_sessionId);
     if (!session) return;
+    const bool replay_owned = session->replayOwned();
+    v8::replayio::AutoMaybeMarkReplayCode mark(replay_owned);
+    v8::replayio::AutoMaybeDisallowEvents disallow(
+        replay_owned, m_inspector->isolate(),
+        "InjectedScript::EvaluateCallback::thenCallback");
     InjectedScript::ContextScope scope(session, m_executionContextId);
     Response response = scope.initialize();
     if (!response.IsSuccess()) return;
@@ -275,6 +281,11 @@ class InjectedScript::ProtocolPromiseHandler {
     V8InspectorSessionImpl* session =
         m_inspector->sessionById(m_contextGroupId, m_sessionId);
     if (!session) return;
+    const bool replay_owned = session->replayOwned();
+    v8::replayio::AutoMaybeMarkReplayCode mark(replay_owned);
+    v8::replayio::AutoMaybeDisallowEvents disallow(
+        replay_owned, m_inspector->isolate(),
+        "InjectedScript::EvaluateCallback::catchCallback");
     InjectedScript::ContextScope scope(session, m_executionContextId);
     Response response = scope.initialize();
     if (!response.IsSuccess()) return;
@@ -373,6 +384,11 @@ class InjectedScript::ProtocolPromiseHandler {
     V8InspectorSessionImpl* session =
         m_inspector->sessionById(m_contextGroupId, m_sessionId);
     if (!session) return;
+    const bool replay_owned = session->replayOwned();
+    v8::replayio::AutoMaybeMarkReplayCode mark(replay_owned);
+    v8::replayio::AutoMaybeDisallowEvents disallow(
+        replay_owned, m_inspector->isolate(),
+        "InjectedScript::EvaluateCallback::sendPromiseCollected");
     InjectedScript::ContextScope scope(session, m_executionContextId);
     Response response = scope.initialize();
     if (!response.IsSuccess()) return;
