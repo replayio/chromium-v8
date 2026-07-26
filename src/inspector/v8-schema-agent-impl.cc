@@ -6,6 +6,7 @@
 
 #include "src/base/replayio.h"
 #include "src/inspector/protocol/Protocol.h"
+#include "src/inspector/v8-inspector-impl.h"
 #include "src/inspector/v8-inspector-session-impl.h"
 
 namespace v8_inspector {
