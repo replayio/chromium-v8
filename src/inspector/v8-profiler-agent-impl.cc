@@ -9,6 +9,7 @@
 #include "include/v8-profiler.h"
 #include "src/base/atomicops.h"
 #include "src/base/platform/time.h"
+#include "src/base/replayio.h"
 #include "src/debug/debug-interface.h"
 #include "src/inspector/protocol/Protocol.h"
 #include "src/inspector/string-util.h"
@@ -180,6 +181,8 @@ V8ProfilerAgentImpl::~V8ProfilerAgentImpl() {
 }
 
 void V8ProfilerAgentImpl::consoleProfile(const String16& title) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_isolate, "V8ProfilerAgentImpl::consoleProfile");
   if (!m_enabled) return;
   String16 id = nextProfileId();
   m_startedProfiles.push_back(ProfileDescriptor(id, title));
@@ -189,6 +192,8 @@ void V8ProfilerAgentImpl::consoleProfile(const String16& title) {
 }
 
 void V8ProfilerAgentImpl::consoleProfileEnd(const String16& title) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_isolate, "V8ProfilerAgentImpl::consoleProfileEnd");
   if (!m_enabled) return;
   String16 id;
   String16 resolvedTitle;
@@ -218,6 +223,8 @@ void V8ProfilerAgentImpl::consoleProfileEnd(const String16& title) {
 }
 
 Response V8ProfilerAgentImpl::enable() {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_isolate, "V8ProfilerAgentImpl::enable");
   if (!m_enabled) {
     m_enabled = true;
     m_state->setBoolean(ProfilerAgentState::profilerEnabled, true);
@@ -227,6 +234,8 @@ Response V8ProfilerAgentImpl::enable() {
 }
 
 Response V8ProfilerAgentImpl::disable() {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_isolate, "V8ProfilerAgentImpl::disable");
   if (m_enabled) {
     for (size_t i = m_startedProfiles.size(); i > 0; --i)
       stopProfiling(m_startedProfiles[i - 1].m_id, false);
@@ -242,6 +251,8 @@ Response V8ProfilerAgentImpl::disable() {
 }
 
 Response V8ProfilerAgentImpl::setSamplingInterval(int interval) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_isolate, "V8ProfilerAgentImpl::setSamplingInterval");
   if (m_profiler) {
     return Response::ServerError(
         "Cannot change sampling interval when profiling.");
@@ -251,6 +262,8 @@ Response V8ProfilerAgentImpl::setSamplingInterval(int interval) {
 }
 
 void V8ProfilerAgentImpl::restore() {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_isolate, "V8ProfilerAgentImpl::restore");
   DCHECK(!m_enabled);
   if (m_state->booleanProperty(ProfilerAgentState::profilerEnabled, false)) {
     m_enabled = true;
@@ -275,6 +288,8 @@ void V8ProfilerAgentImpl::restore() {
 }
 
 Response V8ProfilerAgentImpl::start() {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_isolate, "V8ProfilerAgentImpl::start");
   if (m_recordingCPUProfile) return Response::Success();
   if (!m_enabled) return Response::ServerError("Profiler is not enabled");
   m_recordingCPUProfile = true;
@@ -286,6 +301,8 @@ Response V8ProfilerAgentImpl::start() {
 
 Response V8ProfilerAgentImpl::stop(
     std::unique_ptr<protocol::Profiler::Profile>* profile) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_isolate, "V8ProfilerAgentImpl::stop");
   if (!m_recordingCPUProfile) {
     return Response::ServerError("No recording profiles found");
   }
@@ -304,6 +321,8 @@ Response V8ProfilerAgentImpl::stop(
 Response V8ProfilerAgentImpl::startPreciseCoverage(
     Maybe<bool> callCount, Maybe<bool> detailed,
     Maybe<bool> allowTriggeredUpdates, double* out_timestamp) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_isolate, "V8ProfilerAgentImpl::startPreciseCoverage");
   if (!m_enabled) return Response::ServerError("Profiler is not enabled");
   *out_timestamp = v8::base::TimeTicks::Now().since_origin().InSecondsF();
   bool callCountValue = callCount.fromMaybe(false);
@@ -330,6 +349,8 @@ Response V8ProfilerAgentImpl::startPreciseCoverage(
 }
 
 Response V8ProfilerAgentImpl::stopPreciseCoverage() {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_isolate, "V8ProfilerAgentImpl::stopPreciseCoverage");
   if (!m_enabled) return Response::ServerError("Profiler is not enabled");
   m_state->setBoolean(ProfilerAgentState::preciseCoverageStarted, false);
   m_state->setBoolean(ProfilerAgentState::preciseCoverageCallCount, false);
@@ -412,6 +433,8 @@ Response V8ProfilerAgentImpl::takePreciseCoverage(
     std::unique_ptr<protocol::Array<protocol::Profiler::ScriptCoverage>>*
         out_result,
     double* out_timestamp) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_isolate, "V8ProfilerAgentImpl::takePreciseCoverage");
   if (!m_state->booleanProperty(ProfilerAgentState::preciseCoverageStarted,
                                 false)) {
     return Response::ServerError("Precise coverage has not been started.");
@@ -424,6 +447,9 @@ Response V8ProfilerAgentImpl::takePreciseCoverage(
 
 void V8ProfilerAgentImpl::triggerPreciseCoverageDeltaUpdate(
     const String16& occasion) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_isolate,
+      "V8ProfilerAgentImpl::triggerPreciseCoverageDeltaUpdate");
   if (!m_state->booleanProperty(ProfilerAgentState::preciseCoverageStarted,
                                 false)) {
     return;
@@ -444,6 +470,8 @@ void V8ProfilerAgentImpl::triggerPreciseCoverageDeltaUpdate(
 Response V8ProfilerAgentImpl::getBestEffortCoverage(
     std::unique_ptr<protocol::Array<protocol::Profiler::ScriptCoverage>>*
         out_result) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_isolate, "V8ProfilerAgentImpl::getBestEffortCoverage");
   v8::HandleScope handle_scope(m_isolate);
   v8::debug::Coverage coverage =
       v8::debug::Coverage::CollectBestEffort(m_isolate);
@@ -456,6 +484,8 @@ String16 V8ProfilerAgentImpl::nextProfileId() {
 }
 
 void V8ProfilerAgentImpl::startProfiling(const String16& title) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_isolate, "V8ProfilerAgentImpl::startProfiling");
   v8::HandleScope handleScope(m_isolate);
   if (!m_startedProfilesCount) {
     DCHECK(!m_profiler);
@@ -470,6 +500,8 @@ void V8ProfilerAgentImpl::startProfiling(const String16& title) {
 
 std::unique_ptr<protocol::Profiler::Profile> V8ProfilerAgentImpl::stopProfiling(
     const String16& title, bool serialize) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_isolate, "V8ProfilerAgentImpl::stopProfiling");
   v8::HandleScope handleScope(m_isolate);
   v8::CpuProfile* profile =
       m_profiler->StopProfiling(toV8String(m_isolate, title));

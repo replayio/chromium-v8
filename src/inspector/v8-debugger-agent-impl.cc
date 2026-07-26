@@ -29,6 +29,7 @@
 #include "src/inspector/v8-runtime-agent-impl.h"
 #include "src/inspector/v8-stack-trace-impl.h"
 #include "src/inspector/v8-value-utils.h"
+#include "src/base/replayio.h"
 
 namespace v8_inspector {
 
@@ -381,6 +382,9 @@ V8DebuggerAgentImpl::V8DebuggerAgentImpl(
 V8DebuggerAgentImpl::~V8DebuggerAgentImpl() = default;
 
 void V8DebuggerAgentImpl::enableImpl() {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::enableImpl");
   m_enabled = true;
   m_state->setBoolean(DebuggerAgentState::debuggerEnabled, true);
   m_debugger->enable();
@@ -403,6 +407,9 @@ void V8DebuggerAgentImpl::enableImpl() {
 
 Response V8DebuggerAgentImpl::enable(Maybe<double> maxScriptsCacheSize,
                                      String16* outDebuggerId) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::enable");
   m_maxScriptCacheSize = v8::base::saturated_cast<size_t>(
       maxScriptsCacheSize.fromMaybe(std::numeric_limits<double>::max()));
   *outDebuggerId =
@@ -417,6 +424,9 @@ Response V8DebuggerAgentImpl::enable(Maybe<double> maxScriptsCacheSize,
 }
 
 Response V8DebuggerAgentImpl::disable() {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::disable");
   if (!enabled()) return Response::Success();
 
   m_state->remove(DebuggerAgentState::breakpointsByRegex);
@@ -458,6 +468,9 @@ Response V8DebuggerAgentImpl::disable() {
 }
 
 void V8DebuggerAgentImpl::restore() {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::restore");
   DCHECK(!m_enabled);
   if (!m_state->booleanProperty(DebuggerAgentState::debuggerEnabled, false))
     return;
@@ -486,6 +499,9 @@ void V8DebuggerAgentImpl::restore() {
 }
 
 Response V8DebuggerAgentImpl::setBreakpointsActive(bool active) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::setBreakpointsActive");
   if (!enabled()) return Response::ServerError(kDebuggerNotEnabled);
   if (m_breakpointsActive == active) return Response::Success();
   m_breakpointsActive = active;
@@ -498,6 +514,9 @@ Response V8DebuggerAgentImpl::setBreakpointsActive(bool active) {
 }
 
 Response V8DebuggerAgentImpl::setSkipAllPauses(bool skip) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::setSkipAllPauses");
   m_state->setBoolean(DebuggerAgentState::skipAllPauses, skip);
   m_skipAllPauses = skip;
   return Response::Success();
@@ -528,6 +547,9 @@ Response V8DebuggerAgentImpl::setBreakpointByUrl(
     Maybe<int> optionalColumnNumber, Maybe<String16> optionalCondition,
     String16* outBreakpointId,
     std::unique_ptr<protocol::Array<protocol::Debugger::Location>>* locations) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::setBreakpointByUrl");
   if (!enabled()) return Response::ServerError(kDebuggerNotEnabled);
 
   *locations = std::make_unique<Array<protocol::Debugger::Location>>();
@@ -616,6 +638,9 @@ Response V8DebuggerAgentImpl::setBreakpoint(
     std::unique_ptr<protocol::Debugger::Location> location,
     Maybe<String16> optionalCondition, String16* outBreakpointId,
     std::unique_ptr<protocol::Debugger::Location>* actualLocation) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::setBreakpoint");
   String16 breakpointId = generateBreakpointId(
       BreakpointType::kByScriptId, location->getScriptId(),
       location->getLineNumber(), location->getColumnNumber(0));
@@ -639,6 +664,9 @@ Response V8DebuggerAgentImpl::setBreakpoint(
 Response V8DebuggerAgentImpl::setBreakpointOnFunctionCall(
     const String16& functionObjectId, Maybe<String16> optionalCondition,
     String16* outBreakpointId) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::setBreakpointOnFunctionCall");
   if (!enabled()) return Response::ServerError(kDebuggerNotEnabled);
 
   InjectedScript::ObjectScope scope(m_session, functionObjectId);
@@ -665,6 +693,9 @@ Response V8DebuggerAgentImpl::setBreakpointOnFunctionCall(
 
 Response V8DebuggerAgentImpl::setInstrumentationBreakpoint(
     const String16& instrumentation, String16* outBreakpointId) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::setInstrumentationBreakpoint");
   if (!enabled()) return Response::ServerError(kDebuggerNotEnabled);
   String16 breakpointId = generateInstrumentationBreakpointId(instrumentation);
   protocol::DictionaryValue* breakpoints = getOrCreateObject(
@@ -679,6 +710,9 @@ Response V8DebuggerAgentImpl::setInstrumentationBreakpoint(
 }
 
 Response V8DebuggerAgentImpl::removeBreakpoint(const String16& breakpointId) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::removeBreakpoint");
   if (!enabled()) return Response::ServerError(kDebuggerNotEnabled);
   BreakpointType type;
   String16 selector;
@@ -739,6 +773,9 @@ Response V8DebuggerAgentImpl::removeBreakpoint(const String16& breakpointId) {
 void V8DebuggerAgentImpl::removeBreakpointImpl(
     const String16& breakpointId,
     const std::vector<V8DebuggerScript*>& scripts) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::removeBreakpointImpl");
   DCHECK(enabled());
   BreakpointIdToDebuggerBreakpointIdsMap::iterator
       debuggerBreakpointIdsIterator =
@@ -764,6 +801,9 @@ Response V8DebuggerAgentImpl::getPossibleBreakpoints(
     Maybe<protocol::Debugger::Location> end, Maybe<bool> restrictToFunction,
     std::unique_ptr<protocol::Array<protocol::Debugger::BreakLocation>>*
         locations) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::getPossibleBreakpoints");
   String16 scriptId = start->getScriptId();
 
   if (start->getLineNumber() < 0 || start->getColumnNumber(0) < 0)
@@ -827,6 +867,9 @@ Response V8DebuggerAgentImpl::getPossibleBreakpoints(
 Response V8DebuggerAgentImpl::continueToLocation(
     std::unique_ptr<protocol::Debugger::Location> location,
     Maybe<String16> targetCallFrames) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::continueToLocation");
   if (!enabled()) return Response::ServerError(kDebuggerNotEnabled);
   if (!isPaused()) return Response::ServerError(kDebuggerNotPaused);
   ScriptsMap::iterator it = m_scripts.find(location->getScriptId());
@@ -849,6 +892,9 @@ Response V8DebuggerAgentImpl::continueToLocation(
 Response V8DebuggerAgentImpl::getStackTrace(
     std::unique_ptr<protocol::Runtime::StackTraceId> inStackTraceId,
     std::unique_ptr<protocol::Runtime::StackTrace>* outStackTrace) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::getStackTrace");
   bool isOk = false;
   int64_t id = inStackTraceId->getId().toInteger64(&isOk);
   if (!isOk) return Response::ServerError("Invalid stack trace id");
@@ -946,6 +992,9 @@ V8DebuggerAgentImpl::setBreakpointImpl(const String16& breakpointId,
                                        const String16& scriptId,
                                        const String16& condition,
                                        int lineNumber, int columnNumber) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::setBreakpointImpl");
   v8::HandleScope handles(m_isolate);
   DCHECK(enabled());
 
@@ -980,6 +1029,9 @@ V8DebuggerAgentImpl::setBreakpointImpl(const String16& breakpointId,
 void V8DebuggerAgentImpl::setBreakpointImpl(const String16& breakpointId,
                                             v8::Local<v8::Function> function,
                                             v8::Local<v8::String> condition) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::setBreakpointImpl");
   v8::debug::BreakpointId debuggerBreakpointId;
   if (!v8::debug::SetFunctionBreakpoint(function, condition,
                                         &debuggerBreakpointId)) {
@@ -994,6 +1046,9 @@ Response V8DebuggerAgentImpl::searchInContent(
     const String16& scriptId, const String16& query,
     Maybe<bool> optionalCaseSensitive, Maybe<bool> optionalIsRegex,
     std::unique_ptr<Array<protocol::Debugger::SearchMatch>>* results) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::searchInContent");
   v8::HandleScope handles(m_isolate);
   ScriptsMap::iterator it = m_scripts.find(scriptId);
   if (it == m_scripts.end())
@@ -1031,6 +1086,9 @@ Response V8DebuggerAgentImpl::setScriptSource(
     Maybe<protocol::Runtime::StackTrace>* asyncStackTrace,
     Maybe<protocol::Runtime::StackTraceId>* asyncStackTraceId, String16* status,
     Maybe<protocol::Runtime::ExceptionDetails>* optOutCompileError) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::setScriptSource");
   if (!enabled()) return Response::ServerError(kDebuggerNotEnabled);
 
   ScriptsMap::iterator it = m_scripts.find(scriptId);
@@ -1081,6 +1139,9 @@ Response V8DebuggerAgentImpl::restartFrame(
     std::unique_ptr<Array<CallFrame>>* newCallFrames,
     Maybe<protocol::Runtime::StackTrace>* asyncStackTrace,
     Maybe<protocol::Runtime::StackTraceId>* asyncStackTraceId) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::restartFrame");
   if (!isPaused()) return Response::ServerError(kDebuggerNotPaused);
   if (!mode.isJust()) {
     return Response::ServerError(
@@ -1106,6 +1167,9 @@ Response V8DebuggerAgentImpl::restartFrame(
 Response V8DebuggerAgentImpl::getScriptSource(
     const String16& scriptId, String16* scriptSource,
     Maybe<protocol::Binary>* bytecode) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::getScriptSource");
   if (!enabled()) return Response::ServerError(kDebuggerNotEnabled);
   ScriptsMap::iterator it = m_scripts.find(scriptId);
   if (it == m_scripts.end()) {
@@ -1203,6 +1267,9 @@ Response V8DebuggerAgentImpl::disassembleWasmModule(
     int* out_totalNumberOfLines,
     std::unique_ptr<protocol::Array<int>>* out_functionBodyOffsets,
     std::unique_ptr<protocol::Debugger::WasmDisassemblyChunk>* out_chunk) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::disassembleWasmModule");
 #if V8_ENABLE_WEBASSEMBLY
   if (!enabled()) return Response::ServerError(kDebuggerNotEnabled);
   ScriptsMap::iterator it = m_scripts.find(in_scriptId);
@@ -1244,6 +1311,9 @@ Response V8DebuggerAgentImpl::disassembleWasmModule(
 Response V8DebuggerAgentImpl::nextWasmDisassemblyChunk(
     const String16& in_streamId,
     std::unique_ptr<protocol::Debugger::WasmDisassemblyChunk>* out_chunk) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::nextWasmDisassemblyChunk");
 #if V8_ENABLE_WEBASSEMBLY
   if (!enabled()) return Response::ServerError(kDebuggerNotEnabled);
   auto it = m_wasmDisassemblies.find(in_streamId);
@@ -1275,6 +1345,9 @@ Response V8DebuggerAgentImpl::nextWasmDisassemblyChunk(
 
 Response V8DebuggerAgentImpl::getWasmBytecode(const String16& scriptId,
                                               protocol::Binary* bytecode) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::getWasmBytecode");
 #if V8_ENABLE_WEBASSEMBLY
   if (!enabled()) return Response::ServerError(kDebuggerNotEnabled);
   ScriptsMap::iterator it = m_scripts.find(scriptId);
@@ -1297,15 +1370,24 @@ Response V8DebuggerAgentImpl::getWasmBytecode(const String16& scriptId,
 void V8DebuggerAgentImpl::pushBreakDetails(
     const String16& breakReason,
     std::unique_ptr<protocol::DictionaryValue> breakAuxData) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::pushBreakDetails");
   m_breakReason.push_back(std::make_pair(breakReason, std::move(breakAuxData)));
 }
 
 void V8DebuggerAgentImpl::popBreakDetails() {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::popBreakDetails");
   if (m_breakReason.empty()) return;
   m_breakReason.pop_back();
 }
 
 void V8DebuggerAgentImpl::clearBreakDetails() {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::clearBreakDetails");
   std::vector<BreakReason> emptyBreakReason;
   m_breakReason.swap(emptyBreakReason);
 }
@@ -1313,6 +1395,9 @@ void V8DebuggerAgentImpl::clearBreakDetails() {
 void V8DebuggerAgentImpl::schedulePauseOnNextStatement(
     const String16& breakReason,
     std::unique_ptr<protocol::DictionaryValue> data) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::schedulePauseOnNextStatement");
   if (isPaused() || !acceptsPause(false) || !m_breakpointsActive) return;
   if (m_breakReason.empty()) {
     m_debugger->setPauseOnNextCall(true, m_session->contextGroupId());
@@ -1321,6 +1406,9 @@ void V8DebuggerAgentImpl::schedulePauseOnNextStatement(
 }
 
 void V8DebuggerAgentImpl::cancelPauseOnNextStatement() {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::cancelPauseOnNextStatement");
   if (isPaused() || !acceptsPause(false) || !m_breakpointsActive) return;
   if (m_breakReason.size() == 1) {
     m_debugger->setPauseOnNextCall(false, m_session->contextGroupId());
@@ -1329,6 +1417,9 @@ void V8DebuggerAgentImpl::cancelPauseOnNextStatement() {
 }
 
 Response V8DebuggerAgentImpl::pause() {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::pause");
   if (!enabled()) return Response::ServerError(kDebuggerNotEnabled);
   if (isPaused()) return Response::Success();
 
@@ -1343,6 +1434,9 @@ Response V8DebuggerAgentImpl::pause() {
 }
 
 Response V8DebuggerAgentImpl::resume(Maybe<bool> terminateOnResume) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::resume");
   if (!isPaused()) return Response::ServerError(kDebuggerNotPaused);
   m_session->releaseObjectGroup(kBacktraceObjectGroup);
   m_debugger->continueProgram(m_session->contextGroupId(),
@@ -1352,6 +1446,9 @@ Response V8DebuggerAgentImpl::resume(Maybe<bool> terminateOnResume) {
 
 Response V8DebuggerAgentImpl::stepOver(
     Maybe<protocol::Array<protocol::Debugger::LocationRange>> inSkipList) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::stepOver");
   if (!isPaused()) return Response::ServerError(kDebuggerNotPaused);
 
   if (inSkipList.isJust()) {
@@ -1369,6 +1466,9 @@ Response V8DebuggerAgentImpl::stepOver(
 Response V8DebuggerAgentImpl::stepInto(
     Maybe<bool> inBreakOnAsyncCall,
     Maybe<protocol::Array<protocol::Debugger::LocationRange>> inSkipList) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::stepInto");
   if (!isPaused()) return Response::ServerError(kDebuggerNotPaused);
 
   if (inSkipList.isJust()) {
@@ -1385,6 +1485,9 @@ Response V8DebuggerAgentImpl::stepInto(
 }
 
 Response V8DebuggerAgentImpl::stepOut() {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::stepOut");
   if (!isPaused()) return Response::ServerError(kDebuggerNotPaused);
   m_session->releaseObjectGroup(kBacktraceObjectGroup);
   m_debugger->stepOutOfFunction(m_session->contextGroupId());
@@ -1393,12 +1496,18 @@ Response V8DebuggerAgentImpl::stepOut() {
 
 Response V8DebuggerAgentImpl::pauseOnAsyncCall(
     std::unique_ptr<protocol::Runtime::StackTraceId> inParentStackTraceId) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::pauseOnAsyncCall");
   // Deprecated, just return OK.
   return Response::Success();
 }
 
 Response V8DebuggerAgentImpl::setPauseOnExceptions(
     const String16& stringPauseState) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::setPauseOnExceptions");
   if (!enabled()) return Response::ServerError(kDebuggerNotEnabled);
   v8::debug::ExceptionBreakState pauseState;
   if (stringPauseState == "none") {
@@ -1416,6 +1525,9 @@ Response V8DebuggerAgentImpl::setPauseOnExceptions(
 }
 
 void V8DebuggerAgentImpl::setPauseOnExceptionsImpl(int pauseState) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::setPauseOnExceptionsImpl");
   // TODO(dgozman): this changes the global state and forces all context groups
   // to pause. We should make this flag be per-context-group.
   m_debugger->setPauseOnExceptionsState(
@@ -1430,6 +1542,9 @@ Response V8DebuggerAgentImpl::evaluateOnCallFrame(
     Maybe<bool> throwOnSideEffect, Maybe<double> timeout,
     std::unique_ptr<RemoteObject>* result,
     Maybe<protocol::Runtime::ExceptionDetails>* exceptionDetails) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::evaluateOnCallFrame");
   if (!isPaused()) return Response::ServerError(kDebuggerNotPaused);
   InjectedScript::CallFrameScope scope(m_session, callFrameId);
   Response response = scope.initialize();
@@ -1469,6 +1584,9 @@ Response V8DebuggerAgentImpl::evaluateOnCallFrame(
 //   -> https://linear.app/replay/issue/RUN-1061#comment-fc1c3ee4
 v8::MaybeLocal<v8::Value> V8DebuggerAgentImpl::getArgumentsOfCallFrame(
     const String16& callFrameId) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::getArgumentsOfCallFrame");
   InjectedScript::CallFrameScope scope(m_session, callFrameId);
   Response response = scope.initialize();
   if (!response.IsSuccess()) {
@@ -1494,6 +1612,9 @@ Response V8DebuggerAgentImpl::setVariableValue(
     int scopeNumber, const String16& variableName,
     std::unique_ptr<protocol::Runtime::CallArgument> newValueArgument,
     const String16& callFrameId) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::setVariableValue");
   if (!enabled()) return Response::ServerError(kDebuggerNotEnabled);
   if (!isPaused()) return Response::ServerError(kDebuggerNotPaused);
   InjectedScript::CallFrameScope scope(m_session, callFrameId);
@@ -1528,6 +1649,9 @@ Response V8DebuggerAgentImpl::setVariableValue(
 
 Response V8DebuggerAgentImpl::setReturnValue(
     std::unique_ptr<protocol::Runtime::CallArgument> protocolNewValue) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::setReturnValue");
   if (!enabled()) return Response::ServerError(kDebuggerNotEnabled);
   if (!isPaused()) return Response::ServerError(kDebuggerNotPaused);
   v8::HandleScope handleScope(m_isolate);
@@ -1551,6 +1675,9 @@ Response V8DebuggerAgentImpl::setReturnValue(
 }
 
 Response V8DebuggerAgentImpl::setAsyncCallStackDepth(int depth) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::setAsyncCallStackDepth");
   if (!enabled() && !m_session->runtimeAgent()->enabled()) {
     return Response::ServerError(kDebuggerNotEnabled);
   }
@@ -1561,6 +1688,9 @@ Response V8DebuggerAgentImpl::setAsyncCallStackDepth(int depth) {
 
 Response V8DebuggerAgentImpl::setBlackboxPatterns(
     std::unique_ptr<protocol::Array<String16>> patterns) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::setBlackboxPatterns");
   if (patterns->empty()) {
     m_blackboxPattern = nullptr;
     resetBlackboxedStateCache();
@@ -1585,6 +1715,9 @@ Response V8DebuggerAgentImpl::setBlackboxPatterns(
 }
 
 Response V8DebuggerAgentImpl::setBlackboxPattern(const String16& pattern) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::setBlackboxPattern");
   std::unique_ptr<V8Regex> regex(new V8Regex(
       m_inspector, pattern, true /** caseSensitive */, false /** multiline */));
   if (!regex->isValid())
@@ -1595,6 +1728,9 @@ Response V8DebuggerAgentImpl::setBlackboxPattern(const String16& pattern) {
 }
 
 void V8DebuggerAgentImpl::resetBlackboxedStateCache() {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::resetBlackboxedStateCache");
   for (const auto& it : m_scripts) {
     it.second->resetBlackboxedStateCache();
   }
@@ -1604,6 +1740,9 @@ Response V8DebuggerAgentImpl::setBlackboxedRanges(
     const String16& scriptId,
     std::unique_ptr<protocol::Array<protocol::Debugger::ScriptPosition>>
         inPositions) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::setBlackboxedRanges");
   auto it = m_scripts.find(scriptId);
   if (it == m_scripts.end())
     return Response::ServerError("No script with passed id.");
@@ -1636,11 +1775,17 @@ Response V8DebuggerAgentImpl::getCallFrames(
     Maybe<int> maxFrames, Maybe<bool> noContents,
     Maybe<String16> objectGroup,
     std::unique_ptr<protocol::Array<protocol::Debugger::CallFrame>>* out_callFrames) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::getCallFrames");
   return currentCallFrames(std::move(maxFrames), std::move(noContents),
                            std::move(objectGroup), out_callFrames);
 }
 
 Response V8DebuggerAgentImpl::getTopFrameLocation(Maybe<protocol::Debugger::Location>* out_location) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::getTopFrameLocation");
   if (!isPaused()) {
     return Response::Success();
   }
@@ -1667,6 +1812,9 @@ extern "C" void V8RecordReplayGetCurrentException(v8::MaybeLocal<v8::Value>* exc
 
 Response V8DebuggerAgentImpl::getPendingException(
     Maybe<String16> objectGroup, Maybe<RemoteObject>* out_exception) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::getPendingException");
   v8::MaybeLocal<v8::Value> maybe_exception;
   V8RecordReplayGetCurrentException(&maybe_exception);
 
@@ -1686,6 +1834,9 @@ Response V8DebuggerAgentImpl::currentCallFrames(
     Maybe<int> maxFrames, Maybe<bool> noContentsRaw,
     Maybe<String16> objectGroup,
     std::unique_ptr<Array<CallFrame>>* result) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::currentCallFrames");
   if (!isPaused()) {
     *result = std::make_unique<Array<CallFrame>>();
     return Response::Success();
@@ -1779,6 +1930,9 @@ Response V8DebuggerAgentImpl::currentCallFrames(
 
 std::unique_ptr<protocol::Runtime::StackTrace>
 V8DebuggerAgentImpl::currentAsyncStackTrace() {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::currentAsyncStackTrace");
   std::shared_ptr<AsyncStackTrace> asyncParent =
       m_debugger->currentAsyncParent();
   if (!asyncParent) return nullptr;
@@ -1788,6 +1942,9 @@ V8DebuggerAgentImpl::currentAsyncStackTrace() {
 
 std::unique_ptr<protocol::Runtime::StackTraceId>
 V8DebuggerAgentImpl::currentExternalStackTrace() {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::currentExternalStackTrace");
   V8StackTraceId externalParent = m_debugger->currentExternalParent();
   if (externalParent.IsInvalid()) return nullptr;
   return protocol::Runtime::StackTraceId::create()
@@ -1848,6 +2005,9 @@ static std::unique_ptr<protocol::Debugger::DebugSymbols> getDebugSymbols(
 
 void V8DebuggerAgentImpl::didParseSource(
     std::unique_ptr<V8DebuggerScript> script, bool success) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::didParseSource");
   v8::HandleScope handles(m_isolate);
   if (!success) {
     String16 scriptSource = script->source(0);
@@ -1985,6 +2145,9 @@ void V8DebuggerAgentImpl::didParseSource(
 
 void V8DebuggerAgentImpl::setScriptInstrumentationBreakpointIfNeeded(
     V8DebuggerScript* scriptRef) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::setScriptInstrumentationBreakpointIfNeeded");
   protocol::DictionaryValue* breakpoints =
       m_state->getObject(DebuggerAgentState::instrumentationBreakpoints);
   if (!breakpoints) return;
@@ -2012,6 +2175,9 @@ void V8DebuggerAgentImpl::setScriptInstrumentationBreakpointIfNeeded(
 
 void V8DebuggerAgentImpl::didPauseOnInstrumentation(
     v8::debug::BreakpointId instrumentationId) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::didPauseOnInstrumentation");
   String16 breakReason = protocol::Debugger::Paused::ReasonEnum::Other;
   std::unique_ptr<protocol::DictionaryValue> breakAuxData;
 
@@ -2050,6 +2216,9 @@ void V8DebuggerAgentImpl::didPause(
     const std::vector<v8::debug::BreakpointId>& hitBreakpoints,
     v8::debug::ExceptionType exceptionType, bool isUncaught,
     v8::debug::BreakReasons breakReasons) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::didPause");
   v8::HandleScope handles(m_isolate);
 
   std::vector<BreakReason> hitReasons;
@@ -2156,6 +2325,9 @@ void V8DebuggerAgentImpl::didPause(
 }
 
 void V8DebuggerAgentImpl::didContinue() {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::didContinue");
   m_frontend.resumed();
   m_frontend.flush();
 }
@@ -2163,6 +2335,9 @@ void V8DebuggerAgentImpl::didContinue() {
 void V8DebuggerAgentImpl::breakProgram(
     const String16& breakReason,
     std::unique_ptr<protocol::DictionaryValue> data) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::breakProgram");
   if (!enabled() || m_skipAllPauses || !m_debugger->canBreakProgram()) return;
   std::vector<BreakReason> currentScheduledReason;
   currentScheduledReason.swap(m_breakReason);
@@ -2186,6 +2361,9 @@ void V8DebuggerAgentImpl::breakProgram(
 void V8DebuggerAgentImpl::setBreakpointFor(v8::Local<v8::Function> function,
                                            v8::Local<v8::String> condition,
                                            BreakpointSource source) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::setBreakpointFor");
   String16 breakpointId = generateBreakpointId(
       source == DebugCommandBreakpointSource ? BreakpointType::kDebugCommand
                                              : BreakpointType::kMonitorCommand,
@@ -2199,6 +2377,9 @@ void V8DebuggerAgentImpl::setBreakpointFor(v8::Local<v8::Function> function,
 
 void V8DebuggerAgentImpl::removeBreakpointFor(v8::Local<v8::Function> function,
                                               BreakpointSource source) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::removeBreakpointFor");
   String16 breakpointId = generateBreakpointId(
       source == DebugCommandBreakpointSource ? BreakpointType::kDebugCommand
                                              : BreakpointType::kMonitorCommand,
@@ -2208,6 +2389,9 @@ void V8DebuggerAgentImpl::removeBreakpointFor(v8::Local<v8::Function> function,
 }
 
 void V8DebuggerAgentImpl::reset() {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::reset");
   if (!enabled()) return;
   m_blackboxedPositions.clear();
   resetBlackboxedStateCache();
@@ -2219,6 +2403,9 @@ void V8DebuggerAgentImpl::reset() {
 }
 
 void V8DebuggerAgentImpl::ScriptCollected(const V8DebuggerScript* script) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::ScriptCollected");
   DCHECK_NE(m_scripts.find(script->scriptId()), m_scripts.end());
   std::vector<uint8_t> bytecode;
 #if V8_ENABLE_WEBASSEMBLY
@@ -2244,6 +2431,9 @@ void V8DebuggerAgentImpl::ScriptCollected(const V8DebuggerScript* script) {
 
 Response V8DebuggerAgentImpl::processSkipList(
     protocol::Array<protocol::Debugger::LocationRange>* skipList) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::processSkipList");
   std::unordered_map<String16, std::vector<std::pair<int, int>>> skipListInit;
   for (std::unique_ptr<protocol::Debugger::LocationRange>& range : *skipList) {
     protocol::Debugger::ScriptPosition* start = range->getStart();
@@ -2279,6 +2469,9 @@ Response V8DebuggerAgentImpl::processSkipList(
 
 std::unique_ptr<protocol::Runtime::RemoteObject>
 V8DebuggerAgentImpl::wrapObject(int context_id, v8::Local<v8::Value> val) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_inspector->isolate(),
+      "V8DebuggerAgentImpl::wrapObject");
   InjectedScript* injectedScript = nullptr;
   m_session->findInjectedScript(context_id, injectedScript);
 
