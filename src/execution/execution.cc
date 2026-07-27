@@ -279,6 +279,17 @@ MaybeHandle<Context> NewScriptContext(Isolate* isolate,
   return result;
 }
 
+static std::string GetFunctionScriptName(Isolate* isolate,
+                                         Handle<JSFunction> function) {
+  if (!function->shared().script().IsScript()) {
+    return "<not-script>";
+  }
+  Handle<Script> script(Script::cast(function->shared().script()), isolate);
+  return script->name().IsString()
+             ? String::cast(script->name()).ToCString().get()
+             : "(anonymous script)";
+}
+
 // Get a description of a function's location for logging etc.
 static std::string GetFunctionLocationInfo(Isolate* isolate, Handle<JSFunction> function) {
   if (!function->shared().script().IsScript()) {
@@ -291,13 +302,10 @@ static std::string GetFunctionLocationInfo(Isolate* isolate, Handle<JSFunction> 
   Script::GetPositionInfo(script, function->shared().StartPosition(),
                           &info, Script::WITH_OFFSET);
 
-  std::string name = script->name().IsString()
-    ? String::cast(script->name()).ToCString().get()
-    : "(anonymous script)";
-
   std::ostringstream os;
   os << "scriptId=" << (script.is_null() ? script->id() : -1);
-  os << " @" << name << ":" << info.line + 1 << ":" << info.column;
+  os << " @" << GetFunctionScriptName(isolate, function) << ":"
+     << info.line + 1 << ":" << info.column;
   return os.str();
 }
 
@@ -419,8 +427,18 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
     // Under record/replay, AutoDisallowEvents uses DUMP_ON_FAILURE to block
     // C++→JS without throwing (throws would propagate and diverge).
     if (recordreplay::IsRecordingOrReplaying()) {
+      std::string script_name =
+          params.target->IsJSFunction()
+              ? GetFunctionScriptName(
+                    isolate, Handle<JSFunction>::cast(params.target))
+              : "<non-function>";
       recordreplay::Print(
-          "DisallowJavascriptExecution: blocked C++→JS entry (DUMP_ON_FAILURE)");
+          "DisallowJavascriptExecution: blocked C++→JS entry "
+          "(DUMP_ON_FAILURE) %s",
+          script_name.c_str());
+      if (recordreplay::IsRecording()) {
+        recordreplay::Crash("EncounteredDivergentJSWhenRecording");
+      }
     } else {
       V8::GetCurrentPlatform()->DumpWithoutCrashing();
     }
