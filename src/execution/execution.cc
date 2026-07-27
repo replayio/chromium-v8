@@ -424,8 +424,9 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
     return MaybeHandle<Object>();
   }
   if (!DumpOnJavascriptExecution::IsAllowed(isolate)) {
-    // Under record/replay, AutoDisallowEvents uses DUMP_ON_FAILURE to block
-    // C++→JS without throwing (throws would propagate and diverge).
+    // DUMP_ON_FAILURE blocks C++→JS without throwing (throws would diverge).
+    // Replay EventsDisallowed does not use this; user-JS is gated by
+    // RecordReplayIsDivergentUserJSWithoutPause instead.
     if (recordreplay::IsRecordingOrReplaying()) {
       std::string script_name =
           params.target->IsJSFunction()
