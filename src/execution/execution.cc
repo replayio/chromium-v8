@@ -424,21 +424,19 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
     return MaybeHandle<Object>();
   }
   if (!DumpOnJavascriptExecution::IsAllowed(isolate)) {
-    // DUMP_ON_FAILURE blocks C++→JS without throwing (throws would diverge).
-    // Replay EventsDisallowed does not use this; user-JS is gated by
-    // RecordReplayIsDivergentUserJSWithoutPause instead.
     if (recordreplay::IsRecordingOrReplaying()) {
       std::string script_name =
           params.target->IsJSFunction()
               ? GetFunctionScriptName(
                     isolate, Handle<JSFunction>::cast(params.target))
               : "<non-function>";
-      recordreplay::Print(
+      std::string message =
           "DisallowJavascriptExecution: blocked C++→JS entry "
-          "(DUMP_ON_FAILURE) %s",
-          script_name.c_str());
+          "(DUMP_ON_FAILURE) " +
+          script_name;
+      recordreplay::Print("%s", message.c_str());
       if (recordreplay::IsRecording()) {
-        recordreplay::Crash("EncounteredDivergentJSWhenRecording");
+        recordreplay::Crash("%s", message.c_str());
       }
     } else {
       V8::GetCurrentPlatform()->DumpWithoutCrashing();
