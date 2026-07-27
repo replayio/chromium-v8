@@ -1174,7 +1174,8 @@ BytecodeGenerator::BytecodeGenerator(
       current_loop_scope_(nullptr),
       catch_prediction_(HandlerTable::UNCAUGHT) {
   REPLAY_ASSERT("BytecodeGenerator::OpcodeEmit %d %d %d %d",
-                script_->id(), info_->literal()->start_position(),
+                script_.is_null() ? -1 : script_->id(),
+                info_->literal()->start_position(),
                 RecordReplayHasDefaultContext(),
                 info_->flags().record_replay_ignore());
   DCHECK_EQ(closure_scope(), closure_scope()->GetClosureScope());
