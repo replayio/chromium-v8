@@ -228,8 +228,6 @@ void V8HeapProfilerAgentImpl::restore() {
 
 void V8HeapProfilerAgentImpl::collectGarbage(
     std::unique_ptr<CollectGarbageCallback> callback) {
-  v8::replayio::AutoMaybeReplayOwned replay_owned(
-      m_replay_owned, m_isolate, "V8HeapProfilerAgentImpl::collectGarbage");
   v8::base::MutexGuard lock(&m_async_gc->m_mutex);
   m_async_gc->m_pending_callbacks.push_back(std::move(callback));
   if (!m_async_gc->m_pending) {
@@ -241,9 +239,6 @@ void V8HeapProfilerAgentImpl::collectGarbage(
 
 Response V8HeapProfilerAgentImpl::startTrackingHeapObjects(
     Maybe<bool> trackAllocations) {
-  v8::replayio::AutoMaybeReplayOwned replay_owned(
-      m_replay_owned, m_isolate,
-      "V8HeapProfilerAgentImpl::startTrackingHeapObjects");
   m_state->setBoolean(HeapProfilerAgentState::heapObjectsTrackingEnabled, true);
   bool allocationTrackingEnabled = trackAllocations.fromMaybe(false);
   m_state->setBoolean(HeapProfilerAgentState::allocationTrackingEnabled,
@@ -255,9 +250,6 @@ Response V8HeapProfilerAgentImpl::startTrackingHeapObjects(
 Response V8HeapProfilerAgentImpl::stopTrackingHeapObjects(
     Maybe<bool> reportProgress, Maybe<bool> treatGlobalObjectsAsRoots,
     Maybe<bool> captureNumericValue, Maybe<bool> exposeInternals) {
-  v8::replayio::AutoMaybeReplayOwned replay_owned(
-      m_replay_owned, m_isolate,
-      "V8HeapProfilerAgentImpl::stopTrackingHeapObjects");
   requestHeapStatsUpdate();
   takeHeapSnapshot(std::move(reportProgress),
                    std::move(treatGlobalObjectsAsRoots),
@@ -267,15 +259,11 @@ Response V8HeapProfilerAgentImpl::stopTrackingHeapObjects(
 }
 
 Response V8HeapProfilerAgentImpl::enable() {
-  v8::replayio::AutoMaybeReplayOwned replay_owned(
-      m_replay_owned, m_isolate, "V8HeapProfilerAgentImpl::enable");
   m_state->setBoolean(HeapProfilerAgentState::heapProfilerEnabled, true);
   return Response::Success();
 }
 
 Response V8HeapProfilerAgentImpl::disable() {
-  v8::replayio::AutoMaybeReplayOwned replay_owned(
-      m_replay_owned, m_isolate, "V8HeapProfilerAgentImpl::disable");
   stopTrackingHeapObjectsInternal();
   if (m_state->booleanProperty(
           HeapProfilerAgentState::samplingHeapProfilerEnabled, false)) {
@@ -290,8 +278,6 @@ Response V8HeapProfilerAgentImpl::disable() {
 Response V8HeapProfilerAgentImpl::takeHeapSnapshot(
     Maybe<bool> reportProgress, Maybe<bool> treatGlobalObjectsAsRoots,
     Maybe<bool> captureNumericValue, Maybe<bool> exposeInternals) {
-  v8::replayio::AutoMaybeReplayOwned replay_owned(
-      m_replay_owned, m_isolate, "V8HeapProfilerAgentImpl::takeHeapSnapshot");
   v8::HeapProfiler* profiler = m_isolate->GetHeapProfiler();
   if (!profiler) return Response::ServerError("Cannot access v8 heap profiler");
   std::unique_ptr<HeapSnapshotProgress> progress;
@@ -324,9 +310,6 @@ Response V8HeapProfilerAgentImpl::takeHeapSnapshot(
 Response V8HeapProfilerAgentImpl::getObjectByHeapObjectId(
     const String16& heapSnapshotObjectId, Maybe<String16> objectGroup,
     std::unique_ptr<protocol::Runtime::RemoteObject>* result) {
-  v8::replayio::AutoMaybeReplayOwned replay_owned(
-      m_replay_owned, m_isolate,
-      "V8HeapProfilerAgentImpl::getObjectByHeapObjectId");
   bool ok;
   int id = heapSnapshotObjectId.toInteger(&ok);
   if (!ok) return Response::ServerError("Invalid heap snapshot object id");
@@ -351,9 +334,6 @@ Response V8HeapProfilerAgentImpl::getObjectByHeapObjectId(
 
 Response V8HeapProfilerAgentImpl::addInspectedHeapObject(
     const String16& inspectedHeapObjectId) {
-  v8::replayio::AutoMaybeReplayOwned replay_owned(
-      m_replay_owned, m_isolate,
-      "V8HeapProfilerAgentImpl::addInspectedHeapObject");
   bool ok;
   int id = inspectedHeapObjectId.toInteger(&ok);
   if (!ok) return Response::ServerError("Invalid heap snapshot object id");
@@ -372,8 +352,6 @@ Response V8HeapProfilerAgentImpl::addInspectedHeapObject(
 
 Response V8HeapProfilerAgentImpl::getHeapObjectId(
     const String16& objectId, String16* heapSnapshotObjectId) {
-  v8::replayio::AutoMaybeReplayOwned replay_owned(
-      m_replay_owned, m_isolate, "V8HeapProfilerAgentImpl::getHeapObjectId");
   v8::HandleScope handles(m_isolate);
   v8::Local<v8::Value> value;
   v8::Local<v8::Context> context;
@@ -405,9 +383,6 @@ void V8HeapProfilerAgentImpl::onTimer(void* data) {
 
 void V8HeapProfilerAgentImpl::startTrackingHeapObjectsInternal(
     bool trackAllocations) {
-  v8::replayio::AutoMaybeReplayOwned replay_owned(
-      m_replay_owned, m_isolate,
-      "V8HeapProfilerAgentImpl::startTrackingHeapObjectsInternal");
   m_isolate->GetHeapProfiler()->StartTrackingHeapObjects(trackAllocations);
   if (!m_hasTimer) {
     m_hasTimer = true;
@@ -417,9 +392,6 @@ void V8HeapProfilerAgentImpl::startTrackingHeapObjectsInternal(
 }
 
 void V8HeapProfilerAgentImpl::stopTrackingHeapObjectsInternal() {
-  v8::replayio::AutoMaybeReplayOwned replay_owned(
-      m_replay_owned, m_isolate,
-      "V8HeapProfilerAgentImpl::stopTrackingHeapObjectsInternal");
   if (m_hasTimer) {
     m_session->inspector()->client()->cancelTimer(
         reinterpret_cast<void*>(this));
@@ -435,8 +407,6 @@ Response V8HeapProfilerAgentImpl::startSampling(
     Maybe<double> samplingInterval,
     Maybe<bool> includeObjectsCollectedByMajorGC,
     Maybe<bool> includeObjectsCollectedByMinorGC) {
-  v8::replayio::AutoMaybeReplayOwned replay_owned(
-      m_replay_owned, m_isolate, "V8HeapProfilerAgentImpl::startSampling");
   v8::HeapProfiler* profiler = m_isolate->GetHeapProfiler();
   if (!profiler) return Response::ServerError("Cannot access v8 heap profiler");
   const unsigned defaultSamplingInterval = 1 << 15;
@@ -495,8 +465,6 @@ buildSampingHeapProfileNode(v8::Isolate* isolate,
 
 Response V8HeapProfilerAgentImpl::stopSampling(
     std::unique_ptr<protocol::HeapProfiler::SamplingHeapProfile>* profile) {
-  v8::replayio::AutoMaybeReplayOwned replay_owned(
-      m_replay_owned, m_isolate, "V8HeapProfilerAgentImpl::stopSampling");
   Response result = getSamplingProfile(profile);
   if (result.IsSuccess()) {
     m_isolate->GetHeapProfiler()->StopSamplingHeapProfiler();
@@ -508,8 +476,6 @@ Response V8HeapProfilerAgentImpl::stopSampling(
 
 Response V8HeapProfilerAgentImpl::getSamplingProfile(
     std::unique_ptr<protocol::HeapProfiler::SamplingHeapProfile>* profile) {
-  v8::replayio::AutoMaybeReplayOwned replay_owned(
-      m_replay_owned, m_isolate, "V8HeapProfilerAgentImpl::getSamplingProfile");
   v8::HeapProfiler* profiler = m_isolate->GetHeapProfiler();
   // Need a scope as v8::AllocationProfile contains Local handles.
   v8::HandleScope scope(m_isolate);

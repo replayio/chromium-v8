@@ -29,9 +29,6 @@ V8ConsoleAgentImpl::V8ConsoleAgentImpl(
 V8ConsoleAgentImpl::~V8ConsoleAgentImpl() = default;
 
 Response V8ConsoleAgentImpl::enable() {
-  v8::replayio::AutoMaybeReplayOwned replay_owned(
-      m_replay_owned, m_session->inspector()->isolate(),
-      "V8ConsoleAgentImpl::enable");
   if (m_enabled) return Response::Success();
   m_state->setBoolean(ConsoleAgentState::consoleEnabled, true);
   m_enabled = true;
@@ -40,9 +37,6 @@ Response V8ConsoleAgentImpl::enable() {
 }
 
 Response V8ConsoleAgentImpl::disable() {
-  v8::replayio::AutoMaybeReplayOwned replay_owned(
-      m_replay_owned, m_session->inspector()->isolate(),
-      "V8ConsoleAgentImpl::disable");
   if (!m_enabled) return Response::Success();
   m_state->setBoolean(ConsoleAgentState::consoleEnabled, false);
   m_enabled = false;
@@ -61,18 +55,12 @@ void V8ConsoleAgentImpl::restore() {
 }
 
 void V8ConsoleAgentImpl::messageAdded(V8ConsoleMessage* message) {
-  v8::replayio::AutoMaybeReplayOwned replay_owned(
-      m_replay_owned, m_session->inspector()->isolate(),
-      "V8ConsoleAgentImpl::messageAdded");
   if (m_enabled) reportMessage(message, true);
 }
 
 bool V8ConsoleAgentImpl::enabled() { return m_enabled; }
 
 void V8ConsoleAgentImpl::reportAllMessages() {
-  v8::replayio::AutoMaybeReplayOwned replay_owned(
-      m_replay_owned, m_session->inspector()->isolate(),
-      "V8ConsoleAgentImpl::reportAllMessages");
   V8ConsoleMessageStorage* storage =
       m_session->inspector()->ensureConsoleMessageStorage(
           m_session->contextGroupId());
@@ -85,9 +73,6 @@ void V8ConsoleAgentImpl::reportAllMessages() {
 
 bool V8ConsoleAgentImpl::reportMessage(V8ConsoleMessage* message,
                                        bool generatePreview) {
-  v8::replayio::AutoMaybeReplayOwned replay_owned(
-      m_replay_owned, m_session->inspector()->isolate(),
-      "V8ConsoleAgentImpl::reportMessage");
   DCHECK_EQ(V8MessageOrigin::kConsole, message->origin());
   message->reportToFrontend(&m_frontend);
   m_frontend.flush();

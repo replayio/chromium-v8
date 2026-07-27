@@ -272,8 +272,6 @@ void V8RuntimeAgentImpl::evaluate(
     std::unique_ptr<EvaluateCallback> callback) {
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"),
                "EvaluateScript");
-  v8::replayio::AutoMaybeReplayOwned replay_owned(
-      m_replay_owned, m_inspector->isolate(), "V8RuntimeAgentImpl::evaluate");
   int contextId = 0;
   Response response = ensureContext(m_inspector, m_session->contextGroupId(),
                                     std::move(executionContextId),
@@ -359,9 +357,6 @@ void V8RuntimeAgentImpl::awaitPromise(
     const String16& promiseObjectId, Maybe<bool> returnByValue,
     Maybe<bool> generatePreview,
     std::unique_ptr<AwaitPromiseCallback> callback) {
-  v8::replayio::AutoMaybeReplayOwned replay_owned(
-      m_replay_owned, m_inspector->isolate(),
-      "V8RuntimeAgentImpl::awaitPromise");
   InjectedScript::ObjectScope scope(m_session, promiseObjectId);
   Response response = scope.initialize();
   if (!response.IsSuccess()) {
@@ -390,9 +385,6 @@ void V8RuntimeAgentImpl::callFunctionOn(
     Maybe<int> executionContextId, Maybe<String16> objectGroup,
     Maybe<bool> throwOnSideEffect, Maybe<bool> generateWebDriverValue,
     std::unique_ptr<CallFunctionOnCallback> callback) {
-  v8::replayio::AutoMaybeReplayOwned replay_owned(
-      m_replay_owned, m_inspector->isolate(),
-      "V8RuntimeAgentImpl::callFunctionOn");
   if (objectId.isJust() && executionContextId.isJust()) {
     callback->sendFailure(Response::ServerError(
         "ObjectId must not be specified together with executionContextId"));
@@ -459,9 +451,6 @@ Response V8RuntimeAgentImpl::getProperties(
     Maybe<protocol::Array<protocol::Runtime::PrivatePropertyDescriptor>>*
         privateProperties,
     Maybe<protocol::Runtime::ExceptionDetails>* exceptionDetails) {
-  v8::replayio::AutoMaybeReplayOwned replay_owned(
-      m_replay_owned, m_inspector->isolate(),
-      "V8RuntimeAgentImpl::getProperties");
   using protocol::Runtime::InternalPropertyDescriptor;
   using protocol::Runtime::PrivatePropertyDescriptor;
 
@@ -505,9 +494,6 @@ Response V8RuntimeAgentImpl::getProperties(
 }
 
 Response V8RuntimeAgentImpl::releaseObject(const String16& objectId) {
-  v8::replayio::AutoMaybeReplayOwned replay_owned(
-      m_replay_owned, m_inspector->isolate(),
-      "V8RuntimeAgentImpl::releaseObject");
   InjectedScript::ObjectScope scope(m_session, objectId);
   Response response = scope.initialize();
   if (!response.IsSuccess()) return response;
@@ -516,25 +502,16 @@ Response V8RuntimeAgentImpl::releaseObject(const String16& objectId) {
 }
 
 Response V8RuntimeAgentImpl::releaseObjectGroup(const String16& objectGroup) {
-  v8::replayio::AutoMaybeReplayOwned replay_owned(
-      m_replay_owned, m_inspector->isolate(),
-      "V8RuntimeAgentImpl::releaseObjectGroup");
   m_session->releaseObjectGroup(objectGroup);
   return Response::Success();
 }
 
 Response V8RuntimeAgentImpl::runIfWaitingForDebugger() {
-  v8::replayio::AutoMaybeReplayOwned replay_owned(
-      m_replay_owned, m_inspector->isolate(),
-      "V8RuntimeAgentImpl::runIfWaitingForDebugger");
   m_inspector->client()->runIfWaitingForDebugger(m_session->contextGroupId());
   return Response::Success();
 }
 
 Response V8RuntimeAgentImpl::setCustomObjectFormatterEnabled(bool enabled) {
-  v8::replayio::AutoMaybeReplayOwned replay_owned(
-      m_replay_owned, m_inspector->isolate(),
-      "V8RuntimeAgentImpl::setCustomObjectFormatterEnabled");
   m_state->setBoolean(V8RuntimeAgentImplState::customObjectFormatterEnabled,
                       enabled);
   if (!m_enabled) return Response::ServerError("Runtime agent is not enabled");
@@ -543,9 +520,6 @@ Response V8RuntimeAgentImpl::setCustomObjectFormatterEnabled(bool enabled) {
 }
 
 Response V8RuntimeAgentImpl::setMaxCallStackSizeToCapture(int size) {
-  v8::replayio::AutoMaybeReplayOwned replay_owned(
-      m_replay_owned, m_inspector->isolate(),
-      "V8RuntimeAgentImpl::setMaxCallStackSizeToCapture");
   if (size < 0) {
     return Response::ServerError(
         "maxCallStackSizeToCapture should be non-negative");
@@ -561,9 +535,6 @@ Response V8RuntimeAgentImpl::setMaxCallStackSizeToCapture(int size) {
 }
 
 Response V8RuntimeAgentImpl::discardConsoleEntries() {
-  v8::replayio::AutoMaybeReplayOwned replay_owned(
-      m_replay_owned, m_inspector->isolate(),
-      "V8RuntimeAgentImpl::discardConsoleEntries");
   V8ConsoleMessageStorage* storage =
       m_inspector->ensureConsoleMessageStorage(m_session->contextGroupId());
   storage->clear();
@@ -574,9 +545,6 @@ Response V8RuntimeAgentImpl::compileScript(
     const String16& expression, const String16& sourceURL, bool persistScript,
     Maybe<int> executionContextId, Maybe<String16>* scriptId,
     Maybe<protocol::Runtime::ExceptionDetails>* exceptionDetails) {
-  v8::replayio::AutoMaybeReplayOwned replay_owned(
-      m_replay_owned, m_inspector->isolate(),
-      "V8RuntimeAgentImpl::compileScript");
   if (!m_enabled) return Response::ServerError("Runtime agent is not enabled");
 
   int contextId = 0;
@@ -621,8 +589,6 @@ void V8RuntimeAgentImpl::runScript(
     Maybe<bool> includeCommandLineAPI, Maybe<bool> returnByValue,
     Maybe<bool> generatePreview, Maybe<bool> awaitPromise,
     std::unique_ptr<RunScriptCallback> callback) {
-  v8::replayio::AutoMaybeReplayOwned replay_owned(
-      m_replay_owned, m_inspector->isolate(), "V8RuntimeAgentImpl::runScript");
   if (!m_enabled) {
     callback->sendFailure(
         Response::ServerError("Runtime agent is not enabled"));
@@ -696,9 +662,6 @@ void V8RuntimeAgentImpl::runScript(
 Response V8RuntimeAgentImpl::queryObjects(
     const String16& prototypeObjectId, Maybe<String16> objectGroup,
     std::unique_ptr<protocol::Runtime::RemoteObject>* objects) {
-  v8::replayio::AutoMaybeReplayOwned replay_owned(
-      m_replay_owned, m_inspector->isolate(),
-      "V8RuntimeAgentImpl::queryObjects");
   InjectedScript::ObjectScope scope(m_session, prototypeObjectId);
   Response response = scope.initialize();
   if (!response.IsSuccess()) return response;
@@ -715,9 +678,6 @@ Response V8RuntimeAgentImpl::queryObjects(
 Response V8RuntimeAgentImpl::globalLexicalScopeNames(
     Maybe<int> executionContextId,
     std::unique_ptr<protocol::Array<String16>>* outNames) {
-  v8::replayio::AutoMaybeReplayOwned replay_owned(
-      m_replay_owned, m_inspector->isolate(),
-      "V8RuntimeAgentImpl::globalLexicalScopeNames");
   int contextId = 0;
   Response response = ensureContext(m_inspector, m_session->contextGroupId(),
                                     std::move(executionContextId),
@@ -739,9 +699,6 @@ Response V8RuntimeAgentImpl::globalLexicalScopeNames(
 }
 
 Response V8RuntimeAgentImpl::getIsolateId(String16* outIsolateId) {
-  v8::replayio::AutoMaybeReplayOwned replay_owned(
-      m_replay_owned, m_inspector->isolate(),
-      "V8RuntimeAgentImpl::getIsolateId");
   char buf[40];
   std::snprintf(buf, sizeof(buf), "%" PRIx64, m_inspector->isolateId());
   *outIsolateId = buf;
@@ -750,9 +707,6 @@ Response V8RuntimeAgentImpl::getIsolateId(String16* outIsolateId) {
 
 Response V8RuntimeAgentImpl::getHeapUsage(double* out_usedSize,
                                           double* out_totalSize) {
-  v8::replayio::AutoMaybeReplayOwned replay_owned(
-      m_replay_owned, m_inspector->isolate(),
-      "V8RuntimeAgentImpl::getHeapUsage");
   v8::HeapStatistics stats;
   m_inspector->isolate()->GetHeapStatistics(&stats);
   *out_usedSize = stats.used_heap_size();
@@ -762,9 +716,6 @@ Response V8RuntimeAgentImpl::getHeapUsage(double* out_usedSize,
 
 void V8RuntimeAgentImpl::terminateExecution(
     std::unique_ptr<TerminateExecutionCallback> callback) {
-  v8::replayio::AutoMaybeReplayOwned replay_owned(
-      m_replay_owned, m_inspector->isolate(),
-      "V8RuntimeAgentImpl::terminateExecution");
   m_inspector->debugger()->terminateExecution(std::move(callback));
 }
 
@@ -781,8 +732,6 @@ protocol::DictionaryValue* getOrCreateDictionary(
 Response V8RuntimeAgentImpl::addBinding(const String16& name,
                                         Maybe<int> executionContextId,
                                         Maybe<String16> executionContextName) {
-  v8::replayio::AutoMaybeReplayOwned replay_owned(
-      m_replay_owned, m_inspector->isolate(), "V8RuntimeAgentImpl::addBinding");
   if (executionContextId.isJust()) {
     if (executionContextName.isJust()) {
       return Response::InvalidParams(
@@ -877,9 +826,6 @@ void V8RuntimeAgentImpl::addBinding(InspectedContext* context,
 }
 
 Response V8RuntimeAgentImpl::removeBinding(const String16& name) {
-  v8::replayio::AutoMaybeReplayOwned replay_owned(
-      m_replay_owned, m_inspector->isolate(),
-      "V8RuntimeAgentImpl::removeBinding");
   protocol::DictionaryValue* bindings =
       m_state->getObject(V8RuntimeAgentImplState::bindings);
   if (bindings) bindings->remove(name);
@@ -890,9 +836,6 @@ Response V8RuntimeAgentImpl::removeBinding(const String16& name) {
 Response V8RuntimeAgentImpl::getExceptionDetails(
     const String16& errorObjectId,
     Maybe<protocol::Runtime::ExceptionDetails>* out_exceptionDetails) {
-  v8::replayio::AutoMaybeReplayOwned replay_owned(
-      m_replay_owned, m_inspector->isolate(),
-      "V8RuntimeAgentImpl::getExceptionDetails");
   InjectedScript::ObjectScope scope(m_session, errorObjectId);
   Response response = scope.initialize();
   if (!response.IsSuccess()) return response;
@@ -928,10 +871,6 @@ Response V8RuntimeAgentImpl::getExceptionDetails(
 void V8RuntimeAgentImpl::bindingCalled(const String16& name,
                                        const String16& payload,
                                        int executionContextId) {
-  v8::replayio::AutoMaybeMarkReplayCode mark(m_replay_owned);
-  v8::replayio::AutoMaybeDisallowEvents disallow(
-      m_replay_owned, m_inspector->isolate(),
-      "V8RuntimeAgentImpl::bindingCalled");
 
   if (!m_activeBindings.count(name)) return;
   m_frontend.bindingCalled(name, payload, executionContextId);
@@ -939,9 +878,6 @@ void V8RuntimeAgentImpl::bindingCalled(const String16& name,
 }
 
 void V8RuntimeAgentImpl::addBindings(InspectedContext* context) {
-  v8::replayio::AutoMaybeMarkReplayCode mark(m_replay_owned);
-  v8::replayio::AutoMaybeDisallowEvents disallow(
-      m_replay_owned, m_inspector->isolate(), "V8RuntimeAgentImpl::addBindings");
   const String16 contextName = context->humanReadableName();
   if (!m_enabled) return;
   protocol::DictionaryValue* bindings =
@@ -990,8 +926,6 @@ void V8RuntimeAgentImpl::restore() {
 
 Response V8RuntimeAgentImpl::enable() {
   using v8::recordreplay;
-  v8::replayio::AutoMaybeReplayOwned replay_owned(
-      m_replay_owned, m_inspector->isolate(), "V8RuntimeAgentImpl::enable");
   if (m_enabled) return Response::Success();
   TRACE_EVENT_WITH_FLOW0(TRACE_DISABLED_BY_DEFAULT("v8.inspector"),
                          "V8RuntimeAgentImpl::enable", this,
@@ -1014,8 +948,6 @@ Response V8RuntimeAgentImpl::enable() {
 }
 
 Response V8RuntimeAgentImpl::disable() {
-  v8::replayio::AutoMaybeReplayOwned replay_owned(
-      m_replay_owned, m_inspector->isolate(), "V8RuntimeAgentImpl::disable");
   if (!m_enabled) return Response::Success();
   TRACE_EVENT_WITH_FLOW0(TRACE_DISABLED_BY_DEFAULT("v8.inspector"),
                          "V8RuntimeAgentImpl::disable", this,
@@ -1035,9 +967,6 @@ Response V8RuntimeAgentImpl::disable() {
 }
 
 void V8RuntimeAgentImpl::reset() {
-  v8::replayio::AutoMaybeMarkReplayCode mark(m_replay_owned);
-  v8::replayio::AutoMaybeDisallowEvents disallow(
-      m_replay_owned, m_inspector->isolate(), "V8RuntimeAgentImpl::reset");
 
   m_compiledScripts.clear();
   if (m_enabled) {
@@ -1052,10 +981,6 @@ void V8RuntimeAgentImpl::reset() {
 
 void V8RuntimeAgentImpl::reportExecutionContextCreated(
     InspectedContext* context) {
-  v8::replayio::AutoMaybeMarkReplayCode mark(m_replay_owned);
-  v8::replayio::AutoMaybeDisallowEvents disallow(
-      m_replay_owned, m_inspector->isolate(),
-      "V8RuntimeAgentImpl::reportExecutionContextCreated");
 
   if (!m_enabled) return;
   context->setReported(m_session->sessionId(), true);
@@ -1079,10 +1004,6 @@ void V8RuntimeAgentImpl::reportExecutionContextCreated(
 
 void V8RuntimeAgentImpl::reportExecutionContextDestroyed(
     InspectedContext* context) {
-  v8::replayio::AutoMaybeMarkReplayCode mark(m_replay_owned);
-  v8::replayio::AutoMaybeDisallowEvents disallow(
-      m_replay_owned, m_inspector->isolate(),
-      "V8RuntimeAgentImpl::reportExecutionContextDestroyed");
 
   if (m_enabled && context->isReported(m_session->sessionId())) {
     context->setReported(m_session->sessionId(), false);
@@ -1093,9 +1014,6 @@ void V8RuntimeAgentImpl::reportExecutionContextDestroyed(
 void V8RuntimeAgentImpl::inspect(
     std::unique_ptr<protocol::Runtime::RemoteObject> objectToInspect,
     std::unique_ptr<protocol::DictionaryValue> hints, int executionContextId) {
-  v8::replayio::AutoMaybeMarkReplayCode mark(m_replay_owned);
-  v8::replayio::AutoMaybeDisallowEvents disallow(
-      m_replay_owned, m_inspector->isolate(), "V8RuntimeAgentImpl::inspect");
 
   if (m_enabled)
     m_frontend.inspectRequested(std::move(objectToInspect), std::move(hints),
@@ -1103,18 +1021,11 @@ void V8RuntimeAgentImpl::inspect(
 }
 
 void V8RuntimeAgentImpl::messageAdded(V8ConsoleMessage* message) {
-  v8::replayio::AutoMaybeReplayOwned replay_owned(
-      m_replay_owned, m_inspector->isolate(),
-      "V8RuntimeAgentImpl::messageAdded");
   if (m_enabled) reportMessage(message, true);
 }
 
 bool V8RuntimeAgentImpl::reportMessage(V8ConsoleMessage* message,
                                        bool generatePreview) {
-  v8::replayio::AutoMaybeMarkReplayCode mark(m_replay_owned);
-  v8::replayio::AutoMaybeDisallowEvents disallow(
-      m_replay_owned, m_inspector->isolate(),
-      "V8RuntimeAgentImpl::reportMessage");
 
   message->reportToFrontend(&m_frontend, m_session, generatePreview);
   m_frontend.flush();

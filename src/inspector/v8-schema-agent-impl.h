@@ -24,7 +24,6 @@ class V8SchemaAgentImpl : public protocol::Schema::Backend {
   ~V8SchemaAgentImpl() override;
   V8SchemaAgentImpl(const V8SchemaAgentImpl&) = delete;
   V8SchemaAgentImpl& operator=(const V8SchemaAgentImpl&) = delete;
-  bool replayOwned() const { return m_replay_owned; }
 
   Response getDomains(
       std::unique_ptr<protocol::Array<protocol::Schema::Domain>>*) override;
@@ -32,7 +31,6 @@ class V8SchemaAgentImpl : public protocol::Schema::Backend {
  private:
   V8InspectorSessionImpl* m_session;
   protocol::Schema::Frontend m_frontend;
-  bool m_replay_owned;
 };
 
 }  // namespace v8_inspector
