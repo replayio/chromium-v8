@@ -109,6 +109,8 @@ V8InspectorSessionImpl::V8InspectorSessionImpl(
       m_inspector(inspector),
       m_channel(channel),
       m_customObjectFormatterEnabled(false),
+      // ReplaySession connect is under AutoDisallowEvents; DevTools connect is not.
+      m_replay_owned(v8::recordreplay::AreEventsDisallowed()),
       m_dispatcher(this),
       m_state(ParseState(savedState)),
       m_runtimeAgent(nullptr),
@@ -117,8 +119,7 @@ V8InspectorSessionImpl::V8InspectorSessionImpl(
       m_profilerAgent(nullptr),
       m_consoleAgent(nullptr),
       m_schemaAgent(nullptr),
-      m_clientTrustLevel(clientTrustLevel),
-      m_replay_owned(v8::replayio::CheckReplayOwned()) {
+      m_clientTrustLevel(clientTrustLevel) {
   m_state->getBoolean("use_binary_protocol", &use_binary_protocol_);
 
   v8::recordreplay::CommandDiagnosticTrace(
@@ -164,6 +165,10 @@ V8InspectorSessionImpl::V8InspectorSessionImpl(
 
 V8InspectorSessionImpl::~V8InspectorSessionImpl() {
   v8::Isolate::Scope scope(m_inspector->isolate());
+  v8::replayio::AutoMaybeMarkReplayCode mark(m_replay_owned);
+  v8::replayio::AutoMaybeDisallowEvents disallow(
+      m_replay_owned, m_inspector->isolate(),
+      "V8InspectorSessionImpl::~V8InspectorSessionImpl");
   discardInjectedScripts();
   m_consoleAgent->disable();
   m_profilerAgent->disable();
@@ -300,6 +305,10 @@ void V8InspectorSessionImpl::reset() {
 }
 
 void V8InspectorSessionImpl::discardInjectedScripts() {
+  v8::replayio::AutoMaybeMarkReplayCode mark(m_replay_owned);
+  v8::replayio::AutoMaybeDisallowEvents disallow(
+      m_replay_owned, m_inspector->isolate(),
+      "V8InspectorSessionImpl::discardInjectedScripts");
   m_inspectedObjects.clear();
   int sessionId = m_sessionId;
   m_inspector->forEachContext(m_contextGroupId,
@@ -323,7 +332,7 @@ Response V8InspectorSessionImpl::findInjectedScript(
   }
   injectedScript = context->getInjectedScript(m_sessionId);
   if (!injectedScript) {
-    injectedScript = context->createInjectedScript(m_sessionId);
+    injectedScript = context->createInjectedScript(m_sessionId, m_replay_owned);
     if (m_customObjectFormatterEnabled)
       injectedScript->setCustomObjectFormatterEnabled(true);
   }
@@ -448,6 +457,10 @@ V8InspectorSessionImpl::wrapTable(v8::Local<v8::Context> context,
 }
 
 void V8InspectorSessionImpl::setCustomObjectFormatterEnabled(bool enabled) {
+  v8::replayio::AutoMaybeMarkReplayCode mark(m_replay_owned);
+  v8::replayio::AutoMaybeDisallowEvents disallow(
+      m_replay_owned, m_inspector->isolate(),
+      "V8InspectorSessionImpl::setCustomObjectFormatterEnabled");
   m_customObjectFormatterEnabled = enabled;
   int sessionId = m_sessionId;
   m_inspector->forEachContext(
@@ -459,6 +472,10 @@ void V8InspectorSessionImpl::setCustomObjectFormatterEnabled(bool enabled) {
 }
 
 void V8InspectorSessionImpl::reportAllContexts(V8RuntimeAgentImpl* agent) {
+  v8::replayio::AutoMaybeMarkReplayCode mark(m_replay_owned);
+  v8::replayio::AutoMaybeDisallowEvents disallow(
+      m_replay_owned, m_inspector->isolate(),
+      "V8InspectorSessionImpl::reportAllContexts");
   m_inspector->forEachContext(m_contextGroupId,
                               [&agent](InspectedContext* context) {
                                 agent->reportExecutionContextCreated(context);
@@ -466,6 +483,10 @@ void V8InspectorSessionImpl::reportAllContexts(V8RuntimeAgentImpl* agent) {
 }
 
 void V8InspectorSessionImpl::dispatchProtocolMessage(StringView message) {
+  v8::replayio::AutoMaybeMarkReplayCode mark(m_replay_owned);
+  v8::replayio::AutoMaybeDisallowEvents disallow(
+      m_replay_owned, m_inspector->isolate(),
+      "V8InspectorSessionImpl::dispatchProtocolMessage");
   using v8_crdtp::span;
   using v8_crdtp::SpanFrom;
   span<uint8_t> cbor;

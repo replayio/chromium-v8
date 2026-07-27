@@ -9,8 +9,6 @@
 #ifndef INCLUDE_RECORD_REPLAY_H_
 #define INCLUDE_RECORD_REPLAY_H_
 
-#include <optional>
-
 #include "v8.h"
 
 namespace v8 {
@@ -30,36 +28,23 @@ struct AutoMarkReplayCode {
 };
 
 struct AutoDisallowEvents {
-  AutoDisallowEvents() { Begin(nullptr, nullptr); }
-  explicit AutoDisallowEvents(const char* label, v8::Isolate* isolate = nullptr) {
-    Begin(label, isolate);
+  AutoDisallowEvents() { Begin(nullptr); }
+  explicit AutoDisallowEvents(const char* label, v8::Isolate* = nullptr) {
+    Begin(label);
   }
-  ~AutoDisallowEvents() {
-    no_js_.reset();
-    v8::recordreplay::EndDisallowEvents();
-  }
+  ~AutoDisallowEvents() { v8::recordreplay::EndDisallowEvents(); }
 
   AutoDisallowEvents(const AutoDisallowEvents&) = delete;
   AutoDisallowEvents& operator=(const AutoDisallowEvents&) = delete;
 
  private:
-  void Begin(const char* label, v8::Isolate* isolate) {
+  void Begin(const char* label) {
     if (label) {
       v8::recordreplay::BeginDisallowEventsWithLabel(label);
     } else {
       v8::recordreplay::BeginDisallowEvents();
     }
-    if (!isolate) {
-      isolate = v8::Isolate::TryGetCurrent();
-    }
-    if (isolate) {
-      no_js_.emplace(
-          isolate,
-          v8::Isolate::DisallowJavascriptExecutionScope::DUMP_ON_FAILURE);
-    }
   }
-
-  std::optional<v8::Isolate::DisallowJavascriptExecutionScope> no_js_;
 };
 
 }  // namespace replayio

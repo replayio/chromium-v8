@@ -51,6 +51,7 @@
 #include "src/inspector/v8-stack-trace-impl.h"
 #include "src/inspector/v8-value-utils.h"
 #include "src/inspector/value-mirror.h"
+#include "src/base/replayio.h"
 
 #include "v8.h"
 
@@ -205,7 +206,8 @@ class InjectedScript::ProtocolPromiseHandler {
         m_throwOnSideEffect(throwOnSideEffect),
         m_callback(std::move(callback)),
         m_wrapper(m_inspector->isolate(),
-                  v8::External::New(m_inspector->isolate(), this)) {
+                  v8::External::New(m_inspector->isolate(), this)),
+        m_replay_owned(session->replayOwned()) {
     m_wrapper.SetWeak(this, cleanup, v8::WeakCallbackType::kParameter);
     v8::Local<v8::Promise> promise;
     if (maybeEvaluationResult.ToLocal(&promise)) {
@@ -227,6 +229,9 @@ class InjectedScript::ProtocolPromiseHandler {
   }
 
   void thenCallback(v8::Local<v8::Value> value) {
+    v8::replayio::AutoMaybeReplayOwned replay_owned(
+        m_replay_owned, m_inspector->isolate(),
+        "InjectedScript::EvaluateCallback::thenCallback");
     V8InspectorSessionImpl* session =
         m_inspector->sessionById(m_contextGroupId, m_sessionId);
     if (!session) return;
@@ -272,6 +277,9 @@ class InjectedScript::ProtocolPromiseHandler {
   }
 
   void catchCallback(v8::Local<v8::Value> result) {
+    v8::replayio::AutoMaybeReplayOwned replay_owned(
+        m_replay_owned, m_inspector->isolate(),
+        "InjectedScript::EvaluateCallback::catchCallback");
     V8InspectorSessionImpl* session =
         m_inspector->sessionById(m_contextGroupId, m_sessionId);
     if (!session) return;
@@ -370,6 +378,9 @@ class InjectedScript::ProtocolPromiseHandler {
   }
 
   void sendPromiseCollected() {
+    v8::replayio::AutoMaybeReplayOwned replay_owned(
+        m_replay_owned, m_inspector->isolate(),
+        "InjectedScript::EvaluateCallback::sendPromiseCollected");
     V8InspectorSessionImpl* session =
         m_inspector->sessionById(m_contextGroupId, m_sessionId);
     if (!session) return;
@@ -392,10 +403,14 @@ class InjectedScript::ProtocolPromiseHandler {
   std::weak_ptr<EvaluateCallback> m_callback;
   v8::Global<v8::External> m_wrapper;
   v8::Global<v8::Promise> m_evaluationResult;
+  bool m_replay_owned;
 };
 
-InjectedScript::InjectedScript(InspectedContext* context, int sessionId)
-    : m_context(context), m_sessionId(sessionId) {}
+InjectedScript::InjectedScript(InspectedContext* context, int sessionId,
+                               bool replayOwned)
+    : m_context(context),
+      m_sessionId(sessionId),
+      m_replay_owned(replayOwned) {}
 
 InjectedScript::~InjectedScript() { discardEvaluateCallbacks(); }
 
@@ -612,6 +627,8 @@ Response InjectedScript::wrapObject(
     v8::Local<v8::Value> value, const String16& groupName, WrapMode wrapMode,
     v8::MaybeLocal<v8::Value> customPreviewConfig, int maxCustomPreviewDepth,
     std::unique_ptr<protocol::Runtime::RemoteObject>* result) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_context->isolate(), "InjectedScript::wrapObject");
   v8::Local<v8::Context> context = m_context->context();
   v8::Context::Scope contextScope(context);
   std::unique_ptr<ValueMirror> mirror = ValueMirror::create(context, value);
@@ -745,6 +762,9 @@ void InjectedScript::addPromiseCallback(
 }
 
 void InjectedScript::discardEvaluateCallbacks() {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_context->isolate(),
+      "InjectedScript::discardEvaluateCallbacks");
   while (!m_evaluateCallbacks.empty()) {
     EvaluateCallback::sendFailure(
         *m_evaluateCallbacks.begin(), this,
@@ -785,6 +805,9 @@ void InjectedScript::releaseObjectGroup(const String16& objectGroup) {
 }
 
 void InjectedScript::setCustomObjectFormatterEnabled(bool enabled) {
+  v8::replayio::AutoMaybeReplayOwned replay_owned(
+      m_replay_owned, m_context->isolate(),
+      "InjectedScript::setCustomObjectFormatterEnabled");
   m_customPreviewEnabled = enabled;
 }
 
@@ -1130,18 +1153,18 @@ String16 InjectedScript::bindObject(v8::Local<v8::Value> value,
 Response InjectedScript::bindRemoteObjectIfNeeded(
     int sessionId, v8::Local<v8::Context> context, v8::Local<v8::Value> value,
     const String16& groupName, protocol::Runtime::RemoteObject* remoteObject) {
+  v8::Isolate* isolate = context->GetIsolate();
+  V8InspectorImpl* inspector =
+      static_cast<V8InspectorImpl*>(v8::debug::GetInspector(isolate));
+  InspectedContext* inspectedContext =
+      inspector->getContext(InspectedContext::contextId(context));
+  InjectedScript* injectedScript =
+      inspectedContext ? inspectedContext->getInjectedScript(sessionId)
+                       : nullptr;
   if (!remoteObject) return Response::Success();
   if (remoteObject->hasValue()) return Response::Success();
   if (remoteObject->hasUnserializableValue()) return Response::Success();
   if (remoteObject->getType() != RemoteObject::TypeEnum::Undefined) {
-    v8::Isolate* isolate = context->GetIsolate();
-    V8InspectorImpl* inspector =
-        static_cast<V8InspectorImpl*>(v8::debug::GetInspector(isolate));
-    InspectedContext* inspectedContext =
-        inspector->getContext(InspectedContext::contextId(context));
-    InjectedScript* injectedScript =
-        inspectedContext ? inspectedContext->getInjectedScript(sessionId)
-                         : nullptr;
     if (!injectedScript) {
       if (v8::recordreplay::IsInReplayCode("InjectedScript::bindRemoteObjectIfNeeded")) {
         v8::recordreplay::Warning(

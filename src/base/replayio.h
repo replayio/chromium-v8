@@ -45,6 +45,16 @@ struct AutoMaybeDisallowEvents {
   v8::base::Optional<v8::replayio::AutoDisallowEvents> disallow;
 };
 
+// Mark+Disallow for replay-owned inspector object work sites.
+struct AutoMaybeReplayOwned {
+  AutoMaybeReplayOwned(bool owned, v8::Isolate* isolate, const char* label)
+      : mark(owned), disallow(owned, isolate, label) {}
+
+ private:
+  AutoMaybeMarkReplayCode mark;
+  AutoMaybeDisallowEvents disallow;
+};
+
 }  // namespace replayio
 }  // namespace v8
 
