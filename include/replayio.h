@@ -27,8 +27,6 @@ struct AutoMarkReplayCode {
   AutoMarkReplayCode& operator=(const AutoMarkReplayCode&) = delete;
 };
 
-// Stream-only EventsDisallowed scope. C++→user-JS under EventsDisallowed is
-// gated by RecordReplayIsDivergentUserJSWithoutPause, not DUMP_ON_FAILURE.
 struct AutoDisallowEvents {
   AutoDisallowEvents() { Begin(nullptr); }
   explicit AutoDisallowEvents(const char* label, v8::Isolate* = nullptr) {
