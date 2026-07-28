@@ -25,6 +25,7 @@ namespace internal {
 extern bool RecordReplayIsDivergentUserJSWithoutPause(const SharedFunctionInfo& shared);
 extern uint64_t* gProgressCounter;
 extern bool gRecordReplayEnableDependencyGraph;
+extern std::string GetScriptName(Handle<Script> script);
 
 namespace {
 
@@ -285,9 +286,7 @@ static std::string GetFunctionScriptName(Isolate* isolate,
     return "<not-script>";
   }
   Handle<Script> script(Script::cast(function->shared().script()), isolate);
-  return script->name().IsString()
-             ? String::cast(script->name()).ToCString().get()
-             : "(anonymous script)";
+  return GetScriptName(script);
 }
 
 // Get a description of a function's location for logging etc.

@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 
 #include "src/api/api-inl.h"
@@ -3689,8 +3690,7 @@ extern void RecordReplayAddInterestingSource(const char* url);
 // Return whether a script is an uninteresting internal URL, but which still needs
 // to be registered with the recorder so that breakpoints can be created.
 bool RecordReplayIsInternalScriptURL(const char* url) {
-  return !strcmp(url, "record-replay-react-devtools") ||
-         !strcmp(url, "record-replay-internal") ||
+  return !strncmp(url, "record-replay-", 14) ||
          !strncmp(url, "extensions::", 12);
 }
 
@@ -3698,6 +3698,25 @@ extern bool RecordReplayHasDefaultContext();
 
 typedef std::unordered_set<int> ScriptIdSet;
 static ScriptIdSet* gRegisteredScripts;
+
+typedef std::unordered_map<int, bool> ScriptIdBoolMap;
+static ScriptIdBoolMap* gOpcodeEmitByScript = nullptr;
+
+// Compiles diverge (GC bytecode flush, cache ageing, etc.); freeze emit once dark.
+bool RecordReplayShouldEmitOpcodes(int script_id, bool record_replay_ignore) {
+  const bool base_emit_opcodes =
+      recordreplay::IsRecordingOrReplaying("emit-opcodes") &&
+      RecordReplayHasDefaultContext() && !record_replay_ignore;
+  if (script_id == v8::UnboundScript::kNoScriptId) return base_emit_opcodes;
+  if (!gOpcodeEmitByScript) {
+    gOpcodeEmitByScript = new ScriptIdBoolMap;
+  }
+  auto it = gOpcodeEmitByScript->find(script_id);
+  const bool emit =
+      base_emit_opcodes && (it == gOpcodeEmitByScript->end() || it->second);
+  (*gOpcodeEmitByScript)[script_id] = emit;
+  return emit;
+}
 
 bool RecordReplayHasRegisteredScript(Script script) {
   return IsMainThread() &&

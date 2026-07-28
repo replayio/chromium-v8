@@ -991,10 +991,11 @@ static inline uint64_t BuildScriptProgressEntry(Handle<JSFunction> fun) {
 
 extern Handle<Script> GetScript(Isolate* isolate, int script_id);
 
-static inline std::string GetScriptName(Handle<Script> script) {
-  return script->name().IsString()
-    ? String::cast(script->name()).ToCString().get()
-    : "(anonymous script)";
+std::string GetScriptName(Handle<Script> script) {
+  if (script.is_null() || !script->name().IsString()) {
+    return "(anonymous script)";
+  }
+  return String::cast(script->name()).ToCString().get();
 }
 
 std::string GetScriptLocationString(int script_id, int start_position) {
