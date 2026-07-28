@@ -3689,8 +3689,7 @@ extern void RecordReplayAddInterestingSource(const char* url);
 // Return whether a script is an uninteresting internal URL, but which still needs
 // to be registered with the recorder so that breakpoints can be created.
 bool RecordReplayIsInternalScriptURL(const char* url) {
-  return !strcmp(url, "record-replay-react-devtools") ||
-         !strcmp(url, "record-replay-internal") ||
+  return !strncmp(url, "record-replay-", 14) ||
          !strncmp(url, "extensions::", 12);
 }
 

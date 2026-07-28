@@ -41,6 +41,8 @@ namespace internal {
 
 extern bool RecordReplayTrackThisObjectAssignment(const std::string& property);
 extern bool RecordReplayHasDefaultContext();
+extern bool RecordReplayIsInternalScriptURL(const char* url);
+extern std::string GetScriptName(Handle<Script> script);
 
 namespace interpreter {
 
@@ -1173,11 +1175,15 @@ BytecodeGenerator::BytecodeGenerator(
       loop_depth_(0),
       current_loop_scope_(nullptr),
       catch_prediction_(HandlerTable::UNCAUGHT) {
-  REPLAY_ASSERT("BytecodeGenerator::OpcodeEmit %d %d %d %d",
-                script_.is_null() ? -1 : script_->id(),
-                info_->literal()->start_position(),
-                RecordReplayHasDefaultContext(),
-                info_->flags().record_replay_ignore());
+  std::string script_name = GetScriptName(script_);
+  if (!RecordReplayIsInternalScriptURL(script_name.c_str())) {
+    REPLAY_ASSERT(
+        "BytecodeGenerator::OpcodeEmit %s %d %d %d %d",
+        script_name.c_str(),
+        script_.is_null() ? -1 : script_->id(),
+        info_->literal()->start_position(), RecordReplayHasDefaultContext(),
+        info_->flags().record_replay_ignore());
+  }
   DCHECK_EQ(closure_scope(), closure_scope()->GetClosureScope());
   if (info->has_source_range_map()) {
     block_coverage_builder_ = zone()->New<BlockCoverageBuilder>(
