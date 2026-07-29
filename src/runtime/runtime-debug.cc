@@ -980,6 +980,29 @@ static inline bool RecordReplayBytecodeAllowed() {
 // within that script of the function which executed.
 static std::vector<uint64_t>* gProgressData;
 
+RecordReplayScrubDivergentProgressScope::
+    RecordReplayScrubDivergentProgressScope()
+    : active_(false), start_progress_(0), start_data_size_(0) {
+  if (!recordreplay::IsRecordingOrReplaying() || !IsMainThread()) return;
+  if (!recordreplay::AreEventsDisallowed()) return;
+  if (recordreplay::HasDivergedFromRecording()) return;
+  active_ = true;
+  start_progress_ = *gProgressCounter;
+  start_data_size_ = gProgressData ? gProgressData->size() : 0;
+}
+
+RecordReplayScrubDivergentProgressScope::
+    ~RecordReplayScrubDivergentProgressScope() {
+  if (!active_) return;
+  if (recordreplay::HasDivergedFromRecording()) return;
+  if (start_progress_ >= *gProgressCounter) return;
+  // [RUN-1988] Divergent path advanced PC via instrumented user code.
+  *gProgressCounter = start_progress_;
+  if (gProgressData && gProgressData->size() > start_data_size_) {
+    gProgressData->resize(start_data_size_);
+  }
+}
+
 // Buffer holding data most recently reported to the recorder.
 static std::vector<uint64_t>* gReportedProgressData;
 

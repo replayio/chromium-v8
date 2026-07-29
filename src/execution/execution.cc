@@ -311,6 +311,7 @@ static std::string GetFunctionLocationInfo(Isolate* isolate, Handle<JSFunction> 
 V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
                                                  const InvokeParams& params) {
   RCS_SCOPE(isolate, RuntimeCallCounterId::kInvoke);
+  RecordReplayScrubDivergentProgressScope scrub_divergent_progress;
   DCHECK(!params.receiver->IsJSGlobalObject());
   DCHECK_LE(params.argc, FixedArray::kMaxLength);
 
