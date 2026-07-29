@@ -3702,7 +3702,8 @@ static ScriptIdSet* gRegisteredScripts;
 typedef std::unordered_map<int, bool> ScriptIdBoolMap;
 static ScriptIdBoolMap* gOpcodeEmitByScript = nullptr;
 
-// Compiles diverge (GC bytecode flush, cache ageing, etc.); freeze emit once dark.
+// Compiles diverge (GC bytecode flush, cache ageing, etc.); freeze first emit
+// decision per script_id (both lit and dark).
 bool RecordReplayShouldEmitOpcodes(int script_id, bool record_replay_ignore) {
   const bool base_emit_opcodes =
       recordreplay::IsRecordingOrReplaying("emit-opcodes") &&
@@ -3712,10 +3713,11 @@ bool RecordReplayShouldEmitOpcodes(int script_id, bool record_replay_ignore) {
     gOpcodeEmitByScript = new ScriptIdBoolMap;
   }
   auto it = gOpcodeEmitByScript->find(script_id);
-  const bool emit =
-      base_emit_opcodes && (it == gOpcodeEmitByScript->end() || it->second);
-  (*gOpcodeEmitByScript)[script_id] = emit;
-  return emit;
+  if (it != gOpcodeEmitByScript->end()) {
+    return it->second;
+  }
+  (*gOpcodeEmitByScript)[script_id] = base_emit_opcodes;
+  return base_emit_opcodes;
 }
 
 bool RecordReplayHasRegisteredScript(Script script) {
