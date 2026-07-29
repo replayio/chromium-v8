@@ -17,8 +17,6 @@
 namespace v8 {
 namespace internal {
 
-extern bool RecordReplayIsDivergentWithoutPause();
-
 namespace {
 
 // Returns the holder JSObject if the function can legally be called with this
@@ -178,10 +176,6 @@ MaybeHandle<Object> Builtins::InvokeApiFunction(
     Handle<Object> receiver, int argc, Handle<Object> args[],
     Handle<HeapObject> new_target) {
   RCS_SCOPE(isolate, RuntimeCallCounterId::kInvokeApiFunction);
-
-  if (RecordReplayIsDivergentWithoutPause()) {
-    return isolate->factory()->undefined_value();
-  }
 
   // Do proper receiver conversion for non-strict mode api functions.
   if (!is_construct && !receiver->IsJSReceiver()) {

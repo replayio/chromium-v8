@@ -3726,15 +3726,11 @@ bool RecordReplayHasRegisteredScript(Script script) {
     gRegisteredScripts->find(script.id()) != gRegisteredScripts->end();
 }
 
-bool RecordReplayIsDivergentWithoutPause() {
-  return recordreplay::AreEventsDisallowed() &&
-         !recordreplay::HasDivergedFromRecording();
-}
-
 // Whether we are divergently calling into user JS without having paused first.
 bool RecordReplayIsDivergentUserJSWithoutPause(
     const SharedFunctionInfo& shared) {
-  return RecordReplayIsDivergentWithoutPause() &&
+  return recordreplay::AreEventsDisallowed() &&
+         !recordreplay::HasDivergedFromRecording() &&
          shared.script().IsScript() &&
          RecordReplayHasRegisteredScript(
              Script::cast(shared.script()));
