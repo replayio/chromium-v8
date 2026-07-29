@@ -308,6 +308,21 @@ static std::string GetFunctionLocationInfo(Isolate* isolate, Handle<JSFunction> 
   return os.str();
 }
 
+// Warning + suppress when calling into registered user JS on a divergent path.
+bool RecordReplayWarnAndSuppressDivergentUserJS(Isolate* isolate,
+                                                Handle<JSFunction> function) {
+  if (!RecordReplayIsDivergentUserJSWithoutPause(function->shared())) {
+    return false;
+  }
+  std::string location = GetFunctionLocationInfo(isolate, function);
+  std::stringstream stack;
+  isolate->PrintCurrentStackTrace(stack);
+  recordreplay::Warning(
+      "JS Invoke: Non-deterministic user JS PC=%zu %s stack=%s",
+      *gProgressCounter, location.c_str(), stack.str().c_str());
+  return true;
+}
+
 V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
                                                  const InvokeParams& params) {
   RCS_SCOPE(isolate, RuntimeCallCounterId::kInvoke);
@@ -446,13 +461,7 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
   // User JS must not run on divergent paths unless paused.
   if (params.target->IsJSFunction()) {
     Handle<JSFunction> function = Handle<JSFunction>::cast(params.target);
-    if (RecordReplayIsDivergentUserJSWithoutPause(function->shared())) {
-      std::string location = GetFunctionLocationInfo(isolate, function);
-      std::stringstream stack;
-      isolate->PrintCurrentStackTrace(stack);
-      recordreplay::Warning(
-          "JS Invoke: Non-deterministic user JS PC=%zu %s stack=%s",
-          *gProgressCounter, location.c_str(), stack.str().c_str());
+    if (RecordReplayWarnAndSuppressDivergentUserJS(isolate, function)) {
       return isolate->factory()->undefined_value();
     }
   }

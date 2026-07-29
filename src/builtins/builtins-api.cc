@@ -7,6 +7,7 @@
 #include "src/base/small-vector.h"
 #include "src/builtins/builtins-utils-inl.h"
 #include "src/builtins/builtins.h"
+#include "src/execution/frames.h"
 #include "src/logging/log.h"
 #include "src/logging/runtime-call-stats-scope.h"
 #include "src/objects/objects-inl.h"
@@ -16,6 +17,9 @@
 
 namespace v8 {
 namespace internal {
+
+extern bool RecordReplayWarnAndSuppressDivergentUserJS(
+    Isolate* isolate, Handle<JSFunction> function);
 
 namespace {
 
@@ -176,6 +180,13 @@ MaybeHandle<Object> Builtins::InvokeApiFunction(
     Handle<Object> receiver, int argc, Handle<Object> args[],
     Handle<HeapObject> new_target) {
   RCS_SCOPE(isolate, RuntimeCallCounterId::kInvokeApiFunction);
+
+  for (JavaScriptFrameIterator it(isolate); !it.done(); it.Advance()) {
+    Handle<JSFunction> function(it.frame()->function(), isolate);
+    if (RecordReplayWarnAndSuppressDivergentUserJS(isolate, function)) {
+      return isolate->factory()->undefined_value();
+    }
+  }
 
   // Do proper receiver conversion for non-strict mode api functions.
   if (!is_construct && !receiver->IsJSReceiver()) {
