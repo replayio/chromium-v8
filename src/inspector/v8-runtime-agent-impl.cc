@@ -807,6 +807,12 @@ void V8RuntimeAgentImpl::addBinding(InspectedContext* context,
   }
   v8::HandleScope handles(m_inspector->isolate());
   v8::Local<v8::Context> localContext = context->context();
+  if (localContext.IsEmpty()) {
+    v8::recordreplay::Warning(
+        "[crash-0043] V8RuntimeAgentImpl::addBinding empty context %d",
+        context->contextId());
+    return;
+  }
   v8::Local<v8::Object> global = localContext->Global();
   v8::Local<v8::String> v8Name = toV8String(m_inspector->isolate(), name);
   v8::Local<v8::Value> functionValue;
