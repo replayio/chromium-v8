@@ -177,6 +177,14 @@ MaybeHandle<Object> Builtins::InvokeApiFunction(
     Handle<HeapObject> new_target) {
   RCS_SCOPE(isolate, RuntimeCallCounterId::kInvokeApiFunction);
 
+  // Native API getters/setters skip Execution::Invoke's divergent-user-JS gate.
+  // Under EventsDisallowed, calling the stub can re-enter instrumented user JS
+  // (e.g. monkey-patched Window.crypto) and diverge.
+  if (recordreplay::AreEventsDisallowed("InvokeApiFunction") &&
+      !recordreplay::HasDivergedFromRecording()) {
+    return isolate->factory()->undefined_value();
+  }
+
   // Do proper receiver conversion for non-strict mode api functions.
   if (!is_construct && !receiver->IsJSReceiver()) {
     ASSIGN_RETURN_ON_EXCEPTION(
