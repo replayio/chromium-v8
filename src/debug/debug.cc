@@ -3714,6 +3714,9 @@ bool RecordReplayShouldEmitOpcodes(int script_id, bool record_replay_ignore) {
   }
   auto it = gOpcodeEmitByScript->find(script_id);
   if (it != gOpcodeEmitByScript->end()) {
+    if (it->second && record_replay_ignore && !IsMainThread()) {
+      return false;
+    }
     return it->second;
   }
   (*gOpcodeEmitByScript)[script_id] = base_emit_opcodes;
