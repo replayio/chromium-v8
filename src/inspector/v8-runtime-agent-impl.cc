@@ -1021,7 +1021,7 @@ void V8RuntimeAgentImpl::inspect(
 }
 
 void V8RuntimeAgentImpl::messageAdded(V8ConsoleMessage* message) {
-  if (m_enabled) reportMessage(message, true);
+  if (m_enabled) reportMessage(message, /*generatePreview=*/!m_replay_owned);
 }
 
 bool V8RuntimeAgentImpl::reportMessage(V8ConsoleMessage* message,

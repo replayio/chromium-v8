@@ -3947,7 +3947,6 @@ struct AutoAllowCodeGenerationFromStrings {
 char* CommandCallback(const char* command, const char* params) {
   CHECK(IsMainThread());
   AutoMarkReplayCode amrc;
-  uint64_t startProgressCounter = *gProgressCounter;
 
   Isolate* isolate = Isolate::Current();
   replayio::AutoDisallowEvents disallow("CommandCallback", (v8::Isolate*)isolate);
@@ -4018,15 +4017,6 @@ char* CommandCallback(const char* command, const char* params) {
   Handle<Object> result = rv.ToHandleChecked();
   Handle<Object> rvStr = JsonStringify(isolate, result, undefined, undefined).ToHandleChecked();
   std::unique_ptr<char[]> rvCStr = String::cast(*rvStr).ToCString();
-
-  if (startProgressCounter < *gProgressCounter && !recordreplay::HasDivergedFromRecording()) {
-    // [RUN-1988] Our command handler incremented the PC by accidentally calling
-    // into instrumented user code.
-    // Note that a warning has already been generated due to
-    // gRecordReplayCheckProgress being set.
-    // → Let's reset the PC.
-    *gProgressCounter = startProgressCounter;
-  }
 
   return strdup(rvCStr.get());
 }
