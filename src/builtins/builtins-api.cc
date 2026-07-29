@@ -17,6 +17,8 @@
 namespace v8 {
 namespace internal {
 
+extern bool RecordReplayIsDivergentWithoutPause();
+
 namespace {
 
 // Returns the holder JSObject if the function can legally be called with this
@@ -177,11 +179,7 @@ MaybeHandle<Object> Builtins::InvokeApiFunction(
     Handle<HeapObject> new_target) {
   RCS_SCOPE(isolate, RuntimeCallCounterId::kInvokeApiFunction);
 
-  // Native API getters/setters skip Execution::Invoke's divergent-user-JS gate.
-  // Under EventsDisallowed, calling the stub can re-enter instrumented user JS
-  // (e.g. monkey-patched Window.crypto) and diverge.
-  if (recordreplay::AreEventsDisallowed("InvokeApiFunction") &&
-      !recordreplay::HasDivergedFromRecording()) {
+  if (RecordReplayIsDivergentWithoutPause()) {
     return isolate->factory()->undefined_value();
   }
 
