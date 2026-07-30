@@ -452,7 +452,7 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
       std::stringstream stack;
       isolate->PrintCurrentStackTrace(stack);
       recordreplay::Warning(
-          "JS Invoke: Non-deterministic user JS PC=%zu %s stack=%s",
+          "JSInvoke:BLOCKED:NonDeterministicUserJS PC=%zu %s stack=%s",
           *gProgressCounter, location.c_str(), stack.str().c_str());
       return isolate->factory()->undefined_value();
     }
