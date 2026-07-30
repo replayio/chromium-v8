@@ -1254,12 +1254,7 @@ ValueDeserializer::ValueDeserializer(Isolate* isolate,
       position_(data.begin()),
       end_(data.end()),
       id_map_(isolate->global_handles()->Create(
-          ReadOnlyRoots(isolate_).empty_fixed_array())) {
-  REPLAY_ASSERT(
-    "[TT-492] ValueDeserializer::ValueDeserializer A %u %d",
-    data.size(), HashBytes(&data[0], data.size())
-  );
-}
+          ReadOnlyRoots(isolate_).empty_fixed_array())) {}
 
 ValueDeserializer::ValueDeserializer(Isolate* isolate, const uint8_t* data,
                                      size_t size)
@@ -1268,12 +1263,7 @@ ValueDeserializer::ValueDeserializer(Isolate* isolate, const uint8_t* data,
       position_(data),
       end_(data + size),
       id_map_(isolate->global_handles()->Create(
-          ReadOnlyRoots(isolate_).empty_fixed_array())) {
-  REPLAY_ASSERT(
-    "[TT-492] ValueDeserializer::ValueDeserializer B %u %d", size,
-    HashBytes(data, size)
-  );
-}
+          ReadOnlyRoots(isolate_).empty_fixed_array())) {}
 
 ValueDeserializer::~ValueDeserializer() {
   DCHECK_LE(position_, end_);
