@@ -998,7 +998,12 @@ RecordReplayScrubDivergentProgressScope::
   if (start_progress_ >= *gProgressCounter) return;
   // [RUN-1988] Divergent path advanced PC via instrumented user code.
   *gProgressCounter = start_progress_;
-  if (gProgressData && gProgressData->size() > start_data_size_) {
+  if (start_data_size_ == 0) {
+    if (gProgressData) {
+      delete gProgressData;
+      gProgressData = nullptr;
+    }
+  } else if (gProgressData && gProgressData->size() > start_data_size_) {
     gProgressData->resize(start_data_size_);
   }
 }
@@ -1114,7 +1119,7 @@ static char* GetProgressMismatchMessage(const uint64_t* recorded, size_t recorde
 }
 
 void RecordReplayCallbackAssertGetData(void** pbuf, size_t* psize) {
-  if (!IsMainThread() || !gProgressData) {
+  if (!IsMainThread() || !gProgressData || gProgressData->empty()) {
     *psize = 0;
     return;
   }
