@@ -640,13 +640,6 @@ MaybeHandle<Object> Execution::CallBuiltin(Isolate* isolate,
                                            Handle<Object> argv[]) {
   DCHECK(builtin->code().is_builtin());
   DisableBreak no_break(isolate->debug());
-  // Builtins can enter user JS via NotInvoke paths (e.g. @@toStringTag getters).
-  // Invoke's divergent-user check only sees the builtin target, so it misses that.
-  if (recordreplay::AreEventsDisallowed() &&
-      !recordreplay::HasDivergedFromRecording()) {
-    return RecordReplayBlockNonDeterministicUserJs(
-        isolate, "JSCallBuiltin", GetFunctionLocationInfo(isolate, builtin));
-  }
   return Invoke(isolate, InvokeParams::SetUpForCall(isolate, builtin, receiver,
                                                     argc, argv));
 }

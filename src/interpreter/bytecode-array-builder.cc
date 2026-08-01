@@ -26,6 +26,8 @@ extern bool RecordReplayShouldEmitOpcodes(int script_id,
                                           bool record_replay_ignore);
 extern bool gRecordReplayAssertTrackedObjects;
 
+extern size_t NumRunningBackgroundCompileTasks();
+
 namespace interpreter {
 
 class RegisterTransferWriter final
@@ -73,12 +75,16 @@ BytecodeArrayBuilder::BytecodeArrayBuilder(
         zone->New<RegisterTransferWriter>(this));
   }
 
-  // Record/replay opcodes can only be emitted for scripts that run on the
-  // main thread. Background compile must not consult/mutate the emit map.
-  if (IsMainThread() &&
-      RecordReplayShouldEmitOpcodes(script_id, record_replay_ignore)) {
+  if (RecordReplayShouldEmitOpcodes(script_id, record_replay_ignore)) {
     emit_record_replay_opcodes_ = true;
     emit_record_replay_assert_values_ = record_replay_assert_values;
+
+    // Record/replay opcodes can only be emitted for scripts that run on the
+    // main thread. If we aren't on the main thread, this must have been
+    // triggered by a background compile task.
+    if (!IsMainThread()) {
+      CHECK(NumRunningBackgroundCompileTasks() != 0);
+    }
   }
 }
 
