@@ -4852,6 +4852,11 @@ MaybeLocal<Array> v8::Object::GetOwnPropertyNames(
 MaybeLocal<String> v8::Object::ObjectProtoToString(Local<Context> context) {
   PREPARE_FOR_EXECUTION(context, Object, ObjectProtoToString, String);
   auto self = Utils::OpenHandle(this);
+  // ObjectToString can run a user @@toStringTag getter via CallBuiltin.
+  if (recordreplay::AreEventsDisallowed() &&
+      !recordreplay::HasDivergedFromRecording()) {
+    RETURN_ESCAPED(Utils::ToLocal(i_isolate->factory()->object_to_string()));
+  }
   Local<Value> result;
   has_pending_exception = !ToLocal<Value>(
       i::Execution::CallBuiltin(i_isolate, i_isolate->object_to_string(), self,
