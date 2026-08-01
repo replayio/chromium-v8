@@ -308,6 +308,17 @@ static std::string GetFunctionLocationInfo(Isolate* isolate, Handle<JSFunction> 
   return os.str();
 }
 
+// Block C++→JS entry that can run registered user JS while events are disallowed.
+static MaybeHandle<Object> RecordReplayBlockNonDeterministicUserJs(
+    Isolate* isolate, const char* kind, const std::string& detail) {
+  std::stringstream stack;
+  isolate->PrintCurrentStackTrace(stack);
+  recordreplay::Warning(
+      "%s:BLOCKED:NonDeterministicUserJS PC=%zu %s stack=%s", kind,
+      *gProgressCounter, detail.c_str(), stack.str().c_str());
+  return isolate->factory()->undefined_value();
+}
+
 V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
                                                  const InvokeParams& params) {
   RCS_SCOPE(isolate, RuntimeCallCounterId::kInvoke);
@@ -448,13 +459,8 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
   if (params.target->IsJSFunction()) {
     Handle<JSFunction> function = Handle<JSFunction>::cast(params.target);
     if (RecordReplayIsDivergentUserJSWithoutPause(function->shared())) {
-      std::string location = GetFunctionLocationInfo(isolate, function);
-      std::stringstream stack;
-      isolate->PrintCurrentStackTrace(stack);
-      recordreplay::Warning(
-          "JSInvoke:BLOCKED:NonDeterministicUserJS PC=%zu %s stack=%s",
-          *gProgressCounter, location.c_str(), stack.str().c_str());
-      return isolate->factory()->undefined_value();
+      return RecordReplayBlockNonDeterministicUserJs(
+          isolate, "JSInvoke", GetFunctionLocationInfo(isolate, function));
     }
   }
 
@@ -634,6 +640,13 @@ MaybeHandle<Object> Execution::CallBuiltin(Isolate* isolate,
                                            Handle<Object> argv[]) {
   DCHECK(builtin->code().is_builtin());
   DisableBreak no_break(isolate->debug());
+  // Builtins can enter user JS via NotInvoke paths (e.g. @@toStringTag getters).
+  // Invoke's divergent-user check only sees the builtin target, so it misses that.
+  if (recordreplay::AreEventsDisallowed() &&
+      !recordreplay::HasDivergedFromRecording()) {
+    return RecordReplayBlockNonDeterministicUserJs(
+        isolate, "JSCallBuiltin", GetFunctionLocationInfo(isolate, builtin));
+  }
   return Invoke(isolate, InvokeParams::SetUpForCall(isolate, builtin, receiver,
                                                     argc, argv));
 }
