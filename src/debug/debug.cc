@@ -3701,7 +3701,6 @@ static ScriptIdSet* gRegisteredScripts;
 
 typedef std::unordered_map<int, bool> ScriptIdBoolMap;
 static ScriptIdBoolMap* gOpcodeEmitByScript = nullptr;
-static base::Mutex* gOpcodeEmitByScriptMutex = new base::Mutex;
 
 // Compiles diverge (GC bytecode flush, cache ageing, etc.); freeze first emit
 // decision per script_id (both lit and dark).
@@ -3710,7 +3709,6 @@ bool RecordReplayShouldEmitOpcodes(int script_id, bool record_replay_ignore) {
       recordreplay::IsRecordingOrReplaying("emit-opcodes") &&
       RecordReplayHasDefaultContext() && !record_replay_ignore;
   if (script_id == v8::UnboundScript::kNoScriptId) return base_emit_opcodes;
-  base::MutexGuard guard(gOpcodeEmitByScriptMutex);
   if (!gOpcodeEmitByScript) {
     gOpcodeEmitByScript = new ScriptIdBoolMap;
   }
