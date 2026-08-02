@@ -418,6 +418,11 @@ MaybeHandle<String> Object::ConvertToString(Isolate* isolate,
     if (input->IsBigInt()) {
       return BigInt::ToString(isolate, Handle<BigInt>::cast(input));
     }
+    // ToPrimitive can run user Symbol.toPrimitive / toString / valueOf.
+    if (recordreplay::AreEventsDisallowed() &&
+        !recordreplay::HasDivergedFromRecording()) {
+      return isolate->factory()->object_to_string();
+    }
     ASSIGN_RETURN_ON_EXCEPTION(
         isolate, input,
         JSReceiver::ToPrimitive(isolate, Handle<JSReceiver>::cast(input),
