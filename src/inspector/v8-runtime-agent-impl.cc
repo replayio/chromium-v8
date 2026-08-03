@@ -904,15 +904,12 @@ void V8RuntimeAgentImpl::addBindings(InspectedContext* context) {
 }
 
 void V8RuntimeAgentImpl::restore() {
-  using v8::recordreplay;
   v8::replayio::AutoMaybeMarkReplayCode mark(m_replay_owned);
   v8::replayio::AutoMaybeDisallowEvents disallow(
       m_replay_owned, m_inspector->isolate(), "V8RuntimeAgentImpl::restore");
 
   int runtimeEnabled = m_state->booleanProperty(
       V8RuntimeAgentImplState::runtimeEnabled, false);
-  REPLAY_ASSERT_MAYBE_EVENTS_DISALLOWED("V8RuntimeAgentImpl::restore %d",
-                                        runtimeEnabled);
   if (!runtimeEnabled) return;
   m_frontend.executionContextsCleared();
   enable();
@@ -931,7 +928,6 @@ void V8RuntimeAgentImpl::restore() {
 }
 
 Response V8RuntimeAgentImpl::enable() {
-  using v8::recordreplay;
   if (m_enabled) return Response::Success();
   TRACE_EVENT_WITH_FLOW0(TRACE_DISABLED_BY_DEFAULT("v8.inspector"),
                          "V8RuntimeAgentImpl::enable", this,
@@ -944,8 +940,6 @@ Response V8RuntimeAgentImpl::enable() {
       this, V8StackTraceImpl::kDefaultMaxCallStackSizeToCapture);
   V8ConsoleMessageStorage* storage =
       m_inspector->ensureConsoleMessageStorage(m_session->contextGroupId());
-  REPLAY_ASSERT_MAYBE_EVENTS_DISALLOWED("V8RuntimeAgentImpl::enable %zu",
-                                        storage->messages().size());
   m_session->reportAllContexts(this);
   for (const auto& message : storage->messages()) {
     if (!reportMessage(message.get(), false)) break;
