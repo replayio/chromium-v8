@@ -1211,7 +1211,7 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
         isolate->PrintCurrentStackTrace(stack);
 
         recordreplay::Warning(
-            "[RUN-1919] JS ExecutionProgress in non-deterministic user JS PC=%zu "
+            "NonDeterministicUserJS:UNGATED:JSProgress PC=%zu "
             "scriptId=%d @%s stack=%s",
             *gProgressCounter, script->id(),
             GetScriptLocationString(script->id(), shared->StartPosition())
