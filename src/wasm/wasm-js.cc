@@ -537,8 +537,8 @@ void WasmStreamingCallbackForTesting(
 
   std::shared_ptr<v8::WasmStreaming> streaming =
       v8::WasmStreaming::Unpack(args.GetIsolate(), args.Data());
-  recordreplay::Assert("WasmStreamingCallbackForTesting use_count %ld",
-                       streaming.use_count());
+  REPLAY_ASSERT("WasmStreamingCallbackForTesting use_count %ld",
+                streaming.use_count());
 
   bool is_shared = false;
   i::wasm::ModuleWireBytes bytes =
@@ -556,8 +556,8 @@ void WasmStreamingPromiseFailedCallback(
     const v8::FunctionCallbackInfo<v8::Value>& args) {
   std::shared_ptr<v8::WasmStreaming> streaming =
       v8::WasmStreaming::Unpack(args.GetIsolate(), args.Data());
-  recordreplay::Assert("WasmStreamingPromiseFailedCallback use_count %ld",
-                       streaming.use_count());
+  REPLAY_ASSERT("WasmStreamingPromiseFailedCallback use_count %ld",
+                streaming.use_count());
   streaming->Abort(args[0]);
 }
 
