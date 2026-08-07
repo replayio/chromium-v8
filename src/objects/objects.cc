@@ -1476,6 +1476,11 @@ MaybeHandle<Object> Object::GetPropertyWithAccessor(LookupIterator* it) {
         isolate, false, Handle<FunctionTemplateInfo>::cast(getter), receiver, 0,
         nullptr, isolate->factory()->undefined_value());
   } else if (getter->IsCallable()) {
+    // JS getters run user code via Execution::Call.
+    if (recordreplay::AreEventsDisallowed() &&
+        !recordreplay::HasDivergedFromRecording()) {
+      return isolate->factory()->undefined_value();
+    }
     // TODO(rossberg): nicer would be to cast to some JSCallable here...
     return Object::GetPropertyWithDefinedGetter(
         receiver, Handle<JSReceiver>::cast(getter));
