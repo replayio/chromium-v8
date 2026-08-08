@@ -3694,6 +3694,16 @@ bool RecordReplayIsInternalScriptURL(const char* url) {
          !strncmp(url, "extensions::", 12);
 }
 
+// Replay's own injected JS, which runs under AutoMarkReplayCode and so is
+// compiled with record_replay_ignore: it never emits instrumentation opcodes.
+// The devtools stubs are excluded; they run without that guard so that
+// evaluations can be performed in their frames.
+bool RecordReplayIsIgnoredReplayScriptURL(const char* url) {
+  return !strncmp(url, "record-replay-", 14) &&
+         strcmp(url, "record-replay-react-devtools") &&
+         strcmp(url, "record-replay-redux-devtools");
+}
+
 extern bool RecordReplayHasDefaultContext();
 
 typedef std::unordered_set<int> ScriptIdSet;
@@ -3705,6 +3715,7 @@ static base::Mutex* gOpcodeEmitByScriptMutex = new base::Mutex;
 
 // Compiles diverge (GC bytecode flush, cache ageing, etc.); freeze first emit
 // decision per script_id (both lit and dark).
+// frameIndex: must stay ≡ RecordReplayShouldRegisterScript (stackable scripts).
 bool RecordReplayShouldEmitOpcodes(int script_id, bool record_replay_ignore) {
   const bool base_emit_opcodes =
       recordreplay::IsRecordingOrReplaying("emit-opcodes") &&
@@ -3723,6 +3734,27 @@ bool RecordReplayShouldEmitOpcodes(int script_id, bool record_replay_ignore) {
   }
   (*gOpcodeEmitByScript)[script_id] = base_emit_opcodes;
   return base_emit_opcodes;
+}
+
+// Whether to insert into gRegisteredScripts (Pause / CountStackFrames).
+// frameIndex: must stay ≡ RecordReplayShouldEmitOpcodes (stackable scripts).
+static bool RecordReplayShouldRegisterScript(Script script,
+                                             const std::string& url) {
+  if (!RecordReplayHasDefaultContext()) {
+    return false;
+  }
+  if (script.type() == Script::TYPE_WASM) {
+    return false;
+  }
+  if (recordreplay::AreEventsDisallowed()) {
+    return false;
+  }
+  // Registering these would make CountStackFrames count frames that
+  // instrumentation can never push. [TT-1390] supersedes record-replay-internal.
+  if (RecordReplayIsIgnoredReplayScriptURL(url.c_str())) {
+    return false;
+  }
+  return true;
 }
 
 bool RecordReplayHasRegisteredScript(Script script) {
@@ -3777,32 +3809,18 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
   (*gRecordReplayScripts)[script->id()] =
     Eternal<Value>((v8::Isolate*)isolate, v8::Utils::ToLocal(script));
 
-  if (!RecordReplayHasDefaultContext()) {
-    return;
-  }
-
-  Handle<String> idStr = GetProtocolSourceId(isolate, script);
-  std::unique_ptr<char[]> id = String::cast(*idStr).ToCString();
-
-  if (script->type() == Script::TYPE_WASM) {
-    return;
-  }
-
-  if (recordreplay::AreEventsDisallowed()) {
-    return;
-  }
-
   std::string url;
   if (!script->name().IsUndefined()) {
     std::unique_ptr<char[]> name = String::cast(script->name()).ToCString();
     url = name.get();
   }
 
-  if (!strcmp(url.c_str(), "record-replay-internal")) {
-    // [TT-1390] Hackfix to not register the sourcemap handling script.
-    // We will have a better fix in the upcoming patch for TT-1112.
+  if (!RecordReplayShouldRegisterScript(*script, url)) {
     return;
   }
+
+  Handle<String> idStr = GetProtocolSourceId(isolate, script);
+  std::unique_ptr<char[]> id = String::cast(*idStr).ToCString();
 
   if (!RecordReplayIsInternalScriptURL(url.c_str())) {
     RecordReplayAddInterestingSource(url.c_str());
