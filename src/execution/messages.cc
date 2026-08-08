@@ -343,12 +343,8 @@ MaybeHandle<Object> ErrorUtils::FormatStackTrace(Isolate* isolate,
 
   const bool in_recursion = isolate->formatting_stack_trace();
   const bool has_overflowed = i::StackLimitCheck{isolate}.HasOverflowed();
-  // prepareStackTrace / embedder callback can run user JS.
-  const bool allow_prepare_stack_trace =
-      !(recordreplay::AreEventsDisallowed() &&
-        !recordreplay::HasDivergedFromRecording());
   Handle<Context> error_context;
-  if (allow_prepare_stack_trace && !in_recursion && !has_overflowed &&
+  if (!in_recursion && !has_overflowed &&
       error->GetCreationContext().ToHandle(&error_context)) {
     DCHECK(error_context->IsNativeContext());
 
@@ -674,11 +670,6 @@ MaybeHandle<String> GetStringPropertyOrDefault(Isolate* isolate,
 // ES6 section 19.5.3.4 Error.prototype.toString ( )
 MaybeHandle<String> ErrorUtils::ToString(Isolate* isolate,
                                          Handle<Object> receiver) {
-  // Get("name"|"message") can run user accessors.
-  if (recordreplay::AreEventsDisallowed() &&
-      !recordreplay::HasDivergedFromRecording()) {
-    return Object::NoSideEffectsToString(isolate, receiver);
-  }
   // 1. Let O be the this value.
   // 2. If Type(O) is not Object, throw a TypeError exception.
   if (!receiver->IsJSReceiver()) {
