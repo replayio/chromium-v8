@@ -3715,6 +3715,7 @@ static base::Mutex* gOpcodeEmitByScriptMutex = new base::Mutex;
 
 // Compiles diverge (GC bytecode flush, cache ageing, etc.); freeze first emit
 // decision per script_id (both lit and dark).
+// frameIndex: must stay ≡ RecordReplayShouldRegisterScript (stackable scripts).
 bool RecordReplayShouldEmitOpcodes(int script_id, bool record_replay_ignore) {
   const bool base_emit_opcodes =
       recordreplay::IsRecordingOrReplaying("emit-opcodes") &&
@@ -3733,6 +3734,27 @@ bool RecordReplayShouldEmitOpcodes(int script_id, bool record_replay_ignore) {
   }
   (*gOpcodeEmitByScript)[script_id] = base_emit_opcodes;
   return base_emit_opcodes;
+}
+
+// Whether to insert into gRegisteredScripts (Pause / CountStackFrames).
+// frameIndex: must stay ≡ RecordReplayShouldEmitOpcodes (stackable scripts).
+static bool RecordReplayShouldRegisterScript(Script script,
+                                             const std::string& url) {
+  if (!RecordReplayHasDefaultContext()) {
+    return false;
+  }
+  if (script.type() == Script::TYPE_WASM) {
+    return false;
+  }
+  if (recordreplay::AreEventsDisallowed()) {
+    return false;
+  }
+  // Registering these would make CountStackFrames count frames that
+  // instrumentation can never push. [TT-1390] supersedes record-replay-internal.
+  if (RecordReplayIsIgnoredReplayScriptURL(url.c_str())) {
+    return false;
+  }
+  return true;
 }
 
 bool RecordReplayHasRegisteredScript(Script script) {
@@ -3787,33 +3809,18 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
   (*gRecordReplayScripts)[script->id()] =
     Eternal<Value>((v8::Isolate*)isolate, v8::Utils::ToLocal(script));
 
-  if (!RecordReplayHasDefaultContext()) {
-    return;
-  }
-
-  Handle<String> idStr = GetProtocolSourceId(isolate, script);
-  std::unique_ptr<char[]> id = String::cast(*idStr).ToCString();
-
-  if (script->type() == Script::TYPE_WASM) {
-    return;
-  }
-
-  if (recordreplay::AreEventsDisallowed()) {
-    return;
-  }
-
   std::string url;
   if (!script->name().IsUndefined()) {
     std::unique_ptr<char[]> name = String::cast(script->name()).ToCString();
     url = name.get();
   }
 
-  // Registering these would make Target.countStackFrames count frames that
-  // instrumentation can never push, inflating frame depth after a stack
-  // re-sync. [TT-1390] Supersedes the "record-replay-internal" special case.
-  if (RecordReplayIsIgnoredReplayScriptURL(url.c_str())) {
+  if (!RecordReplayShouldRegisterScript(*script, url)) {
     return;
   }
+
+  Handle<String> idStr = GetProtocolSourceId(isolate, script);
+  std::unique_ptr<char[]> id = String::cast(*idStr).ToCString();
 
   if (!RecordReplayIsInternalScriptURL(url.c_str())) {
     RecordReplayAddInterestingSource(url.c_str());
