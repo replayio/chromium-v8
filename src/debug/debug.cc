@@ -3705,6 +3705,7 @@ bool RecordReplayIsIgnoredReplayScriptURL(const char* url) {
 }
 
 extern bool RecordReplayHasDefaultContext();
+extern size_t NumRunningBackgroundCompileTasks();
 
 typedef std::unordered_set<int> ScriptIdSet;
 static ScriptIdSet* gRegisteredScripts;
@@ -3728,6 +3729,8 @@ bool RecordReplayShouldEmitOpcodes(int script_id, bool record_replay_ignore) {
   auto it = gOpcodeEmitByScript->find(script_id);
   if (it != gOpcodeEmitByScript->end()) {
     if (it->second && record_replay_ignore && !IsMainThread()) {
+      recordreplay::Warning("FailedToReinstrument scriptId=%d bct=%zu",
+                            script_id, NumRunningBackgroundCompileTasks());
       return false;
     }
     return it->second;
