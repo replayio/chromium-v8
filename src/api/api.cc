@@ -11197,6 +11197,9 @@ void RecordReplayAddHTMLParse(const char* url) {
   }
   gHasHTMLParse = true;
 
+  // Static pages have no scripts; HTML alone must keep the recording.
+  RecordReplayAddInterestingSource(url);
+
   void* str = gRecordReplayJSONCreateString(url);
 
   const char* property = "uri";
