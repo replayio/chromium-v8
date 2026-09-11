@@ -22,7 +22,7 @@ namespace internal {
 extern int RegisterAssertValueSite(const std::string& desc, int source_position);
 extern int RegisterInstrumentationSite(const char* kind, int source_position,
                                        int bytecode_offset);
-extern bool RecordReplayShouldEmitOpcodes(int script_id,
+extern bool RecordReplayShouldEmitOpcodes(Isolate* isolate, int script_id,
                                           bool record_replay_ignore);
 extern bool gRecordReplayAssertTrackedObjects;
 
@@ -51,8 +51,9 @@ class RegisterTransferWriter final
 };
 
 BytecodeArrayBuilder::BytecodeArrayBuilder(
-    Zone* zone, int parameter_count, int locals_count, int script_id,
-    bool record_replay_ignore, bool record_replay_assert_values,
+    Zone* zone, int parameter_count, int locals_count, Isolate* isolate,
+    int script_id, bool record_replay_ignore,
+    bool record_replay_assert_values,
     FeedbackVectorSpec* feedback_vector_spec,
     SourcePositionTableBuilder::RecordingMode source_position_mode)
     : zone_(zone),
@@ -75,7 +76,8 @@ BytecodeArrayBuilder::BytecodeArrayBuilder(
         zone->New<RegisterTransferWriter>(this));
   }
 
-  if (RecordReplayShouldEmitOpcodes(script_id, record_replay_ignore)) {
+  if (RecordReplayShouldEmitOpcodes(isolate, script_id,
+                                    record_replay_ignore)) {
     emit_record_replay_opcodes_ = true;
     emit_record_replay_assert_values_ = record_replay_assert_values;
 

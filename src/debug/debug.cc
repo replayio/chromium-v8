@@ -3711,23 +3711,27 @@ typedef std::unordered_set<int> ScriptIdSet;
 static ScriptIdSet* gRegisteredScripts;
 
 typedef std::unordered_map<int, bool> ScriptIdBoolMap;
-static ScriptIdBoolMap* gOpcodeEmitByScript = nullptr;
+typedef std::unordered_map<Isolate*, ScriptIdBoolMap> IsolateOpcodeEmitMap;
+static IsolateOpcodeEmitMap* gOpcodeEmitByScript = nullptr;
 static base::Mutex* gOpcodeEmitByScriptMutex = new base::Mutex;
 
 // Compiles diverge (GC bytecode flush, cache ageing, etc.); freeze first emit
-// decision per script_id (both lit and dark).
+// decision per (isolate, script_id) (both lit and dark).
 // frameIndex: must stay ≡ RecordReplayShouldRegisterScript (stackable scripts).
-bool RecordReplayShouldEmitOpcodes(int script_id, bool record_replay_ignore) {
+bool RecordReplayShouldEmitOpcodes(Isolate* isolate, int script_id,
+                                   bool record_replay_ignore) {
   const bool base_emit_opcodes =
       recordreplay::IsRecordingOrReplaying("emit-opcodes") &&
       RecordReplayHasDefaultContext() && !record_replay_ignore;
   if (script_id == v8::UnboundScript::kNoScriptId) return base_emit_opcodes;
+  DCHECK_NOT_NULL(isolate);
   base::MutexGuard guard(gOpcodeEmitByScriptMutex);
   if (!gOpcodeEmitByScript) {
-    gOpcodeEmitByScript = new ScriptIdBoolMap;
+    gOpcodeEmitByScript = new IsolateOpcodeEmitMap;
   }
-  auto it = gOpcodeEmitByScript->find(script_id);
-  if (it != gOpcodeEmitByScript->end()) {
+  ScriptIdBoolMap& emit_by_script = (*gOpcodeEmitByScript)[isolate];
+  auto it = emit_by_script.find(script_id);
+  if (it != emit_by_script.end()) {
     if (it->second && record_replay_ignore && !IsMainThread()) {
       recordreplay::Warning("FailedToReinstrument scriptId=%d bct=%zu",
                             script_id, NumRunningBackgroundCompileTasks());
@@ -3735,7 +3739,7 @@ bool RecordReplayShouldEmitOpcodes(int script_id, bool record_replay_ignore) {
     }
     return it->second;
   }
-  (*gOpcodeEmitByScript)[script_id] = base_emit_opcodes;
+  emit_by_script[script_id] = base_emit_opcodes;
   return base_emit_opcodes;
 }
 
