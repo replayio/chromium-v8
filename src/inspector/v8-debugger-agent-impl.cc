@@ -1722,7 +1722,22 @@ Response V8DebuggerAgentImpl::currentCallFrames(
       break;
     int contextId = iterator->GetContextId();
     InjectedScript* injectedScript = nullptr;
-    if (contextId) m_session->findInjectedScript(contextId, injectedScript);
+    // Neutralize foreign stamps so Scope findInjectedScript never sees them.
+    if (contextId &&
+        m_inspector->contextGroupId(contextId) != m_session->contextGroupId()) {
+      std::string functionName =
+          toProtocolString(m_isolate, iterator->GetFunctionDebugName()).utf8();
+      v8::Local<v8::debug::Script> script = iterator->GetScript();
+      v8::recordreplay::Warning(
+          "[diskcache-foreign-contextid] skip contextId=%d stampGroup=%d "
+          "sessionGroup=%d scriptId=%d function=%s",
+          contextId, m_inspector->contextGroupId(contextId),
+          m_session->contextGroupId(), script.IsEmpty() ? 0 : script->Id(),
+          functionName.c_str());
+      contextId = 0;
+    } else if (contextId) {
+      m_session->findInjectedScript(contextId, injectedScript);
+    }
     String16 callFrameId = RemoteCallFrameId::serialize(
         m_inspector->isolateId(), contextId, frameOrdinal);
 
@@ -2309,6 +2324,7 @@ std::unique_ptr<protocol::Runtime::RemoteObject>
 V8DebuggerAgentImpl::wrapObject(int context_id, v8::Local<v8::Value> val) {
   InjectedScript* injectedScript = nullptr;
   m_session->findInjectedScript(context_id, injectedScript);
+  if (!injectedScript) return nullptr;
 
   std::unique_ptr<protocol::Runtime::RemoteObject> rv;
   injectedScript->wrapObject(val, kBacktraceObjectGroup,
