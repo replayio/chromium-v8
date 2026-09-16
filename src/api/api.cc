@@ -10856,6 +10856,7 @@ typedef char* (CommandCallbackRaw)(const char* params);
   Macro(RecordReplayInvalidateRecording, (const char* format, ...))           \
   Macro(RecordReplayNewCheckpoint, ())                                        \
   Macro(RecordReplayNewCheckpointFlushed, ())                                 \
+  Macro(RecordReplaySetScriptAlive, (bool alive))                             \
   Macro(RecordReplayRegisterPointerWithName,                                  \
         (const char* name, const void* ptr))                                  \
   Macro(RecordReplayUnregisterPointer, (const void* ptr))                     \
@@ -11713,6 +11714,12 @@ void recordreplay::NewCheckpointFlushed() {
 
 extern "C" DLLEXPORT void V8RecordReplayNewCheckpointFlushed() {
   recordreplay::NewCheckpointFlushed();
+}
+
+extern "C" DLLEXPORT void V8RecordReplaySetScriptAlive(bool alive) {
+  if (recordreplay::IsRecordingOrReplaying()) {
+    gRecordReplaySetScriptAlive(alive);
+  }
 }
 
 // The BrowserEvent callback junction is a support for communicating
