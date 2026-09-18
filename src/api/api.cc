@@ -9,6 +9,7 @@
 #include <cmath>      // For isnan.
 #include <cstdio>
 #include <limits>
+#include <set>
 #include <sstream>
 #include <string>
 #include <utility>  // For move
@@ -2563,6 +2564,19 @@ namespace internal {
 // If we are compiling a script while replaying that replaces another one,
 // the ID of the script being replaced. Main thread only.
 int gReplaceSourceContentsScriptId;
+static std::set<int>* gScriptsWithReplacedContents;
+
+void MarkRecordReplayReplacedScript(int script_id) {
+  if (!gScriptsWithReplacedContents) {
+    gScriptsWithReplacedContents = new std::set<int>();
+  }
+  gScriptsWithReplacedContents->insert(script_id);
+}
+
+bool IsRecordReplayReplacedScript(int script_id) {
+  return gScriptsWithReplacedContents &&
+         gScriptsWithReplacedContents->count(script_id);
+}
 
 MaybeHandle<String>
 ReplayingReplaceScriptContents(Isolate* isolate, Handle<String> source) {
@@ -2598,6 +2612,13 @@ ReplayingMaybeReplaceScript(Isolate* isolate,
       ScriptCompiler::kNoCompileOptions,
       ScriptCompiler::kNoCacheNoReason,
       NOT_NATIVES_CODE);
+
+  // Only ignore source positions for scripts that successfully compiled from
+  // replacement contents. A failed compile should not weaken progress checks
+  // for the original script.
+  if (!maybe_function_info.is_null()) {
+    MarkRecordReplayReplacedScript(gReplaceSourceContentsScriptId);
+  }
 
   gReplaceSourceContentsScriptId = 0;
   return maybe_function_info;

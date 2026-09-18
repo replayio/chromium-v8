@@ -77,6 +77,7 @@ extern MaybeHandle<Script> MaybeGetScript(Isolate* isolate, int script_id);
 extern Handle<Script> GetScript(Isolate* isolate, int script_id);
 
 extern int gReplaceSourceContentsScriptId;
+extern void MarkRecordReplayReplacedScript(int script_id);
 
 extern MaybeHandle<String>
 ReplayingReplaceScriptContents(Isolate* isolate, Handle<String> source);
@@ -2983,6 +2984,7 @@ MaybeHandle<JSFunction> Compiler::GetFunctionFromEval(
                                     &is_compiled_scope)
         .ToHandleChecked();
 
+    MarkRecordReplayReplacedScript(new_script->id());
     result = Factory::JSFunctionBuilder{isolate, new_shared_info, context}.Build();
   }
 
