@@ -97,9 +97,21 @@ void MaybeRetainRecordReplayBreakpointData(
 void MaybeRetainRecordReplayBreakpointData(
     LocalIsolate* isolate, Handle<SharedFunctionInfo> shared,
     bool record_replay_ignore) {
-  if (!isolate->is_main_thread()) return;
-  MaybeRetainRecordReplayBreakpointData(isolate->AsIsolate(), shared,
-                                        record_replay_ignore);
+  Isolate* main_isolate = isolate->GetMainThreadIsolateUnsafe();
+  Script script = Script::cast(shared->script());
+  if (!RecordReplayShouldEmitOpcodes(main_isolate, script.id(),
+                                     record_replay_ignore)) {
+    return;
+  }
+
+  if (isolate->is_main_thread()) {
+    main_isolate->debug()->RetainRecordReplayBreakpointData(shared);
+  } else {
+    // A background LocalIsolate cannot create a main-thread GlobalHandle.
+    // Transfer a PersistentHandles entry with the compile task instead, so
+    // the SFI is retained from creation until the main-thread finalization.
+    isolate->RetainRecordReplaySharedFunctionInfo(shared);
+  }
 }
 
 namespace {
@@ -1429,12 +1441,6 @@ void FinalizeUnoptimizedCompilation(
     IsCompiledScope is_compiled_scope(*shared_info, isolate);
     if (!is_compiled_scope.is_compiled()) continue;
 
-    // Most SFIs are retained when they are created. Keep this fallback for
-    // SFIs published by background compilation, where creation happens on a
-    // LocalIsolate and cannot create a main-thread global handle.
-    MaybeRetainRecordReplayBreakpointData(
-        isolate, shared_info, flags.record_replay_ignore());
-
     if (need_source_positions) {
       SharedFunctionInfo::EnsureSourcePositionsAvailable(isolate, shared_info);
     }
@@ -1869,6 +1875,8 @@ void BackgroundCompileTask::RunOnMainThread(Isolate* isolate) {
 void BackgroundCompileTask::Run(
     LocalIsolate* isolate, ReusableUnoptimizedCompileState* reusable_state) {
   gNumRunningBackgroundCompileTasks++;
+  isolate->SetRecordReplaySharedFunctionInfoCollector(
+      &record_replay_shared_function_infos_);
 
   TimedHistogramScope timer(timer_);
 
@@ -1980,6 +1988,7 @@ void BackgroundCompileTask::Run(
 
   outer_function_sfi_ = isolate->heap()->NewPersistentMaybeHandle(maybe_result);
   DCHECK(isolate->heap()->ContainsPersistentHandle(script_.location()));
+  isolate->SetRecordReplaySharedFunctionInfoCollector(nullptr);
   persistent_handles_ = isolate->heap()->DetachPersistentHandles();
 
   gNumRunningBackgroundCompileTasks--;
@@ -2289,6 +2298,8 @@ MaybeHandle<SharedFunctionInfo> BackgroundCompileTask::FinalizeScript(
     return kNullMaybeHandle;
   }
 
+  RetainRecordReplaySharedFunctionInfos(isolate);
+
   FinalizeUnoptimizedScriptCompilation(isolate, script, flags_, &compile_state_,
                                        finalize_unoptimized_compilation_data_);
 
@@ -2328,6 +2339,8 @@ bool BackgroundCompileTask::FinalizeFunction(
     return false;
   }
 
+  RetainRecordReplaySharedFunctionInfos(isolate);
+
   FinalizeUnoptimizedCompilation(isolate, script_, flags_, &compile_state_,
                                  finalize_unoptimized_compilation_data_);
 
@@ -2343,6 +2356,16 @@ void BackgroundCompileTask::AbortFunction() {
   // deleted, so clear that to avoid the SharedFunctionInfo from pointing to
   // deallocated memory.
   input_shared_info_.ToHandleChecked()->ClearUncompiledDataJobPointer();
+  record_replay_shared_function_infos_.clear();
+}
+
+void BackgroundCompileTask::RetainRecordReplaySharedFunctionInfos(
+    Isolate* isolate) {
+  for (Handle<SharedFunctionInfo> shared :
+       record_replay_shared_function_infos_) {
+    isolate->debug()->RetainRecordReplayBreakpointData(shared);
+  }
+  record_replay_shared_function_infos_.clear();
 }
 
 void BackgroundCompileTask::ReportStatistics(Isolate* isolate) {

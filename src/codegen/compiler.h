@@ -7,6 +7,7 @@
 
 #include <forward_list>
 #include <memory>
+#include <vector>
 
 #include "src/ast/ast-value-factory.h"
 #include "src/base/platform/elapsed-timer.h"
@@ -567,6 +568,8 @@ class V8_EXPORT_PRIVATE BackgroundCompileTask {
  private:
   void ReportStatistics(Isolate* isolate);
 
+  void RetainRecordReplaySharedFunctionInfos(Isolate* isolate);
+
   void ClearFunctionJobPointer();
 
   // Data needed for parsing and compilation. These need to be initialized
@@ -581,6 +584,8 @@ class V8_EXPORT_PRIVATE BackgroundCompileTask {
 
   // Data needed for merging onto the main thread after background finalization.
   std::unique_ptr<PersistentHandles> persistent_handles_;
+  std::vector<Handle<SharedFunctionInfo>>
+      record_replay_shared_function_infos_;
   MaybeHandle<SharedFunctionInfo> outer_function_sfi_;
   Handle<Script> script_;
   IsCompiledScope is_compiled_scope_;
