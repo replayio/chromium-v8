@@ -232,7 +232,8 @@ class V8_EXPORT_PRIVATE Compiler : public AllStatic {
   template <typename IsolateT>
   static Handle<SharedFunctionInfo> GetSharedFunctionInfo(FunctionLiteral* node,
                                                           Handle<Script> script,
-                                                          IsolateT* isolate);
+                                                          IsolateT* isolate,
+                                                          bool record_replay_ignore);
 
   static void LogFunctionCompilation(Isolate* isolate,
                                      LogEventListener::CodeTag code_type,

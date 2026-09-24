@@ -24,7 +24,6 @@ namespace internal {
 
 // Forward declarations.
 class AbstractCode;
-class BytecodeArray;
 class DebugScope;
 class InterpretedFrame;
 class JavaScriptFrame;
@@ -215,7 +214,6 @@ class V8_EXPORT_PRIVATE Debug {
  public:
   struct RetainedRecordReplayBreakpointData {
     Handle<SharedFunctionInfo> shared;
-    Handle<BytecodeArray> bytecode;
   };
 
   Debug(const Debug&) = delete;
@@ -295,9 +293,9 @@ class V8_EXPORT_PRIVATE Debug {
                               int end_position, bool restrict_to_function,
                               std::vector<BreakLocation>* locations);
 
-  // Keep the SFI and its bytecode alive until replay has collected possible
-  // breakpoints. Script::shared_function_infos is weak, and bytecode flushing
-  // can discard the bytecode even when the SFI itself remains alive.
+  // Keep the SFI alive until replay has collected possible breakpoints.
+  // Script::shared_function_infos is weak, so gPB may otherwise lose lazy
+  // functions before it has a chance to compile them.
   void RetainRecordReplayBreakpointData(Handle<SharedFunctionInfo> shared);
   void GetRetainedRecordReplayBreakpointData(
       int script_id,

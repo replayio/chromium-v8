@@ -84,6 +84,24 @@ extern bool RecordReplayShouldEmitOpcodes(Isolate* isolate, int script_id,
 extern MaybeHandle<String>
 ReplayingReplaceScriptContents(Isolate* isolate, Handle<String> source);
 
+void MaybeRetainRecordReplayBreakpointData(
+    Isolate* isolate, Handle<SharedFunctionInfo> shared,
+    bool record_replay_ignore) {
+  Script script = Script::cast(shared->script());
+  if (RecordReplayShouldEmitOpcodes(isolate, script.id(),
+                                    record_replay_ignore)) {
+    isolate->debug()->RetainRecordReplayBreakpointData(shared);
+  }
+}
+
+void MaybeRetainRecordReplayBreakpointData(
+    LocalIsolate* isolate, Handle<SharedFunctionInfo> shared,
+    bool record_replay_ignore) {
+  if (!isolate->is_main_thread()) return;
+  MaybeRetainRecordReplayBreakpointData(isolate->AsIsolate(), shared,
+                                        record_replay_ignore);
+}
+
 namespace {
 
 constexpr bool IsOSR(BytecodeOffset osr_offset) { return !osr_offset.IsNone(); }
@@ -846,7 +864,9 @@ bool IterativelyExecuteAndFinalizeUnoptimizedCompilationJobs(
       shared_info = outer_shared_info;
       is_first = false;
     } else {
-      shared_info = Compiler::GetSharedFunctionInfo(literal, script, isolate);
+      shared_info = Compiler::GetSharedFunctionInfo(
+          literal, script, isolate,
+          parse_info->flags().record_replay_ignore());
     }
 
     if (shared_info->is_compiled()) continue;
@@ -1409,10 +1429,11 @@ void FinalizeUnoptimizedCompilation(
     IsCompiledScope is_compiled_scope(*shared_info, isolate);
     if (!is_compiled_scope.is_compiled()) continue;
 
-    if (RecordReplayShouldEmitOpcodes(isolate, script->id(),
-                                      flags.record_replay_ignore())) {
-      isolate->debug()->RetainRecordReplayBreakpointData(shared_info);
-    }
+    // Most SFIs are retained when they are created. Keep this fallback for
+    // SFIs published by background compilation, where creation happens on a
+    // LocalIsolate and cannot create a main-thread global handle.
+    MaybeRetainRecordReplayBreakpointData(
+        isolate, shared_info, flags.record_replay_ignore());
 
     if (need_source_positions) {
       SharedFunctionInfo::EnsureSourcePositionsAvailable(isolate, shared_info);
@@ -1477,8 +1498,12 @@ Handle<SharedFunctionInfo> CreateTopLevelSharedFunctionInfo(
   EnsureSharedFunctionInfosArrayOnScript(script, parse_info, isolate);
   DCHECK_EQ(kNoSourcePosition,
             parse_info->literal()->function_token_position());
-  return isolate->factory()->NewSharedFunctionInfoForLiteral(
-      parse_info->literal(), script, true);
+  Handle<SharedFunctionInfo> shared =
+      isolate->factory()->NewSharedFunctionInfoForLiteral(
+          parse_info->literal(), script, true);
+  MaybeRetainRecordReplayBreakpointData(
+      isolate, shared, parse_info->flags().record_replay_ignore());
+  return shared;
 }
 
 Handle<SharedFunctionInfo> GetOrCreateTopLevelSharedFunctionInfo(
@@ -1491,6 +1516,8 @@ Handle<SharedFunctionInfo> GetOrCreateTopLevelSharedFunctionInfo(
     DCHECK_EQ(shared->function_literal_id(),
               parse_info->literal()->function_literal_id());
     *is_compiled_scope = shared->is_compiled_scope(isolate);
+    MaybeRetainRecordReplayBreakpointData(
+        isolate, shared, parse_info->flags().record_replay_ignore());
     return shared;
   }
   return CreateTopLevelSharedFunctionInfo(parse_info, script, isolate);
@@ -3982,7 +4009,8 @@ Handle<SharedFunctionInfo> Compiler::GetSharedFunctionInfoForWebSnapshot(
 // static
 template <typename IsolateT>
 Handle<SharedFunctionInfo> Compiler::GetSharedFunctionInfo(
-    FunctionLiteral* literal, Handle<Script> script, IsolateT* isolate) {
+    FunctionLiteral* literal, Handle<Script> script, IsolateT* isolate,
+    bool record_replay_ignore) {
   // Precondition: code has been parsed and scopes have been analyzed.
   MaybeHandle<SharedFunctionInfo> maybe_existing;
 
@@ -4015,6 +4043,8 @@ Handle<SharedFunctionInfo> Compiler::GetSharedFunctionInfo(
               existing_uncompiled_data->end_position(), preparse_data);
       existing->set_uncompiled_data(*new_uncompiled_data);
     }
+    MaybeRetainRecordReplayBreakpointData(isolate, existing,
+                                          record_replay_ignore);
     return existing;
   }
 
@@ -4022,13 +4052,17 @@ Handle<SharedFunctionInfo> Compiler::GetSharedFunctionInfo(
   Handle<SharedFunctionInfo> result =
       isolate->factory()->NewSharedFunctionInfoForLiteral(literal, script,
                                                           false);
+  MaybeRetainRecordReplayBreakpointData(isolate, result,
+                                        record_replay_ignore);
   return result;
 }
 
 template Handle<SharedFunctionInfo> Compiler::GetSharedFunctionInfo(
-    FunctionLiteral* literal, Handle<Script> script, Isolate* isolate);
+    FunctionLiteral* literal, Handle<Script> script, Isolate* isolate,
+    bool record_replay_ignore);
 template Handle<SharedFunctionInfo> Compiler::GetSharedFunctionInfo(
-    FunctionLiteral* literal, Handle<Script> script, LocalIsolate* isolate);
+    FunctionLiteral* literal, Handle<Script> script, LocalIsolate* isolate,
+    bool record_replay_ignore);
 
 // static
 MaybeHandle<CodeT> Compiler::CompileOptimizedOSR(Isolate* isolate,

@@ -102,29 +102,8 @@ class Debug::TemporaryObjectsTracker : public HeapObjectAllocationTracker {
 
 class Debug::RecordReplayBreakpointData {
  public:
-  struct Entry {
-    Address* shared_function_info;
-    Address* bytecode;
-  };
-
-  std::unordered_map<int, std::unordered_map<int, Entry>> by_script;
+  std::unordered_map<int, std::unordered_map<int, Address*>> by_script;
 };
-
-static bool HasRecordReplayInstrumentation(
-    Handle<BytecodeArray> bytecode) {
-  for (interpreter::BytecodeArrayIterator it(bytecode); !it.done();
-       it.Advance()) {
-    switch (it.current_bytecode()) {
-      case interpreter::Bytecode::kRecordReplayInstrumentation:
-      case interpreter::Bytecode::kRecordReplayInstrumentationGenerator:
-      case interpreter::Bytecode::kRecordReplayInstrumentationReturn:
-        return true;
-      default:
-        break;
-    }
-  }
-  return false;
-}
 
 Debug::Debug(Isolate* isolate)
     : is_active_(false),
@@ -148,11 +127,6 @@ Debug::~Debug() {
 
 void Debug::RetainRecordReplayBreakpointData(
     Handle<SharedFunctionInfo> shared) {
-  if (!shared->HasBytecodeArray()) return;
-
-  Handle<BytecodeArray> bytecode(shared->GetBytecodeArray(isolate_), isolate_);
-  if (!HasRecordReplayInstrumentation(bytecode)) return;
-
   Script script = Script::cast(shared->script());
   int script_id = script.id();
   int function_literal_id = shared->function_literal_id();
@@ -167,11 +141,7 @@ void Debug::RetainRecordReplayBreakpointData(
 
   Address* shared_location =
       isolate_->global_handles()->Create(*shared).location();
-  Address* bytecode_location =
-      isolate_->global_handles()->Create(*bytecode).location();
-  entries.emplace(function_literal_id,
-                  RecordReplayBreakpointData::Entry{shared_location,
-                                                    bytecode_location});
+  entries.emplace(function_literal_id, shared_location);
 }
 
 void Debug::GetRetainedRecordReplayBreakpointData(
@@ -182,13 +152,10 @@ void Debug::GetRetainedRecordReplayBreakpointData(
   if (script_it == record_replay_breakpoint_data_->by_script.end()) return;
 
   for (const auto& entry_pair : script_it->second) {
-    const auto& entry = entry_pair.second;
-    Object shared_object = GlobalHandles::Acquire(entry.shared_function_info);
-    Object bytecode_object = GlobalHandles::Acquire(entry.bytecode);
+    Object shared_object = GlobalHandles::Acquire(entry_pair.second);
     DCHECK(shared_object.IsSharedFunctionInfo());
-    DCHECK(bytecode_object.IsBytecodeArray());
-    data->push_back({handle(SharedFunctionInfo::cast(shared_object), isolate_),
-                     handle(BytecodeArray::cast(bytecode_object), isolate_)});
+    data->push_back(
+        {handle(SharedFunctionInfo::cast(shared_object), isolate_)});
   }
 }
 
@@ -199,9 +166,7 @@ void Debug::ReleaseRetainedRecordReplayBreakpointData(int script_id) {
   if (script_it == record_replay_breakpoint_data_->by_script.end()) return;
 
   for (const auto& entry_pair : script_it->second) {
-    const auto& entry = entry_pair.second;
-    GlobalHandles::Destroy(entry.shared_function_info);
-    GlobalHandles::Destroy(entry.bytecode);
+    GlobalHandles::Destroy(entry_pair.second);
   }
   record_replay_breakpoint_data_->by_script.erase(script_it);
 }
@@ -211,9 +176,7 @@ void Debug::ReleaseAllRetainedRecordReplayBreakpointData() {
 
   for (const auto& script_pair : record_replay_breakpoint_data_->by_script) {
     for (const auto& entry_pair : script_pair.second) {
-      const auto& entry = entry_pair.second;
-      GlobalHandles::Destroy(entry.shared_function_info);
-      GlobalHandles::Destroy(entry.bytecode);
+      GlobalHandles::Destroy(entry_pair.second);
     }
   }
   record_replay_breakpoint_data_->by_script.clear();
@@ -3281,20 +3244,9 @@ static void ForEachInstrumentationOp(Isolate* isolate, Handle<Script> script,
     // Now we have a complete list of the functions in the script.
     // Build the final locations.
     for (const auto& candidate : candidates) {
-      Handle<BytecodeArray> bytecode;
-      if (candidate->HasBytecodeArray()) {
-        bytecode =
-            Handle<BytecodeArray>(candidate->GetBytecodeArray(isolate), isolate);
-      } else {
-        for (const auto& retained : retained_data) {
-          if (retained.shared->function_literal_id() ==
-              candidate->function_literal_id()) {
-            bytecode = retained.bytecode;
-            break;
-          }
-        }
-        if (bytecode.is_null()) continue;
-      }
+      if (!candidate->HasBytecodeArray()) continue;
+      Handle<BytecodeArray> bytecode(
+          candidate->GetBytecodeArray(isolate), isolate);
 
       for (interpreter::BytecodeArrayIterator it(bytecode); !it.done();
            it.Advance()) {
