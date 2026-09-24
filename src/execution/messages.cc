@@ -330,12 +330,51 @@ class V8_NODISCARD PrepareStackTraceScope {
   Isolate* isolate_;
 };
 
+MaybeHandle<Object> FormatStackTraceImpl(Isolate* isolate,
+                                         Handle<JSObject> error,
+                                         Handle<Object> raw_stack);
+
 }  // namespace
 
+// [PRO-1150] The replay can compile scripts with different contents than were
+// recorded (instrumentation does), which moves their frames. So the formatted
+// stack is recorded and returned while replaying. Error.prepareStackTrace and
+// the embedder's callback can return any value computed from those frames, so
+// this records around the whole formatting and whether the result was a string.
 // static
 MaybeHandle<Object> ErrorUtils::FormatStackTrace(Isolate* isolate,
                                                  Handle<JSObject> error,
                                                  Handle<Object> raw_stack) {
+  MaybeHandle<Object> maybe_result =
+      FormatStackTraceImpl(isolate, error, raw_stack);
+  if (!recordreplay::IsRecordingOrReplaying("ErrorUtils::FormatStackTrace") ||
+      recordreplay::AreEventsDisallowed()) {
+    return maybe_result;
+  }
+
+  Handle<Object> result;
+  bool is_string = maybe_result.ToHandle(&result) && result->IsString();
+  bool recorded_string = recordreplay::RecordReplayValue(
+      "ErrorUtils::FormatStackTrace IsString", is_string);
+  if (!recorded_string) {
+    return maybe_result;
+  }
+
+  Handle<String> recorded = replayio::RecordReplayStringHandle(
+      "ErrorUtils::FormatStackTrace", isolate,
+      is_string ? Handle<String>::cast(result)
+                : isolate->factory()->empty_string());
+  if (maybe_result.is_null()) {
+    return maybe_result;
+  }
+  return recorded;
+}
+
+namespace {
+
+MaybeHandle<Object> FormatStackTraceImpl(Isolate* isolate,
+                                         Handle<JSObject> error,
+                                         Handle<Object> raw_stack) {
   if (v8_flags.correctness_fuzzer_suppressions) {
     return isolate->factory()->empty_string();
   }
@@ -439,15 +478,10 @@ MaybeHandle<Object> ErrorUtils::FormatStackTrace(Isolate* isolate,
     }
   }
 
-  MaybeHandle<String> rv = builder.Finish();
-  if (recordreplay::IsRecordingOrReplaying("ErrorUtils::FormatStackTrace") &&
-      !recordreplay::AreEventsDisallowed()) {
-    // [PRO-1150] Replay Error.stack
-    rv = replayio::RecordReplayStringHandle(
-        "ErrorUtils::FormatStackTrace", isolate, rv);
-  }
-  return rv;
+  return builder.Finish();
 }
+
+}  // namespace
 
 Handle<String> MessageFormatter::Format(Isolate* isolate, MessageTemplate index,
                                         Handle<Object> arg0,
