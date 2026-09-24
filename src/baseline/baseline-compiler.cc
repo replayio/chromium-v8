@@ -2287,6 +2287,7 @@ void BaselineCompiler::VisitIncBlockCounter() {
 }
 
 void BaselineCompiler::VisitRecordReplayIncExecutionProgressCounter() {
+  SaveAccumulatorScope accumulator_scope(&basm_);
   // The optimized path is currently disabled.
   // See https://linear.app/replay/issue/RUN-744
   if ((true)/*gRecordReplayAssertProgress*/) {
@@ -2344,6 +2345,7 @@ void BaselineCompiler::VisitReplayDecJsFrameDepth() {
 }
 
 void BaselineCompiler::VisitRecordReplayNotifyActivity() {
+  SaveAccumulatorScope accumulator_scope(&basm_);
   CallRuntime(Runtime::kRecordReplayNotifyActivity);
 }
 
