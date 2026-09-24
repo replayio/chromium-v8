@@ -125,6 +125,13 @@ Debug::~Debug() {
   DCHECK_NULL(debug_delegate_);
 }
 
+void Debug::SetRecordReplayPossibleBreakpointsEnabled(bool enabled) {
+  record_replay_possible_breakpoints_enabled_ = enabled;
+  if (!enabled) {
+    ReleaseAllRetainedRecordReplayBreakpointData();
+  }
+}
+
 void Debug::RetainRecordReplayBreakpointData(
     Handle<SharedFunctionInfo> shared) {
   Script script = Script::cast(shared->script());

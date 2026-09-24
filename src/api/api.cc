@@ -12051,6 +12051,16 @@ extern "C" void V8RecordReplaySetPaintCallback(char* (*callback)(const char*, in
   gRecordReplaySetPaintCallback(callback);
 }
 
+// The linker arms this before a runToPoint when it will request possible
+// breakpoints afterward. Keep the switch in V8 so SFI creation can retain only
+// the metadata needed by that upcoming request.
+extern "C" DLLEXPORT void V8RecordReplaySetPossibleBreakpointsEnabled(
+    bool enabled) {
+  Isolate* isolate = Isolate::Current();
+  CHECK(IsMainThread());
+  isolate->debug()->SetRecordReplayPossibleBreakpointsEnabled(enabled);
+}
+
 extern "C" void V8RecordReplayOnDebuggerStatement() {
   DCHECK(recordreplay::IsRecordingOrReplaying());
   if (internal::gRecordReplayHasCheckpoint) {

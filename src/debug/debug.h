@@ -296,6 +296,10 @@ class V8_EXPORT_PRIVATE Debug {
   // Keep the SFI alive until replay has collected possible breakpoints.
   // Script::shared_function_infos is weak, so gPB may otherwise lose lazy
   // functions before it has a chance to compile them.
+  void SetRecordReplayPossibleBreakpointsEnabled(bool enabled);
+  bool RecordReplayPossibleBreakpointsEnabled() const {
+    return record_replay_possible_breakpoints_enabled_;
+  }
   void RetainRecordReplayBreakpointData(Handle<SharedFunctionInfo> shared);
   void GetRetainedRecordReplayBreakpointData(
       int script_id,
@@ -640,6 +644,9 @@ class V8_EXPORT_PRIVATE Debug {
 
   std::unique_ptr<RecordReplayBreakpointData>
       record_replay_breakpoint_data_;
+  // Keep the old always-retain behavior until the linker starts explicitly
+  // arming retention with the possibleBreakpoints runToPoint resource.
+  bool record_replay_possible_breakpoints_enabled_ = true;
 
   friend class Isolate;
   friend class DebugScope;

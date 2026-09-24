@@ -88,6 +88,9 @@ void MaybeRetainRecordReplayBreakpointData(
     Isolate* isolate, Handle<SharedFunctionInfo> shared,
     bool record_replay_ignore) {
   Script script = Script::cast(shared->script());
+  if (!isolate->debug()->RecordReplayPossibleBreakpointsEnabled()) {
+    return;
+  }
   if (RecordReplayShouldEmitOpcodes(isolate, script.id(),
                                     record_replay_ignore)) {
     isolate->debug()->RetainRecordReplayBreakpointData(shared);
@@ -99,6 +102,9 @@ void MaybeRetainRecordReplayBreakpointData(
     bool record_replay_ignore) {
   Isolate* main_isolate = isolate->GetMainThreadIsolateUnsafe();
   Script script = Script::cast(shared->script());
+  if (!main_isolate->debug()->RecordReplayPossibleBreakpointsEnabled()) {
+    return;
+  }
   if (!RecordReplayShouldEmitOpcodes(main_isolate, script.id(),
                                      record_replay_ignore)) {
     return;
