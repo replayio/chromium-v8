@@ -78,6 +78,9 @@ extern Handle<Script> GetScript(Isolate* isolate, int script_id);
 
 extern int gReplaceSourceContentsScriptId;
 
+extern bool RecordReplayShouldEmitOpcodes(Isolate* isolate, int script_id,
+                                          bool record_replay_ignore);
+
 extern MaybeHandle<String>
 ReplayingReplaceScriptContents(Isolate* isolate, Handle<String> source);
 
@@ -1405,6 +1408,11 @@ void FinalizeUnoptimizedCompilation(
     // flushed in the middle of this loop.
     IsCompiledScope is_compiled_scope(*shared_info, isolate);
     if (!is_compiled_scope.is_compiled()) continue;
+
+    if (RecordReplayShouldEmitOpcodes(isolate, script->id(),
+                                      flags.record_replay_ignore())) {
+      isolate->debug()->RetainRecordReplayBreakpointData(shared_info);
+    }
 
     if (need_source_positions) {
       SharedFunctionInfo::EnsureSourcePositionsAvailable(isolate, shared_info);

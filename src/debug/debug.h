@@ -24,6 +24,7 @@ namespace internal {
 
 // Forward declarations.
 class AbstractCode;
+class BytecodeArray;
 class DebugScope;
 class InterpretedFrame;
 class JavaScriptFrame;
@@ -212,6 +213,11 @@ class DebugFeatureTracker {
 // DebugInfo.
 class V8_EXPORT_PRIVATE Debug {
  public:
+  struct RetainedRecordReplayBreakpointData {
+    Handle<SharedFunctionInfo> shared;
+    Handle<BytecodeArray> bytecode;
+  };
+
   Debug(const Debug&) = delete;
   Debug& operator=(const Debug&) = delete;
 
@@ -288,6 +294,16 @@ class V8_EXPORT_PRIVATE Debug {
   bool GetPossibleBreakpoints(Handle<Script> script, int start_position,
                               int end_position, bool restrict_to_function,
                               std::vector<BreakLocation>* locations);
+
+  // Keep the SFI and its bytecode alive until replay has collected possible
+  // breakpoints. Script::shared_function_infos is weak, and bytecode flushing
+  // can discard the bytecode even when the SFI itself remains alive.
+  void RetainRecordReplayBreakpointData(Handle<SharedFunctionInfo> shared);
+  void GetRetainedRecordReplayBreakpointData(
+      int script_id,
+      std::vector<RetainedRecordReplayBreakpointData>* data);
+  void ReleaseRetainedRecordReplayBreakpointData(int script_id);
+  void ReleaseAllRetainedRecordReplayBreakpointData();
 
   bool IsBlackboxed(Handle<SharedFunctionInfo> shared);
   bool ShouldBeSkipped();
@@ -436,6 +452,8 @@ class V8_EXPORT_PRIVATE Debug {
   void UpdateState();
   void UpdateHookOnFunctionCall();
   void Unload();
+
+  class RecordReplayBreakpointData;
 
   // Return the number of virtual frames below debugger entry.
   int CurrentFrameCount();
@@ -621,6 +639,9 @@ class V8_EXPORT_PRIVATE Debug {
 #endif  // V8_ENABLE_WEBASSEMBLY
 
   Isolate* isolate_;
+
+  std::unique_ptr<RecordReplayBreakpointData>
+      record_replay_breakpoint_data_;
 
   friend class Isolate;
   friend class DebugScope;
