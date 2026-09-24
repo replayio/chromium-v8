@@ -1,3 +1,5 @@
+#include <vector>
+
 #include "src/execution/isolate-inl.h"
 #include "src/objects/string.h"
 #include "include/replayio.h"
@@ -12,9 +14,20 @@ v8::internal::Handle<v8::internal::String> RecordReplayStringHandle(
   if (!v8::recordreplay::IsRecordingOrReplaying(why)) {
     return input;
   }
-  std::string str = input->ToCString().get();
-  v8::recordreplay::RecordReplayString(why, str);
-  return isolate->factory()->NewStringFromUtf8(base::CStrVector(str.c_str())).ToHandleChecked();
+  // Copying UTF-16 code units instead of converting to UTF-8 keeps NULs and
+  // unpaired surrogates intact.
+  std::vector<v8::base::uc16> units(input->length());
+  v8::internal::String::WriteToFlat(*input, units.data(), 0, input->length());
+  size_t length = v8::recordreplay::RecordReplayValue(why, units.size());
+  units.resize(length);
+  if (length) {
+    v8::recordreplay::RecordReplayBytes(why, units.data(),
+                                        length * sizeof(v8::base::uc16));
+  }
+  return isolate->factory()
+      ->NewStringFromTwoByte(v8::base::Vector<const v8::base::uc16>(
+          units.data(), static_cast<int>(units.size())))
+      .ToHandleChecked();
 }
 
 v8::internal::MaybeHandle<v8::internal::String> RecordReplayStringHandle(

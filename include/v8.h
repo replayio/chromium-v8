@@ -121,6 +121,9 @@ static bool AreAssertsDisabled();
 
 static uintptr_t RecordReplayValue(const char* why, uintptr_t v);
 static void RecordReplayBytes(const char* why, void* buf, size_t size);
+// Records a byte string as is. Record V8 strings with
+// replayio::RecordReplayStringHandle instead: converting them to a C string
+// loses NULs and unpaired surrogates.
 static void RecordReplayString(const char* why, std::string& str);
 
 static size_t CreateOrderedLock(const char* name);
