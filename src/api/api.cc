@@ -10902,6 +10902,10 @@ typedef char* (CommandCallbackRaw)(const char* params);
         (void (*aCallback)(bool aTrackObjects)))                              \
   Macro(RecordReplaySetPossibleBreakpointsCallback,                           \
         (void (*aCallback)(const char*)))                                     \
+  Macro(RecordReplaySetPossibleBreakpointsEnabledCallback,                    \
+        (void (*aCallback)(bool)))                                            \
+  Macro(RecordReplaySetPossibleBreakpointsReleaseCallback,                    \
+        (void (*aCallback)(const char*)))                                     \
   Macro(RecordReplaySetAssertDataCallbacks,                                   \
         (void (*aGetData)(void**, size_t*),                                   \
          char* (*aOnMismatch)(void*, size_t, void*, size_t),                  \
@@ -11089,6 +11093,8 @@ void RecordReplayInstrument(const char* kind, const char* function, int function
 
 extern void TrackObjectsCallback(bool track_objects);
 extern void RecordReplayGetPossibleBreakpointsCallback(const char* source_id);
+extern void RecordReplaySetPossibleBreakpointsEnabledCallback(bool enabled);
+extern void RecordReplaySetPossibleBreakpointsReleaseCallback(const char* source_id);
 
 extern void RecordReplayCallbackAssertGetData(void** pbuf, size_t* psize);
 extern char* RecordReplayCallbackAssertOnDataMismatch(void* recorded, size_t recorded_size,
@@ -12333,6 +12339,10 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
   gRecordReplayEnableProgressCheckpoints();
   gRecordReplaySetTrackObjectsCallback(i::TrackObjectsCallback);
   gRecordReplaySetPossibleBreakpointsCallback(i::RecordReplayGetPossibleBreakpointsCallback);
+  gRecordReplaySetPossibleBreakpointsEnabledCallback(
+      i::RecordReplaySetPossibleBreakpointsEnabledCallback);
+  gRecordReplaySetPossibleBreakpointsReleaseCallback(
+      i::RecordReplaySetPossibleBreakpointsReleaseCallback);
 
   // Remember whether this recording was made on ARM.
 #if V8_TARGET_ARCH_ARM64
