@@ -3549,6 +3549,12 @@ void RecordReplaySetPossibleBreakpointsEnabledCallback(bool enabled) {
   isolate->debug()->SetRecordReplayPossibleBreakpointsEnabled(enabled);
 }
 
+void RecordReplaySetPossibleBreakpointsReleaseCallback(const char* script_id_str) {
+  Isolate* isolate = Isolate::Current();
+  CHECK(IsMainThread());
+  isolate->debug()->ReleaseRetainedRecordReplayBreakpointData(atoi(script_id_str));
+}
+
 Handle<Object> RecordReplayConvertLocationToFunctionOffset(Isolate* isolate,
                                                            Handle<Object> params) {
   Handle<Object> location = GetProperty(isolate, params, "location");
