@@ -1808,9 +1808,16 @@ class MergeAssumptionChecker final : public ObjectVisitor {
 // For use when checking that record/replay opcodes are only emitted
 // for the main thread.
 static std::atomic<size_t> gNumRunningBackgroundCompileTasks;
+// Unlike the counter above, this identifies the current thread. A different
+// background compile task must not make worker-thread compilation look safe.
+static thread_local bool gIsRunningBackgroundCompileTask = false;
 
 size_t NumRunningBackgroundCompileTasks() {
   return gNumRunningBackgroundCompileTasks;
+}
+
+bool IsRunningBackgroundCompileTask() {
+  return gIsRunningBackgroundCompileTask;
 }
 
 void BackgroundCompileTask::Run() {
@@ -1833,6 +1840,8 @@ void BackgroundCompileTask::RunOnMainThread(Isolate* isolate) {
 
 void BackgroundCompileTask::Run(
     LocalIsolate* isolate, ReusableUnoptimizedCompileState* reusable_state) {
+  DCHECK(!gIsRunningBackgroundCompileTask);
+  gIsRunningBackgroundCompileTask = true;
   gNumRunningBackgroundCompileTasks++;
 
   TimedHistogramScope timer(timer_);
@@ -1947,6 +1956,7 @@ void BackgroundCompileTask::Run(
   DCHECK(isolate->heap()->ContainsPersistentHandle(script_.location()));
   persistent_handles_ = isolate->heap()->DetachPersistentHandles();
 
+  gIsRunningBackgroundCompileTask = false;
   gNumRunningBackgroundCompileTasks--;
 }
 

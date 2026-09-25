@@ -26,7 +26,7 @@ extern bool RecordReplayShouldEmitOpcodes(Isolate* isolate, int script_id,
                                           bool record_replay_ignore);
 extern bool gRecordReplayAssertTrackedObjects;
 
-extern size_t NumRunningBackgroundCompileTasks();
+extern bool IsRunningBackgroundCompileTask();
 
 namespace interpreter {
 
@@ -81,11 +81,11 @@ BytecodeArrayBuilder::BytecodeArrayBuilder(
     emit_record_replay_opcodes_ = true;
     emit_record_replay_assert_values_ = record_replay_assert_values;
 
-    // Record/replay opcodes can only be emitted for scripts that run on the
-    // main thread. If we aren't on the main thread, this must have been
-    // triggered by a background compile task.
+    // Record/replay opcodes can be emitted off the main thread only while a
+    // V8 BackgroundCompileTask is running. Other worker-thread compilation
+    // must not produce bytecode that calls the main-thread Replay runtime.
     if (!IsMainThread()) {
-      CHECK(NumRunningBackgroundCompileTasks() != 0);
+      CHECK(IsRunningBackgroundCompileTask());
     }
   }
 }
