@@ -10901,6 +10901,8 @@ typedef char* (CommandCallbackRaw)(const char* params);
         (void (*aCallback)(bool aTrackObjects)))                              \
   Macro(RecordReplaySetPossibleBreakpointsCallback,                           \
         (void (*aCallback)(const char*)))                                     \
+  Macro(RecordReplaySetPossibleBreakpointsEnabledCallback,                    \
+        (void (*aCallback)(bool)))                                            \
   Macro(RecordReplaySetAssertDataCallbacks,                                   \
         (void (*aGetData)(void**, size_t*),                                   \
          char* (*aOnMismatch)(void*, size_t, void*, size_t),                  \
@@ -11088,6 +11090,7 @@ void RecordReplayInstrument(const char* kind, const char* function, int function
 
 extern void TrackObjectsCallback(bool track_objects);
 extern void RecordReplayGetPossibleBreakpointsCallback(const char* source_id);
+extern void RecordReplaySetPossibleBreakpointsEnabledCallback(bool enabled);
 
 extern void RecordReplayCallbackAssertGetData(void** pbuf, size_t* psize);
 extern char* RecordReplayCallbackAssertOnDataMismatch(void* recorded, size_t recorded_size,
@@ -12051,16 +12054,6 @@ extern "C" void V8RecordReplaySetPaintCallback(char* (*callback)(const char*, in
   gRecordReplaySetPaintCallback(callback);
 }
 
-// The linker arms this before a runToPoint when it will request possible
-// breakpoints afterward. Keep the switch in V8 so SFI creation can retain only
-// the metadata needed by that upcoming request.
-extern "C" DLLEXPORT void V8RecordReplaySetPossibleBreakpointsEnabled(
-    bool enabled) {
-  Isolate* isolate = Isolate::Current();
-  CHECK(IsMainThread());
-  isolate->debug()->SetRecordReplayPossibleBreakpointsEnabled(enabled);
-}
-
 extern "C" void V8RecordReplayOnDebuggerStatement() {
   DCHECK(recordreplay::IsRecordingOrReplaying());
   if (internal::gRecordReplayHasCheckpoint) {
@@ -12336,6 +12329,8 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
   gRecordReplayEnableProgressCheckpoints();
   gRecordReplaySetTrackObjectsCallback(i::TrackObjectsCallback);
   gRecordReplaySetPossibleBreakpointsCallback(i::RecordReplayGetPossibleBreakpointsCallback);
+  gRecordReplaySetPossibleBreakpointsEnabledCallback(
+      i::RecordReplaySetPossibleBreakpointsEnabledCallback);
 
   // Remember whether this recording was made on ARM.
 #if V8_TARGET_ARCH_ARM64
