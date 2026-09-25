@@ -644,9 +644,9 @@ class V8_EXPORT_PRIVATE Debug {
 
   std::unique_ptr<RecordReplayBreakpointData>
       record_replay_breakpoint_data_;
-  // Keep the old always-retain behavior until the linker starts explicitly
-  // arming retention with the possibleBreakpoints runToPoint resource.
-  bool record_replay_possible_breakpoints_enabled_ = true;
+  // Retention is enabled only while the linker is collecting possible
+  // breakpoints for a runToPoint batch.
+  bool record_replay_possible_breakpoints_enabled_ = false;
 
   friend class Isolate;
   friend class DebugScope;
