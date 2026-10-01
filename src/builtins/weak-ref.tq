@@ -9,6 +9,9 @@ namespace runtime {
 extern runtime JSWeakRefAddToKeptObjects(implicit context: Context)(
     JSReceiver | Symbol): void;
 
+extern runtime RecordReplayWeakRefConstruct(implicit context: Context)(
+    JSWeakRef): void;
+
 extern runtime RecordReplayWeakRefDeref(implicit context: Context)(
     JSWeakRef): JSAny;
 
@@ -39,6 +42,8 @@ WeakRefConstructor(
   runtime::JSWeakRefAddToKeptObjects(weakTarget);
   // 5. Set weakRef.[[WeakRefTarget]] to target.
   weakRef.target = weakTarget;
+  weakRef.record_replay_id = 0;
+  runtime::RecordReplayWeakRefConstruct(weakRef);
   // 6. Return weakRef.
   return weakRef;
 }

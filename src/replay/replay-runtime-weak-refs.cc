@@ -2,10 +2,18 @@
 #include "src/execution/arguments-inl.h"
 #include "src/objects/js-weak-refs-inl.h"
 #include "src/replay/finalization-registry.h"
+#include "src/replay/weak-refs.h"
 #include "src/runtime/runtime-utils.h"
 
 namespace v8 {
 namespace internal {
+
+RUNTIME_FUNCTION(Runtime_RecordReplayWeakRefConstruct) {
+  HandleScope scope(isolate);
+  DCHECK_EQ(1, args.length());
+  replayio::ReplayWeakRefs::OnConstruct(isolate, args.at<JSWeakRef>(0));
+  return ReadOnlyRoots(isolate).undefined_value();
+}
 
 // Called from WeakRef.prototype.deref(). Records/replays target liveness so
 // the result is deterministic. When replaying, the GC keeps the target alive

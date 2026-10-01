@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "include/v8-internal.h"
 #include "include/v8-persistent-handle.h"
 
 namespace v8 {
@@ -24,7 +25,7 @@ struct RecordedFinalizationRegistry {
 class ReplayIsolateData {
  public:
   ReplayIsolateData() = default;
-  ~ReplayIsolateData() = default;
+  ~ReplayIsolateData();
 
   ReplayIsolateData(const ReplayIsolateData&) = delete;
   ReplayIsolateData& operator=(const ReplayIsolateData&) = delete;
@@ -62,6 +63,25 @@ class ReplayIsolateData {
     return collected_finalization_registries_;
   }
 
+  int NewWeakRefId() {
+    has_tracked_weak_refs_ = true;
+    return next_weak_ref_id_++;
+  }
+  bool has_tracked_weak_refs() const { return has_tracked_weak_refs_; }
+
+  // While recording, ids of tracked WeakRefs whose target the GC cleared and
+  // which the recording does not describe yet.
+  std::vector<int>& cleared_weak_refs() { return cleared_weak_refs_; }
+
+  // While replaying, the location of a global handle to a WeakArrayList of the
+  // tracked WeakRefs, or null before the first one.
+  internal::Address* tracked_weak_refs_location() const {
+    return tracked_weak_refs_location_;
+  }
+  void set_tracked_weak_refs_location(internal::Address* location) {
+    tracked_weak_refs_location_ = location;
+  }
+
  private:
   int next_finalization_registry_id_ = 1;
   int next_weak_cell_id_ = 1;
@@ -90,6 +110,11 @@ class ReplayIsolateData {
   std::unordered_map<int, std::unique_ptr<RecordedFinalizationRegistry>>
       recorded_finalization_registries_;
   std::vector<int> collected_finalization_registries_;
+
+  int next_weak_ref_id_ = 1;
+  bool has_tracked_weak_refs_ = false;
+  std::vector<int> cleared_weak_refs_;
+  internal::Address* tracked_weak_refs_location_ = nullptr;
 };
 
 }  // namespace replayio

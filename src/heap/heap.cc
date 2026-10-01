@@ -106,6 +106,7 @@
 #include "src/objects/visitors.h"
 #include "src/regexp/regexp.h"
 #include "src/replay/finalization-registry.h"
+#include "src/replay/weak-refs.h"
 #include "src/snapshot/embedded/embedded-data.h"
 #include "src/snapshot/serializer-deserializer.h"
 #include "src/snapshot/snapshot.h"
@@ -6738,6 +6739,7 @@ void Heap::ClearKeptObjects() {
   // through the Blink scheduler to the isolate, for the main thread and
   // workers.
   replayio::ReplayFinalizationRegistries::Poll(isolate());
+  replayio::ReplayWeakRefs::Poll(isolate());
 }
 
 size_t Heap::NumberOfTrackedHeapObjectTypes() {

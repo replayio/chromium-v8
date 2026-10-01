@@ -679,6 +679,7 @@ namespace internal {
   F(RecordReplayFinalizationRegistryConstruct, 1, 1)                 \
   F(RecordReplayFinalizationRegistryNextCell, 1, 1)                  \
   F(RecordReplayFinalizationRegistryRegister, 2, 1)                  \
+  F(RecordReplayWeakRefConstruct, 1, 1)                              \
   F(RecordReplayWeakRefDeref, 1, 1)                                  \
   F(ShrinkFinalizationRegistryUnregisterTokenMap, 1, 1)
 
