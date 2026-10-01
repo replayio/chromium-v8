@@ -404,6 +404,11 @@ int MarkingVisitorBase<ConcreteVisitor, MarkingState>::VisitJSWeakRef(
     Map map, JSWeakRef weak_ref) {
   int size = concrete_visitor()->VisitJSObjectSubclass(map, weak_ref);
   if (size == 0) return 0;
+  // When replaying, the recording decides when deref() stops returning the
+  // target.
+  if (recordreplay::IsReplaying()) {
+    VisitPointer(weak_ref, weak_ref.RawField(JSWeakRef::kTargetOffset));
+  }
   if (weak_ref.target().IsHeapObject()) {
     HeapObject target = HeapObject::cast(weak_ref.target());
     SynchronizePageAccess(target);

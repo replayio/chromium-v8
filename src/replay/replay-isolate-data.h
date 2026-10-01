@@ -29,8 +29,6 @@ class ReplayIsolateData {
   ReplayIsolateData(const ReplayIsolateData&) = delete;
   ReplayIsolateData& operator=(const ReplayIsolateData&) = delete;
 
-  std::vector<v8::Global<v8::Value>>& weak_ref_pins() { return weak_ref_pins_; }
-
   int NewFinalizationRegistryId() { return next_finalization_registry_id_++; }
   int NewWeakCellId() { return next_weak_cell_id_++; }
 
@@ -65,8 +63,6 @@ class ReplayIsolateData {
   }
 
  private:
-  std::vector<v8::Global<v8::Value>> weak_ref_pins_;
-
   int next_finalization_registry_id_ = 1;
   int next_weak_cell_id_ = 1;
 
