@@ -937,8 +937,12 @@ class Heap {
 
   MaybeHandle<JSFinalizationRegistry> DequeueDirtyJSFinalizationRegistry();
 
-  // Record/replay: like the above, restricted to the dirty registries whose
-  // cleanup is (or is not) driven by the recording.
+  // Record/replay: the dirty list holds both registries whose cleanup is
+  // driven by the recording ("tracked", see src/replay/finalization-registry.h)
+  // and registries with the default handling. These look only at the tracked
+  // ones when |tracked| is true and only at the others when it is false.
+  // HasDirty... returns whether the list has such a registry; Dequeue...
+  // removes and returns the first one.
   bool HasDirtyJSFinalizationRegistriesForReplay(bool tracked);
   MaybeHandle<JSFinalizationRegistry>
   DequeueDirtyJSFinalizationRegistryForReplay(bool tracked);
