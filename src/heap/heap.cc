@@ -6615,23 +6615,6 @@ void Heap::EnqueueDirtyJSFinalizationRegistry(
   // ProcessWeakListRoots.
 }
 
-MaybeHandle<JSFinalizationRegistry> Heap::DequeueDirtyJSFinalizationRegistry() {
-  // Take a FinalizationRegistry from the head of the dirty list for fairness.
-  if (HasDirtyJSFinalizationRegistries()) {
-    Handle<JSFinalizationRegistry> head(
-        JSFinalizationRegistry::cast(dirty_js_finalization_registries_list()),
-        isolate());
-    set_dirty_js_finalization_registries_list(head->next_dirty());
-    head->set_next_dirty(ReadOnlyRoots(this).undefined_value());
-    if (*head == dirty_js_finalization_registries_list_tail()) {
-      set_dirty_js_finalization_registries_list_tail(
-          ReadOnlyRoots(this).undefined_value());
-    }
-    return head;
-  }
-  return {};
-}
-
 bool Heap::RecordReplayHasDirtyJSFinalizationRegistries(
     RecordReplayTracking tracking) {
   const bool tracked = tracking == RecordReplayTracking::kTracked;

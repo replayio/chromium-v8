@@ -3502,8 +3502,8 @@ void MarkCompactCollector::ClearJSWeakRefs() {
     HeapObject target = HeapObject::cast(weak_cell.target());
     if (!non_atomic_marking_state()->IsBlackOrGrey(target)) {
       DCHECK(target.CanBeHeldWeakly());
-      // When replaying, marking keeps the targets of replay-tracked cells
-      // alive (see VisitWeakCell), so only the recording clears those cells.
+      // When replaying, marking keeps the targets of tracked cells alive (see
+      // VisitWeakCell), so the GC never clears one.
       DCHECK(!recordreplay::IsReplaying() || weak_cell.record_replay_id() == 0);
       // The value of the WeakCell is dead.
       JSFinalizationRegistry finalization_registry =

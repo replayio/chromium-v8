@@ -44,15 +44,17 @@ class ReplayFinalizationRegistries {
   static void OnConstruct(
       internal::Isolate* isolate,
       internal::Handle<internal::JSFinalizationRegistry> registry);
-  // Crashes for a tracked registry when the current point does not replay, as
-  // the recording could not describe when the new cell is cleared.
+  // Crashes for a tracked registry when the current point does not replay and
+  // the process has not diverged, as the recording could not describe when the
+  // new cell is cleared.
   static void OnRegister(
       internal::Isolate* isolate,
       internal::Handle<internal::JSFinalizationRegistry> registry,
       internal::Handle<internal::WeakCell> cell);
 
   // Called when unregister() removes |cell| from |registry|. Cannot GC. Crashes
-  // for a tracked cell when the current point does not replay.
+  // for a tracked cell when the current point does not replay and the process
+  // has not diverged.
   static void OnUnregisterCell(internal::Isolate* isolate,
                                internal::JSFinalizationRegistry registry,
                                internal::WeakCell cell);
@@ -72,6 +74,7 @@ class ReplayFinalizationRegistries {
   // When replaying: stop retaining the registries with these ids.
   static void ReleaseCollected(internal::Isolate* isolate,
                                const std::vector<int>& ids);
+  // On both sides: post the cleanup task for tracked registries.
   static void PostCleanupTask(internal::Isolate* isolate);
 
   // Picks the tracked registry the cleanup task posted by PostCleanupTask()

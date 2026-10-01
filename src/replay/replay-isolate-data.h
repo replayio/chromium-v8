@@ -11,16 +11,6 @@
 namespace v8 {
 namespace replayio {
 
-class ReplayIsolateData;
-
-// A tracked FinalizationRegistry with registered cells, watched while recording
-// so that the replay can be told when the GC collected it.
-struct RecordedFinalizationRegistry {
-  ReplayIsolateData* data;
-  int id;
-  v8::Global<v8::Value> registry;
-};
-
 // General-purpose per-Isolate data for recording and replaying.
 class ReplayIsolateData {
  public:
@@ -29,6 +19,14 @@ class ReplayIsolateData {
 
   ReplayIsolateData(const ReplayIsolateData&) = delete;
   ReplayIsolateData& operator=(const ReplayIsolateData&) = delete;
+
+  // A tracked FinalizationRegistry with registered cells, watched while
+  // recording so that the replay can be told when the GC collected it.
+  struct RecordedFinalizationRegistry {
+    ReplayIsolateData* data;
+    int id;
+    v8::Global<v8::Value> registry;
+  };
 
   // FinalizationRegistry state, see src/replay/finalization-registry.h.
 

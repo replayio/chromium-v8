@@ -935,8 +935,6 @@ class Heap {
       std::function<void(HeapObject object, ObjectSlot slot, Object target)>
           gc_notify_updated_slot);
 
-  MaybeHandle<JSFinalizationRegistry> DequeueDirtyJSFinalizationRegistry();
-
   // Record/replay: the dirty list holds both registries whose cleanup is
   // driven by the recording ("tracked", see src/replay/finalization-registry.h)
   // and registries with the default handling. These look only at the
