@@ -34,12 +34,8 @@ class ReplayIsolateData {
   int NewFinalizationRegistryId() { return next_finalization_registry_id_++; }
   int NewWeakCellId() { return next_weak_cell_id_++; }
 
-  bool finalization_registry_poll_armed() const {
-    return finalization_registry_poll_armed_;
-  }
-  void ArmFinalizationRegistryPoll() {
-    finalization_registry_poll_armed_ = true;
-  }
+  bool has_registered_weak_cells() const { return has_registered_weak_cells_; }
+  void set_has_registered_weak_cells() { has_registered_weak_cells_ = true; }
 
   bool finalization_registry_task_posted() const {
     return finalization_registry_task_posted_;
@@ -77,8 +73,9 @@ class ReplayIsolateData {
   // tracked registry and never cleared. While unset, the ClearKeptObjects poll
   // records nothing.
   //
-  // A count of outstanding registrations could disarm the poll again and
-  // shrink recordings. To be correct it would have to:
+  // A count of outstanding registrations could stop the poll from recording
+  // again once it drops to zero, and shrink recordings. To be correct it would
+  // have to:
   //   - decrement on callback delivery and on unregister() (per removed cell),
   //   - never decrement when the GC collects a registry, since replay cannot
   //     observe that,
@@ -86,7 +83,7 @@ class ReplayIsolateData {
   // A mismatch desyncs the recorded value stream. Typical users keep
   // registrations outstanding for the life of the page, so the count would
   // rarely return to zero and is unlikely to be worth it.
-  bool finalization_registry_poll_armed_ = false;
+  bool has_registered_weak_cells_ = false;
 
   // Whether a cleanup task for tracked registries is posted and has not run.
   bool finalization_registry_task_posted_ = false;

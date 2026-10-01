@@ -82,7 +82,7 @@ void ReplayFinalizationRegistries::OnRegister(
   recordreplay::Assert("FinalizationRegistry.register %d %d",
                        registry->replay_id(), id);
   cell->set_replay_id(id);
-  data->ArmFinalizationRegistryPoll();
+  data->set_has_registered_weak_cells();
 
   v8::Isolate* v8_isolate = reinterpret_cast<v8::Isolate*>(isolate);
   v8::Local<v8::Value> local = Utils::ToLocal(i::Handle<i::JSObject>(registry));
@@ -151,7 +151,7 @@ bool ReplayFinalizationRegistries::NextCell(
 
 void ReplayFinalizationRegistries::Poll(i::Isolate* isolate) {
   ReplayIsolateData* data = isolate->replay_data();
-  if (!data || !data->finalization_registry_poll_armed()) return;
+  if (!data || !data->has_registered_weak_cells()) return;
   if (!Enabled() || !EventsAvailable()) return;
 
   i::Heap* heap = isolate->heap();
