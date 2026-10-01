@@ -52,31 +52,21 @@ void ReplayWeakRefs::OnConstruct(i::Isolate* isolate,
 
 void ReplayWeakRefs::OnTargetCleared(i::Isolate* isolate,
                                      i::JSWeakRef weak_ref) {
-  // Runs inside the GC, so this only notes the id for the next Poll().
+  // Runs inside the GC, so this only notes the id for the next poll.
   int id = weak_ref.record_replay_id();
   if (!id) return;
   isolate->replay_data()->cleared_weak_refs().push_back(id);
 }
 
-void ReplayWeakRefs::Poll(i::Isolate* isolate) {
-  ReplayIsolateData* data = isolate->replay_data();
-  if (!data || !data->has_tracked_weak_refs()) return;
-  if (!AreEventsAvailable()) return;
+void ReplayWeakRefs::TakeCleared(i::Isolate* isolate, std::vector<int>* ids) {
+  ids->swap(isolate->replay_data()->cleared_weak_refs());
+}
 
-  std::vector<int> cleared;
-  if (recordreplay::IsRecording()) cleared.swap(data->cleared_weak_refs());
-  size_t cleared_count =
-      recordreplay::RecordReplayValue("WeakRef.cleared", cleared.size());
-  if (!cleared_count) return;
-
-  cleared.resize(cleared_count);
-  recordreplay::RecordReplayBytes("WeakRef.cleared ids", cleared.data(),
-                                  cleared_count * sizeof(int));
-  if (!recordreplay::IsReplaying()) return;
-
-  i::WeakArrayList weak_refs =
-      i::WeakArrayList::cast(i::Object(*data->tracked_weak_refs_location()));
-  for (int id : cleared) {
+void ReplayWeakRefs::ClearTargets(i::Isolate* isolate,
+                                  const std::vector<int>& ids) {
+  i::WeakArrayList weak_refs = i::WeakArrayList::cast(
+      i::Object(*isolate->replay_data()->tracked_weak_refs_location()));
+  for (int id : ids) {
     i::HeapObject weak_ref;
     // The replay's GC may have collected the WeakRef itself already.
     if (weak_refs.Get(id - 1)->GetHeapObjectIfWeak(&weak_ref)) {

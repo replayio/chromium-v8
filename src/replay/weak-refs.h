@@ -1,6 +1,8 @@
 #ifndef V8_REPLAY_WEAK_REFS_H_
 #define V8_REPLAY_WEAK_REFS_H_
 
+#include <vector>
+
 #include "src/handles/handles.h"
 
 namespace v8 {
@@ -35,9 +37,12 @@ class ReplayWeakRefs {
   static void OnTargetCleared(internal::Isolate* isolate,
                               internal::JSWeakRef weak_ref);
 
-  // Records/replays which tracked WeakRefs the recording's GC cleared since
-  // the last poll. Called at the end of every microtask checkpoint.
-  static void Poll(internal::Isolate* isolate);
+  // The pieces ReplayGCPoll::Poll records/replays. When recording: the ids of
+  // the tracked WeakRefs whose target the GC cleared since the last poll.
+  static void TakeCleared(internal::Isolate* isolate, std::vector<int>* ids);
+  // When replaying: clear the targets of the WeakRefs with these ids.
+  static void ClearTargets(internal::Isolate* isolate,
+                           const std::vector<int>& ids);
 };
 
 }  // namespace replayio

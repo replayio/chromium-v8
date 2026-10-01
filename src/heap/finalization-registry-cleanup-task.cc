@@ -11,6 +11,7 @@
 #include "src/heap/heap-inl.h"
 #include "src/objects/js-weak-refs-inl.h"
 #include "src/replay/finalization-registry.h"
+#include "src/replay/gc-poll.h"
 #include "src/tracing/trace-event.h"
 
 namespace v8 {
@@ -52,7 +53,7 @@ void FinalizationRegistryCleanupTask::RunInternal() {
     // There is no registry when the recording's task found none.
     if (!replayio::ReplayFinalizationRegistries::TakeRegistryForTask(isolate)
              .ToHandle(&finalization_registry)) {
-      replayio::ReplayFinalizationRegistries::Poll(isolate);
+      replayio::ReplayGCPoll::Poll(isolate);
       return;
     }
   } else if (!heap_
@@ -107,7 +108,7 @@ void FinalizationRegistryCleanupTask::RunInternal() {
   }
 
   if (record_replay_tracking_ == Heap::RecordReplayTracking::kTracked) {
-    replayio::ReplayFinalizationRegistries::Poll(isolate);
+    replayio::ReplayGCPoll::Poll(isolate);
     return;
   }
 

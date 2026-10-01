@@ -106,7 +106,7 @@
 #include "src/objects/visitors.h"
 #include "src/regexp/regexp.h"
 #include "src/replay/finalization-registry.h"
-#include "src/replay/weak-refs.h"
+#include "src/replay/gc-poll.h"
 #include "src/snapshot/embedded/embedded-data.h"
 #include "src/snapshot/serializer-deserializer.h"
 #include "src/snapshot/snapshot.h"
@@ -6576,7 +6576,7 @@ void Heap::PostFinalizationRegistryCleanupTaskIfNeeded() {
   // Only one cleanup task is posted at a time.
   if (is_finalization_registry_cleanup_task_posted_) return;
   // Cleanup of record/replay tracked registries is scheduled by
-  // ReplayFinalizationRegistries::Poll instead.
+  // ReplayGCPoll::Poll instead.
   if (!RecordReplayHasDirtyJSFinalizationRegistries(
           RecordReplayTracking::kUntracked)) {
     return;
@@ -6738,8 +6738,7 @@ void Heap::ClearKeptObjects() {
   // runs identically when replaying). That needs an embedder hook from base
   // through the Blink scheduler to the isolate, for the main thread and
   // workers.
-  replayio::ReplayFinalizationRegistries::Poll(isolate());
-  replayio::ReplayWeakRefs::Poll(isolate());
+  replayio::ReplayGCPoll::Poll(isolate());
 }
 
 size_t Heap::NumberOfTrackedHeapObjectTypes() {

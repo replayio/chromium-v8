@@ -18,7 +18,7 @@ namespace internal {
 class FinalizationRegistryCleanupTask : public CancelableTask {
  public:
   // Record/replay: a kTracked task is posted by
-  // ReplayFinalizationRegistries::Poll and runs for a registry whose cleanup
+  // ReplayGCPoll::Poll and runs for a registry whose cleanup
   // is driven by the recording.
   explicit FinalizationRegistryCleanupTask(
       Heap* heap, Heap::RecordReplayTracking record_replay_tracking =

@@ -4729,6 +4729,8 @@ v8_source_set("v8_base_without_compiler") {
     "src/zone/zone.cc",
     "src/replay/finalization-registry.cc",
     "src/replay/finalization-registry.h",
+    "src/replay/gc-poll.cc",
+    "src/replay/gc-poll.h",
     "src/replay/replay-isolate-data.cc",
     "src/replay/replay-isolate-data.h",
     "src/replay/replayio.cc",
