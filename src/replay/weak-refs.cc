@@ -34,20 +34,24 @@ void ReplayWeakRefs::OnConstruct(i::Isolate* isolate,
   // The ids are consecutive, so the WeakRef with a given id is at index
   // id - 1. The list holds them weakly.
   i::Handle<i::WeakArrayList> weak_refs;
-  if (i::Address* location = data->tracked_weak_refs_location()) {
+  i::Address* location = data->tracked_weak_refs_location();
+  if (location) {
     weak_refs = i::Handle<i::WeakArrayList>(location);
   } else {
     weak_refs = isolate->factory()->empty_weak_array_list();
   }
   CHECK_EQ(weak_refs->length(), id - 1);
-  i::Handle<i::WeakArrayList> new_weak_refs = i::WeakArrayList::AddToEnd(
-      isolate, weak_refs, i::MaybeObjectHandle::Weak(weak_ref));
-  if (i::Address* location = data->tracked_weak_refs_location()) {
-    *location = new_weak_refs->ptr();
-  } else {
-    data->set_tracked_weak_refs_location(
-        isolate->global_handles()->Create(*new_weak_refs).location());
-  }
+  i::Handle<i::WeakArrayList> grown_weak_refs = i::WeakArrayList::EnsureSpace(
+      isolate, weak_refs, id, i::AllocationType::kOld);
+  grown_weak_refs->Set(id - 1, i::HeapObjectReference::Weak(*weak_ref));
+  grown_weak_refs->set_length(id);
+  if (location && *grown_weak_refs == *weak_refs) return;
+
+  // A global handle is only tracked for scavenges according to the object it
+  // is created with, so a reallocated list gets a new handle.
+  if (location) i::GlobalHandles::Destroy(location);
+  data->set_tracked_weak_refs_location(
+      isolate->global_handles()->Create(*grown_weak_refs).location());
 }
 
 void ReplayWeakRefs::OnTargetCleared(i::Isolate* isolate,

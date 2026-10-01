@@ -87,11 +87,12 @@ class ReplayIsolateData {
   int next_weak_cell_id_ = 1;
 
   // Set by the first FinalizationRegistry.prototype.register() call on a
-  // tracked registry and never cleared. While unset, the ClearKeptObjects poll
-  // records nothing.
+  // tracked registry and never cleared. While unset, and without a tracked
+  // WeakRef, the ClearKeptObjects poll records nothing.
   //
   // A count of outstanding registrations could stop the poll from recording
-  // again once it drops to zero, and shrink recordings. To be correct it would
+  // again once it drops to zero, as long as there is no tracked WeakRef
+  // either, and shrink recordings. To be correct it would
   // have to:
   //   - decrement on callback delivery and on unregister() (per removed cell),
   //   - account for the cells of a collected registry only once the recording
@@ -112,6 +113,8 @@ class ReplayIsolateData {
   std::vector<int> collected_finalization_registries_;
 
   int next_weak_ref_id_ = 1;
+  // Set by the first tracked WeakRef and never cleared. From then on the
+  // ClearKeptObjects poll records a value at every microtask checkpoint.
   bool has_tracked_weak_refs_ = false;
   std::vector<int> cleared_weak_refs_;
   internal::Address* tracked_weak_refs_location_ = nullptr;

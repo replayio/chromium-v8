@@ -105,7 +105,6 @@
 #include "src/objects/slots-inl.h"
 #include "src/objects/visitors.h"
 #include "src/regexp/regexp.h"
-#include "src/replay/finalization-registry.h"
 #include "src/replay/gc-poll.h"
 #include "src/snapshot/embedded/embedded-data.h"
 #include "src/snapshot/serializer-deserializer.h"

@@ -17,7 +17,8 @@ RUNTIME_FUNCTION(Runtime_RecordReplayWeakRefConstruct) {
 
 // Called from WeakRef.prototype.deref(). Records/replays target liveness so
 // the result is deterministic. When replaying, the GC keeps the target alive
-// (see MarkingVisitorBase::VisitJSWeakRef) until it is observed dead here.
+// (see MarkingVisitorBase::VisitJSWeakRef) until it is observed dead here or
+// ReplayGCPoll::Poll replays the recording's GC clearing it.
 RUNTIME_FUNCTION(Runtime_RecordReplayWeakRefDeref) {
   HandleScope scope(isolate);
   DCHECK_EQ(1, args.length());
