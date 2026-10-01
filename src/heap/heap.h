@@ -937,6 +937,12 @@ class Heap {
 
   MaybeHandle<JSFinalizationRegistry> DequeueDirtyJSFinalizationRegistry();
 
+  // Record/replay: like the above, restricted to the dirty registries whose
+  // cleanup is (or is not) driven by the recording.
+  bool HasDirtyJSFinalizationRegistriesForReplay(bool tracked);
+  MaybeHandle<JSFinalizationRegistry>
+  DequeueDirtyJSFinalizationRegistryForReplay(bool tracked);
+
   // Called from Heap::NotifyContextDisposed to remove all
   // FinalizationRegistries with {context} from the dirty list when the context
   // e.g. navigates away or is detached. If the dirty list is empty afterwards,

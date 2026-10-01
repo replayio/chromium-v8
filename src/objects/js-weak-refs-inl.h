@@ -107,6 +107,7 @@ bool JSFinalizationRegistry::RemoveUnregisterToken(
       switch (removal_mode) {
         case kRemoveMatchedCellsFromRegistry:
           weak_cell.RemoveFromFinalizationRegistryCells(isolate);
+          ReplayForgetCell(isolate, weak_cell);
           break;
         case kKeepMatchedCellsInRegistry:
           // Do nothing.
@@ -148,6 +149,17 @@ bool JSFinalizationRegistry::RemoveUnregisterToken(
                            new_key_list_head);
   }
   return was_present;
+}
+
+void JSFinalizationRegistry::ReplayForgetCell(Isolate* isolate,
+                                              WeakCell weak_cell) {
+  if (replay_cells().IsUndefined(isolate) || weak_cell.replay_id() <= 0) return;
+  SimpleNumberDictionary cells = SimpleNumberDictionary::cast(replay_cells());
+  InternalIndex entry = cells.FindEntry(isolate, weak_cell.replay_id());
+  if (entry.is_found()) {
+    cells.ClearEntry(entry);
+    cells.ElementRemoved();
+  }
 }
 
 bool JSFinalizationRegistry::NeedsCleanup() const {

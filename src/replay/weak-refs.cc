@@ -11,7 +11,7 @@ namespace replayio {
 
 void ReplayWeakRefPins::Pin(internal::Isolate* isolate,
                             internal::HeapObject target) {
-  DCHECK(!recordreplay::IsReplaying());
+  DCHECK(recordreplay::IsReplaying());
   auto& entries = isolate->EnsureReplayData()->weak_ref_pins();
   auto local = Utils::ToLocal(internal::Handle<internal::Object>(target, isolate));
   for (auto& entry : entries) {

@@ -1,6 +1,7 @@
 #include "include/replayio.h"
 #include "src/execution/arguments-inl.h"
 #include "src/objects/js-weak-refs-inl.h"
+#include "src/replay/finalization-registry.h"
 #include "src/replay/weak-refs.h"
 #include "src/runtime/runtime-utils.h"
 
@@ -41,6 +42,30 @@ RUNTIME_FUNCTION(Runtime_JSReplayWeakRefDeref) {
   }
 
   return target;
+}
+
+RUNTIME_FUNCTION(Runtime_JSReplayFinalizationRegistryConstruct) {
+  HandleScope scope(isolate);
+  DCHECK_EQ(1, args.length());
+  replayio::ReplayFinalizationRegistries::OnConstruct(
+      isolate, args.at<JSFinalizationRegistry>(0));
+  return ReadOnlyRoots(isolate).undefined_value();
+}
+
+RUNTIME_FUNCTION(Runtime_JSReplayFinalizationRegistryRegister) {
+  HandleScope scope(isolate);
+  DCHECK_EQ(2, args.length());
+  replayio::ReplayFinalizationRegistries::OnRegister(
+      isolate, args.at<JSFinalizationRegistry>(0), args.at<WeakCell>(1));
+  return ReadOnlyRoots(isolate).undefined_value();
+}
+
+RUNTIME_FUNCTION(Runtime_JSReplayFinalizationRegistryNextCell) {
+  HandleScope scope(isolate);
+  DCHECK_EQ(1, args.length());
+  return isolate->heap()->ToBoolean(
+      replayio::ReplayFinalizationRegistries::NextCell(
+          isolate, args.at<JSFinalizationRegistry>(0)));
 }
 
 }  // namespace internal

@@ -5,6 +5,7 @@
 #ifndef V8_HEAP_MARKING_VISITOR_INL_H_
 #define V8_HEAP_MARKING_VISITOR_INL_H_
 
+#include "include/v8.h"
 #include "src/heap/marking-state-inl.h"
 #include "src/heap/marking-visitor.h"
 #include "src/heap/marking-worklist.h"
@@ -429,6 +430,10 @@ int MarkingVisitorBase<ConcreteVisitor, MarkingState>::VisitWeakCell(
   int size = WeakCell::BodyDescriptor::SizeOf(map, weak_cell);
   this->VisitMapPointer(weak_cell);
   WeakCell::BodyDescriptor::IterateBody(map, weak_cell, size, this);
+  // When replaying, the recording decides when a tracked cell is cleared.
+  if (recordreplay::IsReplaying() && weak_cell.replay_id() != 0) {
+    VisitPointer(weak_cell, weak_cell.RawField(WeakCell::kTargetOffset));
+  }
   HeapObject target = weak_cell.relaxed_target();
   HeapObject unregister_token = weak_cell.relaxed_unregister_token();
   SynchronizePageAccess(target);

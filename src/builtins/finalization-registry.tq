@@ -9,6 +9,12 @@ ShrinkFinalizationRegistryUnregisterTokenMap(
     Context, JSFinalizationRegistry): void;
 extern runtime JSFinalizationRegistryRegisterWeakCellWithUnregisterToken(
     implicit context: Context)(JSFinalizationRegistry, WeakCell): void;
+extern runtime JSReplayFinalizationRegistryConstruct(
+    implicit context: Context)(JSFinalizationRegistry): void;
+extern runtime JSReplayFinalizationRegistryRegister(
+    implicit context: Context)(JSFinalizationRegistry, WeakCell): void;
+extern runtime JSReplayFinalizationRegistryNextCell(
+    implicit context: Context)(JSFinalizationRegistry): Boolean;
 }
 
 namespace weakref {
@@ -75,6 +81,10 @@ transitioning macro
 FinalizationRegistryCleanupLoop(implicit context: Context)(
     finalizationRegistry: JSFinalizationRegistry, callback: Callable): void {
   while (true) {
+    if (runtime::JSReplayFinalizationRegistryNextCell(finalizationRegistry) ==
+        False) {
+      break;
+    }
     const weakCellHead = PopClearedCell(finalizationRegistry);
     typeswitch (weakCellHead) {
       case (Undefined): {
@@ -125,6 +135,9 @@ FinalizationRegistryConstructor(
   dcheck(finalizationRegistry.active_cells == Undefined);
   dcheck(finalizationRegistry.cleared_cells == Undefined);
   dcheck(finalizationRegistry.key_map == Undefined);
+  finalizationRegistry.replay_id = 0;
+  dcheck(finalizationRegistry.replay_cells == Undefined);
+  runtime::JSReplayFinalizationRegistryConstruct(finalizationRegistry);
   // 8. Return finalizationRegistry.
   return finalizationRegistry;
 }
@@ -179,10 +192,12 @@ FinalizationRegistryRegister(
     prev: Undefined,
     next: Undefined,
     key_list_prev: Undefined,
-    key_list_next: Undefined
+    key_list_next: Undefined,
+    replay_id: 0
   };
   // 7. Append cell to finalizationRegistry.[[Cells]].
   PushCell(finalizationRegistry, cell);
+  runtime::JSReplayFinalizationRegistryRegister(finalizationRegistry, cell);
   if (unregisterToken != Undefined) {
     // If an unregister token is provided, a runtime call is needed to
     // do some OrderedHashTable operations and register the mapping.
