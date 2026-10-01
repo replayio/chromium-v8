@@ -44,7 +44,7 @@ RUNTIME_FUNCTION(Runtime_JSReplayWeakRefDeref) {
   return target;
 }
 
-RUNTIME_FUNCTION(Runtime_JSReplayFinalizationRegistryConstruct) {
+RUNTIME_FUNCTION(Runtime_RecordReplayFinalizationRegistryConstruct) {
   HandleScope scope(isolate);
   DCHECK_EQ(1, args.length());
   replayio::ReplayFinalizationRegistries::OnConstruct(
@@ -52,7 +52,7 @@ RUNTIME_FUNCTION(Runtime_JSReplayFinalizationRegistryConstruct) {
   return ReadOnlyRoots(isolate).undefined_value();
 }
 
-RUNTIME_FUNCTION(Runtime_JSReplayFinalizationRegistryRegister) {
+RUNTIME_FUNCTION(Runtime_RecordReplayFinalizationRegistryRegister) {
   HandleScope scope(isolate);
   DCHECK_EQ(2, args.length());
   replayio::ReplayFinalizationRegistries::OnRegister(
@@ -60,7 +60,7 @@ RUNTIME_FUNCTION(Runtime_JSReplayFinalizationRegistryRegister) {
   return ReadOnlyRoots(isolate).undefined_value();
 }
 
-RUNTIME_FUNCTION(Runtime_JSReplayFinalizationRegistryNextCell) {
+RUNTIME_FUNCTION(Runtime_RecordReplayFinalizationRegistryNextCell) {
   HandleScope scope(isolate);
   DCHECK_EQ(1, args.length());
   return isolate->heap()->ToBoolean(

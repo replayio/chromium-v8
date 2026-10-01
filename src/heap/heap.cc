@@ -6574,11 +6574,10 @@ void Heap::SetDetachedContexts(WeakArrayList detached_contexts) {
 void Heap::PostFinalizationRegistryCleanupTaskIfNeeded() {
   // Only one cleanup task is posted at a time.
   if (is_finalization_registry_cleanup_task_posted_) return;
-  // Cleanup of replay-tracked registries is scheduled by
+  // Cleanup of record/replay tracked registries is scheduled by
   // ReplayFinalizationRegistries::Poll instead.
-  if (replayio::ReplayFinalizationRegistries::Enabled()
-          ? !RecordReplayHasDirtyJSFinalizationRegistries(false)
-          : !HasDirtyJSFinalizationRegistries()) {
+  if (!RecordReplayHasDirtyJSFinalizationRegistries(
+          RecordReplayTracking::kUntracked)) {
     return;
   }
   auto taskrunner = V8::GetCurrentPlatform()->GetForegroundTaskRunner(
@@ -6633,26 +6632,30 @@ MaybeHandle<JSFinalizationRegistry> Heap::DequeueDirtyJSFinalizationRegistry() {
   return {};
 }
 
-bool Heap::RecordReplayHasDirtyJSFinalizationRegistries(bool tracked) {
+bool Heap::RecordReplayHasDirtyJSFinalizationRegistries(
+    RecordReplayTracking tracking) {
+  const bool tracked = tracking == RecordReplayTracking::kTracked;
   Object current = dirty_js_finalization_registries_list();
   while (!current.IsUndefined(isolate())) {
     JSFinalizationRegistry finalization_registry =
         JSFinalizationRegistry::cast(current);
-    if ((finalization_registry.replay_id() != 0) == tracked) return true;
+    if ((finalization_registry.record_replay_id() != 0) == tracked) return true;
     current = finalization_registry.next_dirty();
   }
   return false;
 }
 
 MaybeHandle<JSFinalizationRegistry>
-Heap::RecordReplayDequeueDirtyJSFinalizationRegistry(bool tracked) {
+Heap::RecordReplayDequeueDirtyJSFinalizationRegistry(
+    RecordReplayTracking tracking) {
+  const bool tracked = tracking == RecordReplayTracking::kTracked;
   Isolate* isolate = this->isolate();
   Object prev = ReadOnlyRoots(isolate).undefined_value();
   Object current = dirty_js_finalization_registries_list();
   while (!current.IsUndefined(isolate)) {
     JSFinalizationRegistry finalization_registry =
         JSFinalizationRegistry::cast(current);
-    if ((finalization_registry.replay_id() != 0) != tracked) {
+    if ((finalization_registry.record_replay_id() != 0) != tracked) {
       prev = current;
       current = finalization_registry.next_dirty();
       continue;
@@ -6720,14 +6723,14 @@ void Heap::KeepDuringJob(Handle<HeapObject> target) {
 void Heap::ClearKeptObjects() {
   set_weak_refs_keep_during_job(ReadOnlyRoots(isolate()).undefined_value());
 
-  // Cleanup of replay-tracked registries is scheduled from here and not from
-  // the GC, so that the decision is made at a point that replays. The poll runs
-  // at every microtask checkpoint with events allowed.
+  // Cleanup of record/replay tracked registries is scheduled from here and not
+  // from the GC, so that the decision is made at a point that replays. The poll
+  // runs at every microtask checkpoint with events allowed.
   //
   // Tradeoff: a GC that dirties a registry inside an unordered task is not
-  // followed by a checkpoint, so its cleanup waits for the end of the next
-  // ordered task. Callbacks run later than upstream in that case; nothing
-  // diverges.
+  // followed by such a checkpoint, so its cleanup waits for the next one, which
+  // an ordered task brings. Callbacks run later than upstream in that case;
+  // nothing diverges.
   //
   // If this delay ever matters, add a second poll just before the message loop
   // goes idle (ThreadControllerWithMessagePumpImpl::DoIdleWork, which already

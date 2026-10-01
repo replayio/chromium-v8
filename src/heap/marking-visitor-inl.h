@@ -431,7 +431,7 @@ int MarkingVisitorBase<ConcreteVisitor, MarkingState>::VisitWeakCell(
   this->VisitMapPointer(weak_cell);
   WeakCell::BodyDescriptor::IterateBody(map, weak_cell, size, this);
   // When replaying, the recording decides when a tracked cell is cleared.
-  if (recordreplay::IsReplaying() && weak_cell.replay_id() != 0) {
+  if (recordreplay::IsReplaying() && weak_cell.record_replay_id() != 0) {
     VisitPointer(weak_cell, weak_cell.RawField(WeakCell::kTargetOffset));
   }
   HeapObject target = weak_cell.relaxed_target();

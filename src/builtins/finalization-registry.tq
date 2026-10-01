@@ -9,11 +9,11 @@ ShrinkFinalizationRegistryUnregisterTokenMap(
     Context, JSFinalizationRegistry): void;
 extern runtime JSFinalizationRegistryRegisterWeakCellWithUnregisterToken(
     implicit context: Context)(JSFinalizationRegistry, WeakCell): void;
-extern runtime JSReplayFinalizationRegistryConstruct(
+extern runtime RecordReplayFinalizationRegistryConstruct(
     implicit context: Context)(JSFinalizationRegistry): void;
-extern runtime JSReplayFinalizationRegistryRegister(
+extern runtime RecordReplayFinalizationRegistryRegister(
     implicit context: Context)(JSFinalizationRegistry, WeakCell): void;
-extern runtime JSReplayFinalizationRegistryNextCell(
+extern runtime RecordReplayFinalizationRegistryNextCell(
     implicit context: Context)(JSFinalizationRegistry): Boolean;
 }
 
@@ -81,8 +81,8 @@ transitioning macro
 FinalizationRegistryCleanupLoop(implicit context: Context)(
     finalizationRegistry: JSFinalizationRegistry, callback: Callable): void {
   while (true) {
-    if (finalizationRegistry.replay_id != 0 &&
-        runtime::JSReplayFinalizationRegistryNextCell(finalizationRegistry) ==
+    if (finalizationRegistry.record_replay_id != 0 &&
+        runtime::RecordReplayFinalizationRegistryNextCell(finalizationRegistry) ==
         False) {
       break;
     }
@@ -136,9 +136,9 @@ FinalizationRegistryConstructor(
   dcheck(finalizationRegistry.active_cells == Undefined);
   dcheck(finalizationRegistry.cleared_cells == Undefined);
   dcheck(finalizationRegistry.key_map == Undefined);
-  finalizationRegistry.replay_id = 0;
-  dcheck(finalizationRegistry.replay_cells == Undefined);
-  runtime::JSReplayFinalizationRegistryConstruct(finalizationRegistry);
+  finalizationRegistry.record_replay_id = 0;
+  dcheck(finalizationRegistry.record_replay_cells == Undefined);
+  runtime::RecordReplayFinalizationRegistryConstruct(finalizationRegistry);
   // 8. Return finalizationRegistry.
   return finalizationRegistry;
 }
@@ -194,12 +194,12 @@ FinalizationRegistryRegister(
     next: Undefined,
     key_list_prev: Undefined,
     key_list_next: Undefined,
-    replay_id: 0
+    record_replay_id: 0
   };
   // 7. Append cell to finalizationRegistry.[[Cells]].
   PushCell(finalizationRegistry, cell);
-  if (finalizationRegistry.replay_id != 0) {
-    runtime::JSReplayFinalizationRegistryRegister(finalizationRegistry, cell);
+  if (finalizationRegistry.record_replay_id != 0) {
+    runtime::RecordReplayFinalizationRegistryRegister(finalizationRegistry, cell);
   }
   if (unregisterToken != Undefined) {
     // If an unregister token is provided, a runtime call is needed to

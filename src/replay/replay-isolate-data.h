@@ -37,18 +37,19 @@ class ReplayIsolateData {
   bool has_registered_weak_cells() const { return has_registered_weak_cells_; }
   void set_has_registered_weak_cells() { has_registered_weak_cells_ = true; }
 
-  bool finalization_registry_task_posted() const {
-    return finalization_registry_task_posted_;
+  bool is_finalization_registry_cleanup_task_posted() const {
+    return is_finalization_registry_cleanup_task_posted_;
   }
-  void set_finalization_registry_task_posted(bool posted) {
-    finalization_registry_task_posted_ = posted;
+  void set_is_finalization_registry_cleanup_task_posted(bool posted) {
+    is_finalization_registry_cleanup_task_posted_ = posted;
   }
 
   // While replaying, the tracked registries with registered cells, by
-  // JSFinalizationRegistry::replay_id. An entry is dropped once the recording
-  // shows that the GC collected the registry.
-  std::unordered_map<int, v8::Global<v8::Value>>& finalization_registries() {
-    return finalization_registries_;
+  // JSFinalizationRegistry::record_replay_id. An entry is dropped once the
+  // recording shows that the GC collected the registry.
+  std::unordered_map<int, v8::Global<v8::Value>>&
+  retained_finalization_registries() {
+    return retained_finalization_registries_;
   }
 
   // While recording, weak handles to the same set of registries.
@@ -77,18 +78,19 @@ class ReplayIsolateData {
   // again once it drops to zero, and shrink recordings. To be correct it would
   // have to:
   //   - decrement on callback delivery and on unregister() (per removed cell),
-  //   - never decrement when the GC collects a registry, since replay cannot
-  //     observe that,
-  //   - ignore cells registered while events are disallowed or after diverging.
+  //   - account for the cells of a collected registry only once the recording
+  //     describes the collection, which is when replay learns about it,
+  //   - ignore cells registered after diverging.
   // A mismatch desyncs the recorded value stream. Typical users keep
   // registrations outstanding for the life of the page, so the count would
   // rarely return to zero and is unlikely to be worth it.
   bool has_registered_weak_cells_ = false;
 
   // Whether a cleanup task for tracked registries is posted and has not run.
-  bool finalization_registry_task_posted_ = false;
+  bool is_finalization_registry_cleanup_task_posted_ = false;
 
-  std::unordered_map<int, v8::Global<v8::Value>> finalization_registries_;
+  std::unordered_map<int, v8::Global<v8::Value>>
+      retained_finalization_registries_;
   std::unordered_map<int, std::unique_ptr<RecordedFinalizationRegistry>>
       recorded_finalization_registries_;
   std::vector<int> collected_finalization_registries_;

@@ -21,19 +21,20 @@ namespace replayio {
 // - When recording, the GC clears cells as usual but does not schedule the
 //   cleanup task. Poll() schedules it from a point that replays, and the
 //   cleanup loop records the id of each cell right before its callback runs.
-// - When replaying, the GC treats the targets of cells as strong, so it never
-//   clears one. Poll() schedules the task where the recording did, and the
-//   cleanup loop clears the cells named by the recording before running their
-//   callbacks. Tracked registries with registered cells are retained until
-//   the recording shows that its GC collected them.
+// - When replaying, the GC treats the targets of tracked cells as strong, so it
+//   never clears one. Poll() schedules the task where the recording did, and
+//   the cleanup loop clears the cells named by the recording before running
+//   their callbacks. Tracked registries with registered cells are retained
+//   until the recording shows that its GC collected them.
 //
 // Only registries constructed at a point which replays are handled this way
-// ("tracked", JSFinalizationRegistry::replay_id != 0). Other registries get
-// the default handling when both recording and replaying.
+// ("tracked", JSFinalizationRegistry::record_replay_id != 0). Other registries
+// get the default handling when both recording and replaying.
 class ReplayFinalizationRegistries {
  public:
-  // WeakCell::replay_id of a cell in a tracked registry which was registered
-  // after diverging from the recording. It is retained but never delivered.
+  // WeakCell::record_replay_id of a cell in a tracked registry which was
+  // registered after diverging from the recording. It is retained but never
+  // delivered.
   static constexpr int kUndeliverableCellId = -1;
 
   // Whether the "finalization-registry" feature is active. When it is not,
@@ -43,12 +44,15 @@ class ReplayFinalizationRegistries {
   static void OnConstruct(
       internal::Isolate* isolate,
       internal::Handle<internal::JSFinalizationRegistry> registry);
+  // Crashes for a tracked registry when the current point does not replay, as
+  // the recording could not describe when the new cell is cleared.
   static void OnRegister(
       internal::Isolate* isolate,
       internal::Handle<internal::JSFinalizationRegistry> registry,
       internal::Handle<internal::WeakCell> cell);
 
-  // Called when unregister() removes |cell| from |registry|. Cannot GC.
+  // Called when unregister() removes |cell| from |registry|. Cannot GC. Crashes
+  // for a tracked cell when the current point does not replay.
   static void OnUnregisterCell(internal::Isolate* isolate,
                                internal::JSFinalizationRegistry registry,
                                internal::WeakCell cell);
@@ -61,7 +65,8 @@ class ReplayFinalizationRegistries {
       internal::Handle<internal::JSFinalizationRegistry> registry);
 
   // Schedules the cleanup task for tracked registries where the recording
-  // did. Called at the end of every microtask checkpoint.
+  // did. Called at the end of every microtask checkpoint, and when that task
+  // is done.
   static void Poll(internal::Isolate* isolate);
 
   // Picks the tracked registry the cleanup task posted by Poll() runs for.
