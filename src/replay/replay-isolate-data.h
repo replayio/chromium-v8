@@ -30,6 +30,8 @@ class ReplayIsolateData {
   ReplayIsolateData(const ReplayIsolateData&) = delete;
   ReplayIsolateData& operator=(const ReplayIsolateData&) = delete;
 
+  // FinalizationRegistry state, see src/replay/finalization-registry.h.
+
   int NewFinalizationRegistryId() { return next_finalization_registry_id_++; }
   int NewWeakCellId() { return next_weak_cell_id_++; }
 
@@ -63,6 +65,8 @@ class ReplayIsolateData {
     return collected_finalization_registries_;
   }
 
+  // WeakRef state, see src/replay/weak-refs.h.
+
   int NewWeakRefId() {
     has_tracked_weak_refs_ = true;
     return next_weak_ref_id_++;
@@ -92,8 +96,7 @@ class ReplayIsolateData {
   //
   // A count of outstanding registrations could stop the poll from recording
   // again once it drops to zero, as long as there is no tracked WeakRef
-  // either, and shrink recordings. To be correct it would
-  // have to:
+  // either, and shrink recordings. To be correct it would have to:
   //   - decrement on callback delivery and on unregister() (per removed cell),
   //   - account for the cells of a collected registry only once the recording
   //     describes the collection, which is when replay learns about it,
