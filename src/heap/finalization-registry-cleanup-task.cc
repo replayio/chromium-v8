@@ -50,7 +50,8 @@ void FinalizationRegistryCleanupTask::RunInternal() {
   HandleScope handle_scope(isolate);
   Handle<JSFinalizationRegistry> finalization_registry;
   if (record_replay_tracking_ == Heap::RecordReplayTracking::kTracked) {
-    // There is no registry when the recording's task found none.
+    // There is no registry when the recording's task found none, or when
+    // this point does not replay.
     if (!replayio::ReplayFinalizationRegistries::TakeRegistryForTask(isolate)
              .ToHandle(&finalization_registry)) {
       replayio::ReplayGCPoll::Poll(isolate);

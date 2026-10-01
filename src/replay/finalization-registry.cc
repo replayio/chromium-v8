@@ -39,11 +39,11 @@ void OnRecordedRegistryCollected(
   recorded->data->collected_finalization_registries().push_back(recorded->id);
 }
 
-}  // namespace
-
-bool ReplayFinalizationRegistries::Enabled() {
+bool Enabled() {
   return recordreplay::IsRecordingOrReplaying("finalization-registry");
 }
+
+}  // namespace
 
 void ReplayFinalizationRegistries::OnConstruct(
     i::Isolate* isolate, i::Handle<i::JSFinalizationRegistry> registry) {

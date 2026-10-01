@@ -16,9 +16,13 @@ namespace replayio {
 
 namespace i = internal;
 
-bool ReplayWeakRefs::Enabled() {
+namespace {
+
+bool Enabled() {
   return recordreplay::IsRecordingOrReplaying("weak-ref-collection");
 }
+
+}  // namespace
 
 void ReplayWeakRefs::OnConstruct(i::Isolate* isolate,
                                  i::Handle<i::JSWeakRef> weak_ref) {

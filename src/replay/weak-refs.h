@@ -23,13 +23,10 @@ namespace replayio {
 // and the replay clears the same ones.
 //
 // Only WeakRefs constructed at a point which replays are described this way
-// ("tracked", JSWeakRef::record_replay_id != 0).
+// ("tracked", JSWeakRef::record_replay_id != 0), and none is unless the
+// "weak-ref-collection" feature is active.
 class ReplayWeakRefs {
  public:
-  // Whether the "weak-ref-collection" feature is active. When it is not, no
-  // WeakRef is tracked.
-  static bool Enabled();
-
   static void OnConstruct(internal::Isolate* isolate,
                           internal::Handle<internal::JSWeakRef> weak_ref);
 

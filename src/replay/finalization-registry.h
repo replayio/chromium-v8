@@ -31,18 +31,15 @@ namespace replayio {
 //   retained until the recording shows that its GC collected them.
 //
 // Only registries constructed at a point which replays are handled this way
-// ("tracked", JSFinalizationRegistry::record_replay_id != 0). Other registries
-// get the default handling when both recording and replaying.
+// ("tracked", JSFinalizationRegistry::record_replay_id != 0), and none is
+// unless the "finalization-registry" feature is active. Other registries get
+// the default handling when both recording and replaying.
 class ReplayFinalizationRegistries {
  public:
   // WeakCell::record_replay_id of a cell in a tracked registry which was
   // registered after diverging from the recording. It is retained but never
   // delivered.
   static constexpr int kUndeliverableCellId = -1;
-
-  // Whether the "finalization-registry" feature is active. When it is not,
-  // FinalizationRegistry behaves as it does without this class.
-  static bool Enabled();
 
   static void OnConstruct(
       internal::Isolate* isolate,
