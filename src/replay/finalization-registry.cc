@@ -166,6 +166,10 @@ bool ReplayFinalizationRegistries::NextCell(
     CHECK_WITH_MSG(entry.is_found(),
                    "Recorded FinalizationRegistry cleanup for unknown cell");
     i::WeakCell cell = i::WeakCell::cast(cells->ValueAt(entry));
+    // Nullify assumes an active cell, and the replay's GC clearing a tracked
+    // cell on its own would otherwise go unnoticed.
+    CHECK_WITH_MSG(!cell.target().IsUndefined(isolate),
+                   "Tracked FinalizationRegistry cell cleared while replaying");
     // Do what the recording's GC did when it found the target dead: this moves
     // the cell to the head of the cleared list, where the cleanup loop pops it.
     cell.Nullify(isolate, [](i::HeapObject, i::ObjectSlot, i::Object) {});
