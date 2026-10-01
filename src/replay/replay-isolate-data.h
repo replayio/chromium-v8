@@ -1,6 +1,7 @@
 #ifndef V8_REPLAY_REPLAY_ISOLATE_DATA_H_
 #define V8_REPLAY_REPLAY_ISOLATE_DATA_H_
 
+#include <memory>
 #include <unordered_map>
 #include <vector>
 
@@ -8,6 +9,16 @@
 
 namespace v8 {
 namespace replayio {
+
+class ReplayIsolateData;
+
+// A tracked FinalizationRegistry with registered cells, watched while recording
+// so that the replay can be told when the GC collected it.
+struct RecordedFinalizationRegistry {
+  ReplayIsolateData* data;
+  int id;
+  v8::Global<v8::Value> registry;
+};
 
 // General-purpose per-Isolate data for recording and replaying.
 class ReplayIsolateData {
@@ -38,9 +49,22 @@ class ReplayIsolateData {
   }
 
   // While replaying, the tracked registries with registered cells, by
-  // JSFinalizationRegistry::replay_id.
+  // JSFinalizationRegistry::replay_id. An entry is dropped once the recording
+  // shows that the GC collected the registry.
   std::unordered_map<int, v8::Global<v8::Value>>& finalization_registries() {
     return finalization_registries_;
+  }
+
+  // While recording, weak handles to the same set of registries.
+  std::unordered_map<int, std::unique_ptr<RecordedFinalizationRegistry>>&
+  recorded_finalization_registries() {
+    return recorded_finalization_registries_;
+  }
+
+  // While recording, ids of registries the GC collected which the recording
+  // does not describe yet.
+  std::vector<int>& collected_finalization_registries() {
+    return collected_finalization_registries_;
   }
 
  private:
@@ -68,6 +92,9 @@ class ReplayIsolateData {
   bool finalization_registry_task_posted_ = false;
 
   std::unordered_map<int, v8::Global<v8::Value>> finalization_registries_;
+  std::unordered_map<int, std::unique_ptr<RecordedFinalizationRegistry>>
+      recorded_finalization_registries_;
+  std::vector<int> collected_finalization_registries_;
 };
 
 }  // namespace replayio

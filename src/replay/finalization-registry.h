@@ -24,7 +24,8 @@ namespace replayio {
 // - When replaying, the GC treats the targets of cells as strong, so it never
 //   clears one. Poll() schedules the task where the recording did, and the
 //   cleanup loop clears the cells named by the recording before running their
-//   callbacks.
+//   callbacks. Tracked registries with registered cells are retained until
+//   the recording shows that its GC collected them.
 //
 // Only registries constructed at a point which replays are handled this way
 // ("tracked", JSFinalizationRegistry::replay_id != 0). Other registries get
