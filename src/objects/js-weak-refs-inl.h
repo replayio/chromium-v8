@@ -9,6 +9,7 @@
 #include "src/heap/heap-write-barrier-inl.h"
 #include "src/objects/js-weak-refs.h"
 #include "src/objects/smi-inl.h"
+#include "src/replay/finalization-registry.h"
 
 // Has to be the last include (doesn't have include guards):
 #include "src/objects/object-macros.h"
@@ -107,7 +108,8 @@ bool JSFinalizationRegistry::RemoveUnregisterToken(
       switch (removal_mode) {
         case kRemoveMatchedCellsFromRegistry:
           weak_cell.RemoveFromFinalizationRegistryCells(isolate);
-          ReplayForgetCell(isolate, weak_cell);
+          replayio::ReplayFinalizationRegistries::OnUnregisterCell(
+              isolate, *this, weak_cell);
           break;
         case kKeepMatchedCellsInRegistry:
           // Do nothing.
@@ -149,17 +151,6 @@ bool JSFinalizationRegistry::RemoveUnregisterToken(
                            new_key_list_head);
   }
   return was_present;
-}
-
-void JSFinalizationRegistry::ReplayForgetCell(Isolate* isolate,
-                                              WeakCell weak_cell) {
-  if (replay_cells().IsUndefined(isolate) || weak_cell.replay_id() <= 0) return;
-  SimpleNumberDictionary cells = SimpleNumberDictionary::cast(replay_cells());
-  InternalIndex entry = cells.FindEntry(isolate, weak_cell.replay_id());
-  if (entry.is_found()) {
-    cells.ClearEntry(entry);
-    cells.ElementRemoved();
-  }
 }
 
 bool JSFinalizationRegistry::NeedsCleanup() const {

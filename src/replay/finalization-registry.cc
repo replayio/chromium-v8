@@ -116,6 +116,27 @@ void ReplayFinalizationRegistries::OnRegister(
   registry->set_replay_cells(*cells);
 }
 
+void ReplayFinalizationRegistries::OnUnregisterCell(
+    i::Isolate* isolate, i::JSFinalizationRegistry registry, i::WeakCell cell) {
+  if (!cell.replay_id() || recordreplay::HasDivergedFromRecording()) return;
+
+  // The other side would still have this cell registered, and deliver it or
+  // look for it according to the recording.
+  CHECK_WITH_MSG(
+      EventsAvailable(),
+      "FinalizationRegistry.prototype.unregister on a replay-tracked registry "
+      "while events are disallowed");
+
+  if (registry.replay_cells().IsUndefined(isolate)) return;
+  i::SimpleNumberDictionary cells =
+      i::SimpleNumberDictionary::cast(registry.replay_cells());
+  i::InternalIndex entry = cells.FindEntry(isolate, cell.replay_id());
+  if (entry.is_found()) {
+    cells.ClearEntry(entry);
+    cells.ElementRemoved();
+  }
+}
+
 bool ReplayFinalizationRegistries::NextCell(
     i::Isolate* isolate, i::Handle<i::JSFinalizationRegistry> registry) {
   if (!registry->replay_id()) return true;

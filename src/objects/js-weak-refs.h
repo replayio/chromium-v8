@@ -56,10 +56,6 @@ class JSFinalizationRegistry
   // Returns true if the cleared_cells list is non-empty.
   inline bool NeedsCleanup() const;
 
-  // Record/replay: drops an unregistered weak_cell from replay_cells. Cannot
-  // GC.
-  inline void ReplayForgetCell(Isolate* isolate, WeakCell weak_cell);
-
   // Remove the already-popped weak_cell from its unregister token linked list,
   // as well as removing the entry from the key map if it is the only WeakCell
   // with its unregister token. This method cannot GC and does not shrink the
