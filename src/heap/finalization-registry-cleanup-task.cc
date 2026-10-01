@@ -56,7 +56,8 @@ void FinalizationRegistryCleanupTask::RunInternal() {
       return;
     }
   } else if (!(replayio::ReplayFinalizationRegistries::Enabled()
-                   ? heap_->DequeueDirtyJSFinalizationRegistryForReplay(false)
+                   ? heap_->RecordReplayDequeueDirtyJSFinalizationRegistry(
+                         false)
                    : heap_->DequeueDirtyJSFinalizationRegistry())
                   .ToHandle(&finalization_registry)) {
     return;

@@ -81,7 +81,8 @@ transitioning macro
 FinalizationRegistryCleanupLoop(implicit context: Context)(
     finalizationRegistry: JSFinalizationRegistry, callback: Callable): void {
   while (true) {
-    if (runtime::JSReplayFinalizationRegistryNextCell(finalizationRegistry) ==
+    if (finalizationRegistry.replay_id != 0 &&
+        runtime::JSReplayFinalizationRegistryNextCell(finalizationRegistry) ==
         False) {
       break;
     }
@@ -197,7 +198,9 @@ FinalizationRegistryRegister(
   };
   // 7. Append cell to finalizationRegistry.[[Cells]].
   PushCell(finalizationRegistry, cell);
-  runtime::JSReplayFinalizationRegistryRegister(finalizationRegistry, cell);
+  if (finalizationRegistry.replay_id != 0) {
+    runtime::JSReplayFinalizationRegistryRegister(finalizationRegistry, cell);
+  }
   if (unregisterToken != Undefined) {
     // If an unregister token is provided, a runtime call is needed to
     // do some OrderedHashTable operations and register the mapping.

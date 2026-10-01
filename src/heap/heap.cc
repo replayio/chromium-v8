@@ -6577,7 +6577,7 @@ void Heap::PostFinalizationRegistryCleanupTaskIfNeeded() {
   // Cleanup of replay-tracked registries is scheduled by
   // ReplayFinalizationRegistries::Poll instead.
   if (replayio::ReplayFinalizationRegistries::Enabled()
-          ? !HasDirtyJSFinalizationRegistriesForReplay(false)
+          ? !RecordReplayHasDirtyJSFinalizationRegistries(false)
           : !HasDirtyJSFinalizationRegistries()) {
     return;
   }
@@ -6633,7 +6633,7 @@ MaybeHandle<JSFinalizationRegistry> Heap::DequeueDirtyJSFinalizationRegistry() {
   return {};
 }
 
-bool Heap::HasDirtyJSFinalizationRegistriesForReplay(bool tracked) {
+bool Heap::RecordReplayHasDirtyJSFinalizationRegistries(bool tracked) {
   Object current = dirty_js_finalization_registries_list();
   while (!current.IsUndefined(isolate())) {
     JSFinalizationRegistry finalization_registry =
@@ -6645,7 +6645,7 @@ bool Heap::HasDirtyJSFinalizationRegistriesForReplay(bool tracked) {
 }
 
 MaybeHandle<JSFinalizationRegistry>
-Heap::DequeueDirtyJSFinalizationRegistryForReplay(bool tracked) {
+Heap::RecordReplayDequeueDirtyJSFinalizationRegistry(bool tracked) {
   Isolate* isolate = this->isolate();
   Object prev = ReadOnlyRoots(isolate).undefined_value();
   Object current = dirty_js_finalization_registries_list();

@@ -157,7 +157,7 @@ void ReplayFinalizationRegistries::Poll(i::Isolate* isolate) {
   i::Heap* heap = isolate->heap();
   uintptr_t post = recordreplay::IsRecording() &&
                    !data->finalization_registry_task_posted() &&
-                   heap->HasDirtyJSFinalizationRegistriesForReplay(true);
+                   heap->RecordReplayHasDirtyJSFinalizationRegistries(true);
 
   // One value carries both whether to post the cleanup task and how many
   // registries the recording's GC collected since the last poll.
@@ -198,7 +198,7 @@ ReplayFinalizationRegistries::TakeRegistryForTask(i::Isolate* isolate) {
   uintptr_t id = 0;
   if (recordreplay::IsRecording()) {
     registry =
-        isolate->heap()->DequeueDirtyJSFinalizationRegistryForReplay(true);
+        isolate->heap()->RecordReplayDequeueDirtyJSFinalizationRegistry(true);
     if (!registry.is_null()) id = registry.ToHandleChecked()->replay_id();
   }
   id = recordreplay::RecordReplayValue("FinalizationRegistry.task", id);
