@@ -21,6 +21,7 @@
 #include "src/heap/cppgc/stats-collector.h"
 #include "src/heap/cppgc/unmarker.h"
 #include "src/heap/cppgc/write-barrier.h"
+#include "replayio.h"
 
 namespace cppgc {
 namespace internal {
@@ -211,6 +212,9 @@ void HeapBase::ResetRememberedSet() {
 #endif  // defined(CPPGC_YOUNG_GENERATION)
 
 void HeapBase::Terminate() {
+  // The pre-finalizers run here belong to whatever earlier GCs left alive,
+  // which differs between recording and replay.
+  v8::replayio::AutoDisallowEvents disallow("HeapBase::Terminate");
   DCHECK(!IsMarking());
   CHECK(!in_disallow_gc_scope());
 
