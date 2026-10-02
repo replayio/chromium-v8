@@ -1471,11 +1471,11 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::ReplayOnFrameEnter() {
 }
 
 BytecodeArrayBuilder& BytecodeArrayBuilder::ReplayOnFrameEnterGenerator(
-    Register generator_object) {
+    const char* kind, Register generator_object) {
   if (emit_record_replay_opcodes_) {
     OutputReplayIncJsFrameDepth();
   }
-  RecordReplayInstrumentationGenerator("generator", generator_object);
+  RecordReplayInstrumentationGenerator(kind, generator_object);
   return *this;
 }
 

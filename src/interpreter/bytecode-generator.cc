@@ -1434,7 +1434,7 @@ void BytecodeGenerator::GenerateBytecodeBody() {
   builder()->RecordReplayOnProgress();
 
   if (IsResumableFunction(literal->kind())) {
-    builder()->ReplayOnFrameEnterGenerator(generator_object());
+    builder()->ReplayOnFrameEnterGenerator("generator", generator_object());
   } else {
     builder()->ReplayOnFrameEnter();
   }
@@ -4777,7 +4777,7 @@ void BytecodeGenerator::BuildSuspendPoint(int position) {
   builder()->ResumeGenerator(generator_object(), registers);
 
   builder()->RecordReplayOnProgress();
-  builder()->ReplayOnFrameEnterGenerator(generator_object());
+  builder()->ReplayOnFrameEnterGenerator("entry", generator_object());
 }
 
 void BytecodeGenerator::VisitYield(Yield* expr) {
