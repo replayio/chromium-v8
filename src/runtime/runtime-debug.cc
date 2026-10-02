@@ -1244,6 +1244,16 @@ RUNTIME_FUNCTION(Runtime_ReplaySyncJsFrameDepth) {
   int depth = RecordReplayCountJsFrameDepth(isolate);
   isolate->set_replay_js_frame_depth(depth);
   if (depth >= ThreadLocalTop::kReplayMaxJsFrameDepth) {
+    // StackOverflow() throws with JS execution disallowed. The debugger skips
+    // exception events for real overflows (see Debug::OnException), but this
+    // one happens with plenty of native stack left, so suppress it here too:
+    // anything evaluated while paused on it would crash. Stepping is still
+    // retargeted to the catch handler, as for real overflows.
+    {
+      HandleScope scope(isolate);
+      isolate->debug()->PrepareStepOnThrow();
+    }
+    SuppressDebug no_debug(isolate->debug());
     return isolate->StackOverflow();
   }
   return ReadOnlyRoots(isolate).undefined_value();
