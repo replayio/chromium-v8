@@ -1237,7 +1237,7 @@ extern int RecordReplayCountJsFrameDepth(Isolate* isolate);
 // stack first: it is stale after frames were unwound by an exception (see
 // Isolate::UnwindAndFindHandler). The stack overflow is then thrown at the
 // same JS frame depth when recording and replaying, regardless of how much
-// native stack is used.
+// native stack is used, so it doesn't invalidate the recording.
 RUNTIME_FUNCTION(Runtime_ReplaySyncJsFrameDepth) {
   SealHandleScope shs(isolate);
   DCHECK_EQ(0, args.length());
@@ -1254,7 +1254,7 @@ RUNTIME_FUNCTION(Runtime_ReplaySyncJsFrameDepth) {
       isolate->debug()->PrepareStepOnThrow();
     }
     SuppressDebug no_debug(isolate->debug());
-    return isolate->StackOverflow();
+    return isolate->StackOverflow(/* deterministic */ true);
   }
   return ReadOnlyRoots(isolate).undefined_value();
 }

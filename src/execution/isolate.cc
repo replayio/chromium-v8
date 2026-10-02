@@ -1589,7 +1589,11 @@ bool Isolate::MayAccess(Handle<Context> accessing_context,
 
 static bool gHasPrintedStack = false;
 
-Object Isolate::StackOverflow() {
+Object Isolate::StackOverflow(bool deterministic) {
+  if (!deterministic) {
+    recordreplay::InvalidateRecording("Stack overflow");
+  }
+
   if (recordreplay::IsRecordingOrReplaying() && !gHasPrintedStack) {
     gHasPrintedStack = true;
     std::stringstream stack;
