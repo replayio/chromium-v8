@@ -157,6 +157,12 @@ template EXPORT_TEMPLATE_DEFINE(V8_EXPORT_PRIVATE)
 BytecodeSourceInfo BytecodeArrayBuilder::CurrentSourcePosition(
     Bytecode bytecode) {
   BytecodeSourceInfo source_position;
+  // Leave positions to the following bytecode, e.g. the return statement's
+  // position to Return, which the debugger needs as a break location.
+  if (bytecode == Bytecode::kReplayIncJsFrameDepth ||
+      bytecode == Bytecode::kReplayDecJsFrameDepth) {
+    return source_position;
+  }
   if (latest_source_info_.is_valid()) {
     // Statement positions need to be emitted immediately.  Expression
     // positions can be pushed back until a bytecode is found that can
@@ -180,6 +186,11 @@ void BytecodeArrayBuilder::SetDeferredSourceInfo(
 
 void BytecodeArrayBuilder::AttachOrEmitDeferredSourceInfo(BytecodeNode* node) {
   if (!deferred_source_info_.is_valid()) return;
+  // See CurrentSourcePosition.
+  if (node->bytecode() == Bytecode::kReplayIncJsFrameDepth ||
+      node->bytecode() == Bytecode::kReplayDecJsFrameDepth) {
+    return;
+  }
   if (!node->source_info().is_valid()) {
     node->set_source_info(deferred_source_info_);
   } else if (deferred_source_info_.is_statement() &&
