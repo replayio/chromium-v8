@@ -31,6 +31,11 @@ class ThreadLocalTop {
   // integer fields.
   static constexpr uint32_t kSizeInBytes = 26 * kSystemPointerSize;
   static constexpr int kReplayMaxJsFrameDepth = 1024;
+  // Stored into replay_js_frame_depth_ when frames are unwound by an
+  // exception. It is far above kReplayMaxJsFrameDepth, so the next
+  // ReplayIncJsFrameDepth takes its slow path and recomputes the depth from
+  // the stack (see Runtime_ReplaySyncJsFrameDepth).
+  static constexpr int kReplayJsFrameDepthNeedsSync = 1 << 30;
 
   // Does early low-level initialization that does not depend on the
   // isolate being present.

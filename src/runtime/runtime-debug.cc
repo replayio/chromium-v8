@@ -1230,6 +1230,25 @@ RUNTIME_FUNCTION(Runtime_RecordReplayTargetProgressReached) {
   return ReadOnlyRoots(isolate).undefined_value();
 }
 
+extern int RecordReplayCountJsFrameDepth(Isolate* isolate);
+
+// Slow path of ReplayIncJsFrameDepth, taken when the incremented depth reached
+// ThreadLocalTop::kReplayMaxJsFrameDepth. The depth is recomputed from the
+// stack first: it is stale after frames were unwound by an exception (see
+// Isolate::UnwindAndFindHandler). The stack overflow is then thrown at the
+// same JS frame depth when recording and replaying, regardless of how much
+// native stack is used.
+RUNTIME_FUNCTION(Runtime_ReplaySyncJsFrameDepth) {
+  SealHandleScope shs(isolate);
+  DCHECK_EQ(0, args.length());
+  int depth = RecordReplayCountJsFrameDepth(isolate);
+  isolate->set_replay_js_frame_depth(depth);
+  if (depth >= ThreadLocalTop::kReplayMaxJsFrameDepth) {
+    return isolate->StackOverflow();
+  }
+  return ReadOnlyRoots(isolate).undefined_value();
+}
+
 extern "C" void V8RecordReplayNotifyActivity();
 
 RUNTIME_FUNCTION(Runtime_RecordReplayNotifyActivity) {
