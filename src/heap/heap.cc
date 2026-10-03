@@ -105,7 +105,7 @@
 #include "src/objects/slots-inl.h"
 #include "src/objects/visitors.h"
 #include "src/regexp/regexp.h"
-#include "src/replay/finalization-registry.h"
+#include "src/replay/gc-poll.h"
 #include "src/snapshot/embedded/embedded-data.h"
 #include "src/snapshot/serializer-deserializer.h"
 #include "src/snapshot/snapshot.h"
@@ -6575,7 +6575,7 @@ void Heap::PostFinalizationRegistryCleanupTaskIfNeeded() {
   // Only one cleanup task is posted at a time.
   if (is_finalization_registry_cleanup_task_posted_) return;
   // Cleanup of record/replay tracked registries is scheduled by
-  // ReplayFinalizationRegistries::Poll instead.
+  // ReplayGCPoll::Poll instead.
   if (!RecordReplayHasDirtyJSFinalizationRegistries(
           RecordReplayTracking::kUntracked)) {
     return;
@@ -6613,23 +6613,6 @@ void Heap::EnqueueDirtyJSFinalizationRegistry(
   set_dirty_js_finalization_registries_list_tail(finalization_registry);
   // dirty_js_finalization_registries_list_tail_ is rescanned by
   // ProcessWeakListRoots.
-}
-
-MaybeHandle<JSFinalizationRegistry> Heap::DequeueDirtyJSFinalizationRegistry() {
-  // Take a FinalizationRegistry from the head of the dirty list for fairness.
-  if (HasDirtyJSFinalizationRegistries()) {
-    Handle<JSFinalizationRegistry> head(
-        JSFinalizationRegistry::cast(dirty_js_finalization_registries_list()),
-        isolate());
-    set_dirty_js_finalization_registries_list(head->next_dirty());
-    head->set_next_dirty(ReadOnlyRoots(this).undefined_value());
-    if (*head == dirty_js_finalization_registries_list_tail()) {
-      set_dirty_js_finalization_registries_list_tail(
-          ReadOnlyRoots(this).undefined_value());
-    }
-    return head;
-  }
-  return {};
 }
 
 bool Heap::RecordReplayHasDirtyJSFinalizationRegistries(
@@ -6737,7 +6720,7 @@ void Heap::ClearKeptObjects() {
   // runs identically when replaying). That needs an embedder hook from base
   // through the Blink scheduler to the isolate, for the main thread and
   // workers.
-  replayio::ReplayFinalizationRegistries::Poll(isolate());
+  replayio::ReplayGCPoll::Poll(isolate());
 }
 
 size_t Heap::NumberOfTrackedHeapObjectTypes() {

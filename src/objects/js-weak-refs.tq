@@ -52,4 +52,7 @@ extern class WeakCell extends HeapObject {
 
 extern class JSWeakRef extends JSObject {
   target: Undefined|JSReceiver|Symbol;
+  // Record/replay: nonzero when the recording describes the GC clearing the
+  // target. See src/replay/weak-refs.h.
+  record_replay_id: Smi;
 }

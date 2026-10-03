@@ -12,6 +12,10 @@ class String;
 
 namespace replayio {
 
+// Whether the current point replays, so that values can be recorded/replayed
+// and ids handed out consistently.
+bool AreEventsAvailable();
+
 v8::internal::Handle<v8::internal::String> RecordReplayStringHandle(
     const char* why, v8::internal::Isolate* isolate,
     v8::internal::Handle<v8::internal::String> input);

@@ -196,11 +196,13 @@ FinalizationRegistryRegister(
     key_list_next: Undefined,
     record_replay_id: 0
   };
-  // 7. Append cell to finalizationRegistry.[[Cells]].
-  PushCell(finalizationRegistry, cell);
+  // The cell gets its record/replay id before a marker can reach it through
+  // the registry.
   if (finalizationRegistry.record_replay_id != 0) {
     runtime::RecordReplayFinalizationRegistryRegister(finalizationRegistry, cell);
   }
+  // 7. Append cell to finalizationRegistry.[[Cells]].
+  PushCell(finalizationRegistry, cell);
   if (unregisterToken != Undefined) {
     // If an unregister token is provided, a runtime call is needed to
     // do some OrderedHashTable operations and register the mapping.

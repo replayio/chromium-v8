@@ -75,6 +75,7 @@
 #include "src/objects/string-forwarding-table-inl.h"
 #include "src/objects/transitions-inl.h"
 #include "src/objects/visitors.h"
+#include "src/replay/weak-refs.h"
 #include "src/snapshot/shared-heap-serializer.h"
 #include "src/tasks/cancelable-task.h"
 #include "src/tracing/tracing-category-observer.h"
@@ -3483,6 +3484,7 @@ void MarkCompactCollector::ClearJSWeakRefs() {
     HeapObject target = HeapObject::cast(weak_ref.target());
     if (!non_atomic_marking_state()->IsBlackOrGrey(target)) {
       weak_ref.set_target(ReadOnlyRoots(isolate()).undefined_value());
+      replayio::ReplayWeakRefs::OnTargetCleared(isolate(), weak_ref);
     } else {
       // The value of the JSWeakRef is alive.
       ObjectSlot slot = weak_ref.RawField(JSWeakRef::kTargetOffset);
@@ -3500,8 +3502,8 @@ void MarkCompactCollector::ClearJSWeakRefs() {
     HeapObject target = HeapObject::cast(weak_cell.target());
     if (!non_atomic_marking_state()->IsBlackOrGrey(target)) {
       DCHECK(target.CanBeHeldWeakly());
-      // When replaying, marking keeps the targets of replay-tracked cells
-      // alive (see VisitWeakCell), so only the recording clears those cells.
+      // When replaying, marking keeps the targets of tracked cells alive (see
+      // VisitWeakCell), so the GC never clears one.
       DCHECK(!recordreplay::IsReplaying() || weak_cell.record_replay_id() == 0);
       // The value of the WeakCell is dead.
       JSFinalizationRegistry finalization_registry =
