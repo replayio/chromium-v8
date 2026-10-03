@@ -3698,6 +3698,9 @@ void Isolate::Deinit() {
 
   FutexEmulation::IsolateDeinit(this);
 
+  // Holds v8::Globals, which have to be destroyed before the global handles.
+  replay_data_.reset();
+
   debug()->Unload();
 
 #if V8_ENABLE_WEBASSEMBLY

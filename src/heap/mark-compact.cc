@@ -8,6 +8,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "include/v8.h"
 #include "src/base/logging.h"
 #include "src/base/optional.h"
 #include "src/base/utils/random-number-generator.h"
@@ -3499,6 +3500,9 @@ void MarkCompactCollector::ClearJSWeakRefs() {
     HeapObject target = HeapObject::cast(weak_cell.target());
     if (!non_atomic_marking_state()->IsBlackOrGrey(target)) {
       DCHECK(target.CanBeHeldWeakly());
+      // When replaying, marking keeps the targets of replay-tracked cells
+      // alive (see VisitWeakCell), so only the recording clears those cells.
+      DCHECK(!recordreplay::IsReplaying() || weak_cell.record_replay_id() == 0);
       // The value of the WeakCell is dead.
       JSFinalizationRegistry finalization_registry =
           JSFinalizationRegistry::cast(weak_cell.finalization_registry());

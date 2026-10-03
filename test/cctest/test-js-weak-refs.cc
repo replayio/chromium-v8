@@ -37,6 +37,7 @@ Handle<JSFinalizationRegistry> ConstructJSFinalizationRegistry(
   finalization_registry->set_cleanup(
       isolate->native_context()->empty_function());
   finalization_registry->set_flags(0);
+  finalization_registry->set_record_replay_id(0);
 
 #ifdef VERIFY_HEAP
   finalization_registry->JSFinalizationRegistryVerify(isolate);
