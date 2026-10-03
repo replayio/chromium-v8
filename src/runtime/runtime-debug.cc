@@ -1230,6 +1230,35 @@ RUNTIME_FUNCTION(Runtime_RecordReplayTargetProgressReached) {
   return ReadOnlyRoots(isolate).undefined_value();
 }
 
+extern int RecordReplayCountJsFrameDepth(Isolate* isolate);
+
+// Slow path of ReplayIncJsFrameDepth, taken when the incremented depth reached
+// ThreadLocalTop::kReplayMaxJsFrameDepth. The depth is recomputed from the
+// stack first: it is stale after frames were unwound by an exception (see
+// Isolate::UnwindAndFindHandler). The stack overflow is then thrown at the
+// same JS frame depth when recording and replaying, regardless of how much
+// native stack is used, so it doesn't invalidate the recording.
+RUNTIME_FUNCTION(Runtime_ReplaySyncJsFrameDepth) {
+  SealHandleScope shs(isolate);
+  DCHECK_EQ(0, args.length());
+  int depth = RecordReplayCountJsFrameDepth(isolate);
+  isolate->set_replay_js_frame_depth(depth);
+  if (depth >= ThreadLocalTop::kReplayMaxJsFrameDepth) {
+    // StackOverflow() throws with JS execution disallowed. The debugger skips
+    // exception events for real overflows (see Debug::OnException), but this
+    // one happens with plenty of native stack left, so suppress it here too:
+    // anything evaluated while paused on it would crash. Stepping is still
+    // retargeted to the catch handler, as for real overflows.
+    {
+      HandleScope scope(isolate);
+      isolate->debug()->PrepareStepOnThrow();
+    }
+    SuppressDebug no_debug(isolate->debug());
+    return isolate->StackOverflow(/* deterministic */ true);
+  }
+  return ReadOnlyRoots(isolate).undefined_value();
+}
+
 extern "C" void V8RecordReplayNotifyActivity();
 
 RUNTIME_FUNCTION(Runtime_RecordReplayNotifyActivity) {

@@ -2313,17 +2313,22 @@ void BaselineCompiler::VisitRecordReplayIncExecutionProgressCounter() {
 
 void BaselineCompiler::VisitReplayIncJsFrameDepth() {
 #if V8_TARGET_ARCH_X64
-  BaselineAssembler::ScratchRegisterScope scratch_scope(&basm_);
-  Register scratch = scratch_scope.AcquireScratch();
-  ExternalReference depth_ref = ExternalReference::Create(
-      IsolateAddressId::kReplayJsFrameDepthAddress, masm_.isolate());
-  Operand depth = masm_.ExternalReferenceAsOperand(depth_ref, scratch);
-  masm_.incl(depth);
-  masm_.cmpl(depth, Immediate(ThreadLocalTop::kReplayMaxJsFrameDepth));
   Label done;
-  masm_.j(less, &done);
-  CallRuntime(Runtime::kThrowStackOverflow);
-  __ Trap();
+  {
+    BaselineAssembler::ScratchRegisterScope scratch_scope(&basm_);
+    Register scratch = scratch_scope.AcquireScratch();
+    ExternalReference depth_ref = ExternalReference::Create(
+        IsolateAddressId::kReplayJsFrameDepthAddress, masm_.isolate());
+    Operand depth = masm_.ExternalReferenceAsOperand(depth_ref, scratch);
+    masm_.incl(depth);
+    masm_.cmpl(depth, Immediate(ThreadLocalTop::kReplayMaxJsFrameDepth));
+    masm_.j(less, &done);
+  }
+  {
+    // The accumulator is live here, e.g. after ResumeGenerator.
+    SaveAccumulatorScope accumulator_scope(&basm_);
+    CallRuntime(Runtime::kReplaySyncJsFrameDepth);
+  }
   __ Bind(&done);
 #else
   FATAL("ReplayIncJsFrameDepth Baseline lowering is x64 only");

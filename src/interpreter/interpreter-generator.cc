@@ -2871,9 +2871,8 @@ IGNITION_HANDLER(ReplayIncJsFrameDepth, InterpreterAssembler) {
   Goto(&ok);
 
   BIND(&overflow);
-  CallRuntime(Runtime::kThrowStackOverflow, GetContext());
-  Abort(AbortReason::kUnexpectedReturnFromThrow);
-  Unreachable();
+  CallRuntime(Runtime::kReplaySyncJsFrameDepth, GetContext());
+  Goto(&ok);
 
   BIND(&ok);
   Dispatch();

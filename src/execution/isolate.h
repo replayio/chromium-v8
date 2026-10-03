@@ -1071,7 +1071,10 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   Handle<JSMessageObject> CreateMessageFromException(Handle<Object> exception);
 
   // Out of resource exception helpers.
-  Object StackOverflow();
+  // When recording, a stack overflow invalidates the recording unless it is
+  // |deterministic|, i.e. thrown at the same point when replaying regardless
+  // of native stack usage (see Runtime_ReplaySyncJsFrameDepth).
+  Object StackOverflow(bool deterministic = false);
   Object TerminateExecution();
   void CancelTerminateExecution();
 

@@ -1434,7 +1434,7 @@ void BytecodeGenerator::GenerateBytecodeBody() {
   builder()->RecordReplayOnProgress();
 
   if (IsResumableFunction(literal->kind())) {
-    builder()->ReplayOnFrameEnterGenerator(generator_object());
+    builder()->ReplayOnFrameEnterGenerator("generator", generator_object());
   } else {
     builder()->ReplayOnFrameEnter();
   }
@@ -3745,11 +3745,13 @@ void BytecodeGenerator::BuildReturn(int source_position) {
   }
   builder()->SetStatementPosition(source_position,
                                   /* record_replay_breakpoint */ false);
-  {
+  if (builder()->EmitRecordReplayInstrumentationOpcodes()) {
     RegisterAllocationScope register_scope(this);
     Register return_value = register_allocator()->NewRegister();
     builder()->StoreAccumulatorInRegister(return_value);
     builder()->ReplayOnFrameReturn(return_value);
+  } else {
+    builder()->ReplayOnFrameExit();
   }
   builder()->Return();
 }
@@ -4777,7 +4779,7 @@ void BytecodeGenerator::BuildSuspendPoint(int position) {
   builder()->ResumeGenerator(generator_object(), registers);
 
   builder()->RecordReplayOnProgress();
-  builder()->ReplayOnFrameEnterGenerator(generator_object());
+  builder()->ReplayOnFrameEnterGenerator("entry", generator_object());
 }
 
 void BytecodeGenerator::VisitYield(Yield* expr) {

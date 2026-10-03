@@ -3621,7 +3621,8 @@ void BytecodeGraphBuilder::VisitRecordReplayIncExecutionProgressCounter() {
 }
 
 void BytecodeGraphBuilder::VisitReplayIncJsFrameDepth() {
-  // SoftSO before TempSchedule so IfException attaches to ThrowCall.
+  PrepareEagerCheckpoint();
+
   // Simplified ops only — machine value ops are Typer UNREACHABLE.
   FieldAccess depth_access(kUntaggedBase, 0, MaybeHandle<Name>(),
                            MaybeHandle<Map>(), Type::Signed32(),
@@ -3639,18 +3640,23 @@ void BytecodeGraphBuilder::VisitReplayIncJsFrameDepth() {
       jsgraph()->SmiConstant(ThreadLocalTop::kReplayMaxJsFrameDepth),
       incremented);
   NewBranch(overflow, BranchHint::kFalse);
+  Environment* slow_environment;
   {
     SubEnvironment sub_environment(this);
     NewIfTrue();
-    BuildLoopExitsForFunctionExit(bytecode_analysis().GetInLivenessFor(
-        bytecode_iterator().current_offset()));
-    Node* throw_call =
-        NewNode(javascript()->CallRuntime(Runtime::kThrowStackOverflow));
-    environment()->RecordAfterState(throw_call, Environment::kAttachFrameState);
-    Node* control = NewNode(common()->Throw());
-    MergeControlToLeaveFunction(control);
+    // Resync the depth from the stack, throwing a stack overflow if it is
+    // really too deep. A JS call rather than a simplified operator so that a
+    // surrounding try/catch handles the exception.
+    Node* call =
+        NewNode(javascript()->CallRuntime(Runtime::kReplaySyncJsFrameDepth));
+    environment()->RecordAfterState(call, Environment::kAttachFrameState);
+    slow_environment = environment();
   }
   NewIfFalse();
+  environment()->Merge(slow_environment,
+                       bytecode_analysis().GetOutLivenessFor(
+                           bytecode_iterator().current_offset()));
+  mark_as_needing_eager_checkpoint(true);
 }
 
 void BytecodeGraphBuilder::VisitReplayDecJsFrameDepth() {
