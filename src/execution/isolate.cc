@@ -3698,9 +3698,6 @@ void Isolate::Deinit() {
 
   FutexEmulation::IsolateDeinit(this);
 
-  // Holds v8::Globals, which have to be destroyed before the global handles.
-  replay_data_.reset();
-
   debug()->Unload();
 
 #if V8_ENABLE_WEBASSEMBLY
@@ -3734,6 +3731,10 @@ void Isolate::Deinit() {
   // We start with the heap tear down so that releasing managed objects does
   // not cause a GC.
   heap_.StartTearDown();
+
+  // Holds v8::Globals, which have to be destroyed before the global handles,
+  // and is used by the GC, which can still run before the heap tear down.
+  replay_data_.reset();
 
   // Stop concurrent tasks before destroying resources since they might still
   // use those.
