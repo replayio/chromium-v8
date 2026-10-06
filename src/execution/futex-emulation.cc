@@ -9,6 +9,7 @@
 #include "src/api/api-inl.h"
 #include "src/base/logging.h"
 #include "src/base/macros.h"
+#include "src/base/optional.h"
 #include "src/execution/isolate.h"
 #include "src/execution/vm-state-inl.h"
 #include "src/handles/handles-inl.h"
@@ -168,7 +169,8 @@ class AsyncWaiterTimeoutTask : public CancelableTask {
   FutexWaitListNode* node_;
 };
 
-void FutexEmulation::NotifyAsyncWaiter(FutexWaitListNode* node) {
+void FutexEmulation::NotifyAsyncWaiter(
+    FutexWaitListNode* node, std::vector<AsyncWaiterTask>* tasks_to_post) {
   // This function can run in any thread.
 
   g_mutex.Pointer()->AssertHeld();
@@ -190,7 +192,7 @@ void FutexEmulation::NotifyAsyncWaiter(FutexWaitListNode* node) {
                                       FutexWaitList::HeadAndTail{node, node}));
     auto task = std::make_unique<ResolveAsyncWaiterPromisesTask>(
         node->cancelable_task_manager_, node->isolate_for_async_waiters_);
-    node->task_runner_->PostNonNestableTask(std::move(task));
+    tasks_to_post->push_back({node->task_runner_, std::move(task)});
   } else {
     // Add this Node into the existing list.
     node->prev_ = it->second.tail;
@@ -550,6 +552,9 @@ Object FutexEmulation::WaitAsync(Isolate* isolate,
 
   enum class ResultKind { kNotEqual, kTimedOut, kAsync };
   ResultKind result_kind;
+  // Posted at the end, once events are allowed again: posted from inside the
+  // scope the timeout task is flagged as a divergent task when it runs.
+  AsyncWaiterTask timeout_task;
   {
     replayio::AutoDisallowEvents disallow("FutexEmulation::WaitAsync");
     // 16. Perform EnterCriticalSection(WL).
@@ -584,8 +589,7 @@ Object FutexEmulation::WaitAsync(Isolate* isolate,
         auto task = std::make_unique<AsyncWaiterTimeoutTask>(
             node->cancelable_task_manager_, node);
         node->timeout_task_id_ = task->id();
-        node->task_runner_->PostNonNestableDelayedTask(
-            std::move(task), rel_timeout.InSecondsF());
+        timeout_task = {node->task_runner_, std::move(task)};
       }
 
       g_wait_list.Pointer()->AddNode(node);
@@ -595,6 +599,11 @@ Object FutexEmulation::WaitAsync(Isolate* isolate,
     // 18.a. Perform LeaveCriticalSection(WL).
     // 19.b. Perform LeaveCriticalSection(WL).
     // 24. Perform LeaveCriticalSection(WL).
+  }
+
+  if (timeout_task.task) {
+    timeout_task.runner->PostNonNestableDelayedTask(
+        std::move(timeout_task.task), rel_timeout.InSecondsF());
   }
 
   switch (result_kind) {
@@ -668,8 +677,16 @@ Object FutexEmulation::Wake(Handle<JSArrayBuffer> array_buffer, size_t addr,
   std::shared_ptr<BackingStore> backing_store = array_buffer->GetBackingStore();
   auto wait_location = FutexWaitList::ToWaitLocation(backing_store.get(), addr);
 
-  replayio::AutoDisallowEvents disallow("FutexEmulation::Wake");
-  NoGarbageCollectionMutexGuard lock_guard(g_mutex.Pointer());
+  // The tasks resolving async waiters' promises are posted at the end, once
+  // the lock is released and events are allowed again: posted from inside the
+  // scope they would be unordered tasks, which the waiter's thread only runs
+  // when its queue next reloads, so an idle worker's Atomics.waitAsync would
+  // never resolve.
+  std::vector<AsyncWaiterTask> tasks_to_post;
+  base::Optional<replayio::AutoDisallowEvents> disallow(
+      base::in_place, "FutexEmulation::Wake");
+  base::Optional<NoGarbageCollectionMutexGuard> lock_guard(
+      base::in_place, g_mutex.Pointer());
 
   auto& location_lists = g_wait_list.Pointer()->location_lists_;
   auto it = location_lists.find(wait_location);
@@ -698,7 +715,7 @@ Object FutexEmulation::Wake(Handle<JSArrayBuffer> array_buffer, size_t addr,
       auto old_node = node;
       node = node->next_;
       if (old_node->IsAsync()) {
-        NotifyAsyncWaiter(old_node);
+        NotifyAsyncWaiter(old_node, &tasks_to_post);
       } else {
         // WaitSync will remove the node from the list.
         old_node->cond_.NotifyOne();
@@ -747,6 +764,12 @@ Object FutexEmulation::Wake(Handle<JSArrayBuffer> array_buffer, size_t addr,
     } else {
       node = node->next_;
     }
+  }
+
+  lock_guard.reset();
+  disallow.reset();
+  for (AsyncWaiterTask& task : tasks_to_post) {
+    task.runner->PostNonNestableTask(std::move(task.task));
   }
 
   return Smi::FromInt(waiters_woken);
