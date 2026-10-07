@@ -10785,7 +10785,11 @@ std::shared_ptr<WasmStreaming> WasmStreaming::Unpack(Isolate* v8_isolate,
 #define DLLEXPORT
 #endif
 
-static bool gRecordingOrReplaying;
+namespace internal {
+// Builtins read this through
+// ExternalReference::record_replay_is_recording_or_replaying.
+bool gRecordReplayIsRecordingOrReplaying;
+}  // namespace internal
 static bool gARMRecording;
 static bool gHasDisabledFeatures;
 static bool gAssertsDisabled;
@@ -10963,7 +10967,7 @@ extern "C" void V8RecordReplayGetCurrentException(MaybeLocal<Value>* exception) 
 extern bool RecordReplayHasRegisteredScript(Script script);
 
 void RecordReplayOnExceptionUnwind(Isolate* isolate) {
-  CHECK(gRecordingOrReplaying);
+  CHECK(gRecordReplayIsRecordingOrReplaying);
   CHECK(IsMainThread());
   CHECK(!gCurrentException);
 
@@ -11334,7 +11338,7 @@ static void RecordReplayInitializeDisabledFeatures() {
 }
 
 bool recordreplay::IsRecordingOrReplaying(const char* feature, const char* subfeature) {
-  return gRecordingOrReplaying && (!feature || FeatureEnabled(feature, subfeature));
+  return internal::gRecordReplayIsRecordingOrReplaying && (!feature || FeatureEnabled(feature, subfeature));
 }
 
 extern "C" DLLEXPORT bool V8IsRecordingOrReplaying(const char* feature, const char* subfeature) {
@@ -12313,7 +12317,7 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
   RecordReplayInitializeDisabledFeatures();
   gHasDisabledFeatures = gRecordReplayHasDisabledFeatures();
 
-  gRecordingOrReplaying = V8RecordReplayFeatureEnabled("record-replay", nullptr);
+  internal::gRecordReplayIsRecordingOrReplaying = V8RecordReplayFeatureEnabled("record-replay", nullptr);
   InitMainThread();
 
   gAssertsDisabled = gRecordReplayAreAssertsDisabled();
