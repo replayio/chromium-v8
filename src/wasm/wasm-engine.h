@@ -66,6 +66,8 @@ class V8_EXPORT_PRIVATE InstantiationResultResolver {
 // Native modules cached by their wire bytes.
 class NativeModuleCache {
  public:
+  NativeModuleCache();
+
   struct Key {
     // Store the prefix hash as part of the key for faster lookup, and to
     // quickly check existing prefixes for streaming compilation.
@@ -107,6 +109,19 @@ class NativeModuleCache {
       std::shared_ptr<NativeModule> native_module, bool error);
   void Erase(NativeModule* native_module);
 
+  // When recording or replaying, whether the cache finds a module, and which
+  // thread creates it, must not depend on cross-thread timing that isn't
+  // recorded. Every operation used with synchronous compilation (see the
+  // constructor) then takes an ordered lock, a lookup never waits for another
+  // thread compiling the same bytes (both compile and {Update} keeps the
+  // first), and a cached module is kept alive by the cache itself for as long
+  // as some isolate holds it through a {Managed}: the cache counts those
+  // holders under the ordered lock and drops the module when the last one goes
+  // away, instead of finding out when its {weak_ptr} expires, which happens on
+  // whichever thread drops the last reference.
+  void AddHolder(NativeModule* native_module);
+  void RemoveHolder(NativeModule* native_module);
+
   bool empty() { return map_.empty(); }
 
   // Hash the wire bytes up to the code section header. Used as a heuristic to
@@ -135,6 +150,18 @@ class NativeModuleCache {
   // module. Only one thread will create the {NativeModule}. Other threads
   // will wait on this variable until the first thread wakes them up.
   base::ConditionVariable cache_cv_;
+
+  // Whether the cache behaves as described above, decided by the constructor.
+  bool record_replay_mode() const { return ordered_lock_id_ != 0; }
+
+  // In that mode: the cache's ordered lock, and the cached modules with the
+  // number of {Managed}s holding each.
+  int ordered_lock_id_ = 0;
+  struct HeldModule {
+    std::shared_ptr<NativeModule> native_module;
+    size_t holders = 0;
+  };
+  std::map<NativeModule*, HeldModule> held_modules_;
 };
 
 // The central data structure that represents an engine instance capable of
@@ -431,6 +458,8 @@ class V8_EXPORT_PRIVATE WasmEngine {
   std::unique_ptr<CurrentGCInfo> current_gc_info_;
 
   NativeModuleCache native_module_cache_;
+  friend void ManagedNativeModuleAdded(NativeModule* native_module);
+  friend void ManagedNativeModuleRemoved(NativeModule* native_module);
 
   // End of fields protected by {mutex_}.
   //////////////////////////////////////////////////////////////////////////////

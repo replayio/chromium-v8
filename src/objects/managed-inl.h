@@ -45,6 +45,7 @@ Handle<Managed<CppType>> Managed<CppType>::FromSharedPtr(
     std::shared_ptr<CppType> shared_ptr, AllocationType allocation_type) {
   reinterpret_cast<v8::Isolate*>(isolate)
       ->AdjustAmountOfExternalAllocatedMemory(estimated_size);
+  if (shared_ptr) OnManagedAdded(shared_ptr.get());
   auto destructor = new ManagedPtrDestructor(
       estimated_size, new std::shared_ptr<CppType>{std::move(shared_ptr)},
       Destructor);
