@@ -44,7 +44,5 @@ void ManagedObjectFinalizer(const v8::WeakCallbackInfo<void>& data) {
   data.SetSecondPassCallback(&ManagedObjectFinalizerSecondPass);
 }
 
-void AssertManagedDestructor() { recordreplay::Assert("Managed::Destructor"); }
-
 }  // namespace internal
 }  // namespace v8

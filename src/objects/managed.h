@@ -6,6 +6,7 @@
 #define V8_OBJECTS_MANAGED_H_
 
 #include <memory>
+#include "include/v8.h"  // For replay.
 #include "src/execution/isolate.h"
 #include "src/handles/handles.h"
 #include "src/heap/factory.h"
@@ -37,10 +38,6 @@ struct ManagedPtrDestructor {
 // the template parameter.
 V8_EXPORT_PRIVATE void ManagedObjectFinalizer(
     const v8::WeakCallbackInfo<void>& data);
-
-// Out of line so callers of Managed<CppType>::Destructor don't need to
-// include the recordreplay headers from this template header.
-void AssertManagedDestructor();
 
 // {Managed<T>} is essentially a {std::shared_ptr<T>} allocated on the heap
 // that can be used to manage the lifetime of C++ objects that are shared
@@ -110,7 +107,7 @@ class Managed : public Foreign {
     // (e.g. a wasm NativeModule shared with workers) and release their
     // references on their own threads, which nothing orders with this one,
     // so the count differs when replaying.
-    AssertManagedDestructor();
+    recordreplay::Assert("Managed::Destructor");
     delete shared_ptr_ptr;
   }
 };
