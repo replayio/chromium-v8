@@ -7,9 +7,6 @@
 
 #include <stdint.h>
 
-#include <memory>
-#include <vector>
-
 #include "include/v8-persistent-handle.h"
 #include "src/base/atomicops.h"
 #include "src/base/lazy-instance.h"
@@ -137,6 +134,10 @@ class FutexWaitListNode {
 
   CancelableTaskManager::Id timeout_task_id_ =
       CancelableTaskManager::kInvalidTaskId;
+
+  // While recording or replaying, the id of the task that resolves this async
+  // waiter's promise once it is notified.
+  uint64_t record_replay_resolve_id_ = 0;
 };
 
 class FutexEmulation : public AllStatic {
@@ -230,26 +231,20 @@ class FutexEmulation : public AllStatic {
                           int64_t rel_timeout_ns, CallType call_type);
 
   // Resolve the Promises of the async waiters which belong to |isolate|.
-  static void ResolveAsyncWaiterPromises(Isolate* isolate);
+  // While recording or replaying, only those given record_replay_resolve_id.
+  static void ResolveAsyncWaiterPromises(Isolate* isolate,
+                                         uint64_t record_replay_resolve_id = 0);
 
   static void ResolveAsyncWaiterPromise(FutexWaitListNode* node);
 
   static void HandleAsyncWaiterTimeout(FutexWaitListNode* node);
 
-  // A task resolving an isolate's async waiter promises or timing out one of
-  // its waiters, with the runner to post it to. Posting while events are
-  // disallowed makes the task an unordered one, which the receiving thread
-  // only runs when its queue next reloads, so it happens once g_mutex is
-  // released and events are allowed again.
-  struct AsyncWaiterTask {
-    std::shared_ptr<TaskRunner> runner;
-    std::unique_ptr<CancelableTask> task;
-  };
+  // While recording or replaying, the tasks to post once events are allowed
+  // again.
+  class RecordReplayTasksToPost;
 
-  // Appends the task to post for the node's isolate, if any, to tasks_to_post
-  // instead of posting it; Wake posts it after releasing g_mutex.
   static void NotifyAsyncWaiter(FutexWaitListNode* node,
-                                std::vector<AsyncWaiterTask>* tasks_to_post);
+                                RecordReplayTasksToPost* record_replay_tasks);
 
   // Remove the node's Promise from the NativeContext's Promise set.
   static void CleanupAsyncWaiterPromise(FutexWaitListNode* node);
