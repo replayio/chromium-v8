@@ -280,6 +280,7 @@ void ScopeIterator::TryParseAndRetrieveScopes(ReparseStrategy strategy) {
     ScopeChainRetriever scope_chain_retriever(literal_scope, function_,
                                               GetSourcePosition());
     start_scope_ = scope_chain_retriever.StartScope();
+    RecordReplayStartOutsideUnenteredClassScope();
     current_scope_ = start_scope_;
 
     // In case of a FUNCTION_SCOPE, the ScopeIterator expects
@@ -312,6 +313,27 @@ void ScopeIterator::TryParseAndRetrieveScopes(ReparseStrategy strategy) {
     // Silently fail by presenting an empty context chain.
     context_ = Handle<Context>();
   }
+}
+
+// A replay pauses at the breakpoint instrumentation SetStatementPosition
+// emits, which takes the statement position before VisitClassLiteral can move
+// it past the class's block context push. For `var x = class {...}` that
+// position is the class token, so the frame is at Token::CLASS while its
+// context is still the one outside the class, and the class scope isn't
+// entered yet.
+void ScopeIterator::RecordReplayStartOutsideUnenteredClassScope() {
+  if (!recordreplay::IsRecordingOrReplaying()) return;
+  if (!start_scope_->is_class_scope() || !start_scope_->NeedsContext() ||
+      GetSourcePosition() != start_scope_->start_position()) {
+    return;
+  }
+  if (context_->IsBlockContext() &&
+      context_->scope_info().scope_type() == CLASS_SCOPE &&
+      context_->scope_info().StartPosition() ==
+          start_scope_->start_position()) {
+    return;
+  }
+  start_scope_ = start_scope_->outer_scope();
 }
 
 void ScopeIterator::UnwrapEvaluationContext() {

@@ -155,6 +155,7 @@ class ScopeIterator {
   void TryParseAndRetrieveScopes(ReparseStrategy strategy);
 
   void UnwrapEvaluationContext();
+  void RecordReplayStartOutsideUnenteredClassScope();
 
   using Visitor = std::function<bool(Handle<String> name, Handle<Object> value,
                                      ScopeType scope_type)>;
