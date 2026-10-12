@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <optional>
 
 #include "../../third_party/inspector_protocol/crdtp/json.h"
 #include "include/v8-context.h"
@@ -289,6 +290,14 @@ Response buildScopes(v8::Isolate* isolate, v8::debug::ScopeIterator* iterator,
   String16 scriptId = String16::fromInteger(iterator->GetScriptId());
 
   for (; !iterator->Done(); iterator->Advance()) {
+    // Replay builds the scopes of every frame on the stack at each exception
+    // and console message, and building a scope object makes handles for each
+    // of its bindings. A deep stack in a module with many bindings would
+    // otherwise keep millions of handles alive, which every scavenge visits.
+    std::optional<v8::HandleScope> recordReplayHandles;
+    if (v8::recordreplay::IsRecordingOrReplaying()) {
+      recordReplayHandles.emplace(isolate);
+    }
     std::unique_ptr<RemoteObject> object;
     Response result =
         injectedScript->wrapObject(iterator->GetObject(), objectGroup,
