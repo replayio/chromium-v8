@@ -320,7 +320,8 @@ void ScopeIterator::TryParseAndRetrieveScopes(ReparseStrategy strategy) {
 // it past the class's block context push. For `var x = class {...}` that
 // position is the class token, so the frame is at Token::CLASS while its
 // context is still the one outside the class, and the class scope isn't
-// entered yet.
+// entered yet. A pause after the push, or a caller frame while the class is
+// being evaluated, has the class's block context instead.
 void ScopeIterator::RecordReplayStartOutsideUnenteredClassScope() {
   if (!recordreplay::IsRecordingOrReplaying()) return;
   if (!start_scope_->is_class_scope() || !start_scope_->NeedsContext() ||
