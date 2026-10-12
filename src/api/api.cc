@@ -12073,6 +12073,12 @@ extern "C" void V8RecordReplayNotifyActivity() {
   gRecordReplayNotifyActivity();
 }
 
+void recordreplay::NotifyActivity() {
+  if (IsRecordingOrReplaying()) {
+    gRecordReplayNotifyActivity();
+  }
+}
+
 extern "C" void V8RecordReplayAddMetadata(const char* jsonString) {
   gRecordReplayAddMetadata(jsonString);
 }

@@ -2517,6 +2517,10 @@ std::pair<size_t, size_t> MarkCompactCollector::ProcessMarkingWorklist(
     }
     bytes_processed += visited_size;
     objects_processed++;
+    // Marking a large heap is one long GC phase.
+    if (V8_UNLIKELY(objects_processed % 0x10000 == 0)) {
+      recordreplay::NotifyActivity();
+    }
     if (bytes_to_process && bytes_processed >= bytes_to_process) {
       break;
     }

@@ -153,6 +153,10 @@ static void ExitReplayCode();
 static bool HasDivergedFromRecording();
 static bool AllowSideEffects();
 
+// Long running work that doesn't advance the progress counter calls this
+// regularly, so replay hang detection sees the process is busy.
+static void NotifyActivity();
+
 static int NewDependencyGraphNode(const char* json);
 static void AddDependencyGraphEdge(int source, int target, const char* json);
 static void BeginDependencyExecution(int node);
