@@ -2358,11 +2358,18 @@ void MarkCompactCollector::MarkTransitiveClosureLinear() {
   DCHECK(
       local_weak_objects()->current_ephemerons_local.IsLocalAndGlobalEmpty());
   weak_objects_.current_ephemerons.Merge(weak_objects_.next_ephemerons);
+  const bool record_replay = recordreplay::IsRecordingOrReplaying();
+  size_t ephemerons_processed = 0;
   while (local_weak_objects()->current_ephemerons_local.Pop(&ephemeron)) {
     ProcessEphemeron(ephemeron.key, ephemeron.value);
 
     if (non_atomic_marking_state()->IsWhite(ephemeron.value)) {
       key_to_values.insert(std::make_pair(ephemeron.key, ephemeron.value));
+    }
+
+    // This pass opens no GC scopes, and the ephemerons can number millions.
+    if (V8_UNLIKELY(record_replay && ++ephemerons_processed % 0x10000 == 0)) {
+      recordreplay::NotifyActivity();
     }
   }
 
@@ -2475,6 +2482,7 @@ std::pair<size_t, size_t> MarkCompactCollector::ProcessMarkingWorklist(
   PtrComprCageBase cage_base(isolate);
   CodePageHeaderModificationScope rwx_write_scope(
       "Marking of Code objects require write access to Code page headers");
+  const bool record_replay = recordreplay::IsRecordingOrReplaying();
   if (parallel_marking_)
     heap_->concurrent_marking()->RescheduleJobIfNeeded(
         GarbageCollector::MARK_COMPACTOR, TaskPriority::kUserBlocking);
@@ -2517,8 +2525,8 @@ std::pair<size_t, size_t> MarkCompactCollector::ProcessMarkingWorklist(
     }
     bytes_processed += visited_size;
     objects_processed++;
-    // Marking a large heap is one long GC phase.
-    if (V8_UNLIKELY(objects_processed % 0x10000 == 0)) {
+    // Marking a large heap opens no further GC scopes.
+    if (V8_UNLIKELY(record_replay && objects_processed % 0x10000 == 0)) {
       recordreplay::NotifyActivity();
     }
     if (bytes_to_process && bytes_processed >= bytes_to_process) {

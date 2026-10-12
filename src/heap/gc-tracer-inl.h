@@ -35,9 +35,11 @@ GCTracer::Scope::Scope(GCTracer* tracer, ScopeId scope, ThreadKind thread_kind)
       scope_(scope),
       thread_kind_(thread_kind),
       start_time_(tracer_->MonotonicallyIncreasingTimeInMs()) {
-  // While recording or replaying, GCs are atomic (no incremental marking) and
-  // advance nothing that replay hang detection counts as progress.
-  if (thread_kind_ == ThreadKind::kMain) {
+  // While replaying, GCs are atomic (no incremental marking) and advance
+  // nothing that hang detection counts as progress. Scopes opened outside a GC
+  // (e.g. sweeping on allocation) don't count as activity.
+  if (thread_kind_ == ThreadKind::kMain &&
+      tracer_->heap_->gc_state() != Heap::NOT_IN_GC) {
     recordreplay::NotifyActivity();
   }
 #ifdef V8_RUNTIME_CALL_STATS
