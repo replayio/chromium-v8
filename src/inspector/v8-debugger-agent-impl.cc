@@ -6,13 +6,13 @@
 
 #include <algorithm>
 #include <memory>
-#include <optional>
 
 #include "../../third_party/inspector_protocol/crdtp/json.h"
 #include "include/v8-context.h"
 #include "include/v8-function.h"
 #include "include/v8-inspector.h"
 #include "include/v8-microtask-queue.h"
+#include "src/base/optional.h"
 #include "src/base/safe_conversions.h"
 #include "src/debug/debug-interface.h"
 #include "src/inspector/injected-script.h"
@@ -294,7 +294,7 @@ Response buildScopes(v8::Isolate* isolate, v8::debug::ScopeIterator* iterator,
     // and console message, and building a scope object makes handles for each
     // of its bindings. A deep stack in a module with many bindings would
     // otherwise keep millions of handles alive, which every scavenge visits.
-    std::optional<v8::HandleScope> recordReplayHandles;
+    v8::base::Optional<v8::HandleScope> recordReplayHandles;
     if (v8::recordreplay::IsRecordingOrReplaying()) {
       recordReplayHandles.emplace(isolate);
     }
