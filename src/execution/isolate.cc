@@ -1737,10 +1737,11 @@ void Isolate::RecordReplayInvokeApiInterruptCallbacksAtProgress() {
   // requested for callbacks queued meanwhile. Running them there would nest
   // every queued callback inside the previous one, thousands deep for a burst
   // of DevTools commands, until C stack limit checks (e.g. in RegExp parsing)
-  // fail in the replay where they didn't in the recording. The outermost
-  // invocation's loop runs them instead. JS entered from a callback (e.g. an
-  // evaluation in a debugger pause the callback started) still runs them, so
-  // they can interrupt that JS.
+  // fail at a depth that differs between recording and replaying. The
+  // outermost invocation's loop runs them instead. JS entered from a callback
+  // (e.g. an evaluation in a debugger pause the callback started) still runs
+  // them, so they can interrupt that JS: the enclosing invocation's topmost JS
+  // frame stays on the stack, so a different topmost fp means newer JS frames.
   Address js_fp = kNullAddress;
   {
     JavaScriptFrameIterator it(this);
