@@ -1732,15 +1732,28 @@ void Isolate::RecordReplayInvokeApiInterruptCallbacksAtProgress() {
   CHECK(recordreplay::IsRecordingOrReplaying("interrupts"));
   CHECK(IsMainThread());
 
-  // A callback that advances progress (an inspector command's response adds
-  // a bookmark) reaches the progress interrupt requested for callbacks queued
-  // meanwhile. Running them there would nest every queued callback inside the
-  // previous one, thousands deep for a burst of DevTools commands, until
-  // C stack limit checks (e.g. in RegExp parsing) fail at a depth that
-  // differs between recording and replaying. The outermost invocation's loop
-  // runs them instead.
-  if (record_replay_invoking_api_interrupts_) return;
+  // A callback that advances progress without running JS (an inspector
+  // command's response adds a bookmark) reaches the progress interrupt
+  // requested for callbacks queued meanwhile. Running them there would nest
+  // every queued callback inside the previous one, thousands deep for a burst
+  // of DevTools commands, until C stack limit checks (e.g. in RegExp parsing)
+  // fail in the replay where they didn't in the recording. The outermost
+  // invocation's loop runs them instead. JS entered from a callback (e.g. an
+  // evaluation in a debugger pause the callback started) still runs them, so
+  // they can interrupt that JS.
+  Address js_fp = kNullAddress;
+  {
+    JavaScriptFrameIterator it(this);
+    if (!it.done()) js_fp = it.frame()->fp();
+  }
+  if (record_replay_invoking_api_interrupts_ &&
+      record_replay_api_interrupts_js_fp_ == js_fp) {
+    return;
+  }
+  bool was_invoking = record_replay_invoking_api_interrupts_;
+  Address previous_js_fp = record_replay_api_interrupts_js_fp_;
   record_replay_invoking_api_interrupts_ = true;
+  record_replay_api_interrupts_js_fp_ = js_fp;
 
   while (true) {
     InterruptEntry entry;
@@ -1760,7 +1773,8 @@ void Isolate::RecordReplayInvokeApiInterruptCallbacksAtProgress() {
     entry.first(reinterpret_cast<v8::Isolate*>(this), entry.second);
   }
 
-  record_replay_invoking_api_interrupts_ = false;
+  record_replay_invoking_api_interrupts_ = was_invoking;
+  record_replay_api_interrupts_js_fp_ = previous_js_fp;
 }
 
 namespace {
