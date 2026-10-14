@@ -3368,15 +3368,24 @@ void ReplayIncrementAndCheckJsFrameDepth::GenerateCode(
   MemOperand depth = __ ExternalReferenceAsOperand(depth_ref, scratch);
   __ incl(depth);
   __ cmpl(depth, Immediate(ThreadLocalTop::kReplayMaxJsFrameDepth));
+  ZoneLabelRef done(masm);
   __ JumpToDeferredIf(
       greater_equal,
-      [](MaglevAssembler* masm, ReplayIncrementAndCheckJsFrameDepth* node) {
-        __ Move(kContextRegister, masm->native_context().object());
-        __ CallRuntime(Runtime::kThrowStackOverflow, 0);
-        masm->DefineExceptionHandlerAndLazyDeoptPoint(node);
-        __ Abort(AbortReason::kUnexpectedReturnFromThrow);
+      [](MaglevAssembler* masm, ZoneLabelRef done,
+         ReplayIncrementAndCheckJsFrameDepth* node) {
+        {
+          SaveRegisterStateForCall save_register_state(
+              masm, node->register_snapshot());
+          __ Move(kContextRegister, masm->native_context().object());
+          __ CallRuntime(Runtime::kReplaySyncJsFrameDepth, 0);
+          save_register_state.DefineSafepointWithLazyDeopt(
+              node->lazy_deopt_info());
+          masm->DefineExceptionHandlerPoint(node);
+        }
+        __ jmp(*done);
       },
-      this);
+      done, this);
+  __ bind(*done);
 }
 
 void ReplayDecrementJsFrameDepth::AllocateVreg(

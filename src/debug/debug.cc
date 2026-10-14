@@ -3743,6 +3743,44 @@ bool RecordReplayShouldEmitOpcodes(Isolate* isolate, int script_id,
   return base_emit_opcodes;
 }
 
+// Count the JS frames (including inlined ones) on the stack whose bytecode
+// emits ReplayIncJsFrameDepth/ReplayDecJsFrameDepth. Frames of scripts that
+// don't emit opcodes (e.g. Replay's own scripts) and builtin frames never touch
+// the depth, so they aren't counted here either. Doesn't allocate.
+// This relies on the emit decision frozen per script above: functions of an
+// emitting script whose bytecode lacks the opcodes anyway (see the
+// FailedToReinstrument warning) would be miscounted.
+int RecordReplayCountJsFrameDepth(Isolate* isolate) {
+  DisallowGarbageCollection no_gc;
+  base::MutexGuard guard(gOpcodeEmitByScriptMutex);
+  if (!gOpcodeEmitByScript) {
+    return 0;
+  }
+  auto emit_it = gOpcodeEmitByScript->find(isolate);
+  if (emit_it == gOpcodeEmitByScript->end()) {
+    return 0;
+  }
+  const ScriptIdBoolMap& emit_by_script = emit_it->second;
+
+  int depth = 0;
+  std::vector<SharedFunctionInfo> functions;
+  for (StackFrameIterator it(isolate); !it.done(); it.Advance()) {
+    StackFrame* frame = it.frame();
+    if (!frame->is_java_script()) continue;
+    functions.clear();
+    JavaScriptFrame::cast(frame)->GetFunctions(&functions);
+    for (SharedFunctionInfo shared : functions) {
+      Object script = shared.script();
+      if (!script.IsScript()) continue;
+      auto script_it = emit_by_script.find(Script::cast(script).id());
+      if (script_it != emit_by_script.end() && script_it->second) {
+        depth++;
+      }
+    }
+  }
+  return depth;
+}
+
 // Whether to insert into gRegisteredScripts (Pause / CountStackFrames).
 // frameIndex: must stay ≡ RecordReplayShouldEmitOpcodes (stackable scripts).
 static bool RecordReplayShouldRegisterScript(Script script,

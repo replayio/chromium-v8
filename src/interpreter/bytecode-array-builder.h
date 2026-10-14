@@ -479,7 +479,10 @@ class V8_EXPORT_PRIVATE BytecodeArrayBuilder final {
   BytecodeArrayBuilder& RecordReplayTrackObjectId(Register object);
 
   BytecodeArrayBuilder& ReplayOnFrameEnter();
-  BytecodeArrayBuilder& ReplayOnFrameEnterGenerator(Register generator_object);
+  // |kind| is "generator" when the generator's body starts and "entry" when
+  // it resumes.
+  BytecodeArrayBuilder& ReplayOnFrameEnterGenerator(const char* kind,
+                                                    Register generator_object);
   BytecodeArrayBuilder& ReplayOnFrameExit();
   BytecodeArrayBuilder& ReplayOnFrameReturn(Register return_value);
 
