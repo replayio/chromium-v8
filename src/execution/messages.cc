@@ -21,6 +21,7 @@
 #include "src/objects/struct-inl.h"
 #include "src/parsing/parse-info.h"
 #include "src/parsing/parsing.h"
+#include "src/replay/replayio.h"
 #include "src/roots/roots.h"
 #include "src/strings/string-builder-inl.h"
 
@@ -442,9 +443,8 @@ MaybeHandle<Object> ErrorUtils::FormatStackTrace(Isolate* isolate,
   if (recordreplay::IsRecordingOrReplaying("ErrorUtils::FormatStackTrace") &&
       !recordreplay::AreEventsDisallowed()) {
     // [PRO-1150] Replay Error.stack
-    std::string str = rv.ToHandleChecked()->ToCString().get();
-    recordreplay::RecordReplayString("ErrorUtils::FormatStackTrace", str);
-    rv = isolate->factory()->NewStringFromUtf8(base::CStrVector(str.c_str()));
+    rv = replayio::RecordReplayStringHandle(
+        "ErrorUtils::FormatStackTrace", isolate, rv);
   }
   return rv;
 }
@@ -531,9 +531,8 @@ MaybeHandle<String> MessageFormatter::Format(Isolate* isolate,
   if (recordreplay::IsRecordingOrReplaying("MessageFormatter::Format") &&
       !recordreplay::AreEventsDisallowed()) {
     // [PRO-1150] Replay error messages.
-    std::string str = rv.ToHandleChecked()->ToCString().get();
-    recordreplay::RecordReplayString("MessageFormatter::Format", str);
-    rv = isolate->factory()->NewStringFromUtf8(base::CStrVector(str.c_str()));
+    rv = replayio::RecordReplayStringHandle(
+        "MessageFormatter::Format", isolate, rv);
   }
   return rv;
 }
