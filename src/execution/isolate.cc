@@ -1749,6 +1749,10 @@ void Isolate::RecordReplayInvokeApiInterruptCallbacksAtProgress() {
   }
   if (record_replay_invoking_api_interrupts_ &&
       record_replay_api_interrupts_js_fp_ == js_fp) {
+    // The interrupt that got us here is used up. Request it again so JS the
+    // enclosing callback runs next still requests a progress interrupt for
+    // whatever is queued, instead of waiting for the callback to return.
+    stack_guard()->RequestApiInterrupt();
     return;
   }
   bool was_invoking = record_replay_invoking_api_interrupts_;
