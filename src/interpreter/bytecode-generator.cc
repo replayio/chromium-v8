@@ -772,7 +772,8 @@ class BytecodeGenerator::TopLevelDeclarationsBuilder final : public ZoneObject {
         if (decl->IsFunctionDeclaration()) {
           FunctionLiteral* f = static_cast<FunctionDeclaration*>(decl)->fun();
           Handle<SharedFunctionInfo> sfi(
-              Compiler::GetSharedFunctionInfo(f, script, isolate));
+              Compiler::GetSharedFunctionInfo(
+                  f, script, isolate, info->flags().record_replay_ignore()));
           // Return a null handle if any initial values can't be created. Caller
           // will set stack overflow.
           if (sfi.is_null()) return Handle<FixedArray>();
@@ -801,7 +802,8 @@ class BytecodeGenerator::TopLevelDeclarationsBuilder final : public ZoneObject {
         } else {
           FunctionLiteral* f = static_cast<FunctionDeclaration*>(decl)->fun();
           Handle<SharedFunctionInfo> sfi(
-              Compiler::GetSharedFunctionInfo(f, script, isolate));
+              Compiler::GetSharedFunctionInfo(
+                  f, script, isolate, info->flags().record_replay_ignore()));
           // Return a null handle if any initial values can't be created. Caller
           // will set stack overflow.
           if (sfi.is_null()) return Handle<FixedArray>();
@@ -1291,7 +1293,8 @@ void BytecodeGenerator::AllocateDeferredConstants(IsolateT* isolate,
   for (std::pair<FunctionLiteral*, size_t> literal : function_literals_) {
     FunctionLiteral* expr = literal.first;
     Handle<SharedFunctionInfo> shared_info =
-        Compiler::GetSharedFunctionInfo(expr, script, isolate);
+        Compiler::GetSharedFunctionInfo(
+            expr, script, isolate, info()->flags().record_replay_ignore());
     if (shared_info.is_null()) return SetStackOverflow();
     builder()->SetDeferredConstantPoolEntry(literal.second, shared_info);
   }
@@ -2594,7 +2597,9 @@ void BytecodeGenerator::AddToEagerLiteralsIfEager(FunctionLiteral* literal) {
     if (!Script::FindSharedFunctionInfo(script_, local_isolate_, literal)
              .ToHandle(&shared_info)) {
       shared_info =
-          Compiler::GetSharedFunctionInfo(literal, script_, local_isolate_);
+          Compiler::GetSharedFunctionInfo(
+              literal, script_, local_isolate_,
+              info()->flags().record_replay_ignore());
       info()->dispatcher()->Enqueue(local_isolate_, shared_info,
                                     info()->character_stream()->Clone());
     }

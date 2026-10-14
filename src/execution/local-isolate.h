@@ -5,6 +5,8 @@
 #ifndef V8_EXECUTION_LOCAL_ISOLATE_H_
 #define V8_EXECUTION_LOCAL_ISOLATE_H_
 
+#include <vector>
+
 #include "src/base/macros.h"
 #include "src/execution/shared-mutex-guard-if-off-thread.h"
 #include "src/execution/thread-id.h"
@@ -26,6 +28,7 @@ namespace internal {
 class Isolate;
 class LocalLogger;
 class RuntimeCallStats;
+class SharedFunctionInfo;
 
 // HiddenLocalFactory parallels Isolate's HiddenFactory
 class V8_EXPORT_PRIVATE HiddenLocalFactory : private LocalFactory {
@@ -131,6 +134,18 @@ class V8_EXPORT_PRIVATE LocalIsolate final : private HiddenLocalFactory {
   }
   LocalIsolate* AsLocalIsolate() { return this; }
 
+  void SetRecordReplaySharedFunctionInfoCollector(
+      std::vector<Handle<SharedFunctionInfo>>* collector) {
+    record_replay_shared_function_info_collector_ = collector;
+  }
+
+  void RetainRecordReplaySharedFunctionInfo(
+      Handle<SharedFunctionInfo> shared) {
+    DCHECK_NOT_NULL(record_replay_shared_function_info_collector_);
+    record_replay_shared_function_info_collector_->push_back(
+        heap()->NewPersistentHandle(shared));
+  }
+
   // TODO(victorgomes): Remove this when/if MacroAssembler supports LocalIsolate
   // only constructor.
   Isolate* GetMainThreadIsolateUnsafe() const { return isolate_; }
@@ -159,6 +174,9 @@ class V8_EXPORT_PRIVATE LocalIsolate final : private HiddenLocalFactory {
   std::unique_ptr<LocalLogger> logger_;
   ThreadId const thread_id_;
   Address const stack_limit_;
+
+  std::vector<Handle<SharedFunctionInfo>>*
+      record_replay_shared_function_info_collector_ = nullptr;
 
   bigint::Processor* bigint_processor_{nullptr};
 
