@@ -321,7 +321,13 @@ ExternalPointerTable::Freelist ExternalPointerTable::Grow(Isolate* isolate) {
   double old_utilization = static_cast<double>(old_capacity) / kMaxCapacity;
   double new_utilization = static_cast<double>(new_capacity) / kMaxCapacity;
   for (double threshold : kGCThresholds) {
-    if (old_utilization < threshold && new_utilization >= threshold) {
+    // The pressure report can run a full GC here (always when incremental
+    // marking is off, as when replaying). That GC decommits the block added
+    // above while it is still empty and can move objects callers hold raw
+    // pointers to (e.g. SetAlignedPointerInInternalFields). Upstream drops this
+    // GC trigger altogether (v8/v8@852aa1865fd).
+    if (old_utilization < threshold && new_utilization >= threshold &&
+        !recordreplay::IsRecordingOrReplaying()) {
       isolate->heap()->ReportExternalMemoryPressure();
       break;
     }
