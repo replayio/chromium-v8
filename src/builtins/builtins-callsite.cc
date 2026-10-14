@@ -8,6 +8,7 @@
 #include "src/logging/counters.h"
 #include "src/objects/call-site-info-inl.h"
 #include "src/objects/objects-inl.h"
+#include "src/replay/replayio.h"
 
 namespace v8 {
 namespace internal {
@@ -31,32 +32,69 @@ Object PositiveNumberOrNull(int value, Isolate* isolate) {
   return ReadOnlyRoots(isolate).null_value();
 }
 
+// The replay can compile scripts with different contents than were recorded
+// (instrumentation does), which moves their frames. Everything that page code
+// can read about a frame's position is recorded, so it sees the positions it
+// saw while being recorded, whatever it computes from them.
+bool ShouldRecordReplayCallSite(const char* why) {
+  return recordreplay::IsRecordingOrReplaying(why) &&
+         !recordreplay::AreEventsDisallowed();
+}
+
+int RecordReplayCallSiteInt(const char* why, int value) {
+  if (!ShouldRecordReplayCallSite(why)) return value;
+  return static_cast<int>(
+      recordreplay::RecordReplayValue(why, static_cast<uintptr_t>(value)));
+}
+
+Handle<String> RecordReplayCallSiteString(const char* why, Isolate* isolate,
+                                          Handle<String> value) {
+  if (!ShouldRecordReplayCallSite(why)) return value;
+  return replayio::RecordReplayStringHandle(why, isolate, value);
+}
+
 }  // namespace
 
 BUILTIN(CallSitePrototypeGetColumnNumber) {
   HandleScope scope(isolate);
   CHECK_CALLSITE(frame, "getColumnNumber");
-  return PositiveNumberOrNull(CallSiteInfo::GetColumnNumber(frame), isolate);
+  return PositiveNumberOrNull(
+      RecordReplayCallSiteInt("CallSite::getColumnNumber",
+                              CallSiteInfo::GetColumnNumber(frame)),
+      isolate);
 }
 
 BUILTIN(CallSitePrototypeGetEnclosingColumnNumber) {
   HandleScope scope(isolate);
   CHECK_CALLSITE(frame, "getEnclosingColumnNumber");
-  return PositiveNumberOrNull(CallSiteInfo::GetEnclosingColumnNumber(frame),
-                              isolate);
+  return PositiveNumberOrNull(
+      RecordReplayCallSiteInt("CallSite::getEnclosingColumnNumber",
+                              CallSiteInfo::GetEnclosingColumnNumber(frame)),
+      isolate);
 }
 
 BUILTIN(CallSitePrototypeGetEnclosingLineNumber) {
   HandleScope scope(isolate);
   CHECK_CALLSITE(frame, "getEnclosingLineNumber");
-  return PositiveNumberOrNull(CallSiteInfo::GetEnclosingLineNumber(frame),
-                              isolate);
+  return PositiveNumberOrNull(
+      RecordReplayCallSiteInt("CallSite::getEnclosingLineNumber",
+                              CallSiteInfo::GetEnclosingLineNumber(frame)),
+      isolate);
 }
 
 BUILTIN(CallSitePrototypeGetEvalOrigin) {
   HandleScope scope(isolate);
   CHECK_CALLSITE(frame, "getEvalOrigin");
-  return *CallSiteInfo::GetEvalOrigin(frame);
+  Handle<PrimitiveHeapObject> origin = CallSiteInfo::GetEvalOrigin(frame);
+  const char* why = "CallSite::getEvalOrigin";
+  if (!ShouldRecordReplayCallSite(why)) return *origin;
+  if (!recordreplay::RecordReplayValue(why, origin->IsString())) {
+    return ReadOnlyRoots(isolate).undefined_value();
+  }
+  return *RecordReplayCallSiteString(
+      why, isolate,
+      origin->IsString() ? Handle<String>::cast(origin)
+                         : isolate->factory()->empty_string());
 }
 
 BUILTIN(CallSitePrototypeGetFileName) {
@@ -86,7 +124,10 @@ BUILTIN(CallSitePrototypeGetFunctionName) {
 BUILTIN(CallSitePrototypeGetLineNumber) {
   HandleScope scope(isolate);
   CHECK_CALLSITE(frame, "getLineNumber");
-  return PositiveNumberOrNull(CallSiteInfo::GetLineNumber(frame), isolate);
+  return PositiveNumberOrNull(
+      RecordReplayCallSiteInt("CallSite::getLineNumber",
+                              CallSiteInfo::GetLineNumber(frame)),
+      isolate);
 }
 
 BUILTIN(CallSitePrototypeGetMethodName) {
@@ -98,7 +139,8 @@ BUILTIN(CallSitePrototypeGetMethodName) {
 BUILTIN(CallSitePrototypeGetPosition) {
   HandleScope scope(isolate);
   CHECK_CALLSITE(frame, "getPosition");
-  return Smi::FromInt(CallSiteInfo::GetSourcePosition(frame));
+  return Smi::FromInt(RecordReplayCallSiteInt(
+      "CallSite::getPosition", CallSiteInfo::GetSourcePosition(frame)));
 }
 
 BUILTIN(CallSitePrototypeGetPromiseIndex) {
@@ -114,7 +156,8 @@ BUILTIN(CallSitePrototypeGetPromiseIndex) {
 BUILTIN(CallSitePrototypeGetScriptHash) {
   HandleScope scope(isolate);
   CHECK_CALLSITE(frame, "getScriptHash");
-  return *CallSiteInfo::GetScriptHash(frame);
+  return *RecordReplayCallSiteString("CallSite::getScriptHash", isolate,
+                                     CallSiteInfo::GetScriptHash(frame));
 }
 
 BUILTIN(CallSitePrototypeGetScriptNameOrSourceURL) {
@@ -181,7 +224,10 @@ BUILTIN(CallSitePrototypeIsToplevel) {
 BUILTIN(CallSitePrototypeToString) {
   HandleScope scope(isolate);
   CHECK_CALLSITE(frame, "toString");
-  RETURN_RESULT_OR_FAILURE(isolate, SerializeCallSiteInfo(isolate, frame));
+  Handle<String> result;
+  ASSIGN_RETURN_FAILURE_ON_EXCEPTION(isolate, result,
+                                     SerializeCallSiteInfo(isolate, frame));
+  return *RecordReplayCallSiteString("CallSite::toString", isolate, result);
 }
 
 #undef CHECK_CALLSITE
