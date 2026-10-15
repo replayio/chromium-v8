@@ -12409,8 +12409,9 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
     i::v8_flags.turbofan = false;
   }
 
-  // Disable some GC settings while replaying for causing mysterious crashes.
-  if (IsReplaying() || !V8RecordReplayFeatureEnabled("v8-flags-gc", nullptr)) {
+  // Concurrent, parallel and incremental GC are used when recording and
+  // replaying by default but can be disabled via a feature.
+  if (!V8RecordReplayFeatureEnabled("v8-flags-gc", nullptr)) {
     i::FLAG_concurrent_marking = false;
     i::FLAG_concurrent_sweeping = false;
     i::FLAG_incremental_marking_task = false;
