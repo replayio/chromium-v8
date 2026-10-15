@@ -485,6 +485,23 @@ class V8_EXPORT_PRIVATE BytecodeArrayBuilder final {
 
   bool EmitRecordReplayInstrumentationOpcodes() const;
 
+  // Registers a breakpoint site at |site_position| and queues its
+  // instrumentation bytecode, which takes the pending source position the way
+  // CurrentSourcePosition() would. The queue is written right before whatever
+  // comes next in the bytecode stream (where upstream attaches the pending
+  // statement position), so positional adjustments made in between move the
+  // breakpoint along with the position: VisitClassLiteral's
+  // MaybePopSourcePosition/PushSourcePosition pair moves the class token's
+  // position past the class's block context push (v8/v8@f74ea020d5d,
+  // crrev.com/c/3284887, chromium:1259878; v8/v8@6a8b90c303b keeps it in place
+  // when it is outside the class scope), and a pause there then sees that
+  // context. Everywhere else the bytecode matches writing the breakpoint
+  // immediately, as every write, label/handler binding and source position
+  // read writes the queue first. Upstream changes to SetStatementPosition,
+  // CurrentSourcePosition, AttachOrEmitDeferredSourceInfo or
+  // MaybePopSourcePosition/PushSourcePosition need rechecking against this.
+  void RecordReplayDeferBreakpoint(int site_position);
+
   // Complex flow control.
   BytecodeArrayBuilder& ForInEnumerate(Register receiver);
   BytecodeArrayBuilder& ForInPrepare(RegisterList cache_info_triple,
@@ -648,21 +665,6 @@ class V8_EXPORT_PRIVATE BytecodeArrayBuilder final {
   // if node already have valid source info.
   void AttachOrEmitDeferredSourceInfo(BytecodeNode* node);
 
-  // The breakpoint instrumentation for a statement position is written right
-  // before whatever comes next in the bytecode stream (where upstream attaches
-  // the pending statement position), so positional adjustments made in between
-  // move it along with the position. VisitClassLiteral's
-  // MaybePopSourcePosition/PushSourcePosition pair moves the class token's
-  // position past the class's block context push (v8/v8@f74ea020d5d,
-  // crrev.com/c/3284887, chromium:1259878; v8/v8@6a8b90c303b keeps it in place
-  // when it is outside the class scope), and a pause there then sees that
-  // context. Everywhere else the bytecode matches writing the breakpoint
-  // immediately: the site is registered and the statement position taken right
-  // away, and every write, label/handler binding and source position read
-  // writes the pending breakpoints first. Upstream changes to
-  // SetStatementPosition, CurrentSourcePosition, AttachOrEmitDeferredSourceInfo
-  // or MaybePopSourcePosition/PushSourcePosition need rechecking against this.
-  void RecordReplayDeferBreakpoint(int position);
   void RecordReplayFlushPendingBreakpoints() {
     if (V8_UNLIKELY(!record_replay_pending_breakpoints_.empty())) {
       RecordReplayWritePendingBreakpoints();
@@ -717,7 +719,7 @@ class V8_EXPORT_PRIVATE BytecodeArrayBuilder final {
   std::unordered_set<int> record_replay_instrumentation_site_locations_;
   struct RecordReplayPendingBreakpoint {
     int site_index;
-    int position;
+    BytecodeSourceInfo source_info;
   };
   std::vector<RecordReplayPendingBreakpoint>
       record_replay_pending_breakpoints_;

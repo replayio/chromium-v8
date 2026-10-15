@@ -1735,7 +1735,7 @@ void BytecodeGenerator::ReplayExpressionShiftedSetStatementPosition(Statement* s
   builder()->SetStatementPosition(stmt, /* record_replay_breakpoint */ false);
   if (expr->position() < 0) {
     // expression is empty, so the breakpoint gets added at the statement itself
-    builder()->RecordReplayInstrumentation("breakpoint", stmt->position());
+    builder()->RecordReplayDeferBreakpoint(stmt->position());
   } else if (expr->IsBinaryOperation()) {
     // given the breakpoint gets shifted to the expression (if that's available) by default
     // we first check if it's not a binary operation, in which case we need to make sure the breakpoint is added at the position of the left operand
@@ -1745,9 +1745,9 @@ void BytecodeGenerator::ReplayExpressionShiftedSetStatementPosition(Statement* s
     // without this specialcase the breakpoints would be added like this (3 would be skipped):
     //
     // return /*2*/foo(), /*1*//*3*/bar();
-    builder()->RecordReplayInstrumentation("breakpoint", expr->AsBinaryOperation()->left()->position());
+    builder()->RecordReplayDeferBreakpoint(expr->AsBinaryOperation()->left()->position());
   } else {
-    builder()->RecordReplayInstrumentation("breakpoint", expr->position());
+    builder()->RecordReplayDeferBreakpoint(expr->position());
   }
 }
 

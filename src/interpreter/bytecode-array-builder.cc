@@ -1441,15 +1441,16 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayInstrumentation(
   return *this;
 }
 
-void BytecodeArrayBuilder::RecordReplayDeferBreakpoint(int position) {
+void BytecodeArrayBuilder::RecordReplayDeferBreakpoint(int site_position) {
   if (!EmitRecordReplayInstrumentationOpcodes()) return;
-  int index = RecordReplayRegisterInstrumentationSite("breakpoint", position);
+  int index =
+      RecordReplayRegisterInstrumentationSite("breakpoint", site_position);
   if (index < 0) return;
-  // Writing the instrumentation here would take the statement position.
-  DCHECK(latest_source_info_.is_statement());
-  DCHECK_EQ(latest_source_info_.source_position(), position);
+  // CurrentSourcePosition() hands this bytecode any pending position.
+  static_assert(!Bytecodes::IsWithoutExternalSideEffects(
+      Bytecode::kRecordReplayInstrumentation));
+  record_replay_pending_breakpoints_.push_back({index, latest_source_info_});
   latest_source_info_.set_invalid();
-  record_replay_pending_breakpoints_.push_back({index, position});
 }
 
 void BytecodeArrayBuilder::RecordReplayWritePendingBreakpoints() {
@@ -1457,8 +1458,7 @@ void BytecodeArrayBuilder::RecordReplayWritePendingBreakpoints() {
   pending.swap(record_replay_pending_breakpoints_);
   for (const RecordReplayPendingBreakpoint& breakpoint : pending) {
     BytecodeNode node(BytecodeNode::RecordReplayInstrumentation(
-        BytecodeSourceInfo(breakpoint.position, true),
-        static_cast<uint32_t>(breakpoint.site_index)));
+        breakpoint.source_info, static_cast<uint32_t>(breakpoint.site_index)));
     Write(&node);
   }
 }
@@ -1467,16 +1467,21 @@ bool BytecodeArrayBuilder::RecordReplayMaybePopPendingBreakpoints(
     int scope_start) {
   if (V8_LIKELY(record_replay_pending_breakpoints_.empty())) return false;
   DCHECK(record_replay_popped_breakpoints_.empty());
-  // Nothing has taken upstream's pending statement position since the last
-  // breakpoint was queued, so it's that breakpoint's, or a statement position
-  // set afterwards without one.
-  int pending_position = latest_source_info_.is_statement()
-                             ? latest_source_info_.source_position()
-                             : record_replay_pending_breakpoints_.back().position;
-  if (pending_position < scope_start) return false;
+  // Nothing has taken upstream's pending position since the last breakpoint
+  // was queued, so its statement position is the last breakpoint's, or one set
+  // afterwards without a breakpoint.
+  const BytecodeSourceInfo& pending_statement =
+      latest_source_info_.is_statement()
+          ? latest_source_info_
+          : record_replay_pending_breakpoints_.back().source_info;
+  if (!pending_statement.is_statement() ||
+      pending_statement.source_position() < scope_start) {
+    return false;
+  }
   auto first = record_replay_pending_breakpoints_.end();
   while (first != record_replay_pending_breakpoints_.begin() &&
-         (first - 1)->position >= scope_start) {
+         (first - 1)->source_info.is_valid() &&
+         (first - 1)->source_info.source_position() >= scope_start) {
     --first;
   }
   record_replay_popped_breakpoints_.assign(
