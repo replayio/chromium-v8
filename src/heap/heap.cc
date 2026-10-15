@@ -5116,9 +5116,7 @@ bool Heap::ShouldExpandOldGenerationOnSlowAllocation(LocalHeap* local_heap) {
   }
 
   if (incremental_marking()->IsStopped() &&
-      IncrementalMarkingLimitReached() == IncrementalMarkingLimit::kNoLimit &&
-      // Incremental marking is disabled when recording/replaying.
-      !recordreplay::IsRecordingOrReplaying("gc-changes", "NoIncrementalMarking")) {
+      IncrementalMarkingLimitReached() == IncrementalMarkingLimit::kNoLimit) {
     // We cannot start incremental marking.
     return false;
   }
