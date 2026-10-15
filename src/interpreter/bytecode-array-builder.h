@@ -5,6 +5,8 @@
 #ifndef V8_INTERPRETER_BYTECODE_ARRAY_BUILDER_H_
 #define V8_INTERPRETER_BYTECODE_ARRAY_BUILDER_H_
 
+#include <vector>
+
 #include "src/ast/ast.h"
 #include "src/base/export-template.h"
 #include "src/common/globals.h"
@@ -725,6 +727,10 @@ class V8_EXPORT_PRIVATE BytecodeArrayBuilder final {
       record_replay_pending_breakpoints_;
   std::vector<RecordReplayPendingBreakpoint>
       record_replay_popped_breakpoints_;
+  // Swapped with the pending queue while it's written, keeping both buffers'
+  // capacity across statements.
+  std::vector<RecordReplayPendingBreakpoint>
+      record_replay_writing_breakpoints_;
  public:
   int record_replay_instrumentation_site_counter_ = 0;
 };

@@ -1454,13 +1454,16 @@ void BytecodeArrayBuilder::RecordReplayDeferBreakpoint(int site_position) {
 }
 
 void BytecodeArrayBuilder::RecordReplayWritePendingBreakpoints() {
-  std::vector<RecordReplayPendingBreakpoint> pending;
-  pending.swap(record_replay_pending_breakpoints_);
-  for (const RecordReplayPendingBreakpoint& breakpoint : pending) {
+  // Write() flushes the queue again, so it must be empty while writing.
+  DCHECK(record_replay_writing_breakpoints_.empty());
+  record_replay_writing_breakpoints_.swap(record_replay_pending_breakpoints_);
+  for (const RecordReplayPendingBreakpoint& breakpoint :
+       record_replay_writing_breakpoints_) {
     BytecodeNode node(BytecodeNode::RecordReplayInstrumentation(
         breakpoint.source_info, static_cast<uint32_t>(breakpoint.site_index)));
     Write(&node);
   }
+  record_replay_writing_breakpoints_.clear();
 }
 
 bool BytecodeArrayBuilder::RecordReplayMaybePopPendingBreakpoints(
