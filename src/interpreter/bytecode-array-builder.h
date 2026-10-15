@@ -537,8 +537,13 @@ class V8_EXPORT_PRIVATE BytecodeArrayBuilder final {
   }
 
   base::Optional<BytecodeSourceInfo> MaybePopSourcePosition(int scope_start) {
+    bool popped_breakpoints =
+        RecordReplayMaybePopPendingBreakpoints(scope_start);
     if (!latest_source_info_.is_valid() ||
         latest_source_info_.source_position() < scope_start) {
+      // An invalid source info still makes the caller push the popped
+      // breakpoints back.
+      if (popped_breakpoints) return BytecodeSourceInfo();
       return base::nullopt;
     }
     BytecodeSourceInfo source_info = latest_source_info_;
@@ -549,6 +554,7 @@ class V8_EXPORT_PRIVATE BytecodeArrayBuilder final {
   void PushSourcePosition(BytecodeSourceInfo source_info) {
     DCHECK(!latest_source_info_.is_valid());
     latest_source_info_ = source_info;
+    RecordReplayPushPoppedBreakpoints();
   }
 
   void SetStatementPosition(int position, bool record_replay_breakpoint = true) {
@@ -556,7 +562,7 @@ class V8_EXPORT_PRIVATE BytecodeArrayBuilder final {
     latest_source_info_.MakeStatementPosition(position);
     most_recent_source_position_ = position;
     if (record_replay_breakpoint) {
-      RecordReplayInstrumentation("breakpoint", position);
+      RecordReplayDeferBreakpoint(position);
     }
   }
 
@@ -642,6 +648,30 @@ class V8_EXPORT_PRIVATE BytecodeArrayBuilder final {
   // if node already have valid source info.
   void AttachOrEmitDeferredSourceInfo(BytecodeNode* node);
 
+  // The breakpoint instrumentation for a statement position is written right
+  // before whatever comes next in the bytecode stream (where upstream attaches
+  // the pending statement position), so positional adjustments made in between
+  // move it along with the position. VisitClassLiteral's
+  // MaybePopSourcePosition/PushSourcePosition pair moves the class token's
+  // position past the class's block context push (v8/v8@f74ea020d5d,
+  // crrev.com/c/3284887, chromium:1259878; v8/v8@6a8b90c303b keeps it in place
+  // when it is outside the class scope), and a pause there then sees that
+  // context. Everywhere else the bytecode matches writing the breakpoint
+  // immediately: the site is registered and the statement position taken right
+  // away, and every write, label/handler binding and source position read
+  // writes the pending breakpoints first. Upstream changes to
+  // SetStatementPosition, CurrentSourcePosition, AttachOrEmitDeferredSourceInfo
+  // or MaybePopSourcePosition/PushSourcePosition need rechecking against this.
+  void RecordReplayDeferBreakpoint(int position);
+  void RecordReplayFlushPendingBreakpoints() {
+    if (V8_UNLIKELY(!record_replay_pending_breakpoints_.empty())) {
+      RecordReplayWritePendingBreakpoints();
+    }
+  }
+  void RecordReplayWritePendingBreakpoints();
+  bool RecordReplayMaybePopPendingBreakpoints(int scope_start);
+  void RecordReplayPushPoppedBreakpoints();
+
   // Write bytecode to bytecode array.
   void Write(BytecodeNode* node);
   void WriteJump(BytecodeNode* node, BytecodeLabel* label);
@@ -685,6 +715,14 @@ class V8_EXPORT_PRIVATE BytecodeArrayBuilder final {
   bool emit_record_replay_opcodes_ = false;
   bool emit_record_replay_assert_values_ = false;
   std::unordered_set<int> record_replay_instrumentation_site_locations_;
+  struct RecordReplayPendingBreakpoint {
+    int site_index;
+    int position;
+  };
+  std::vector<RecordReplayPendingBreakpoint>
+      record_replay_pending_breakpoints_;
+  std::vector<RecordReplayPendingBreakpoint>
+      record_replay_popped_breakpoints_;
  public:
   int record_replay_instrumentation_site_counter_ = 0;
 };
