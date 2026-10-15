@@ -453,6 +453,18 @@ Object FutexEmulation::WaitSync(Isolate* isolate,
       // be false, so we'll loop and then check interrupts.
       if (interrupted) {
         Object interrupt_object = isolate->stack_guard()->HandleInterrupts();
+        // HandleInterrupts leaves interrupts pending while events are
+        // disallowed, as they are for this whole wait, so it doesn't terminate.
+        // Only another thread can ask for that while this one is blocked here,
+        // and going back to waiting would ignore it, so the termination is
+        // handled here. When it arrives can't be replayed, so the recording is
+        // invalidated.
+        if (!interrupt_object.IsException(isolate) &&
+            isolate->stack_guard()->HasTerminationRequest()) {
+          recordreplay::InvalidateRecording(
+              "Terminate execution while blocked in Atomics.wait");
+          interrupt_object = isolate->TerminateExecution();
+        }
         if (interrupt_object.IsException(isolate)) {
           result = handle(interrupt_object, isolate);
           callback_result = AtomicsWaitEvent::kTerminatedExecution;
