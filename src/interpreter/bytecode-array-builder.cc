@@ -1454,7 +1454,8 @@ void BytecodeArrayBuilder::RecordReplayDeferBreakpoint(int site_position) {
 }
 
 void BytecodeArrayBuilder::RecordReplayWritePendingBreakpoints() {
-  // Write() flushes the queue again, so it must be empty while writing.
+  // Write() flushes the queue again, so swap it out first. Nothing written here
+  // queues breakpoints, so this never nests.
   DCHECK(record_replay_writing_breakpoints_.empty());
   record_replay_writing_breakpoints_.swap(record_replay_pending_breakpoints_);
   for (const RecordReplayPendingBreakpoint& breakpoint :
