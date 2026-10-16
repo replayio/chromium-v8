@@ -2288,28 +2288,30 @@ void BaselineCompiler::VisitIncBlockCounter() {
 
 void BaselineCompiler::VisitRecordReplayIncExecutionProgressCounter() {
   SaveAccumulatorScope accumulator_scope(&basm_);
-  // The optimized path is currently disabled.
-  // See https://linear.app/replay/issue/RUN-744
-  if ((true)/*gRecordReplayAssertProgress*/) {
-    CallRuntime(Runtime::kRecordReplayAssertExecutionProgress,
-                __ FunctionOperand());
-  } else {
-    /*
-    BaselineAssembler::ScratchRegisterScope scratch_scope(&basm_);
-    Register reg1 = scratch_scope.AcquireScratch();
-    Register reg2 = scratch_scope.AcquireScratch();
-    __ Move(reg1, ExternalReference::record_replay_progress_counter());
-    __ Move(reg2, MemOperand(reg1, 0));
-    __ AddPointer(reg2, Immediate(1));
-    __ Move(MemOperand(reg1, 0), reg2);
-    __ Move(reg1, ExternalReference::record_replay_target_progress());
-    __ ComparePointer(reg2, MemOperand(reg1, 0));
+#if V8_TARGET_ARCH_X64
+  // Assertions and checks on progress need the VM call. Otherwise increment
+  // the counter inline and only call into the VM at the target progress.
+  if (!gRecordReplayAssertProgress && !gRecordReplayCheckProgress) {
     Label done;
-    __ JumpIf(Condition::kNotEqual, &done, Label::kNear);
+    {
+      BaselineAssembler::ScratchRegisterScope scratch_scope(&basm_);
+      Register address = scratch_scope.AcquireScratch();
+      Register counter = scratch_scope.AcquireScratch();
+      masm_.Move(address, ExternalReference::record_replay_progress_counter());
+      masm_.movq(counter, Operand(address, 0));
+      masm_.incq(counter);
+      masm_.movq(Operand(address, 0), counter);
+      masm_.Move(address, ExternalReference::record_replay_target_progress());
+      masm_.cmpq(counter, Operand(address, 0));
+      masm_.j(not_equal, &done);
+    }
     CallRuntime(Runtime::kRecordReplayTargetProgressReached);
     __ Bind(&done);
-    */
+    return;
   }
+#endif
+  CallRuntime(Runtime::kRecordReplayAssertExecutionProgress,
+              __ FunctionOperand());
 }
 
 void BaselineCompiler::VisitReplayIncJsFrameDepth() {
