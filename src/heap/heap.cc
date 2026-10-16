@@ -5116,7 +5116,11 @@ bool Heap::ShouldExpandOldGenerationOnSlowAllocation(LocalHeap* local_heap) {
   }
 
   if (incremental_marking()->IsStopped() &&
-      IncrementalMarkingLimitReached() == IncrementalMarkingLimit::kNoLimit) {
+      IncrementalMarkingLimitReached() == IncrementalMarkingLimit::kNoLimit &&
+      // Incremental marking is disabled when recording/replaying with the
+      // v8-flags-gc feature disabled. Expand instead of collecting then.
+      (v8_flags.incremental_marking ||
+       !recordreplay::IsRecordingOrReplaying("gc-changes", "NoIncrementalMarking"))) {
     // We cannot start incremental marking.
     return false;
   }
