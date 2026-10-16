@@ -948,6 +948,7 @@ extern uint64_t* gProgressCounter;
 extern uint64_t gTargetProgress;
 extern bool gRecordReplayAssertProgress;
 extern int gRecordReplayCheckProgress;
+extern bool IsRecordReplayReplacedScript(int script_id);
 
 // Define this to check preconditions for using record/replay opcodes.
 //#define RECORD_REPLAY_CHECK_OPCODES
@@ -1045,6 +1046,20 @@ static std::string GetScriptProgressEntryString(uint64_t v) {
   int start_position = static_cast<int>(v);
 
   return GetScriptLocationString(script_id, start_position);
+}
+
+static bool ScriptProgressEntriesMatch(uint64_t recorded, uint64_t replayed) {
+  if (recorded == replayed) {
+    return true;
+  }
+
+  // Replaced source contents can shift function StartPosition() offsets within
+  // the script even when replay is still executing the same logical functions.
+  // In that case, compare only script identity and ignore the in-script offset.
+  int recorded_script_id = static_cast<int>(recorded >> 32);
+  int replayed_script_id = static_cast<int>(replayed >> 32);
+  return recorded_script_id == replayed_script_id &&
+         IsRecordReplayReplacedScript(recorded_script_id);
 }
 
 // Escape a string for embedding as a JSON string value.
@@ -1147,10 +1162,17 @@ char* RecordReplayCallbackAssertOnDataMismatch(void* recorded_buf, size_t record
   size_t firstDivergentIndex = 0;
   size_t common = std::min<size_t>(recorded_size, replayed_size);
   while (firstDivergentIndex < common &&
-         recorded[firstDivergentIndex] == replayed[firstDivergentIndex]) {
+         ScriptProgressEntriesMatch(recorded[firstDivergentIndex],
+                                    replayed[firstDivergentIndex])) {
     std::string text = GetScriptProgressEntryString(recorded[firstDivergentIndex]);
     RecordReplayDescribeAssertData(text.c_str());
     firstDivergentIndex++;
+  }
+
+  // The raw buffers differed, but every progress entry was equivalent after
+  // applying the replaced-script comparison above, so suppress the warning.
+  if (firstDivergentIndex == common && recorded_size == replayed_size) {
+    return nullptr;
   }
 
   // Divergence is at firstDivergentIndex: either a differing entry, or one side
