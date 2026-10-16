@@ -12403,8 +12403,8 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
     i::FLAG_wasm_async_compilation = false;
   }
 
-  // The baseline JIT's handling of some record/replay opcodes is buggy.
-  if (V8RecordReplayFeatureEnabled("disable-v8-flags-baseline-jit", nullptr)) {
+  // The baseline JIT is used by default but can be disabled via a feature.
+  if (!V8RecordReplayFeatureEnabled("v8-flags-baseline-jit", nullptr)) {
     i::v8_flags.sparkplug = false;
   }
 
