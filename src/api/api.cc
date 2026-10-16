@@ -12452,13 +12452,6 @@ extern "C" void V8SetRecordingOrReplaying(void* handle) {
   recordreplay::SetRecordingOrReplaying(handle);
 }
 
-extern "C" void V8InitializeNotRecordingOrReplaying() {
-  // These flags are necessary to avoid hangs in some situations, for unknown
-  // reasons. See https://linear.app/replay/issue/RUN-1071
-  internal::v8_flags.sparkplug = false;
-  internal::FLAG_incremental_marking_task = false;
-}
-
 extern "C" DLLEXPORT bool V8IsMainThread() {
   return IsMainThread();
 }
