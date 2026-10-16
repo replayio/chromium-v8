@@ -11133,6 +11133,10 @@ bool gRecordReplayAssertTrackedObjects;
 // This is on by default.
 bool gRecordReplayEnableDependencyGraph;
 
+// Use V8's GC as upstream does while recording/replaying.
+// This is on by default and controlled by the v8-flags-gc feature.
+bool gRecordReplayEnableGCFeatures;
+
 // Assert that dependency graph nodes / edges are created consistently.
 // This adds recording overhead and is off by default.
 bool gRecordReplayAssertDependencyGraph;
@@ -12410,8 +12414,11 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
   }
 
   // Concurrent, parallel and incremental GC are used when recording and
-  // replaying by default but can be disabled via a feature.
-  if (!V8RecordReplayFeatureEnabled("v8-flags-gc", nullptr)) {
+  // replaying by default but can be disabled via a feature, which runs every
+  // GC on the main thread instead.
+  i::gRecordReplayEnableGCFeatures =
+    V8RecordReplayFeatureEnabled("v8-flags-gc", nullptr);
+  if (!i::gRecordReplayEnableGCFeatures) {
     i::FLAG_concurrent_marking = false;
     i::FLAG_concurrent_sweeping = false;
     i::FLAG_incremental_marking_task = false;

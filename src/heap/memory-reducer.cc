@@ -200,7 +200,14 @@ MemoryReducer::State MemoryReducer::Step(const State& state,
   UNREACHABLE();
 }
 
+extern bool gRecordReplayEnableGCFeatures;
+
 void MemoryReducer::ScheduleTimer(double delay_ms) {
+  // The timer posts tasks at non-deterministic points, which isn't done when
+  // recording/replaying with the v8-flags-gc feature disabled.
+  if (recordreplay::IsRecordingOrReplaying() && !gRecordReplayEnableGCFeatures) {
+    return;
+  }
   DCHECK_LT(0, delay_ms);
   if (heap()->IsTearingDown()) return;
   // Leave some room for precision error in task scheduler.

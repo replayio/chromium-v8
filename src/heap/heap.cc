@@ -5077,6 +5077,8 @@ bool Heap::ShouldOptimizeForLoadTime() {
              isolate()->LoadStartTimeMs() + kMaxLoadTimeMs;
 }
 
+extern bool gRecordReplayEnableGCFeatures;
+
 // This predicate is called when an old generation space cannot allocated from
 // the free list and is about to add a new page. Returning false will cause a
 // major GC. It happens when the old generation allocation limit is reached and
@@ -5119,8 +5121,7 @@ bool Heap::ShouldExpandOldGenerationOnSlowAllocation(LocalHeap* local_heap) {
       IncrementalMarkingLimitReached() == IncrementalMarkingLimit::kNoLimit &&
       // Incremental marking is disabled when recording/replaying with the
       // v8-flags-gc feature disabled. Expand instead of collecting then.
-      (v8_flags.incremental_marking ||
-       !recordreplay::IsRecordingOrReplaying("gc-changes", "NoIncrementalMarking"))) {
+      (gRecordReplayEnableGCFeatures || !recordreplay::IsRecordingOrReplaying())) {
     // We cannot start incremental marking.
     return false;
   }
