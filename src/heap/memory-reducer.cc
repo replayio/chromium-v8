@@ -200,12 +200,11 @@ MemoryReducer::State MemoryReducer::Step(const State& state,
   UNREACHABLE();
 }
 
-extern bool gRecordReplayEnableGCFeatures;
-
 void MemoryReducer::ScheduleTimer(double delay_ms) {
-  // The timer posts tasks at non-deterministic points, which isn't done when
-  // recording/replaying with the v8-flags-gc feature disabled.
-  if (recordreplay::IsRecordingOrReplaying() && !gRecordReplayEnableGCFeatures) {
+  // Whether the timer is posted depends on the GC's history, which differs
+  // between recording and replaying, and posting it can be a recorded event
+  // (e.g. from Heap::NotifyContextDisposed).
+  if (recordreplay::IsRecordingOrReplaying("gc-changes", "MemoryReducer::ScheduleTimer")) {
     return;
   }
   DCHECK_LT(0, delay_ms);
