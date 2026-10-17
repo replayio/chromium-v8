@@ -1199,14 +1199,12 @@ extern bool RecordReplayIsDivergentUserJSWithoutPause(
 
 static bool gHasPrintedStack = false;
 
-RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
+static void OnExecutionProgress(Isolate* isolate, Handle<JSFunction> function) {
   if (++*gProgressCounter == gTargetProgress) {
     RecordReplayOnTargetProgressReached();
   }
 
   if (gRecordReplayAssertProgress) {
-    Handle<JSFunction> function = args.at<JSFunction>(0);
-
     if (!gProgressData) {
       gProgressData = new std::vector<uint64_t>();
     }
@@ -1214,8 +1212,6 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
   }
 
   if (gRecordReplayCheckProgress) {
-    Handle<JSFunction> function = args.at<JSFunction>(0);
-
     Handle<SharedFunctionInfo> shared(function->shared(), isolate);
     Handle<Script> script(Script::cast(shared->script()), isolate);
 
@@ -1242,7 +1238,10 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
       }
     }
   }
+}
 
+RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
+  OnExecutionProgress(isolate, args.at<JSFunction>(0));
   return ReadOnlyRoots(isolate).undefined_value();
 }
 
@@ -1257,6 +1256,26 @@ extern "C" void V8RecordReplayNotifyActivity();
 RUNTIME_FUNCTION(Runtime_RecordReplayNotifyActivity) {
   V8RecordReplayNotifyActivity();
   return ReadOnlyRoots(isolate).undefined_value();
+}
+
+// The baseline JIT's variants of the calls above take the accumulator and
+// return it. The calling frame's baseline code can be discarded while the
+// call is on the stack (e.g. when a breakpoint is set), and the frame then
+// resumes in the interpreter with the call's result as its accumulator.
+RUNTIME_FUNCTION(Runtime_RecordReplayBaselineExecutionProgress) {
+  OnExecutionProgress(isolate, args.at<JSFunction>(0));
+  return args[1];
+}
+
+RUNTIME_FUNCTION(Runtime_RecordReplayBaselineTargetProgressReached) {
+  CHECK(*gProgressCounter == gTargetProgress);
+  RecordReplayOnTargetProgressReached();
+  return args[0];
+}
+
+RUNTIME_FUNCTION(Runtime_RecordReplayBaselineNotifyActivity) {
+  V8RecordReplayNotifyActivity();
+  return args[0];
 }
 
 static std::string GetStackLocation(Isolate* isolate) {

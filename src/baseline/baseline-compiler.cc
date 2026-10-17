@@ -2290,7 +2290,8 @@ void BaselineCompiler::VisitIncBlockCounter() {
 }
 
 void BaselineCompiler::VisitRecordReplayIncExecutionProgressCounter() {
-  SaveAccumulatorScope accumulator_scope(&basm_);
+  // The progress calls return the accumulator, which is live after
+  // ResumeGenerator and at the start of catch blocks.
 #if V8_TARGET_ARCH_X64
   // Assertions and checks on progress need the VM call. Otherwise increment
   // the counter inline and only call into the VM at the target progress.
@@ -2308,13 +2309,14 @@ void BaselineCompiler::VisitRecordReplayIncExecutionProgressCounter() {
       masm_.cmpq(counter, Operand(address, 0));
       masm_.j(not_equal, &done);
     }
-    CallRuntime(Runtime::kRecordReplayTargetProgressReached);
+    CallRuntime(Runtime::kRecordReplayBaselineTargetProgressReached,
+                kInterpreterAccumulatorRegister);
     __ Bind(&done);
     return;
   }
 #endif
-  CallRuntime(Runtime::kRecordReplayAssertExecutionProgress,
-              __ FunctionOperand());
+  CallRuntime(Runtime::kRecordReplayBaselineExecutionProgress,
+              __ FunctionOperand(), kInterpreterAccumulatorRegister);
 }
 
 void BaselineCompiler::VisitReplayIncJsFrameDepth() {
@@ -2350,8 +2352,9 @@ void BaselineCompiler::VisitReplayDecJsFrameDepth() {
 }
 
 void BaselineCompiler::VisitRecordReplayNotifyActivity() {
-  SaveAccumulatorScope accumulator_scope(&basm_);
-  CallRuntime(Runtime::kRecordReplayNotifyActivity);
+  // Returns the accumulator, see VisitRecordReplayIncExecutionProgressCounter.
+  CallRuntime(Runtime::kRecordReplayBaselineNotifyActivity,
+              kInterpreterAccumulatorRegister);
 }
 
 void BaselineCompiler::VisitRecordReplayInstrumentation() {
