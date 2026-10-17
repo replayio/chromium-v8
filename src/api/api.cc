@@ -12439,8 +12439,9 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
     i::FLAG_incremental_marking = false;
   }
 
-  // For now the compilation cache is only used when recording.
-  if (IsReplaying() || !V8RecordReplayFeatureEnabled("v8-flags-compilation-cache", nullptr)) {
+  // When replaying, scripts are only taken from the compilation cache when
+  // the recording took them from it, see GetSharedFunctionInfoForScriptImpl.
+  if (!V8RecordReplayFeatureEnabled("v8-flags-compilation-cache", nullptr)) {
     i::FLAG_compilation_cache = false;
   }
 

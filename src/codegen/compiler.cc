@@ -3605,10 +3605,12 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
     maybe_result = lookup_result.toplevel_sfi();
     is_compiled_scope = lookup_result.is_compiled_scope();
 
-    // The compilation cache isn't enabled when replaying, but we still need
-    // to record/replay whether a script was found when recording so that the
-    // same scripts are created at the same points. The SFI will need to be
-    // recompiled when replaying but that's fine when the right script ID is used.
+    // Whether a script was found when recording is recorded so that the same
+    // scripts are created at the same points when replaying. The replaying
+    // process's cache can hold different entries (e.g. after collecting
+    // different ones), so its result is only used when it is the script the
+    // recording found, and the script's top level SFI is recompiled when the
+    // cache doesn't have it.
     if (recordreplay::IsRecordingOrReplaying("values") &&
         !recordreplay::AreEventsDisallowed() &&
         IsMainThread() &&
@@ -3629,17 +3631,26 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
         }
       }
       script_id = (int)recordreplay::RecordReplayValue("GetSharedFunctionInfoForScriptImpl script_id", script_id);
-      if (recordreplay::IsReplaying() && script_id != v8::UnboundScript::kNoScriptId) {
-        maybe_script = GetScript(isolate, script_id);
+      if (recordreplay::IsReplaying()) {
+        Handle<Script> found;
+        if (!maybe_script.ToHandle(&found) || found->id() != script_id) {
+          maybe_result = MaybeHandle<SharedFunctionInfo>();
+          is_compiled_scope = IsCompiledScope();
+        }
+        maybe_script = script_id == v8::UnboundScript::kNoScriptId
+                           ? MaybeHandle<Script>()
+                           : MaybeHandle<Script>(GetScript(isolate, script_id));
       }
-    } else if (recordreplay::IsRecording() &&
-               recordreplay::IsRecordingOrReplaying("values") &&
-               !IsMainThread()) {
-      // Off the main thread whether the lookup found a script isn't recorded,
-      // and the replay doesn't use the cache, so don't use what it found when
-      // recording either: the replay would create a script the recording
-      // didn't, as when a worker imports the same script twice or an audio
-      // worklet loads the same module again.
+    } else if (recordreplay::IsReplaying() ||
+               (recordreplay::IsRecording() &&
+                recordreplay::IsRecordingOrReplaying("values") &&
+                !IsMainThread())) {
+      // Nothing was recorded about the lookup, so the replay can't tell
+      // whether the recording found a script and compiles it. Off the main
+      // thread, don't use what the lookup found when recording either: the
+      // replay would create a script the recording didn't, as when a worker
+      // imports the same script twice or an audio worklet loads the same
+      // module again.
       maybe_script = MaybeHandle<Script>();
       maybe_result = MaybeHandle<SharedFunctionInfo>();
       is_compiled_scope = IsCompiledScope();
