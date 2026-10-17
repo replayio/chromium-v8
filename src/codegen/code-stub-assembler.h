@@ -2754,6 +2754,11 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
         ExternalReference::record_replay_is_recording_or_replaying());
   }
 
+  TNode<BoolT> IsRecordReplayInstrumentationEnabled() {
+    return LoadRuntimeFlag(
+        ExternalReference::record_replay_instrumentation_enabled());
+  }
+
   TNode<BoolT> HasSharedStringTableFlag() {
     return LoadRuntimeFlag(
         ExternalReference::address_of_shared_string_table_flag());

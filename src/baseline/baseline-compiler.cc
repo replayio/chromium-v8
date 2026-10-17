@@ -2408,13 +2408,36 @@ void BaselineCompiler::VisitRecordReplayNotifyActivity() {
               kInterpreterAccumulatorRegister);
 }
 
+// Jumps to |skip| while instrumentation is disabled, when the runtime call
+// would do nothing and return the accumulator unchanged.
+void BaselineCompiler::JumpIfRecordReplayInstrumentationDisabled(Label* skip) {
+#if V8_TARGET_ARCH_X64
+  BaselineAssembler::ScratchRegisterScope scratch_scope(&basm_);
+  Register address = scratch_scope.AcquireScratch();
+  masm_.Move(address,
+             ExternalReference::record_replay_instrumentation_enabled());
+  masm_.cmpb(Operand(address, 0), Immediate(0));
+  masm_.j(equal, skip);
+#elif V8_TARGET_ARCH_ARM64
+  BaselineAssembler::ScratchRegisterScope scratch_scope(&basm_);
+  Register address = scratch_scope.AcquireScratch();
+  masm_.Mov(address,
+            Operand(ExternalReference::record_replay_instrumentation_enabled()));
+  masm_.Ldrb(address.W(), MemOperand(address));
+  masm_.Cbz(address.W(), skip);
+#endif
+}
+
 // The instrumentation calls return the accumulator, see
 // VisitRecordReplayIncExecutionProgressCounter.
 void BaselineCompiler::VisitRecordReplayInstrumentation() {
+  Label skip;
+  JumpIfRecordReplayInstrumentationDisabled(&skip);
   uint32_t index = Index(0);
   CallRuntime(Runtime::kRecordReplayBaselineInstrumentation,
               __ FunctionOperand(), Smi::FromInt(index),
               kInterpreterAccumulatorRegister);
+  __ Bind(&skip);
 }
 
 void BaselineCompiler::VisitRecordReplayInstrumentationGenerator() {
@@ -2425,10 +2448,13 @@ void BaselineCompiler::VisitRecordReplayInstrumentationGenerator() {
 }
 
 void BaselineCompiler::VisitRecordReplayInstrumentationReturn() {
+  Label skip;
+  JumpIfRecordReplayInstrumentationDisabled(&skip);
   uint32_t index = Index(0);
   CallRuntime(Runtime::kRecordReplayBaselineInstrumentationReturn,
               __ FunctionOperand(), Smi::FromInt(index), RegisterOperand(1),
               kInterpreterAccumulatorRegister);
+  __ Bind(&skip);
 }
 
 void BaselineCompiler::VisitRecordReplayAssertValue() {
