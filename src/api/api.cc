@@ -11105,7 +11105,11 @@ void RecordReplayOnTargetProgressReached() {
 static void RecordReplayProgressInterruptCallback() {
   CHECK(IsMainThread());
   Isolate* isolate = Isolate::Current();
-  isolate->RecordReplayInvokeApiInterruptCallbacksAtProgress();
+  isolate->heap()->RecordReplayOnProgressInterrupt();
+  // The memory reducer triggers progress interrupts too.
+  if (recordreplay::IsRecordingOrReplaying("interrupts")) {
+    isolate->RecordReplayInvokeApiInterruptCallbacksAtProgress();
+  }
 }
 
 void RecordReplayInstrument(const char* kind, const char* function, int function_index) {

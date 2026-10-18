@@ -1821,6 +1821,9 @@ int Heap::NotifyContextDisposed(bool dependant_context) {
       event.type = MemoryReducer::kPossibleGarbage;
       event.time_ms = MonotonicallyIncreasingTimeInMs();
       memory_reducer_->NotifyPossibleGarbage(event);
+      if (recordreplay::IsRecordingOrReplaying()) {
+        memory_reducer_->RecordReplayPostRequestedTimer();
+      }
     }
   }
   isolate()->AbortConcurrentOptimization(BlockingBehavior::kDontBlock);
@@ -6629,6 +6632,12 @@ void Heap::EnqueueDirtyJSFinalizationRegistry(
   set_dirty_js_finalization_registries_list_tail(finalization_registry);
   // dirty_js_finalization_registries_list_tail_ is rescanned by
   // ProcessWeakListRoots.
+}
+
+void Heap::RecordReplayOnProgressInterrupt() {
+  if (memory_reducer_) {
+    memory_reducer_->RecordReplayOnProgressInterrupt();
+  }
 }
 
 bool Heap::RecordReplayHasDirtyJSFinalizationRegistries(
