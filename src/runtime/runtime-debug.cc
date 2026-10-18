@@ -1562,18 +1562,21 @@ static inline void OnInstrumentation(Isolate* isolate,
 
 extern bool gRecordReplayInstrumentationEnabled;
 
-RUNTIME_FUNCTION(Runtime_RecordReplayInstrumentation) {
+static void OnInstrumentationSite(Isolate* isolate, RuntimeArguments& args) {
   if (!gRecordReplayInstrumentationEnabled) {
-    return ReadOnlyRoots(isolate).undefined_value();
+    return;
   }
 
   HandleScope scope(isolate);
-  DCHECK_EQ(2, args.length());
   Handle<JSFunction> function = args.at<JSFunction>(0);
   int32_t index = NumberToInt32(args[1]);
 
   OnInstrumentation(isolate, function, index);
+}
 
+RUNTIME_FUNCTION(Runtime_RecordReplayInstrumentation) {
+  DCHECK_EQ(2, args.length());
+  OnInstrumentationSite(isolate, args);
   return ReadOnlyRoots(isolate).undefined_value();
 }
 
@@ -1586,9 +1589,9 @@ int RecordReplayCurrentGeneratorIdRaw() {
   return gCurrentGeneratorId;
 }
 
-RUNTIME_FUNCTION(Runtime_RecordReplayInstrumentationGenerator) {
+static void OnGeneratorInstrumentationSite(Isolate* isolate,
+                                           RuntimeArguments& args) {
   HandleScope scope(isolate);
-  DCHECK_EQ(3, args.length());
   Handle<JSFunction> function = args.at<JSFunction>(0);
   int32_t index = NumberToInt32(args[1]);
   Handle<Object> generator_object = args.at(2);
@@ -1607,19 +1610,23 @@ RUNTIME_FUNCTION(Runtime_RecordReplayInstrumentationGenerator) {
   }
 
   gCurrentGeneratorId = 0;
+}
 
+RUNTIME_FUNCTION(Runtime_RecordReplayInstrumentationGenerator) {
+  DCHECK_EQ(3, args.length());
+  OnGeneratorInstrumentationSite(isolate, args);
   return ReadOnlyRoots(isolate).undefined_value();
 }
 
 static Handle<Object>* gCurrentReturnValue;
 
-RUNTIME_FUNCTION(Runtime_RecordReplayInstrumentationReturn) {
+static void OnReturnInstrumentationSite(Isolate* isolate,
+                                        RuntimeArguments& args) {
   if (!gRecordReplayInstrumentationEnabled) {
-    return ReadOnlyRoots(isolate).undefined_value();
+    return;
   }
 
   HandleScope scope(isolate);
-  DCHECK_EQ(3, args.length());
   Handle<JSFunction> function = args.at<JSFunction>(0);
   int32_t index = NumberToInt32(args[1]);
   Handle<Object> return_value = args.at(2);
@@ -1629,8 +1636,36 @@ RUNTIME_FUNCTION(Runtime_RecordReplayInstrumentationReturn) {
   OnInstrumentation(isolate, function, index);
 
   gCurrentReturnValue = nullptr;
+}
 
+RUNTIME_FUNCTION(Runtime_RecordReplayInstrumentationReturn) {
+  DCHECK_EQ(3, args.length());
+  OnReturnInstrumentationSite(isolate, args);
   return ReadOnlyRoots(isolate).undefined_value();
+}
+
+// The baseline JIT's variants of the instrumentation calls take the
+// accumulator as their last argument and return it, like
+// Runtime_RecordReplayBaselineExecutionProgress: the accumulator is live
+// around these sites (after ResumeGenerator, before SuspendGenerator and
+// before Return), and the frame resumes in the interpreter with the call's
+// result as its accumulator if its baseline code is discarded meanwhile.
+RUNTIME_FUNCTION(Runtime_RecordReplayBaselineInstrumentation) {
+  DCHECK_EQ(3, args.length());
+  OnInstrumentationSite(isolate, args);
+  return args[2];
+}
+
+RUNTIME_FUNCTION(Runtime_RecordReplayBaselineInstrumentationGenerator) {
+  DCHECK_EQ(4, args.length());
+  OnGeneratorInstrumentationSite(isolate, args);
+  return args[3];
+}
+
+RUNTIME_FUNCTION(Runtime_RecordReplayBaselineInstrumentationReturn) {
+  DCHECK_EQ(4, args.length());
+  OnReturnInstrumentationSite(isolate, args);
+  return args[3];
 }
 
 extern "C" bool V8RecordReplayCurrentReturnValue(v8::Local<v8::Value>* object) {

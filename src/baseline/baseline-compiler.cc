@@ -2408,25 +2408,27 @@ void BaselineCompiler::VisitRecordReplayNotifyActivity() {
               kInterpreterAccumulatorRegister);
 }
 
+// The instrumentation calls return the accumulator, see
+// VisitRecordReplayIncExecutionProgressCounter.
 void BaselineCompiler::VisitRecordReplayInstrumentation() {
-  SaveAccumulatorScope accumulator_scope(&basm_);
   uint32_t index = Index(0);
-  CallRuntime(Runtime::kRecordReplayInstrumentation,
-              __ FunctionOperand(), Smi::FromInt(index));
+  CallRuntime(Runtime::kRecordReplayBaselineInstrumentation,
+              __ FunctionOperand(), Smi::FromInt(index),
+              kInterpreterAccumulatorRegister);
 }
 
 void BaselineCompiler::VisitRecordReplayInstrumentationGenerator() {
-  SaveAccumulatorScope accumulator_scope(&basm_);
   uint32_t index = Index(0);
-  CallRuntime(Runtime::kRecordReplayInstrumentationGenerator,
-              __ FunctionOperand(), Smi::FromInt(index), RegisterOperand(1));
+  CallRuntime(Runtime::kRecordReplayBaselineInstrumentationGenerator,
+              __ FunctionOperand(), Smi::FromInt(index), RegisterOperand(1),
+              kInterpreterAccumulatorRegister);
 }
 
 void BaselineCompiler::VisitRecordReplayInstrumentationReturn() {
-  SaveAccumulatorScope accumulator_scope(&basm_);
   uint32_t index = Index(0);
-  CallRuntime(Runtime::kRecordReplayInstrumentationReturn,
-              __ FunctionOperand(), Smi::FromInt(index), RegisterOperand(1));
+  CallRuntime(Runtime::kRecordReplayBaselineInstrumentationReturn,
+              __ FunctionOperand(), Smi::FromInt(index), RegisterOperand(1),
+              kInterpreterAccumulatorRegister);
 }
 
 void BaselineCompiler::VisitRecordReplayAssertValue() {
