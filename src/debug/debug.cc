@@ -2462,6 +2462,19 @@ void Debug::ProcessCompileEvent(bool has_compile_error, Handle<Script> script) {
   }
 }
 
+// Registers a top-level script as soon as its main-thread compile finishes.
+// ProcessCompileEvent only sees it once its function is instantiated, which
+// for a module waits for its whole import graph and never happens when that
+// graph fails to load.
+void RecordReplayRegisterCompiledScript(
+    Isolate* isolate, MaybeHandle<SharedFunctionInfo> maybe_function_info) {
+  Handle<SharedFunctionInfo> function_info;
+  if (maybe_function_info.ToHandle(&function_info) &&
+      recordreplay::IsRecordingOrReplaying("register-scripts") && IsMainThread()) {
+    RecordReplayRegisterScript(handle(Script::cast(function_info->script()), isolate));
+  }
+}
+
 int Debug::CurrentFrameCount() {
   StackTraceFrameIterator it(isolate_);
   if (break_frame_id() != StackFrameId::NO_ID) {

@@ -2593,6 +2593,9 @@ ReplayingReplaceScriptContents(Isolate* isolate, Handle<String> source) {
   return isolate->factory()->NewStringFromUtf8(base::CStrVector(new_contents)).ToHandleChecked();
 }
 
+extern void RecordReplayRegisterCompiledScript(
+    Isolate* isolate, MaybeHandle<SharedFunctionInfo> maybe_function_info);
+
 MaybeHandle<SharedFunctionInfo>
 ReplayingMaybeReplaceScript(Isolate* isolate,
                             MaybeHandle<SharedFunctionInfo> maybe_function_info,
@@ -2601,6 +2604,7 @@ ReplayingMaybeReplaceScript(Isolate* isolate,
   MaybeHandle<String> new_source = ReplayingReplaceScriptContents(isolate, source);
 
   if (new_source.is_null() || maybe_function_info.is_null()) {
+    RecordReplayRegisterCompiledScript(isolate, maybe_function_info);
     return maybe_function_info;
   }
 
@@ -2621,6 +2625,7 @@ ReplayingMaybeReplaceScript(Isolate* isolate,
   }
 
   gReplaceSourceContentsScriptId = 0;
+  RecordReplayRegisterCompiledScript(isolate, maybe_function_info);
   return maybe_function_info;
 }
 
