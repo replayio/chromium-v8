@@ -10963,6 +10963,19 @@ namespace internal {
 
 bool gRecordReplayHasCheckpoint;
 
+extern void RecordReplayRegisterScriptsBeforeFirstCheckpoint();
+
+extern uint64_t* gProgressCounter;
+
+// Scripts instrumented before the first checkpoint (see
+// gRecordReplayInstrumentScripts) advance the progress counter, which the
+// recording starts from zero at the first checkpoint. Nothing before it is
+// addressed by progress, and recording and replaying run the same code
+// before it.
+void RecordReplayBeforeFirstCheckpoint() {
+  *gProgressCounter = 0;
+}
+
 void RecordReplayOnNewSource(Isolate* isolate, const char* id,
                              const char* kind, const char* url) {
   if (gRecordReplayHasCheckpoint) {
@@ -11273,8 +11286,21 @@ extern "C" void V8RecordReplayGetDefaultContext(v8::Isolate* isolate, v8::Local<
   *cx = gDefaultContext->Get(isolate);
 }
 
-bool RecordReplayHasDefaultContext() {
-  return !!gDefaultContext;
+// Set at the tab's first main-world context, which can come before the
+// default context: the initial about:blank document runs scripts before the
+// first navigation creates the first checkpoint. V8's compilation cache hands
+// later runs of the same source the Script compiled there, so it has to be
+// instrumented and registered like a script compiled after the checkpoint.
+static bool gRecordReplayInstrumentScripts;
+
+extern "C" void V8RecordReplayStartInstrumentingScripts() {
+  if (IsMainThread()) {
+    gRecordReplayInstrumentScripts = true;
+  }
+}
+
+bool RecordReplayShouldInstrumentScripts() {
+  return gRecordReplayInstrumentScripts || gDefaultContext;
 }
 
 // Tagged pointer of the DefaultContext for `isolate`, or 0 if none. Deref-free:
@@ -11732,8 +11758,15 @@ void recordreplay::NewCheckpoint() {
   // We can only create checkpoints if a context has been created. A context is
   // needed to process commands which we might get from the driver.
   if (IsRecordingOrReplaying() && IsMainThread() && internal::gDefaultContext) {
+    bool first = !internal::gRecordReplayHasCheckpoint;
+    if (first) {
+      internal::RecordReplayBeforeFirstCheckpoint();
+    }
     internal::gRecordReplayHasCheckpoint = true;
     gRecordReplayNewCheckpoint();
+    if (first) {
+      internal::RecordReplayRegisterScriptsBeforeFirstCheckpoint();
+    }
   }
 }
 
@@ -11745,8 +11778,15 @@ void recordreplay::NewCheckpointFlushed() {
   // We can only create checkpoints if a context has been created. A context is
   // needed to process commands which we might get from the driver.
   if (IsRecordingOrReplaying() && IsMainThread() && internal::gDefaultContext) {
+    bool first = !internal::gRecordReplayHasCheckpoint;
+    if (first) {
+      internal::RecordReplayBeforeFirstCheckpoint();
+    }
     internal::gRecordReplayHasCheckpoint = true;
     gRecordReplayNewCheckpointFlushed();
+    if (first) {
+      internal::RecordReplayRegisterScriptsBeforeFirstCheckpoint();
+    }
   }
 }
 
