@@ -10967,6 +10967,12 @@ extern void RecordReplayRegisterScriptsBeforeFirstCheckpoint();
 
 extern uint64_t* gProgressCounter;
 
+// Progress interrupts requested before the first checkpoint. Scripts can
+// advance the progress counter before it (see RecordReplayBeforeFirstCheckpoint),
+// but replaying only takes interrupts from the first checkpoint on, so they are
+// requested once the counter is reset there, as when nothing advanced it.
+static int gRecordReplayProgressInterruptsBeforeFirstCheckpoint;
+
 // Scripts instrumented before the first checkpoint (see
 // gRecordReplayInstrumentScripts) advance the progress counter, which the
 // recording starts from zero at the first checkpoint. Nothing before it is
@@ -10974,6 +10980,10 @@ extern uint64_t* gProgressCounter;
 // before it.
 void RecordReplayBeforeFirstCheckpoint() {
   *gProgressCounter = 0;
+  for (; gRecordReplayProgressInterruptsBeforeFirstCheckpoint > 0;
+       gRecordReplayProgressInterruptsBeforeFirstCheckpoint--) {
+    gRecordReplayTriggerProgressInterrupt();
+  }
 }
 
 void RecordReplayOnNewSource(Isolate* isolate, const char* id,
@@ -11095,6 +11105,10 @@ void RecordReplaySetTargetProgress(uint64_t progress) {
 
 void RecordReplayTriggerProgressInterrupt() {
   CHECK(recordreplay::IsRecording() && IsMainThread());
+  if (!gRecordReplayHasCheckpoint) {
+    gRecordReplayProgressInterruptsBeforeFirstCheckpoint++;
+    return;
+  }
   gRecordReplayTriggerProgressInterrupt();
 }
 
