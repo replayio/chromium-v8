@@ -1821,6 +1821,9 @@ int Heap::NotifyContextDisposed(bool dependant_context) {
       event.type = MemoryReducer::kPossibleGarbage;
       event.time_ms = MonotonicallyIncreasingTimeInMs();
       memory_reducer_->NotifyPossibleGarbage(event);
+      if (recordreplay::IsRecordingOrReplaying()) {
+        memory_reducer_->RecordReplayPostRequestedTimer();
+      }
     }
   }
   isolate()->AbortConcurrentOptimization(BlockingBehavior::kDontBlock);
@@ -5077,6 +5080,8 @@ bool Heap::ShouldOptimizeForLoadTime() {
              isolate()->LoadStartTimeMs() + kMaxLoadTimeMs;
 }
 
+extern bool gRecordReplayEnableGCFeatures;
+
 // This predicate is called when an old generation space cannot allocated from
 // the free list and is about to add a new page. Returning false will cause a
 // major GC. It happens when the old generation allocation limit is reached and
@@ -5117,8 +5122,9 @@ bool Heap::ShouldExpandOldGenerationOnSlowAllocation(LocalHeap* local_heap) {
 
   if (incremental_marking()->IsStopped() &&
       IncrementalMarkingLimitReached() == IncrementalMarkingLimit::kNoLimit &&
-      // Incremental marking is disabled when recording/replaying.
-      !recordreplay::IsRecordingOrReplaying("gc-changes", "NoIncrementalMarking")) {
+      // Incremental marking is disabled when recording/replaying with the
+      // v8-flags-gc feature disabled. Expand instead of collecting then.
+      (gRecordReplayEnableGCFeatures || !recordreplay::IsRecordingOrReplaying())) {
     // We cannot start incremental marking.
     return false;
   }
@@ -6626,6 +6632,12 @@ void Heap::EnqueueDirtyJSFinalizationRegistry(
   set_dirty_js_finalization_registries_list_tail(finalization_registry);
   // dirty_js_finalization_registries_list_tail_ is rescanned by
   // ProcessWeakListRoots.
+}
+
+void Heap::RecordReplayOnProgressInterrupt() {
+  if (memory_reducer_) {
+    memory_reducer_->RecordReplayOnProgressInterrupt();
+  }
 }
 
 bool Heap::RecordReplayHasDirtyJSFinalizationRegistries(

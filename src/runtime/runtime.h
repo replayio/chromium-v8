@@ -151,10 +151,16 @@ namespace internal {
   F(RecordReplayAssertExecutionProgress, 1, 1)  \
   F(RecordReplayTargetProgressReached, 0, 1)    \
   F(RecordReplayNotifyActivity, 0, 1)           \
+  F(RecordReplayBaselineExecutionProgress, 2, 1) \
+  F(RecordReplayBaselineTargetProgressReached, 1, 1) \
+  F(RecordReplayBaselineNotifyActivity, 1, 1)   \
   F(RecordReplayAssertValue, 3, 1)              \
   F(RecordReplayInstrumentation, 2, 1)          \
   F(RecordReplayInstrumentationGenerator, 3, 1) \
   F(RecordReplayInstrumentationReturn, 3, 1)    \
+  F(RecordReplayBaselineInstrumentation, 3, 1)  \
+  F(RecordReplayBaselineInstrumentationGenerator, 4, 1) \
+  F(RecordReplayBaselineInstrumentationReturn, 4, 1) \
   F(RecordReplayTrackObjectId, 1, 1)
 
 #define FOR_EACH_INTRINSIC_FORIN(F, I) \

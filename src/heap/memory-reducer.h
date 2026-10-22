@@ -126,6 +126,11 @@ class V8_EXPORT_PRIVATE MemoryReducer {
   static State Step(const State& state, const Event& event);
   // Posts a timer task that will call NotifyTimer after the given delay.
   void ScheduleTimer(double delay_ms);
+
+  // Posts the timer when recording/replaying if the recording requested one,
+  // see RecordReplayRequestTimer.
+  void RecordReplayPostRequestedTimer();
+  void RecordReplayOnProgressInterrupt();
   void TearDown();
   static const int kLongDelayMs;
   static const int kShortDelayMs;
@@ -156,10 +161,14 @@ class V8_EXPORT_PRIVATE MemoryReducer {
    private:
     // v8::internal::CancelableTask overrides.
     void RunInternal() override;
+    void RunTimer();
     MemoryReducer* memory_reducer_;
   };
 
   void NotifyTimer(const Event& event);
+
+  void PostTimer(double delay_ms);
+  void RecordReplayRequestTimer(double delay_ms);
 
   static bool WatchdogGC(const State& state, const Event& event);
 
@@ -169,6 +178,12 @@ class V8_EXPORT_PRIVATE MemoryReducer {
   unsigned int js_calls_counter_;
   double js_calls_sample_time_ms_;
   int start_delay_ms_ = false;
+  // When recording/replaying, the delay of a requested timer which hasn't
+  // been posted yet, or zero, and whether a posted timer hasn't run yet.
+  double record_replay_timer_delay_ms_ = 0;
+  bool record_replay_timer_posted_ = false;
+  // Whether a progress interrupt was triggered when recording and hasn't run.
+  bool record_replay_interrupt_triggered_ = false;
 
   // Used in cctest.
   friend class heap::HeapTester;

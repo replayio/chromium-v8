@@ -3614,7 +3614,14 @@ void BytecodeGraphBuilder::VisitRecordReplayIncExecutionProgressCounter() {
     Node* node = NewNode(op, closure);
     environment()->RecordAfterState(node, Environment::kAttachFrameState);
   } else {
-    Node* node = NewNode(simplified()->IncrementAndCheckProgressCounter());
+    // What runs at the target progress (e.g. a DevTools command setting a
+    // breakpoint) can deoptimize this code while the call is on the stack.
+    const int offset = bytecode_iterator().current_offset();
+    Node* frame_state = environment()->Checkpoint(
+        BytecodeOffset(offset), OutputFrameStateCombine::Ignore(),
+        bytecode_analysis().GetOutLivenessFor(offset));
+    Node* node =
+        NewNode(simplified()->IncrementAndCheckProgressCounter(), frame_state);
     environment()->RecordAfterState(node, Environment::kAttachFrameState);
   }
   CHECK(needs_eager_checkpoint());

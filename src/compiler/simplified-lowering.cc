@@ -4033,6 +4033,9 @@ class RepresentationSelector {
         VisitInputs<T>(node);
         return SetOutput<T>(node, MachineRepresentation::kTagged);
       case IrOpcode::kIncrementAndCheckProgressCounter:
+        // The frame state.
+        ProcessInput<T>(node, 0, UseInfo::AnyTagged());
+        return;
       case IrOpcode::kReplayDecrementJsFrameDepth:
         return;
       case IrOpcode::kFrameState:

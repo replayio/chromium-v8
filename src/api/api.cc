@@ -11110,7 +11110,11 @@ void RecordReplayOnTargetProgressReached() {
 static void RecordReplayProgressInterruptCallback() {
   CHECK(IsMainThread());
   Isolate* isolate = Isolate::Current();
-  isolate->RecordReplayInvokeApiInterruptCallbacksAtProgress();
+  isolate->heap()->RecordReplayOnProgressInterrupt();
+  // The memory reducer triggers progress interrupts too.
+  if (recordreplay::IsRecordingOrReplaying("interrupts")) {
+    isolate->RecordReplayInvokeApiInterruptCallbacksAtProgress();
+  }
 }
 
 void RecordReplayInstrument(const char* kind, const char* function, int function_index) {
@@ -11137,6 +11141,10 @@ bool gRecordReplayAssertTrackedObjects;
 // Enable reporting the dependency graph while replaying.
 // This is on by default.
 bool gRecordReplayEnableDependencyGraph;
+
+// Use V8's GC as upstream does while recording/replaying.
+// This is on by default and controlled by the v8-flags-gc feature.
+bool gRecordReplayEnableGCFeatures;
 
 // Assert that dependency graph nodes / edges are created consistently.
 // This adds recording overhead and is off by default.
@@ -12404,8 +12412,8 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
     i::FLAG_wasm_async_compilation = false;
   }
 
-  // The baseline JIT's handling of some record/replay opcodes is buggy.
-  if (V8RecordReplayFeatureEnabled("disable-v8-flags-baseline-jit", nullptr)) {
+  // The baseline JIT is used by default but can be disabled via a feature.
+  if (!V8RecordReplayFeatureEnabled("v8-flags-baseline-jit", nullptr)) {
     i::v8_flags.sparkplug = false;
   }
 
@@ -12414,8 +12422,12 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
     i::v8_flags.turbofan = false;
   }
 
-  // Disable some GC settings while replaying for causing mysterious crashes.
-  if (IsReplaying() || !V8RecordReplayFeatureEnabled("v8-flags-gc", nullptr)) {
+  // Concurrent, parallel and incremental GC are used when recording and
+  // replaying by default but can be disabled via a feature, which runs every
+  // GC on the main thread instead.
+  i::gRecordReplayEnableGCFeatures =
+    V8RecordReplayFeatureEnabled("v8-flags-gc", nullptr);
+  if (!i::gRecordReplayEnableGCFeatures) {
     i::FLAG_concurrent_marking = false;
     i::FLAG_concurrent_sweeping = false;
     i::FLAG_incremental_marking_task = false;
@@ -12447,13 +12459,6 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
 
 extern "C" void V8SetRecordingOrReplaying(void* handle) {
   recordreplay::SetRecordingOrReplaying(handle);
-}
-
-extern "C" void V8InitializeNotRecordingOrReplaying() {
-  // These flags are necessary to avoid hangs in some situations, for unknown
-  // reasons. See https://linear.app/replay/issue/RUN-1071
-  internal::v8_flags.sparkplug = false;
-  internal::FLAG_incremental_marking_task = false;
 }
 
 extern "C" DLLEXPORT bool V8IsMainThread() {

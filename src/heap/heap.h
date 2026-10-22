@@ -941,6 +941,9 @@ class Heap {
   // registries of one kind. The first returns whether the list has such a
   // registry, the second removes and returns the first one.
   enum class RecordReplayTracking { kTracked, kUntracked };
+
+  // Called at each progress interrupt when recording/replaying.
+  void RecordReplayOnProgressInterrupt();
   bool RecordReplayHasDirtyJSFinalizationRegistries(
       RecordReplayTracking tracking);
   MaybeHandle<JSFinalizationRegistry>
