@@ -157,6 +157,26 @@ void V8::Initialize() {
 
   FlagList::EnforceFlagImplications();
 
+#if V8_ENABLE_WEBASSEMBLY
+  // A lazily compiled wasm function is compiled by whichever thread calls it
+  // first, and other threads sharing its native module then call the published
+  // code directly, so which thread compiles it depends on timing between them.
+  // Compile wasm modules eagerly when recording or replaying, including those
+  // whose compilation hints section asks for lazy compilation. asm.js modules
+  // stay lazy: their native modules are never shared between isolates.
+  // Embedders set these flags after the recorder attaches (Chromium sets
+  // --wasm-lazy-compilation from its WebAssemblyLazyCompilation feature, then
+  // applies --js-flags), so they are overridden here. This has to follow
+  // EnforceFlagImplications: --future and --wasm-lazy-validation weakly imply
+  // --wasm-lazy-compilation, and these assignments don't count as setting it.
+  if (recordreplay::IsRecordingOrReplaying(
+          "disable-v8-flags-wasm-lazy-compilation")) {
+    v8_flags.wasm_lazy_compilation = false;
+    v8_flags.wasm_lazy_validation = false;
+    v8_flags.experimental_wasm_compilation_hints = false;
+  }
+#endif  // V8_ENABLE_WEBASSEMBLY
+
   if (v8_flags.predictable && v8_flags.random_seed == 0) {
     // Avoid random seeds in predictable mode.
     v8_flags.random_seed = 12347;
