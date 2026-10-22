@@ -1606,7 +1606,7 @@ BackgroundCompileTask::BackgroundCompileTask(
       end_position_(0),
       function_literal_id_(kFunctionLiteralIdTopLevel) {}
 
-extern bool RecordReplayHasDefaultContext();
+extern bool RecordReplayShouldInstrumentScripts();
 extern bool RecordReplayAssertValues(const std::string& url);
 
 static void SetRecordReplayFlags(UnoptimizedCompileFlags& flags, const std::string& url) {
@@ -1615,7 +1615,7 @@ static void SetRecordReplayFlags(UnoptimizedCompileFlags& flags, const std::stri
   }
 
   if (!IsMainThread() ||
-      !RecordReplayHasDefaultContext() ||
+      !RecordReplayShouldInstrumentScripts() ||
       recordreplay::AreEventsDisallowed("CompileFlags") ||
       recordreplay::IsInReplayCode("CompileFlags")) {
     flags.set_record_replay_ignore(true);

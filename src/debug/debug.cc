@@ -3722,7 +3722,7 @@ bool RecordReplayIsIgnoredReplayScriptURL(const char* url) {
          strcmp(url, "record-replay-redux-devtools");
 }
 
-extern bool RecordReplayHasDefaultContext();
+extern bool RecordReplayShouldInstrumentScripts();
 extern size_t NumRunningBackgroundCompileTasks();
 
 typedef std::unordered_set<int> ScriptIdSet;
@@ -3740,7 +3740,7 @@ bool RecordReplayShouldEmitOpcodes(Isolate* isolate, int script_id,
                                    bool record_replay_ignore) {
   const bool base_emit_opcodes =
       recordreplay::IsRecordingOrReplaying("emit-opcodes") &&
-      RecordReplayHasDefaultContext() && !record_replay_ignore;
+      RecordReplayShouldInstrumentScripts() && !record_replay_ignore;
   if (script_id == v8::UnboundScript::kNoScriptId) return base_emit_opcodes;
   DCHECK_NOT_NULL(isolate);
   base::MutexGuard guard(gOpcodeEmitByScriptMutex);
@@ -3767,7 +3767,7 @@ bool RecordReplayShouldEmitOpcodes(Isolate* isolate, int script_id,
 // frameIndex: must stay ≡ RecordReplayShouldEmitOpcodes (stackable scripts).
 static bool RecordReplayShouldRegisterScript(Script script,
                                              const std::string& url) {
-  if (!RecordReplayHasDefaultContext()) {
+  if (!RecordReplayShouldInstrumentScripts()) {
     return false;
   }
   if (script.type() == Script::TYPE_WASM) {
@@ -3819,33 +3819,17 @@ struct AutoMarkReplayCode {
 
 } // anonymous namespace
 
-static void RecordReplayRegisterScript(Handle<Script> script) {
-  CHECK(IsMainThread());
-
-  if (!gRecordReplayScripts) {
-    gRecordReplayScripts = new ScriptIdMap();
+static std::string RecordReplayScriptURL(Script script) {
+  if (script.name().IsUndefined()) {
+    return "";
   }
-  auto iter = gRecordReplayScripts->find(script->id());
-  if (iter != gRecordReplayScripts->end()) {
-    // Ignore duplicate registers.
-    return;
-  }
+  std::unique_ptr<char[]> name = String::cast(script.name()).ToCString();
+  return name.get();
+}
 
-  Isolate* isolate = Isolate::Current();
-
-  (*gRecordReplayScripts)[script->id()] =
-    Eternal<Value>((v8::Isolate*)isolate, v8::Utils::ToLocal(script));
-
-  std::string url;
-  if (!script->name().IsUndefined()) {
-    std::unique_ptr<char[]> name = String::cast(script->name()).ToCString();
-    url = name.get();
-  }
-
-  if (!RecordReplayShouldRegisterScript(*script, url)) {
-    return;
-  }
-
+// Tells the recorder and the new script handlers about a registered script.
+static void RecordReplayAnnounceScript(Isolate* isolate, Handle<Script> script,
+                                       const std::string& url) {
   Handle<String> idStr = GetProtocolSourceId(isolate, script);
   std::unique_ptr<char[]> id = String::cast(*idStr).ToCString();
 
@@ -3868,11 +3852,6 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
                          : "scriptSource";
 
   recordreplay::Diagnostic("OnNewSource %s %s", id.get(), kind);
-
-  if (!gRegisteredScripts) {
-    gRegisteredScripts = new ScriptIdSet;
-  }
-  gRegisteredScripts->insert(script->id());
 
   if (gNewScriptHandlers) {
     for (auto entry : *gNewScriptHandlers) {
@@ -3900,6 +3879,67 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
   }
 
   RecordReplayOnNewSource(isolate, id.get(), kind, url.length() ? url.c_str() : nullptr);
+}
+
+extern bool gRecordReplayHasCheckpoint;
+
+// Ids of the scripts registered before the first checkpoint, in order. The
+// recorder only takes sources from the first checkpoint on.
+static std::vector<int>* gRecordReplayScriptsBeforeFirstCheckpoint;
+
+static void RecordReplayRegisterScript(Handle<Script> script) {
+  CHECK(IsMainThread());
+
+  if (!gRecordReplayScripts) {
+    gRecordReplayScripts = new ScriptIdMap();
+  }
+  auto iter = gRecordReplayScripts->find(script->id());
+  if (iter != gRecordReplayScripts->end()) {
+    // Ignore duplicate registers.
+    return;
+  }
+
+  Isolate* isolate = Isolate::Current();
+
+  (*gRecordReplayScripts)[script->id()] =
+    Eternal<Value>((v8::Isolate*)isolate, v8::Utils::ToLocal(script));
+
+  std::string url = RecordReplayScriptURL(*script);
+
+  if (!RecordReplayShouldRegisterScript(*script, url)) {
+    return;
+  }
+
+  if (!gRegisteredScripts) {
+    gRegisteredScripts = new ScriptIdSet;
+  }
+  gRegisteredScripts->insert(script->id());
+
+  if (!gRecordReplayHasCheckpoint) {
+    if (!gRecordReplayScriptsBeforeFirstCheckpoint) {
+      gRecordReplayScriptsBeforeFirstCheckpoint = new std::vector<int>;
+    }
+    gRecordReplayScriptsBeforeFirstCheckpoint->push_back(script->id());
+    return;
+  }
+
+  RecordReplayAnnounceScript(isolate, script, url);
+}
+
+void RecordReplayRegisterScriptsBeforeFirstCheckpoint() {
+  if (!gRecordReplayScriptsBeforeFirstCheckpoint) {
+    return;
+  }
+  std::unique_ptr<std::vector<int>> script_ids(
+      gRecordReplayScriptsBeforeFirstCheckpoint);
+  gRecordReplayScriptsBeforeFirstCheckpoint = nullptr;
+
+  Isolate* isolate = Isolate::Current();
+  HandleScope scope(isolate);
+  for (int script_id : *script_ids) {
+    Handle<Script> script = GetScript(isolate, script_id);
+    RecordReplayAnnounceScript(isolate, script, RecordReplayScriptURL(*script));
+  }
 }
 
 // Command callbacks which we handle directly.
