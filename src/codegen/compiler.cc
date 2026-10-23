@@ -82,6 +82,14 @@ extern void MarkRecordReplayReplacedScript(int script_id);
 extern MaybeHandle<String>
 ReplayingReplaceScriptContents(Isolate* isolate, Handle<String> source);
 
+// Whether lookups in the eval cache are made, and recorded, when recording
+// or replaying: the cache is only used where whether a lookup found a script
+// can be recorded.
+bool RecordReplayRecordsEvalCacheLookups() {
+  return recordreplay::IsRecordingOrReplaying("values") &&
+         !recordreplay::AreEventsDisallowed() && IsMainThread();
+}
+
 namespace {
 
 constexpr bool IsOSR(BytecodeOffset osr_offset) { return !osr_offset.IsNone(); }
@@ -2841,6 +2849,38 @@ MaybeHandle<JSFunction> Compiler::GetFunctionFromEval(
   CompilationCache* compilation_cache = isolate->compilation_cache();
   InfoCellPair eval_result = compilation_cache->LookupEval(
       source, outer_info, context, language_mode, eval_scope_position);
+
+  // A hit in the eval cache creates no new script, so whether the recording
+  // found one is recorded and the replay creates the same scripts at the same
+  // points. The replaying process's cache can hold different entries (e.g.
+  // after collecting different ones), so its result is only used when it is
+  // the script the recording found, and the script's top level is compiled
+  // again when the cache doesn't have it.
+  Handle<Script> recorded_script;
+  if (RecordReplayRecordsEvalCacheLookups()) {
+    int script_id = v8::UnboundScript::kNoScriptId;
+    if (eval_result.has_shared()) {
+      script_id = Script::cast(eval_result.shared().script()).id();
+    }
+    if (recordreplay::IsRecording() &&
+        script_id != v8::UnboundScript::kNoScriptId &&
+        MaybeGetScript(isolate, script_id).is_null()) {
+      // The replay can't find scripts that weren't registered.
+      eval_result = InfoCellPair();
+      script_id = v8::UnboundScript::kNoScriptId;
+    }
+    int recorded_id = (int)recordreplay::RecordReplayValue(
+        "GetFunctionFromEval script_id", script_id);
+    if (recordreplay::IsReplaying()) {
+      if (script_id != recorded_id) {
+        eval_result = InfoCellPair();
+      }
+      if (recorded_id != v8::UnboundScript::kNoScriptId &&
+          !eval_result.has_shared()) {
+        recorded_script = GetScript(isolate, recorded_id);
+      }
+    }
+  }
   Handle<FeedbackCell> feedback_cell;
   if (eval_result.has_feedback_cell()) {
     feedback_cell = handle(eval_result.feedback_cell(), isolate);
@@ -2858,7 +2898,9 @@ MaybeHandle<JSFunction> Compiler::GetFunctionFromEval(
   } else {
     UnoptimizedCompileFlags flags = UnoptimizedCompileFlags::ForToplevelCompile(
         isolate, true, language_mode, REPLMode::kNo, ScriptType::kClassic,
-        v8_flags.lazy_eval);
+        v8_flags.lazy_eval,
+        recorded_script.is_null() ? v8::UnboundScript::kNoScriptId
+                                  : recorded_script->id());
     flags.set_is_eval(true);
     flags.set_parsing_while_debugging(parsing_while_debugging);
     DCHECK(!flags.is_module());
@@ -2875,6 +2917,10 @@ MaybeHandle<JSFunction> Compiler::GetFunctionFromEval(
     if (!context->IsNativeContext()) {
       maybe_outer_scope_info = handle(context->scope_info(), isolate);
     }
+    if (!recorded_script.is_null()) {
+      // The recording found this script in its cache.
+      script = recorded_script;
+    } else {
     script = parse_info.CreateScript(
         isolate, source, kNullMaybeHandle,
         OriginOptionsForEval(outer_info->script(), parsing_while_debugging));
@@ -2896,6 +2942,7 @@ MaybeHandle<JSFunction> Compiler::GetFunctionFromEval(
       }
     }
     script->set_eval_from_position(eval_position);
+    }
 
     if (!v8::internal::CompileToplevel(&parse_info, script,
                                        maybe_outer_scope_info, isolate,
