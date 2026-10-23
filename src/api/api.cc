@@ -58,6 +58,7 @@
 #include "src/execution/embedder-state.h"
 #include "src/execution/execution.h"
 #include "src/execution/frames-inl.h"
+#include "src/execution/futex-emulation.h"
 #include "src/execution/isolate-inl.h"
 #include "src/execution/messages.h"
 #include "src/execution/microtask-queue.h"
@@ -12367,6 +12368,7 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
   gRecordReplaySetCrashReasonCallback(V8RecordReplayCrashReasonCallback);
 
   gFinishRecordingOrderedLockId = (int)CreateOrderedLock("FinishRecording");
+  i::FutexEmulation::RecordReplayInitialize();
   gAssertBufferAllocationStateLSKey = base::Thread::CreateThreadLocalKey();
 
   i::gProgressCounter = gRecordReplayProgressCounter();
