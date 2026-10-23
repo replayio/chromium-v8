@@ -12539,12 +12539,7 @@ recordreplay::AutoAssertMaybeEventsDisallowed::AutoAssertMaybeEventsDisallowed(
   va_end(arguments);
   msg_ = std::string(buf.begin());
 
-  if (!gAssertsDisabled &&
-      IsRecordingOrReplaying() &&
-      (
-        !AreEventsDisallowed("AutoAssertMaybeEventsDisallowed")
-      )
-  ) {
+  if (!AreEventsDisallowed("AutoAssertMaybeEventsDisallowed")) {
     recordreplay::Assert("%s", msg_.c_str());
   }
 }
