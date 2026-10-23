@@ -260,17 +260,12 @@ void MemoryReducer::PostTimer(double delay_ms) {
 void MemoryReducer::RecordReplayRequestTimer(double delay_ms) {
   if (!IsMainThread()) return;
   record_replay_timer_delay_ms_ = delay_ms;
-  // The driver can only stop once at a progress value, and an idle page's
-  // counter doesn't advance between requests, so trigger one interrupt at a
-  // time.
-  if (recordreplay::IsRecording() && !record_replay_interrupt_triggered_) {
-    record_replay_interrupt_triggered_ = true;
+  if (recordreplay::IsRecording()) {
     RecordReplayTriggerProgressInterrupt();
   }
 }
 
 void MemoryReducer::RecordReplayOnProgressInterrupt() {
-  record_replay_interrupt_triggered_ = false;
   RecordReplayPostRequestedTimer();
 }
 
