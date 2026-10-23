@@ -3936,6 +3936,11 @@ void RecordReplayRegisterScriptsBeforeFirstCheckpoint() {
 
   Isolate* isolate = Isolate::Current();
   HandleScope scope(isolate);
+  // The first checkpoint can be taken between tasks, with no context entered:
+  // when the first replay window isn't a root frame (e.g. an iframe of the
+  // initial about:blank), the root frame's context comes later.
+  base::Optional<SaveAndSwitchContext> ssc;
+  EnsureIsolateContext(isolate, ssc);
   for (int script_id : *script_ids) {
     Handle<Script> script = GetScript(isolate, script_id);
     RecordReplayAnnounceScript(isolate, script, RecordReplayScriptURL(*script));
