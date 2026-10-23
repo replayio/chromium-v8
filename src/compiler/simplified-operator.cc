@@ -2043,12 +2043,13 @@ const Operator* SimplifiedOperatorBuilder::DateNow() {
 }
 
 const Operator* SimplifiedOperatorBuilder::IncrementAndCheckProgressCounter() {
-  // The only value input is the frame state for after the progress bytecode,
-  // where the call at the target progress lazily deoptimizes to.
+  // The value inputs are the frame state for after the progress bytecode,
+  // where the call at the target progress lazily deoptimizes to, and the
+  // context the call runs in.
   return zone()->New<Operator>(IrOpcode::kIncrementAndCheckProgressCounter,
                                Operator::kNoThrow,
                                "IncrementAndCheckProgressCounter",
-                               1, 1, 0, 1, 1, 0);
+                               2, 1, 0, 1, 1, 0);
 }
 
 const Operator* SimplifiedOperatorBuilder::ReplayDecrementJsFrameDepth() {

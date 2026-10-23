@@ -3620,8 +3620,8 @@ void BytecodeGraphBuilder::VisitRecordReplayIncExecutionProgressCounter() {
     Node* frame_state = environment()->Checkpoint(
         BytecodeOffset(offset), OutputFrameStateCombine::Ignore(),
         bytecode_analysis().GetOutLivenessFor(offset));
-    Node* node =
-        NewNode(simplified()->IncrementAndCheckProgressCounter(), frame_state);
+    Node* node = NewNode(simplified()->IncrementAndCheckProgressCounter(),
+                         frame_state, environment()->Context());
     environment()->RecordAfterState(node, Environment::kAttachFrameState);
   }
   CHECK(needs_eager_checkpoint());
