@@ -12545,12 +12545,7 @@ recordreplay::AutoAssertMaybeEventsDisallowed::AutoAssertMaybeEventsDisallowed(
 }
 
 recordreplay::AutoAssertMaybeEventsDisallowed::~AutoAssertMaybeEventsDisallowed() {
-  if (!gAssertsDisabled &&
-      IsRecordingOrReplaying() &&
-      (
-        !AreEventsDisallowed("AutoAssertMaybeEventsDisallowed")
-      )
-  ) {
+  if (HasAsserts() && !AreEventsDisallowed("AutoAssertMaybeEventsDisallowed")) {
     recordreplay::Assert("%s", msg_.c_str());
   }
 }
