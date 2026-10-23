@@ -3652,6 +3652,14 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
     maybe_result = lookup_result.toplevel_sfi();
     is_compiled_scope = lookup_result.is_compiled_scope();
 
+    // The replay doesn't use what it finds in the script cache, and compiles
+    // each script again, into the script the recording found if it found one.
+    if (recordreplay::IsReplaying()) {
+      maybe_script = MaybeHandle<Script>();
+      maybe_result = MaybeHandle<SharedFunctionInfo>();
+      is_compiled_scope = IsCompiledScope();
+    }
+
     // The compilation cache isn't enabled when replaying, but we still need
     // to record/replay whether a script was found when recording so that the
     // same scripts are created at the same points. The SFI will need to be
