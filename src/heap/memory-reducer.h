@@ -182,8 +182,6 @@ class V8_EXPORT_PRIVATE MemoryReducer {
   // been posted yet, or zero, and whether a posted timer hasn't run yet.
   double record_replay_timer_delay_ms_ = 0;
   bool record_replay_timer_posted_ = false;
-  // Whether a progress interrupt was triggered when recording and hasn't run.
-  bool record_replay_interrupt_triggered_ = false;
 
   // Used in cctest.
   friend class heap::HeapTester;
