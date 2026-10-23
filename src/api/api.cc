@@ -11303,23 +11303,6 @@ extern "C" void V8RecordReplayGetDefaultContext(v8::Isolate* isolate, v8::Local<
   *cx = gDefaultContext->Get(isolate);
 }
 
-// Set at the tab's first main-world context, which can come before the
-// default context: the initial about:blank document runs scripts before the
-// first navigation creates the first checkpoint. V8's compilation cache hands
-// later runs of the same source the Script compiled there, so it has to be
-// instrumented and registered like a script compiled after the checkpoint.
-static bool gRecordReplayInstrumentScripts;
-
-extern "C" void V8RecordReplayStartInstrumentingScripts() {
-  if (IsMainThread()) {
-    gRecordReplayInstrumentScripts = true;
-  }
-}
-
-bool RecordReplayShouldInstrumentScripts() {
-  return gRecordReplayInstrumentScripts || gDefaultContext;
-}
-
 // Tagged pointer of the DefaultContext for `isolate`, or 0 if none. Deref-free:
 // survives a garbage current Context, so safe from command/teardown diagnostics.
 extern "C" uintptr_t V8RecordReplayGetDefaultContextAddress(v8::Isolate* isolate) {

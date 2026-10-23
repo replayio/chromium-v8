@@ -21,7 +21,7 @@
 namespace v8 {
 namespace internal {
 
-extern bool RecordReplayHasRegisteredScript(Script script);
+extern bool RecordReplayIsInstrumentedScript(Isolate* isolate, int script_id);
 extern bool RecordReplayAssertValues(const std::string& url);
 
 UnoptimizedCompileFlags::UnoptimizedCompileFlags(Isolate* isolate,
@@ -162,7 +162,8 @@ void UnoptimizedCompileFlags::SetFlagsForFunctionFromScript(Script script) {
   set_block_coverage_enabled(block_coverage_enabled() &&
                              script.IsUserJavaScript());
 
-  if (!RecordReplayHasRegisteredScript(script)) {
+  // Function compiles follow the decision the script's first compile made.
+  if (!RecordReplayIsInstrumentedScript(Isolate::TryGetCurrent(), script.id())) {
     set_record_replay_ignore(true);
   } else if (recordreplay::IsRecordingOrReplaying()) {
     std::string url;

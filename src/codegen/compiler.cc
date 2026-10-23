@@ -1587,6 +1587,15 @@ DeferredFinalizationJobData::DeferredFinalizationJobData(
     : function_handle_(isolate->heap()->NewPersistentHandle(function_handle)),
       job_(std::move(job)) {}
 
+// Whether the code handing V8 a script's source on the main thread leaves it
+// uninstrumented: Replay's own code, or code running with events disallowed.
+// The first compile of a script decides for all of its compiles
+// (RecordReplayShouldEmitOpcodes).
+static bool RecordReplayMainThreadIgnoresCompile() {
+  return recordreplay::AreEventsDisallowed("CompileFlags") ||
+         recordreplay::IsInReplayCode("CompileFlags");
+}
+
 BackgroundCompileTask::BackgroundCompileTask(
     ScriptStreamingData* streamed_data, Isolate* isolate, ScriptType type,
     ScriptCompiler::CompileOptions options)
@@ -1604,9 +1613,17 @@ BackgroundCompileTask::BackgroundCompileTask(
       timer_(isolate->counters()->compile_script_on_background()),
       start_position_(0),
       end_position_(0),
-      function_literal_id_(kFunctionLiteralIdTopLevel) {}
+      function_literal_id_(kFunctionLiteralIdTopLevel) {
+  // Streamed scripts compile on a background thread: decide here, where
+  // streaming starts. That is the main thread, except for inline scripts Blink
+  // precompiles on its HTML scanner's thread, which are the page's own.
+  // Streamed scripts don't assert values, as before.
+  if (recordreplay::IsRecordingOrReplaying() && IsMainThread() &&
+      RecordReplayMainThreadIgnoresCompile()) {
+    flags_.set_record_replay_ignore(true);
+  }
+}
 
-extern bool RecordReplayShouldInstrumentScripts();
 extern bool RecordReplayAssertValues(const std::string& url);
 
 static void SetRecordReplayFlags(UnoptimizedCompileFlags& flags, const std::string& url) {
@@ -1614,10 +1631,7 @@ static void SetRecordReplayFlags(UnoptimizedCompileFlags& flags, const std::stri
     return;
   }
 
-  if (!IsMainThread() ||
-      !RecordReplayShouldInstrumentScripts() ||
-      recordreplay::AreEventsDisallowed("CompileFlags") ||
-      recordreplay::IsInReplayCode("CompileFlags")) {
+  if (!IsMainThread() || RecordReplayMainThreadIgnoresCompile()) {
     flags.set_record_replay_ignore(true);
     return;
   }
@@ -1646,14 +1660,6 @@ BackgroundCompileTask::BackgroundCompileTask(
       end_position_(shared_info->EndPosition()),
       function_literal_id_(shared_info->function_literal_id()) {
   DCHECK(!shared_info->is_toplevel());
-
-  std::string url;
-  Handle<Script> script(Script::cast(shared_info->script()), isolate);
-  if (!script->name().IsUndefined()) {
-    std::unique_ptr<char[]> name = String::cast(script->name()).ToCString();
-    url = name.get();
-  }
-  SetRecordReplayFlags(flags_, url);
 
   character_stream_->Seek(start_position_);
 
