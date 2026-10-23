@@ -12529,6 +12529,9 @@ extern "C" DLLEXPORT void V8RecordReplayEndAssertBufferAllocations() {
 
 recordreplay::AutoAssertMaybeEventsDisallowed::AutoAssertMaybeEventsDisallowed(
     const char* format, ...) {
+  if (!HasAsserts()) {
+    return;
+  }
   base::EmbeddedVector<char, 1024> buf;
   va_list arguments;
   va_start(arguments, format);
