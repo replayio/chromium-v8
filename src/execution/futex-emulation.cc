@@ -149,12 +149,10 @@ namespace {
 base::LazyMutex g_mutex = LAZY_MUTEX_INITIALIZER;
 base::LazyInstance<FutexWaitList>::type g_wait_list = LAZY_INSTANCE_INITIALIZER;
 
-// While recording or replaying, orders Wake against waiters entering the wait
-// list, leaving it woken or timed out, and going away with their isolate: all
-// of them change the list under g_mutex with events disallowed, so the replay
-// would otherwise pick its own order, and a notify would wake other waiters,
-// or none. Waits that end terminated or stopped through the embedder's wake
-// handle leave unordered.
+// While recording or replaying, orders Wake against waiters entering and
+// leaving the wait list and going away with their isolate: all of them change
+// the list under g_mutex with events disallowed, so the replay would otherwise
+// pick its own order, and a notify would wake other waiters, or none.
 int gRecordReplayOrderedLockId = 0;
 }  // namespace
 
@@ -651,20 +649,18 @@ Object FutexEmulation::WaitSync(Isolate* isolate,
       // Spurious wakeup, interrupt or timeout.
     }
 
-    // While recording or replaying, whether the wait was woken or timed out is
-    // decided again under the ordered lock Wake takes: the loop decided it
-    // with events disallowed, so a replay could time out a wait the
+    // While recording or replaying, the wait leaves the list under the
+    // ordered lock, and whether it timed out is decided again there: the loop
+    // decided it with events disallowed, so a replay could time out a wait the
     // recording's notify woke, or the other way around. A notify that takes
     // the lock first wakes the wait even if its timeout has passed.
-    if (recordreplay::IsRecordingOrReplaying() &&
-        (callback_result == AtomicsWaitEvent::kWokenUp ||
-         callback_result == AtomicsWaitEvent::kTimedOut)) {
+    if (recordreplay::IsRecordingOrReplaying()) {
       lock_guard.Unlock();
       recordreplay::EndDisallowEvents();
       ordered_lock.emplace(gRecordReplayOrderedLockId);
       recordreplay::BeginDisallowEventsWithLabel("FutexEmulation::WaitSync");
       lock_guard.Lock();
-      if (!node->waiting_) {
+      if (callback_result == AtomicsWaitEvent::kTimedOut && !node->waiting_) {
         result = handle(Smi::FromInt(WaitReturnValue::kOk), isolate);
         callback_result = AtomicsWaitEvent::kWokenUp;
       }
@@ -672,6 +668,14 @@ Object FutexEmulation::WaitSync(Isolate* isolate,
 
     g_wait_list.Pointer()->RemoveNode(node);
   } while (false);
+  // A wait that found another value takes the lock a second time as well, so
+  // that every wait takes it twice: which value a wait finds isn't recorded,
+  // and a replay taking it a different number of times would hang the next
+  // thread waiting for its turn.
+  if (ordered_lock && callback_result == AtomicsWaitEvent::kNotEqual) {
+    ordered_lock.reset();
+    ordered_lock.emplace(gRecordReplayOrderedLockId);
+  }
   ordered_lock.reset();
 
   isolate->RunAtomicsWaitCallback(callback_result, array_buffer, addr, value,
