@@ -5040,13 +5040,14 @@ Node* EffectControlLinearizer::LowerIncrementAndCheckProgressCounter(Node* node)
   __ Bind(&reached_target_progress);
 
   Node* frame_state = node->InputAt(0);
+  Node* context = node->InputAt(1);
   Runtime::FunctionId id = Runtime::kRecordReplayTargetProgressReached;
   auto call_descriptor = Linkage::GetRuntimeCallDescriptor(
     graph()->zone(), id, 0, Operator::kNoThrow,
     CallDescriptor::kNeedsFrameState);
   __ Call(call_descriptor, __ CEntryStubConstant(1),
           __ ExternalConstant(ExternalReference::Create(id)),
-          __ Int32Constant(0), __ NoContextConstant(), frame_state);
+          __ Int32Constant(0), context, frame_state);
 
   __ Goto(&done);
   __ Bind(&done);
