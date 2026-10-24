@@ -2896,11 +2896,17 @@ IGNITION_HANDLER(RecordReplayNotifyActivity, InterpreterAssembler) {
   Dispatch();
 }
 
+// The runtime call does nothing while instrumentation is disabled, which is
+// the case for most of a replay.
 IGNITION_HANDLER(RecordReplayInstrumentation, InterpreterAssembler) {
+  Label done(this);
+  GotoIfNot(IsRecordReplayInstrumentationEnabled(), &done);
   TNode<Context> context = GetContext();
   TNode<Object> closure = LoadRegister(Register::function_closure());
   TNode<Smi> index = BytecodeOperandIdxSmi(0);
   CallRuntime(Runtime::kRecordReplayInstrumentation, context, closure, index);
+  Goto(&done);
+  BIND(&done);
   Dispatch();
 }
 
@@ -2914,13 +2920,20 @@ IGNITION_HANDLER(RecordReplayInstrumentationGenerator, InterpreterAssembler) {
   Dispatch();
 }
 
+// Skipped while instrumentation is disabled, as RecordReplayInstrumentation.
+// The generator variant always calls, see
+// Runtime_RecordReplayInstrumentationGenerator.
 IGNITION_HANDLER(RecordReplayInstrumentationReturn, InterpreterAssembler) {
+  Label done(this);
+  GotoIfNot(IsRecordReplayInstrumentationEnabled(), &done);
   TNode<Context> context = GetContext();
   TNode<Object> closure = LoadRegister(Register::function_closure());
   TNode<Smi> index = BytecodeOperandIdxSmi(0);
   TNode<Object> return_value = LoadRegisterAtOperandIndex(1);
   CallRuntime(Runtime::kRecordReplayInstrumentationReturn,
               context, closure, index, return_value);
+  Goto(&done);
+  BIND(&done);
   Dispatch();
 }
 

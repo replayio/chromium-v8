@@ -132,6 +132,8 @@ class BaselineCompiler {
   void JumpIfToBoolean(bool do_jump_if_true, Label* label,
                        Label::Distance distance = Label::kFar);
 
+  void JumpIfRecordReplayInstrumentationDisabled(Label* skip);
+
   // Call helpers.
   template <Builtin kBuiltin, typename... Args>
   void CallBuiltin(Args... args);
