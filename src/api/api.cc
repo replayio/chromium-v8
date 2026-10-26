@@ -11172,7 +11172,6 @@ extern char* CommandCallback(const char* command, const char* params);
 extern void ClearPauseDataCallback();
 
 bool gRecordReplayAssertValues;
-const char* gRecordReplayAssertValuesPattern;
 
 bool gRecordReplayAssertProgress;
 bool gRecordReplayAssertTrackedObjects;
@@ -11357,17 +11356,10 @@ void RecordReplayDescribeAssertData(const char* text) {
   gRecordReplayDescribeAssertData(text);
 }
 
-// Whether a script created now asserts values (RECORD_REPLAY_JS_ASSERTS),
-// optionally only for URLs containing RECORD_REPLAY_JS_ASSERTS_PATTERN. Streamed
-// scripts are created before their URL is known: they're decided with "".
-bool RecordReplayAssertValues(const std::string& url) {
-  if (!gRecordReplayAssertValues) {
-    return false;
-  }
-  if (!gRecordReplayAssertValuesPattern) {
-    return true;
-  }
-  return url.length() && strstr(url.c_str(), gRecordReplayAssertValuesPattern);
+// Whether an instrumented script created now also asserts the values it loads
+// (RECORD_REPLAY_JS_ASSERTS).
+bool RecordReplayAssertValues() {
+  return gRecordReplayAssertValues;
 }
 
 } // namespace internal
@@ -12440,7 +12432,6 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
   gARMRecording = RecordReplayValue("ARMRecording", gARMRecording);
 
   i::gRecordReplayAssertValues = !!getenv("RECORD_REPLAY_JS_ASSERTS");
-  i::gRecordReplayAssertValuesPattern = getenv("RECORD_REPLAY_JS_ASSERTS_PATTERN");
 
   i::gRecordReplayCheckProgress =
       i::gRecordReplayAssertValues || !!getenv("RECORD_REPLAY_JS_PROGRESS_CHECKS");
