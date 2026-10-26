@@ -3712,69 +3712,24 @@ bool RecordReplayIsInternalScriptURL(const char* url) {
          !strncmp(url, "extensions::", 12);
 }
 
-extern size_t NumRunningBackgroundCompileTasks();
 
 typedef std::unordered_set<int> ScriptIdSet;
 static ScriptIdSet* gRegisteredScripts;
 
-typedef std::unordered_map<int, bool> ScriptIdBoolMap;
-typedef std::unordered_map<Isolate*, ScriptIdBoolMap> IsolateOpcodeEmitMap;
-static IsolateOpcodeEmitMap* gOpcodeEmitByScript = nullptr;
-static base::Mutex* gOpcodeEmitByScriptMutex = new base::Mutex;
-
-// Whether a script is instrumented: decided once, by the first compile of the
-// script (whose flags say whether that compile handed V8 the source on the main
-// thread with events allowed, outside replay code), and the only answer for all
-// later compiles of it (lazy functions, recompiles after bytecode flushing) and
-// for registering it. Compiles diverge (GC bytecode flush, cache ageing, etc.),
-// so nothing else may decide. Keyed by (isolate, script_id).
-// frameIndex: emitting opcodes ≡ RecordReplayShouldRegisterScript (stackable
-// scripts) follows from both reading this; registering also leaves out wasm,
-// which emits no opcodes.
-bool RecordReplayShouldEmitOpcodes(Isolate* isolate, int script_id,
-                                   bool record_replay_ignore) {
-  const bool first_compile_emits =
-      recordreplay::IsRecordingOrReplaying("emit-opcodes") && !record_replay_ignore;
-  if (script_id == v8::UnboundScript::kNoScriptId) return first_compile_emits;
-  DCHECK_NOT_NULL(isolate);
-  base::MutexGuard guard(gOpcodeEmitByScriptMutex);
-  if (!gOpcodeEmitByScript) {
-    gOpcodeEmitByScript = new IsolateOpcodeEmitMap;
-  }
-  ScriptIdBoolMap& emit_by_script = (*gOpcodeEmitByScript)[isolate];
-  auto it = emit_by_script.find(script_id);
-  if (it != emit_by_script.end()) {
-    if (it->second && record_replay_ignore) {
-      recordreplay::Warning(
-          "UninstrumentedCompileOfInstrumentedScript",
-          {{"scriptId", script_id},
-           {"backgroundCompileTasks", NumRunningBackgroundCompileTasks()}});
-    }
-    return it->second;
-  }
-  emit_by_script[script_id] = first_compile_emits;
-  return first_compile_emits;
-}
-
-// The decision RecordReplayShouldEmitOpcodes made for a script, or false if
-// none of it was compiled yet.
-bool RecordReplayIsInstrumentedScript(Isolate* isolate, int script_id) {
-  if (!isolate) return false;
-  base::MutexGuard guard(gOpcodeEmitByScriptMutex);
-  if (!gOpcodeEmitByScript) return false;
-  auto by_isolate = gOpcodeEmitByScript->find(isolate);
-  if (by_isolate == gOpcodeEmitByScript->end()) return false;
-  auto it = by_isolate->second.find(script_id);
-  return it != by_isolate->second.end() && it->second;
+// Whether a compile emits record/replay instrumentation: its flags say so,
+// which compiles take from the script they compile into, as decided once when
+// the script was created (ParseInfo::CreateScript).
+bool RecordReplayShouldEmitOpcodes(bool record_replay_ignore) {
+  return recordreplay::IsRecordingOrReplaying("emit-opcodes") &&
+         !record_replay_ignore;
 }
 
 // Whether to insert into gRegisteredScripts (Pause / CountStackFrames): the
-// instrumented scripts. Replay's own scripts are compiled in replay code or with
-// events disallowed, so they aren't instrumented and frames they push are never
-// counted.
-static bool RecordReplayShouldRegisterScript(Isolate* isolate, Script script) {
-  return script.type() != Script::TYPE_WASM &&
-         RecordReplayIsInstrumentedScript(isolate, script.id());
+// instrumented scripts, so that every frame instrumentation pushes is counted
+// and none other. Replay's own scripts are compiled in replay code or with
+// events disallowed, so they aren't instrumented.
+static bool RecordReplayShouldRegisterScript(Script script) {
+  return script.record_replay_instrumented();
 }
 
 bool RecordReplayHasRegisteredScript(Script script) {
@@ -3907,7 +3862,7 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
 
   std::string url = RecordReplayScriptURL(*script);
 
-  if (!RecordReplayShouldRegisterScript(isolate, *script)) {
+  if (!RecordReplayShouldRegisterScript(*script)) {
     return;
   }
 

@@ -2565,6 +2565,9 @@ namespace internal {
 // If we are compiling a script while replaying that replaces another one,
 // the ID of the script being replaced. Main thread only.
 int gReplaceSourceContentsScriptId;
+// Whether the script whose contents are being replaced is instrumented: the
+// replacing script has its id, so it gets its decision too.
+bool gReplaceSourceContentsInstrumented;
 static std::set<int>* gScriptsWithReplacedContents;
 
 void MarkRecordReplayReplacedScript(int script_id) {
@@ -2610,7 +2613,9 @@ ReplayingMaybeReplaceScript(Isolate* isolate,
   }
 
   CHECK(!gReplaceSourceContentsScriptId);
-  gReplaceSourceContentsScriptId = Script::cast(maybe_function_info.ToHandleChecked()->script()).id();
+  Script replaced_script = Script::cast(maybe_function_info.ToHandleChecked()->script());
+  gReplaceSourceContentsScriptId = replaced_script.id();
+  gReplaceSourceContentsInstrumented = replaced_script.record_replay_instrumented();
 
   maybe_function_info = Compiler::GetSharedFunctionInfoForScript(
       isolate, new_source.ToHandleChecked(), script_details,
@@ -2626,6 +2631,7 @@ ReplayingMaybeReplaceScript(Isolate* isolate,
   }
 
   gReplaceSourceContentsScriptId = 0;
+  gReplaceSourceContentsInstrumented = false;
   RecordReplayRegisterCompiledScript(isolate, maybe_function_info);
   return maybe_function_info;
 }
@@ -11288,6 +11294,10 @@ static Isolate* gMainThreadIsolate;
 void RecordReplayOnMainThreadIsolateCreated(Isolate* isolate) {
   CHECK(!gMainThreadIsolate);
   gMainThreadIsolate = isolate;
+}
+
+bool RecordReplayIsMainThreadIsolate(Isolate* isolate) {
+  return isolate == gMainThreadIsolate;
 }
 
 static Eternal<v8::Context>* gDefaultContext;

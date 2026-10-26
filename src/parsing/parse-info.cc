@@ -21,7 +21,6 @@
 namespace v8 {
 namespace internal {
 
-extern bool RecordReplayIsInstrumentedScript(Isolate* isolate, int script_id);
 extern bool RecordReplayAssertValues(const std::string& url);
 
 UnoptimizedCompileFlags::UnoptimizedCompileFlags(Isolate* isolate,
@@ -162,19 +161,25 @@ void UnoptimizedCompileFlags::SetFlagsForFunctionFromScript(Script script) {
   set_block_coverage_enabled(block_coverage_enabled() &&
                              script.IsUserJavaScript());
 
-  // Function compiles follow the decision the script's first compile made.
-  if (!RecordReplayIsInstrumentedScript(Isolate::TryGetCurrent(), script.id())) {
-    set_record_replay_ignore(true);
-  } else if (recordreplay::IsRecordingOrReplaying()) {
+  RecordReplayInheritCompileFlags(*this, script);
+}
+
+// Compiles of an existing script follow the decision made when the script was
+// created, so that no script is ever decided twice.
+void RecordReplayInheritCompileFlags(UnoptimizedCompileFlags& flags,
+                                     Script script) {
+  const bool instrumented = script.record_replay_instrumented();
+  flags.set_record_replay_ignore(!instrumented);
+  bool assert_values = false;
+  if (instrumented && recordreplay::IsRecordingOrReplaying()) {
     std::string url;
     if (!script.name().IsUndefined()) {
       std::unique_ptr<char[]> name = String::cast(script.name()).ToCString();
       url = name.get();
     }
-    if (RecordReplayAssertValues(url)) {
-      set_record_replay_assert_values(true);
-    }
+    assert_values = RecordReplayAssertValues(url);
   }
+  flags.set_record_replay_assert_values(assert_values);
 }
 
 ReusableUnoptimizedCompileState::ReusableUnoptimizedCompileState(
@@ -277,6 +282,12 @@ Handle<Script> ParseInfo::CreateScript(
   }
   raw_script.set_origin_options(origin_options);
   raw_script.set_is_repl_mode(flags().is_repl_mode());
+  // Replay: the one place a script's instrumentation is decided, by the compile
+  // creating it. Compiles of an existing script inherit it
+  // (RecordReplayInheritCompileFlags).
+  raw_script.set_record_replay_instrumented(
+      recordreplay::IsRecordingOrReplaying("emit-opcodes") &&
+      !flags().record_replay_ignore());
 
   DCHECK_EQ(is_wrapped_as_function(), !maybe_wrapped_arguments.is_null());
   if (is_wrapped_as_function()) {
