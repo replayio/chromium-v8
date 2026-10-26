@@ -1374,6 +1374,16 @@ void Heap::HandleGCRequest() {
                       GarbageCollectionReason::kFinalizeMarkingViaStackGuard,
                       current_gc_callback_flags_);
   }
+  if (record_replay_external_memory_pressure_requested_.exchange(
+          false, std::memory_order_relaxed)) {
+    ReportExternalMemoryPressure();
+  }
+}
+
+void Heap::RecordReplayRequestExternalMemoryPressureReport() {
+  record_replay_external_memory_pressure_requested_.store(
+      true, std::memory_order_relaxed);
+  isolate()->stack_guard()->RequestGC();
 }
 
 void Heap::ScheduleScavengeTaskIfNeeded() {
