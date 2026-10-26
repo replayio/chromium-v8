@@ -162,6 +162,14 @@ void Script::set_record_replay_instrumented(bool value) {
   set_flags(RecordReplayInstrumentedBit::update(flags(), value));
 }
 
+bool Script::record_replay_assert_values() const {
+  return RecordReplayAssertValuesBit::decode(flags());
+}
+
+void Script::set_record_replay_assert_values(bool value) {
+  set_flags(RecordReplayAssertValuesBit::update(flags(), value));
+}
+
 ScriptOriginOptions Script::origin_options() {
   return ScriptOriginOptions(OriginOptionsBits::decode(flags()));
 }

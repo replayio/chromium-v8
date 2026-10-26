@@ -2565,9 +2565,10 @@ namespace internal {
 // If we are compiling a script while replaying that replaces another one,
 // the ID of the script being replaced. Main thread only.
 int gReplaceSourceContentsScriptId;
-// Whether the script whose contents are being replaced is instrumented: the
-// replacing script has its id, so it gets its decision too.
+// The decisions made for the script whose contents are being replaced: the
+// replacing script has its id, so it gets its decisions too.
 bool gReplaceSourceContentsInstrumented;
+bool gReplaceSourceContentsAssertValues;
 static std::set<int>* gScriptsWithReplacedContents;
 
 void MarkRecordReplayReplacedScript(int script_id) {
@@ -2616,6 +2617,7 @@ ReplayingMaybeReplaceScript(Isolate* isolate,
   Script replaced_script = Script::cast(maybe_function_info.ToHandleChecked()->script());
   gReplaceSourceContentsScriptId = replaced_script.id();
   gReplaceSourceContentsInstrumented = replaced_script.record_replay_instrumented();
+  gReplaceSourceContentsAssertValues = replaced_script.record_replay_assert_values();
 
   maybe_function_info = Compiler::GetSharedFunctionInfoForScript(
       isolate, new_source.ToHandleChecked(), script_details,
@@ -2632,6 +2634,7 @@ ReplayingMaybeReplaceScript(Isolate* isolate,
 
   gReplaceSourceContentsScriptId = 0;
   gReplaceSourceContentsInstrumented = false;
+  gReplaceSourceContentsAssertValues = false;
   RecordReplayRegisterCompiledScript(isolate, maybe_function_info);
   return maybe_function_info;
 }
@@ -11354,6 +11357,9 @@ void RecordReplayDescribeAssertData(const char* text) {
   gRecordReplayDescribeAssertData(text);
 }
 
+// Whether a script created now asserts values (RECORD_REPLAY_JS_ASSERTS),
+// optionally only for URLs containing RECORD_REPLAY_JS_ASSERTS_PATTERN. Streamed
+// scripts are created before their URL is known: they're decided with "".
 bool RecordReplayAssertValues(const std::string& url) {
   if (!gRecordReplayAssertValues) {
     return false;

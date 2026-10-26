@@ -21,8 +21,6 @@
 namespace v8 {
 namespace internal {
 
-extern bool RecordReplayAssertValues(const std::string& url);
-
 UnoptimizedCompileFlags::UnoptimizedCompileFlags(Isolate* isolate,
                                                  int script_id)
     : flags_(0),
@@ -164,22 +162,12 @@ void UnoptimizedCompileFlags::SetFlagsForFunctionFromScript(Script script) {
   RecordReplayInheritCompileFlags(*this, script);
 }
 
-// Compiles of an existing script follow the decision made when the script was
+// Compiles of an existing script follow the decisions made when the script was
 // created, so that no script is ever decided twice.
 void RecordReplayInheritCompileFlags(UnoptimizedCompileFlags& flags,
                                      Script script) {
-  const bool instrumented = script.record_replay_instrumented();
-  flags.set_record_replay_ignore(!instrumented);
-  bool assert_values = false;
-  if (instrumented && recordreplay::IsRecordingOrReplaying()) {
-    std::string url;
-    if (!script.name().IsUndefined()) {
-      std::unique_ptr<char[]> name = String::cast(script.name()).ToCString();
-      url = name.get();
-    }
-    assert_values = RecordReplayAssertValues(url);
-  }
-  flags.set_record_replay_assert_values(assert_values);
+  flags.set_record_replay_ignore(!script.record_replay_instrumented());
+  flags.set_record_replay_assert_values(script.record_replay_assert_values());
 }
 
 ReusableUnoptimizedCompileState::ReusableUnoptimizedCompileState(
@@ -285,9 +273,12 @@ Handle<Script> ParseInfo::CreateScript(
   // Replay: the one place a script's instrumentation is decided, by the compile
   // creating it. Compiles of an existing script inherit it
   // (RecordReplayInheritCompileFlags).
-  raw_script.set_record_replay_instrumented(
+  const bool record_replay_instrumented =
       recordreplay::IsRecordingOrReplaying("emit-opcodes") &&
-      !flags().record_replay_ignore());
+      !flags().record_replay_ignore();
+  raw_script.set_record_replay_instrumented(record_replay_instrumented);
+  raw_script.set_record_replay_assert_values(
+      record_replay_instrumented && flags().record_replay_assert_values());
 
   DCHECK_EQ(is_wrapped_as_function(), !maybe_wrapped_arguments.is_null());
   if (is_wrapped_as_function()) {

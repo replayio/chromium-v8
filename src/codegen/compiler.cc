@@ -78,6 +78,7 @@ extern Handle<Script> GetScript(Isolate* isolate, int script_id);
 
 extern int gReplaceSourceContentsScriptId;
 extern bool gReplaceSourceContentsInstrumented;
+extern bool gReplaceSourceContentsAssertValues;
 extern void MarkRecordReplayReplacedScript(int script_id);
 
 extern MaybeHandle<String>
@@ -811,6 +812,8 @@ ExecuteSingleUnoptimizedCompilationJob(
       (IsMainThread() || parse_info->flags().is_toplevel())) {
     CHECK_EQ(!parse_info->flags().record_replay_ignore(),
              script->record_replay_instrumented());
+    CHECK_EQ(parse_info->flags().record_replay_assert_values(),
+             script->record_replay_assert_values());
   }
   std::unique_ptr<UnoptimizedCompilationJob> job(
       interpreter::Interpreter::NewCompilationJob(
@@ -1597,6 +1600,7 @@ DeferredFinalizationJobData::DeferredFinalizationJobData(
       job_(std::move(job)) {}
 
 extern bool RecordReplayIsMainThreadIsolate(Isolate* isolate);
+extern bool RecordReplayAssertValues(const std::string& url);
 
 // Whether the code handing V8 a script's source on the main thread leaves it
 // uninstrumented: Replay's own code, or code running with events disallowed.
@@ -1628,16 +1632,18 @@ BackgroundCompileTask::BackgroundCompileTask(
   // Streamed scripts compile on a background thread: decide here, where
   // streaming starts. That is the main thread, except for inline scripts Blink
   // precompiles on its HTML scanner's thread, which are the page's own. Only the
-  // main thread's isolate is instrumented. Streamed scripts don't assert values,
-  // as before.
-  if (recordreplay::IsRecordingOrReplaying() &&
-      (!RecordReplayIsMainThreadIsolate(isolate) ||
-       (IsMainThread() && RecordReplayMainThreadIgnoresCompile()))) {
-    flags_.set_record_replay_ignore(true);
+  // main thread's isolate is instrumented. The script's URL isn't known yet
+  // (it comes with finalizing), so a URL pattern for asserting values never
+  // matches streamed scripts.
+  if (recordreplay::IsRecordingOrReplaying()) {
+    if (!RecordReplayIsMainThreadIsolate(isolate) ||
+        (IsMainThread() && RecordReplayMainThreadIgnoresCompile())) {
+      flags_.set_record_replay_ignore(true);
+    } else if (RecordReplayAssertValues("")) {
+      flags_.set_record_replay_assert_values(true);
+    }
   }
 }
-
-extern bool RecordReplayAssertValues(const std::string& url);
 
 static void SetRecordReplayFlags(UnoptimizedCompileFlags& flags, const std::string& url) {
   if (!recordreplay::IsRecordingOrReplaying()) {
@@ -3413,6 +3419,7 @@ MaybeHandle<SharedFunctionInfo> CompileScriptOnMainThread(
     } else if (gReplaceSourceContentsScriptId) {
       // The script replacing the contents of another one is that script.
       flags.set_record_replay_ignore(!gReplaceSourceContentsInstrumented);
+      flags.set_record_replay_assert_values(gReplaceSourceContentsAssertValues);
     }
   }
 
