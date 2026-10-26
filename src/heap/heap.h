@@ -2384,7 +2384,6 @@ class Heap {
 
   std::unique_ptr<CollectionBarrier> collection_barrier_;
 
-  // Set by RecordReplayRequestExternalMemoryPressureReport().
   std::atomic<bool> record_replay_external_memory_pressure_requested_{false};
 
   int ignore_local_gc_requests_depth_ = 0;

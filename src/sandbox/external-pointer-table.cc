@@ -327,7 +327,7 @@ ExternalPointerTable::Freelist ExternalPointerTable::Grow(Isolate* isolate) {
         // marking is off). Here that GC would decommit the block added above
         // while it is still empty and could move objects callers hold raw
         // pointers to (e.g. SetAlignedPointerInInternalFields). Entries are
-        // only freed by full GCs, and wrappers that die in scavenges keep
+        // only freed by full GCs, and objects that die in scavenges keep
         // theirs until then, so the report still has to happen: at the next
         // stack guard interrupt instead.
         isolate->heap()->RecordReplayRequestExternalMemoryPressureReport();
