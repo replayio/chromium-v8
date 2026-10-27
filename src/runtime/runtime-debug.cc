@@ -1229,12 +1229,13 @@ static void OnExecutionProgress(Isolate* isolate, Handle<JSFunction> function) {
         isolate->PrintCurrentStackTrace(stack);
 
         recordreplay::Warning(
-            "NonDeterministicUserJS:UNGATED:JSProgress PC=%zu "
-            "scriptId=%d @%s stack=%s",
-            *gProgressCounter, script->id(),
-            GetScriptLocationString(script->id(), shared->StartPosition())
-                .c_str(),
-            stack.str().c_str());
+            "NonDeterministicUserJSUngated",
+            {{"trigger", "JSProgress"},
+             {"progress", *gProgressCounter},
+             {"scriptId", script->id()},
+             {"location",
+              GetScriptLocationString(script->id(), shared->StartPosition())},
+             {"jsStack", stack.str()}});
       }
     }
   }
@@ -1411,12 +1412,14 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertValue) {
       isolate->PrintCurrentStackTrace(stack);
 
       recordreplay::Warning(
-          "JS-Stack %s%s PC=%zu scriptId=%d @%s stack=%s", site.desc_.c_str(),
-          RecordReplayIsDivergentUserJSWithoutPause(function->shared())
-              ? " in non-deterministic user JS"
-              : "",
-          *gProgressCounter, script->id(), site.location_.c_str(),
-          stack.str().c_str());
+          "AssertionSiteJSStack",
+          {{"site", site.desc_},
+           {"nonDeterministicUserJS",
+            RecordReplayIsDivergentUserJSWithoutPause(function->shared())},
+           {"progress", *gProgressCounter},
+           {"scriptId", script->id()},
+           {"location", site.location_},
+           {"jsStack", stack.str()}});
     }
   }
 

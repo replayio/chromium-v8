@@ -10866,7 +10866,9 @@ typedef char* (CommandCallbackRaw)(const char* params);
         (const char* method, CommandCallbackRaw callback))                    \
   Macro(RecordReplayPrint, (const char* format, va_list args))                \
   Macro(RecordReplayDiagnostic, (const char* format, va_list args))           \
-  Macro(RecordReplayWarning, (const char* format, va_list args))              \
+  Macro(RecordReplayStructuredWarning,                                        \
+        (const char* kind, const RecordReplayWarningField* fields,            \
+         size_t count))                                                       \
   Macro(RecordReplayTrace, (const char* format, va_list args))                \
   Macro(RecordReplayOnInstrument,                                             \
         (const char* kind, const char* function, int offset))                 \
@@ -11094,14 +11096,14 @@ void RecordReplayOnTargetProgressReached() {
     // We should not have progress updates when events disallowed.
     if (!recordreplay::HasDivergedFromRecording()) {
       // TODO: [RUN-2235] Replace with GetCurrentLocationStringExtended.
-      std::ostringstream os;
-      os << "PC=" << *gProgressCounter;
+      std::ostringstream stack;
       Isolate* isolate = Isolate::Current();
       HandleScope scope(isolate);
-      os << " stack=";
-      isolate->PrintCurrentStackTrace(os);
+      isolate->PrintCurrentStackTrace(stack);
 
-      recordreplay::Warning("OnProgressReached %s", os.str().c_str());
+      recordreplay::Warning("TargetProgressReachedWithEventsDisallowed",
+                            {{"progress", *gProgressCounter},
+                             {"jsStack", stack.str()}});
     }
     return;
   }
@@ -11474,19 +11476,17 @@ void recordreplay::CommandDiagnosticTrace(const char* format, ...) {
   }
 }
 
-void recordreplay::Warning(const char* format, ...) {
+void recordreplay::Warning(
+    const char* kind, std::initializer_list<RecordReplayWarningField> fields) {
   if (IsRecordingOrReplaying()) {
-    va_list args;
-    va_start(args, format);
-    gRecordReplayWarning(format, args);
-    va_end(args);
+    gRecordReplayStructuredWarning(kind, fields.begin(), fields.size());
   }
 }
 
-extern "C" DLLEXPORT void V8RecordReplayWarning(const char* format,
-                                                va_list args) {
+extern "C" DLLEXPORT void V8RecordReplayStructuredWarning(
+    const char* kind, const RecordReplayWarningField* fields, size_t count) {
   if (recordreplay::IsRecordingOrReplaying()) {
-    gRecordReplayWarning(format, args);
+    gRecordReplayStructuredWarning(kind, fields, count);
   }
 }
 

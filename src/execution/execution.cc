@@ -313,9 +313,11 @@ static MaybeHandle<Object> RecordReplayBlockNonDeterministicUserJs(
     Isolate* isolate, const char* kind, const std::string& detail) {
   std::stringstream stack;
   isolate->PrintCurrentStackTrace(stack);
-  recordreplay::Warning(
-      "%s:BLOCKED:NonDeterministicUserJS PC=%zu %s stack=%s", kind,
-      *gProgressCounter, detail.c_str(), stack.str().c_str());
+  recordreplay::Warning("NonDeterministicUserJSBlocked",
+                        {{"trigger", kind},
+                         {"progress", *gProgressCounter},
+                         {"detail", detail},
+                         {"jsStack", stack.str()}});
   return isolate->factory()->undefined_value();
 }
 
@@ -400,7 +402,8 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
       static bool show_warning = !!getenv("RECORD_REPLAY_WARN_MISSING_EXECUTION");
       if (show_warning) {
         std::string location = GetFunctionLocationInfo(isolate, function);
-        recordreplay::Warning("DependencyGraph missing execution: %s", location.c_str());
+        recordreplay::Warning("DependencyGraphMissingExecution",
+                              {{"location", location}});
       }
     }
 

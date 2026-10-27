@@ -19,6 +19,7 @@
 #include <stdint.h>
 #include <string>
 
+#include <initializer_list>
 #include <memory>
 
 #include "cppgc/common.h"
@@ -108,7 +109,10 @@ static void Print(const char* format, ...);
 static void Diagnostic(const char* format, ...);
 static void CommandDiagnostic(const char* format, ...);
 static void CommandDiagnosticTrace(const char* format, ...);
-static void Warning(const char* format, ...);
+// Adds a warning about unexpected behavior to the recording. kind names the
+// condition, fields hold the details that differ between occurrences.
+static void Warning(const char* kind,
+                    std::initializer_list<RecordReplayWarningField> fields = {});
 static void Trace(const char* format, ...);
 static void Crash(const char* format, ...);
 static bool HadMismatch();

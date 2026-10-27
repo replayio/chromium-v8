@@ -234,9 +234,8 @@ Response ensureContext(V8InspectorImpl* inspector, int contextGroupId,
         inspector->client()->ensureDefaultContextInGroup(contextGroupId);
     if (defaultContext.IsEmpty()) {
       if (v8::recordreplay::IsInReplayCode("InjectedScript::bindRemoteObjectIfNeeded")) {
-        v8::recordreplay::Warning(
-          "[RUN-2486-2498] Cannot find default execution context %d",
-          contextGroupId);
+        v8::recordreplay::Warning("InspectorDefaultContextNotFound",
+                                  {{"contextGroupId", contextGroupId}});
       }
       return Response::ServerError("Cannot find default execution context");
     }
@@ -808,9 +807,8 @@ void V8RuntimeAgentImpl::addBinding(InspectedContext* context,
   v8::HandleScope handles(m_inspector->isolate());
   v8::Local<v8::Context> localContext = context->context();
   if (localContext.IsEmpty()) {
-    v8::recordreplay::Warning(
-        "[crash-0043] V8RuntimeAgentImpl::addBinding empty context %d",
-        context->contextId());
+    v8::recordreplay::Warning("InspectorAddBindingEmptyContext",
+                              {{"contextId", context->contextId()}});
     return;
   }
   v8::Local<v8::Object> global = localContext->Global();
