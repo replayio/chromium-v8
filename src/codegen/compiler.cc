@@ -3621,11 +3621,8 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
 
   // For extensions or REPL mode scripts neither do a compilation cache lookup,
   // nor put the compilation result back into the cache.
-  // Replay: replacing a script's contents compiles a script with that script's
-  // id, which a cached script can't be.
   const bool use_compilation_cache =
-      extension == nullptr && script_details.repl_mode == REPLMode::kNo &&
-      !gReplaceSourceContentsScriptId;
+      extension == nullptr && script_details.repl_mode == REPLMode::kNo;
   MaybeHandle<SharedFunctionInfo> maybe_result;
   MaybeHandle<Script> maybe_script;
   IsCompiledScope is_compiled_scope;
@@ -3642,6 +3639,9 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
     maybe_script = lookup_result.script();
     maybe_result = lookup_result.toplevel_sfi();
     is_compiled_scope = lookup_result.is_compiled_scope();
+    // Replaying turns the compilation cache off (api.cc), so a script the
+    // replay compiles into is only ever one the recording found (below).
+    CHECK(!recordreplay::IsReplaying() || maybe_script.is_null());
 
     // The compilation cache isn't enabled when replaying, but we still need
     // to record/replay whether a script was found when recording so that the
@@ -3667,16 +3667,8 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
         }
       }
       script_id = (int)recordreplay::RecordReplayValue("GetSharedFunctionInfoForScriptImpl script_id", script_id);
-      if (recordreplay::IsReplaying()) {
-        if (script_id != v8::UnboundScript::kNoScriptId) {
-          maybe_script = GetScript(isolate, script_id);
-        } else {
-          // The recording found no script: create one, as it did, whatever
-          // the replay's own cache holds.
-          maybe_script = MaybeHandle<Script>();
-          maybe_result = MaybeHandle<SharedFunctionInfo>();
-          is_compiled_scope = IsCompiledScope();
-        }
+      if (recordreplay::IsReplaying() && script_id != v8::UnboundScript::kNoScriptId) {
+        maybe_script = GetScript(isolate, script_id);
       }
     } else if (recordreplay::IsRecording() &&
                recordreplay::IsRecordingOrReplaying("values") &&
