@@ -3924,11 +3924,9 @@ void RecordReplayBeforeInvoke(Isolate* isolate, Handle<JSFunction> function) {
   if (!script_object.IsScript()) {
     return;
   }
-  Script script = Script::cast(script_object);
-  // An empty script runs nothing: new-document scripts registered only to
-  // create a world (Playwright's utility world) aren't activity.
-  if (!RecordReplayHasRegisteredScript(script) ||
-      (script.source().IsString() && String::cast(script.source()).length() == 0)) {
+  // An empty script counts too: entering its top-level function advances the
+  // progress counter.
+  if (!RecordReplayHasRegisteredScript(Script::cast(script_object))) {
     return;
   }
   HandleScope scope(isolate);

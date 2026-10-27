@@ -1214,8 +1214,8 @@ static void OnExecutionProgress(Isolate* isolate, Handle<JSFunction> function) {
     Handle<Script> script(Script::cast(shared->script()), isolate);
 
     CHECK(RecordReplayBytecodeAllowed());
-    // Scripts can run instrumented before the first checkpoint (see
-    // gRecordReplayInstrumentScripts in api.cc).
+    // Instrumented JS can run before the first checkpoint, in a window the
+    // recording doesn't start at (see RecordReplayBeforeFirstCheckpoint).
     CHECK(RecordReplayHasRegisteredScript(*script));
 
     if (recordreplay::AreEventsDisallowed() && !recordreplay::HasDivergedFromRecording()) {
