@@ -10979,12 +10979,20 @@ extern void RecordReplayRegisterScriptsBeforeFirstCheckpoint();
 
 extern uint64_t* gProgressCounter;
 
-// Instrumented JS that runs before the first checkpoint without starting the
-// recording (in a window the embedder doesn't start it at) advances the
-// progress counter, which the recording starts from zero at the first
-// checkpoint. Nothing before it is addressed by progress, and recording and
-// replaying run the same code before it.
+// The recording starts the progress counter from zero at the first checkpoint,
+// and nothing should advance it before: the embedder takes the first
+// checkpoint before any instrumented JS runs in a window it starts the
+// recording at (RecordReplayBeforeInvoke), and instrumented JS in other
+// windows (e.g. Chrome's error pages, if theirs is) is expected to run in
+// renderers that never take a checkpoint. The reset is defensive, for a
+// renderer that runs such JS and starts the recording later; it is safe, as
+// nothing before the first checkpoint is addressed by progress and recording
+// and replaying run the same code before it.
 void RecordReplayBeforeFirstCheckpoint() {
+  if (*gProgressCounter) {
+    recordreplay::Warning("ProgressBeforeFirstCheckpoint",
+                          {{"progress", *gProgressCounter}});
+  }
   *gProgressCounter = 0;
 }
 
