@@ -3724,14 +3724,6 @@ bool RecordReplayShouldEmitOpcodes(bool record_replay_ignore) {
          !record_replay_ignore;
 }
 
-// Whether to insert into gRegisteredScripts (Pause / CountStackFrames): the
-// instrumented scripts, so that every frame instrumentation pushes is counted
-// and none other. Replay's own scripts are compiled in replay code or with
-// events disallowed, so they aren't instrumented.
-static bool RecordReplayShouldRegisterScript(Script script) {
-  return script.record_replay_instrumented();
-}
-
 bool RecordReplayHasRegisteredScript(Script script) {
   return IsMainThread() &&
     gRegisteredScripts &&
@@ -3862,7 +3854,11 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
 
   std::string url = RecordReplayScriptURL(*script);
 
-  if (!RecordReplayShouldRegisterScript(*script)) {
+  // Registered scripts (Pause / CountStackFrames) are exactly the instrumented
+  // ones, so that every frame instrumentation pushes is counted and none other.
+  // Replay's own scripts are compiled in replay code or with events disallowed,
+  // so they aren't instrumented.
+  if (!script->record_replay_instrumented()) {
     return;
   }
 
