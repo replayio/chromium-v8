@@ -1191,6 +1191,8 @@ void RecordReplayCallbackAssertDescribeData(void* buf, size_t buf_size) {
   }
 }
 
+extern bool gRecordReplayHasCheckpoint;
+
 extern void RecordReplayOnTargetProgressReached();
 extern bool RecordReplayIsDivergentUserJSWithoutPause(
     const SharedFunctionInfo& shared);
@@ -1214,8 +1216,7 @@ static void OnExecutionProgress(Isolate* isolate, Handle<JSFunction> function) {
     Handle<Script> script(Script::cast(shared->script()), isolate);
 
     CHECK(RecordReplayBytecodeAllowed());
-    // Instrumented JS can run before the first checkpoint, in a window the
-    // recording doesn't start at (see RecordReplayBeforeFirstCheckpoint).
+    CHECK(gRecordReplayHasCheckpoint);
     CHECK(RecordReplayHasRegisteredScript(*script));
 
     if (recordreplay::AreEventsDisallowed() && !recordreplay::HasDivergedFromRecording()) {
