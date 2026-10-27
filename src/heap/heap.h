@@ -1894,6 +1894,8 @@ class Heap {
   void EagerlyFreeExternalMemory();
 
   bool InvokeNearHeapLimitCallback();
+  // Runs the last near-heap-limit callback and applies the limit it returns.
+  bool CallNearHeapLimitCallback();
 
   void InvokeIncrementalMarkingPrologueCallbacks();
   void InvokeIncrementalMarkingEpilogueCallbacks();
@@ -2385,6 +2387,10 @@ class Heap {
   std::unique_ptr<CollectionBarrier> collection_barrier_;
 
   std::atomic<bool> record_replay_external_memory_pressure_requested_{false};
+
+  // Record/replay: near-heap-limit callback calls since the last progress
+  // interrupt when recording, see InvokeNearHeapLimitCallback.
+  size_t record_replay_near_heap_limit_calls_ = 0;
 
   int ignore_local_gc_requests_depth_ = 0;
 
