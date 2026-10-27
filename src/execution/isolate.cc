@@ -4376,6 +4376,26 @@ bool Isolate::Init(SnapshotData* startup_snapshot_data,
   }
 
   if (v8_flags.lazy_compile_dispatcher) {
+    // Replay: the dispatcher compiles functions on worker threads, which post
+    // the main thread's finalize task when they finish (LazyCompileDispatcher::
+    // ScheduleIdleTaskFromAnyThread), and the main thread installs a function's
+    // bytecode in that task or, if it calls the function first, waits for the
+    // worker (FinishNow). Both depend on the workers' timing, so a recording
+    // doesn't replay reliably. Supporting it would take workers that only hand
+    // finished jobs back, with the main thread finalizing them at points that
+    // are the same when replaying (e.g. always on the first call). The flags
+    // are left as requested, so the recording is invalidated instead.
+    if (recordreplay::IsRecordingOrReplaying() && IsMainThread()) {
+      const char* flag =
+          v8_flags.parallel_compile_tasks_for_lazy
+              ? "--parallel-compile-tasks-for-lazy"
+          : v8_flags.parallel_compile_tasks_for_eager_toplevel
+              ? "--parallel-compile-tasks-for-eager-toplevel"
+              : "--lazy-compile-dispatcher";
+      std::string why =
+          std::string("V8 flag ") + flag + " is not supported when recording";
+      recordreplay::InvalidateRecording(why.c_str());
+    }
     lazy_compile_dispatcher_ = std::make_unique<LazyCompileDispatcher>(
         this, V8::GetCurrentPlatform(), v8_flags.stack_size);
   }
