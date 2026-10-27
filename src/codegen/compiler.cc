@@ -80,6 +80,7 @@ extern int gReplaceSourceContentsScriptId;
 extern bool gReplaceSourceContentsInstrumented;
 extern bool gReplaceSourceContentsAssertValues;
 extern void MarkRecordReplayReplacedScript(int script_id);
+extern bool RecordReplayIsDisallowedScriptId(int script_id);
 
 extern MaybeHandle<String>
 ReplayingReplaceScriptContents(Isolate* isolate, Handle<String> source);
@@ -3657,9 +3658,18 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
         script_id = script->id();
         CHECK(script_id != v8::UnboundScript::kNoScriptId);
 
+        // Scripts created with events disallowed have ids the replay may not
+        // create (Isolate::GetNextScriptId): compile a new script instead.
+        // Not known to happen.
+        const bool disallowed_id = RecordReplayIsDisallowedScriptId(script_id);
+        if (disallowed_id) {
+          recordreplay::Warning("CompilationCacheHitOnDisallowedScript",
+                                {{"scriptId", script_id}});
+        }
+
         // Make sure the script has been registered, if it hasn't then we won't
         // be able to find it when replaying.
-        if (MaybeGetScript(isolate, script_id).is_null()) {
+        if (disallowed_id || MaybeGetScript(isolate, script_id).is_null()) {
           maybe_script = MaybeHandle<Script>();
           maybe_result = MaybeHandle<SharedFunctionInfo>();
           is_compiled_scope = IsCompiledScope();
