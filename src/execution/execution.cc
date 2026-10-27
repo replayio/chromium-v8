@@ -430,8 +430,8 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
     }
   }
 
-  // Replay: user JS about to run before the first checkpoint can start the
-  // recording, before entering it.
+  // Replay: JS of an instrumented script about to run before the first
+  // checkpoint can start the recording, before entering it.
   if (V8_UNLIKELY(gRecordReplayIsRecordingOrReplaying) &&
       !gRecordReplayHasCheckpoint && params.target->IsJSFunction() &&
       AllowJavascriptExecution::IsAllowed(isolate) &&

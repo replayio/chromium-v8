@@ -3899,23 +3899,24 @@ void RecordReplayRegisterScriptsBeforeFirstCheckpoint() {
   }
 }
 
-// Embedder callback for user JS about to run before the first checkpoint, with
-// the context of the function about to run. The embedder can start the
+// Embedder callback for JS of an instrumented script about to run before the
+// first checkpoint, with the context of the function about to run. The embedder can start the
 // recording there, before that JS runs (see RecordReplayBeforeInvoke).
-typedef void (*RecordReplayUserScriptCallback)(v8::Isolate* isolate,
-                                               v8::Local<v8::Context> context);
-static RecordReplayUserScriptCallback gRecordReplayUserScriptBeforeFirstCheckpoint;
+typedef void (*RecordReplayInstrumentedScriptCallback)(
+    v8::Isolate* isolate, v8::Local<v8::Context> context);
+static RecordReplayInstrumentedScriptCallback gRecordReplayInstrumentedScriptBeforeFirstCheckpoint;
 
-extern "C" void V8RecordReplaySetUserScriptBeforeFirstCheckpointCallback(
-    RecordReplayUserScriptCallback callback) {
-  gRecordReplayUserScriptBeforeFirstCheckpoint = callback;
+extern "C" void V8RecordReplaySetInstrumentedScriptBeforeFirstCheckpointCallback(
+    RecordReplayInstrumentedScriptCallback callback) {
+  gRecordReplayInstrumentedScriptBeforeFirstCheckpoint = callback;
 }
 
-// User JS here: registered (instrumented) scripts, called outside Replay's own
-// code with events allowed, so the embedder never sees replay-owned JS.
+// Functions of instrumented (registered) scripts, called outside Replay's own
+// code with events allowed: the conditions under which a compile is
+// instrumented, so the embedder never sees calls made by Replay's own JS.
 void RecordReplayBeforeInvoke(Isolate* isolate, Handle<JSFunction> function) {
   if (gRecordReplayHasCheckpoint ||
-      !gRecordReplayUserScriptBeforeFirstCheckpoint || !IsMainThread() ||
+      !gRecordReplayInstrumentedScriptBeforeFirstCheckpoint || !IsMainThread() ||
       recordreplay::AreEventsDisallowed() ||
       recordreplay::IsInReplayCode("RecordReplayBeforeInvoke")) {
     return;
@@ -3931,7 +3932,7 @@ void RecordReplayBeforeInvoke(Isolate* isolate, Handle<JSFunction> function) {
   }
   HandleScope scope(isolate);
   Handle<Context> context(function->native_context(), isolate);
-  gRecordReplayUserScriptBeforeFirstCheckpoint(
+  gRecordReplayInstrumentedScriptBeforeFirstCheckpoint(
       reinterpret_cast<v8::Isolate*>(isolate), Utils::ToLocal(context));
 }
 
