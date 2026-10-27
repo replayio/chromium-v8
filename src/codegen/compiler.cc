@@ -3413,6 +3413,11 @@ MaybeHandle<SharedFunctionInfo> CompileScriptOnMainThread(
       // The script replacing the contents of another one is that script.
       flags.set_record_replay_ignore(!gReplaceSourceContentsInstrumented);
       flags.set_record_replay_assert_values(gReplaceSourceContentsAssertValues);
+    } else if (natives == EXTENSION_CODE) {
+      // V8 extensions (e.g. --expose-gc's) are the embedder's code, run when
+      // every context is created, like Replay's own scripts.
+      flags.set_record_replay_ignore(true);
+      flags.set_record_replay_assert_values(false);
     }
   }
 
