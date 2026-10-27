@@ -1374,6 +1374,16 @@ void Heap::HandleGCRequest() {
                       GarbageCollectionReason::kFinalizeMarkingViaStackGuard,
                       current_gc_callback_flags_);
   }
+  if (record_replay_external_memory_pressure_requested_.exchange(
+          false, std::memory_order_relaxed)) {
+    ReportExternalMemoryPressure();
+  }
+}
+
+void Heap::RecordReplayRequestExternalMemoryPressureReport() {
+  record_replay_external_memory_pressure_requested_.store(
+      true, std::memory_order_relaxed);
+  isolate()->stack_guard()->RequestGC();
 }
 
 void Heap::ScheduleScavengeTaskIfNeeded() {
@@ -2190,6 +2200,11 @@ size_t Heap::PerformGarbageCollection(
 
   if (collector == GarbageCollector::MARK_COMPACTOR) {
     MarkCompact();
+    // This GC sweeps the external pointer table, which is what a pending
+    // report was for. Its GC_REQUEST may also have been cleared by
+    // IncrementalMarking::Stop().
+    record_replay_external_memory_pressure_requested_.store(
+        false, std::memory_order_relaxed);
   } else if (collector == GarbageCollector::MINOR_MARK_COMPACTOR) {
     MinorMarkCompact();
   } else {

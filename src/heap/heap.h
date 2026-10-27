@@ -1030,6 +1030,10 @@ class Heap {
   // Invoked when GC was requested via the stack guard.
   void HandleGCRequest();
 
+  // Record/replay: runs ReportExternalMemoryPressure() at the next stack guard
+  // interrupt, for callers where a GC isn't safe.
+  void RecordReplayRequestExternalMemoryPressureReport();
+
   // ===========================================================================
   // Iterators. ================================================================
   // ===========================================================================
@@ -2379,6 +2383,8 @@ class Heap {
   base::Mutex relocation_mutex_;
 
   std::unique_ptr<CollectionBarrier> collection_barrier_;
+
+  std::atomic<bool> record_replay_external_memory_pressure_requested_{false};
 
   int ignore_local_gc_requests_depth_ = 0;
 

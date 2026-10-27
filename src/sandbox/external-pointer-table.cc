@@ -321,14 +321,19 @@ ExternalPointerTable::Freelist ExternalPointerTable::Grow(Isolate* isolate) {
   double old_utilization = static_cast<double>(old_capacity) / kMaxCapacity;
   double new_utilization = static_cast<double>(new_capacity) / kMaxCapacity;
   for (double threshold : kGCThresholds) {
-    // The pressure report can run a full GC here (always when incremental
-    // marking is off, as when replaying). That GC decommits the block added
-    // above while it is still empty and can move objects callers hold raw
-    // pointers to (e.g. SetAlignedPointerInInternalFields). Upstream drops this
-    // GC trigger altogether (v8/v8@852aa1865fd).
-    if (old_utilization < threshold && new_utilization >= threshold &&
-        !recordreplay::IsRecordingOrReplaying()) {
-      isolate->heap()->ReportExternalMemoryPressure();
+    if (old_utilization < threshold && new_utilization >= threshold) {
+      if (recordreplay::IsRecordingOrReplaying()) {
+        // The pressure report can run a full GC (always when incremental
+        // marking is off). Here that GC would decommit the block added above
+        // while it is still empty and could move objects callers hold raw
+        // pointers to (e.g. SetAlignedPointerInInternalFields). Entries are
+        // only freed by full GCs, and objects that die in scavenges keep
+        // theirs until then, so the report still has to happen: at the next
+        // stack guard interrupt instead.
+        isolate->heap()->RecordReplayRequestExternalMemoryPressureReport();
+      } else {
+        isolate->heap()->ReportExternalMemoryPressure();
+      }
       break;
     }
   }
