@@ -3751,8 +3751,10 @@ bool RecordReplayShouldEmitOpcodes(Isolate* isolate, int script_id,
   auto it = emit_by_script.find(script_id);
   if (it != emit_by_script.end()) {
     if (it->second && record_replay_ignore && !IsMainThread()) {
-      recordreplay::Warning("FailedToReinstrument scriptId=%d bct=%zu",
-                            script_id, NumRunningBackgroundCompileTasks());
+      recordreplay::Warning(
+          "FailedToReinstrument",
+          {{"scriptId", script_id},
+           {"backgroundCompileTasks", NumRunningBackgroundCompileTasks()}});
       return false;
     }
     return it->second;

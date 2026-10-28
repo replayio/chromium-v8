@@ -1168,8 +1168,10 @@ Response InjectedScript::bindRemoteObjectIfNeeded(
     if (!injectedScript) {
       if (v8::recordreplay::IsInReplayCode("InjectedScript::bindRemoteObjectIfNeeded")) {
         v8::recordreplay::Warning(
-          "[RUN-2486-2498] Cannot find context with specified id A %d %d %d",
-          sessionId, InspectedContext::contextId(context), !!inspectedContext);
+            "InspectorBindRemoteObjectContextNotFound",
+            {{"sessionId", sessionId},
+             {"contextId", InspectedContext::contextId(context)},
+             {"hasInspectedContext", !!inspectedContext}});
       }
       return Response::ServerError("Cannot find context with specified id");
     }

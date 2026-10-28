@@ -222,7 +222,7 @@ void DebugStackTraceIterator::UpdateInlineFrameIndexAndResumableFnOnStack() {
   if (resumable_fn_on_stack_) return;
 
   if (recordreplay::IsRecordingOrReplaying() && !frames.size()) {
-    recordreplay::Warning("[RUN-1920] Frame summary was empty.");
+    recordreplay::Warning("EmptyFrameSummary");
     return;
   }
 
