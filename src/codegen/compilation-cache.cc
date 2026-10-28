@@ -17,6 +17,8 @@
 namespace v8 {
 namespace internal {
 
+extern bool RecordReplayRecordsEvalCacheLookups();
+
 // Initial size of each compilation cache table allocated.
 static const int kInitialCacheSize = 64;
 
@@ -283,10 +285,14 @@ InfoCellPair CompilationCache::LookupEval(Handle<String> source,
   InfoCellPair result;
   if (!IsEnabledScriptAndEval()) return result;
 
-  // Evaluations aren't cached when recording/replaying because new sources
-  // will not be generated on a cache hit, and sources need to be generated
-  // at deterministic points.
-  if (recordreplay::IsRecordingOrReplaying("no-eval-cache")) return result;
+  // A hit generates no new source, and sources need to be generated at
+  // deterministic points, so when recording/replaying evaluations are only
+  // cached where whether a lookup found a script is recorded, see
+  // Compiler::GetFunctionFromEval.
+  if (recordreplay::IsRecordingOrReplaying("no-eval-cache") &&
+      !RecordReplayRecordsEvalCacheLookups()) {
+    return result;
+  }
 
   const char* cache_type;
 
@@ -332,7 +338,10 @@ void CompilationCache::PutEval(Handle<String> source,
                                int position) {
   if (!IsEnabledScriptAndEval()) return;
 
-  if (recordreplay::IsRecordingOrReplaying("no-eval-cache")) return;
+  if (recordreplay::IsRecordingOrReplaying("no-eval-cache") &&
+      !RecordReplayRecordsEvalCacheLookups()) {
+    return;
+  }
 
   const char* cache_type;
   HandleScope scope(isolate());
