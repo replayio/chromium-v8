@@ -3148,6 +3148,7 @@ static void ForEachInstrumentationOp(Isolate* isolate, Handle<Script> script,
                                      std::function<void(Handle<SharedFunctionInfo>,
                                                         int)> aCallback) {
   // Based on Debug::GetPossibleBreakpoints.
+  bool tried_top_level_compile = false;
   while (true) {
     HandleScope scope(isolate);
     std::vector<Handle<SharedFunctionInfo>> candidates;
@@ -3158,6 +3159,21 @@ static void ForEachInstrumentationOp(Isolate* isolate, Handle<Script> script,
       if (!info.IsSubjectToDebugging()) continue;
       if (!info.is_compiled() && !info.allows_lazy_compilation()) continue;
       candidates.push_back(i::handle(info, isolate));
+    }
+
+    // The GC collects the top-level function once nothing references it, and
+    // with it the functions only its bytecode referenced. Recompiling it
+    // recreates them, as Debug::FindSharedFunctionInfosIntersectingRange does.
+    if (!tried_top_level_compile && script->shared_function_info_count() > 0) {
+      MaybeObject top_level = script->shared_function_infos().Get(0);
+      HeapObject heap_object;
+      if (!top_level->GetHeapObject(&heap_object) ||
+          heap_object.IsUndefined()) {
+        tried_top_level_compile = true;
+        if (CompileTopLevel(isolate, script)) continue;
+        recordreplay::Warning("PossibleBreakpointsTopLevelCompileFailed",
+                              {{"scriptId", script->id()}});
+      }
     }
 
     // Compile any uncompiled functions found in the script.
