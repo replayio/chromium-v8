@@ -15,9 +15,8 @@
 #include <string>
 #include <type_traits>
 
-// A detail of a structured warning (see recordreplay::Warning), handed to the
-// driver's RecordReplayStructuredWarning. Same layout as the driver's
-// RecordReplayWarningField.
+// A detail of a warning (see recordreplay::Warning), handed to the driver's
+// RecordReplayWarning. Same layout as the driver's RecordReplayWarningField.
 struct RecordReplayWarningField {
   enum Type : int { kString, kInt, kUnsigned, kDouble, kBool };
 

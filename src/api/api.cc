@@ -10866,7 +10866,7 @@ typedef char* (CommandCallbackRaw)(const char* params);
         (const char* method, CommandCallbackRaw callback))                    \
   Macro(RecordReplayPrint, (const char* format, va_list args))                \
   Macro(RecordReplayDiagnostic, (const char* format, va_list args))           \
-  Macro(RecordReplayStructuredWarning,                                        \
+  Macro(RecordReplayWarning,                                                  \
         (const char* kind, const RecordReplayWarningField* fields,            \
          size_t count))                                                       \
   Macro(RecordReplayTrace, (const char* format, va_list args))                \
@@ -11479,14 +11479,14 @@ void recordreplay::CommandDiagnosticTrace(const char* format, ...) {
 void recordreplay::Warning(
     const char* kind, std::initializer_list<RecordReplayWarningField> fields) {
   if (IsRecordingOrReplaying()) {
-    gRecordReplayStructuredWarning(kind, fields.begin(), fields.size());
+    gRecordReplayWarning(kind, fields.begin(), fields.size());
   }
 }
 
-extern "C" DLLEXPORT void V8RecordReplayStructuredWarning(
+extern "C" DLLEXPORT void V8RecordReplayWarning(
     const char* kind, const RecordReplayWarningField* fields, size_t count) {
   if (recordreplay::IsRecordingOrReplaying()) {
-    gRecordReplayStructuredWarning(kind, fields, count);
+    gRecordReplayWarning(kind, fields, count);
   }
 }
 
