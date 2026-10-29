@@ -2565,6 +2565,10 @@ namespace internal {
 // If we are compiling a script while replaying that replaces another one,
 // the ID of the script being replaced. Main thread only.
 int gReplaceSourceContentsScriptId;
+// The decisions made for the script whose contents are being replaced: the
+// replacing script has its id, so it gets its decisions too.
+bool gReplaceSourceContentsInstrumented;
+bool gReplaceSourceContentsAssertValues;
 static std::set<int>* gScriptsWithReplacedContents;
 
 void MarkRecordReplayReplacedScript(int script_id) {
@@ -2610,7 +2614,10 @@ ReplayingMaybeReplaceScript(Isolate* isolate,
   }
 
   CHECK(!gReplaceSourceContentsScriptId);
-  gReplaceSourceContentsScriptId = Script::cast(maybe_function_info.ToHandleChecked()->script()).id();
+  Script replaced_script = Script::cast(maybe_function_info.ToHandleChecked()->script());
+  gReplaceSourceContentsScriptId = replaced_script.id();
+  gReplaceSourceContentsInstrumented = replaced_script.record_replay_instrumented();
+  gReplaceSourceContentsAssertValues = replaced_script.record_replay_assert_values();
 
   maybe_function_info = Compiler::GetSharedFunctionInfoForScript(
       isolate, new_source.ToHandleChecked(), script_details,
@@ -2626,6 +2633,8 @@ ReplayingMaybeReplaceScript(Isolate* isolate,
   }
 
   gReplaceSourceContentsScriptId = 0;
+  gReplaceSourceContentsInstrumented = false;
+  gReplaceSourceContentsAssertValues = false;
   RecordReplayRegisterCompiledScript(isolate, maybe_function_info);
   return maybe_function_info;
 }
@@ -10961,6 +10970,27 @@ namespace internal {
 
 bool gRecordReplayHasCheckpoint;
 
+extern void RecordReplayRegisterScriptsBeforeFirstCheckpoint();
+
+extern uint64_t* gProgressCounter;
+
+// The recording starts the progress counter from zero at the first checkpoint,
+// and nothing should advance it before: the embedder takes the first
+// checkpoint before any instrumented JS runs in a window it starts the
+// recording at (RecordReplayBeforeInvoke), and instrumented JS in other
+// windows (e.g. Chrome's error pages, if theirs is) is expected to run in
+// renderers that never take a checkpoint. The reset is defensive, for a
+// renderer that runs such JS and starts the recording later; it is safe, as
+// nothing before the first checkpoint is addressed by progress and recording
+// and replaying run the same code before it.
+void RecordReplayBeforeFirstCheckpoint() {
+  if (*gProgressCounter) {
+    recordreplay::Warning("ProgressBeforeFirstCheckpoint",
+                          {{"progress", *gProgressCounter}});
+  }
+  *gProgressCounter = 0;
+}
+
 void RecordReplayOnNewSource(Isolate* isolate, const char* id,
                              const char* kind, const char* url) {
   if (gRecordReplayHasCheckpoint) {
@@ -11131,7 +11161,6 @@ extern char* CommandCallback(const char* command, const char* params);
 extern void ClearPauseDataCallback();
 
 bool gRecordReplayAssertValues;
-const char* gRecordReplayAssertValuesPattern;
 
 bool gRecordReplayAssertProgress;
 bool gRecordReplayAssertTrackedObjects;
@@ -11258,6 +11287,10 @@ void RecordReplayOnMainThreadIsolateCreated(Isolate* isolate) {
   gMainThreadIsolate = isolate;
 }
 
+bool RecordReplayIsMainThreadIsolate(Isolate* isolate) {
+  return isolate == gMainThreadIsolate;
+}
+
 static Eternal<v8::Context>* gDefaultContext;
 
 extern "C" void V8RecordReplaySetDefaultContext(v8::Isolate* isolate, v8::Local<v8::Context> cx) {
@@ -11269,10 +11302,6 @@ extern "C" void V8RecordReplaySetDefaultContext(v8::Isolate* isolate, v8::Local<
 extern "C" void V8RecordReplayGetDefaultContext(v8::Isolate* isolate, v8::Local<v8::Context>* cx) {
   CHECK(IsMainThread() && gDefaultContext);
   *cx = gDefaultContext->Get(isolate);
-}
-
-bool RecordReplayHasDefaultContext() {
-  return !!gDefaultContext;
 }
 
 // Tagged pointer of the DefaultContext for `isolate`, or 0 if none. Deref-free:
@@ -11316,14 +11345,10 @@ void RecordReplayDescribeAssertData(const char* text) {
   gRecordReplayDescribeAssertData(text);
 }
 
-bool RecordReplayAssertValues(const std::string& url) {
-  if (!gRecordReplayAssertValues) {
-    return false;
-  }
-  if (!gRecordReplayAssertValuesPattern) {
-    return true;
-  }
-  return url.length() && strstr(url.c_str(), gRecordReplayAssertValuesPattern);
+// Whether an instrumented script created now also asserts the values it loads
+// (RECORD_REPLAY_JS_ASSERTS).
+bool RecordReplayAssertValues() {
+  return gRecordReplayAssertValues;
 }
 
 } // namespace internal
@@ -11728,8 +11753,15 @@ void recordreplay::NewCheckpoint() {
   // We can only create checkpoints if a context has been created. A context is
   // needed to process commands which we might get from the driver.
   if (IsRecordingOrReplaying() && IsMainThread() && internal::gDefaultContext) {
+    bool first = !internal::gRecordReplayHasCheckpoint;
+    if (first) {
+      internal::RecordReplayBeforeFirstCheckpoint();
+    }
     internal::gRecordReplayHasCheckpoint = true;
     gRecordReplayNewCheckpoint();
+    if (first) {
+      internal::RecordReplayRegisterScriptsBeforeFirstCheckpoint();
+    }
   }
 }
 
@@ -11741,8 +11773,15 @@ void recordreplay::NewCheckpointFlushed() {
   // We can only create checkpoints if a context has been created. A context is
   // needed to process commands which we might get from the driver.
   if (IsRecordingOrReplaying() && IsMainThread() && internal::gDefaultContext) {
+    bool first = !internal::gRecordReplayHasCheckpoint;
+    if (first) {
+      internal::RecordReplayBeforeFirstCheckpoint();
+    }
     internal::gRecordReplayHasCheckpoint = true;
     gRecordReplayNewCheckpointFlushed();
+    if (first) {
+      internal::RecordReplayRegisterScriptsBeforeFirstCheckpoint();
+    }
   }
 }
 
@@ -12382,7 +12421,6 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
   gARMRecording = RecordReplayValue("ARMRecording", gARMRecording);
 
   i::gRecordReplayAssertValues = !!getenv("RECORD_REPLAY_JS_ASSERTS");
-  i::gRecordReplayAssertValuesPattern = getenv("RECORD_REPLAY_JS_ASSERTS_PATTERN");
 
   i::gRecordReplayCheckProgress =
       i::gRecordReplayAssertValues || !!getenv("RECORD_REPLAY_JS_PROGRESS_CHECKS");
