@@ -29,7 +29,7 @@ class ThreadLocalTop {
   // TODO(all): This is not particularly beautiful. We should probably
   // refactor this to really consist of just Addresses and 32-bit
   // integer fields.
-  static constexpr uint32_t kSizeInBytes = 26 * kSystemPointerSize;
+  static constexpr uint32_t kSizeInBytes = 27 * kSystemPointerSize;
   static constexpr int kReplayMaxJsFrameDepth = 1024;
 
   // Does early low-level initialization that does not depend on the
@@ -151,7 +151,8 @@ class ThreadLocalTop {
   int replay_js_frame_depth_;
 
   // The "thread in wasm" flag when recording/replaying, see Initialize.
-  int replay_thread_in_wasm_flag_;
+  // Pointer-sized because the arm64 generic JS-to-wasm wrapper stores 64 bits.
+  Address replay_thread_in_wasm_flag_;
 };
 
 static_assert(ThreadLocalTop::kSizeInBytes == sizeof(ThreadLocalTop));
