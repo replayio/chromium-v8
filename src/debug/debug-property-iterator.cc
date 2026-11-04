@@ -57,7 +57,7 @@ void DebugPropertyIterator::AdvanceToPrototype() {
   // Listing a proxy's keys runs its traps. Replay code's previews must not run
   // page JS, so they stop at a proxy in the prototype chain.
   if (!is_done_ && recordreplay::IsInReplayCode("DebugPropertyIterator") &&
-      prototype_iterator_.GetCurrent().IsJSProxy()) {
+      PrototypeIterator::GetCurrent(prototype_iterator_)->IsJSProxy()) {
     is_done_ = true;
   }
 }
