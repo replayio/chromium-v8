@@ -3,6 +3,8 @@
 // found in the LICENSE file.
 
 #include "src/execution/thread-local-top.h"
+
+#include "include/v8.h"
 #include "src/execution/isolate.h"
 #include "src/execution/simulator.h"
 
