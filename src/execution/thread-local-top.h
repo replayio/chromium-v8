@@ -149,6 +149,9 @@ class ThreadLocalTop {
   Address thread_in_wasm_flag_address_;
 
   int replay_js_frame_depth_;
+
+  // The "thread in wasm" flag when recording/replaying, see Initialize.
+  int replay_thread_in_wasm_flag_;
 };
 
 static_assert(ThreadLocalTop::kSizeInBytes == sizeof(ThreadLocalTop));
