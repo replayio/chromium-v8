@@ -191,6 +191,33 @@ class ScopeChainRetriever {
   }
 };
 
+// Whether |context| starts with the contexts that the scopes from |start_scope|
+// up to |closure_scope| create, which holds while execution is inside all of
+// those scopes.
+bool RecordReplayContextsMatchScopes(Scope* start_scope,
+                                     DeclarationScope* closure_scope,
+                                     Context context,
+                                     SharedFunctionInfo shared) {
+  DisallowGarbageCollection no_gc;
+  for (Scope* scope = start_scope; scope != closure_scope;
+       scope = scope->outer_scope()) {
+    if (!scope->NeedsContext()) continue;
+    if (context.IsNativeContext() ||
+        context.scope_info().scope_type() != scope->scope_type()) {
+      return false;
+    }
+    for (Variable* var : *scope->locals()) {
+      if (var->location() == VariableLocation::CONTEXT &&
+          context.scope_info().ContextSlotIndex(var->name()) != var->index()) {
+        return false;
+      }
+    }
+    context = context.previous();
+  }
+  return !closure_scope->NeedsContext() ||
+         context.scope_info() == shared.scope_info();
+}
+
 }  // namespace
 
 void ScopeIterator::TryParseAndRetrieveScopes(ReparseStrategy strategy) {
@@ -301,6 +328,32 @@ void ScopeIterator::TryParseAndRetrieveScopes(ReparseStrategy strategy) {
 
     MaybeCollectAndStoreLocalBlocklists();
     UnwrapEvaluationContext();
+
+    // While recording or replaying, frames are also described at points the
+    // debugger doesn't pause at, such as the implicit catch handler that
+    // rejects an async function's promise. That handler has no source position
+    // of its own, so the frame reports the last position before it, which can
+    // be inside blocks and catch clauses whose contexts are gone. Describe only
+    // the function scope then, as at a return.
+    if (recordreplay::IsRecordingOrReplaying() &&
+        scope_info->scope_type() == FUNCTION_SCOPE && closure_scope_ &&
+        !RecordReplayContextsMatchScopes(start_scope_, closure_scope_,
+                                         *context_, *shared_info)) {
+      current_scope_ = closure_scope_;
+      start_scope_ = current_scope_;
+      Context context = function_->context();
+      if (closure_scope_->NeedsContext()) {
+        context = *context_;
+        while (context.scope_info() != *scope_info) {
+          if (context.IsNativeContext()) {
+            context_ = Handle<Context>();
+            return;
+          }
+          context = context.previous();
+        }
+      }
+      context_ = handle(context, isolate_);
+    }
   } else {
     // A failed reparse indicates that the preparser has diverged from the
     // parser, that the preparse data given to the initial parse was faulty, or
