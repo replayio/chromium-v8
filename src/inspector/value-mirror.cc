@@ -17,6 +17,7 @@
 #include "include/v8-typed-array.h"
 #include "include/v8-wasm.h"
 #include "src/base/optional.h"
+#include "src/base/replayio.h"
 #include "src/debug/debug-interface.h"
 #include "src/inspector/v8-debugger.h"
 #include "src/inspector/v8-inspector-impl.h"
@@ -267,9 +268,10 @@ String16 descriptionForError(v8::Local<v8::Context> context,
   v8::TryCatch tryCatch(isolate);
   String16 className = toProtocolString(isolate, object->GetConstructorName());
 
-  // Get("stack"|"message") can run user accessors via Execution::Call.
-  if (v8::recordreplay::AreEventsDisallowed() &&
-      !v8::recordreplay::HasDivergedFromRecording()) {
+  // Get("stack"|"message") can run user accessors and prepareStackTrace (see
+  // MustNotRunUserJS). Replay's own session never reads Error descriptions
+  // (previews are built in pauses), so any placeholder works.
+  if (v8::replayio::MustNotRunUserJS()) {
     return className + " (Divergent message + stack retrieval skipped)";
   }
 
