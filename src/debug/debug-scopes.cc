@@ -80,6 +80,23 @@ ScopeIterator::ScopeIterator(Isolate* isolate,
   TryParseAndRetrieveScopes(ReparseStrategy::kFunctionLiteral);
 }
 
+namespace {
+
+// The context of |function| on the chain starting at |context|, or an empty
+// context if the chain doesn't hold it.
+Context RecordReplayFunctionContext(Context context,
+                                    DeclarationScope* closure_scope,
+                                    JSFunction function) {
+  if (!closure_scope->NeedsContext()) return function.context();
+  while (context.scope_info() != function.shared().scope_info()) {
+    if (context.IsNativeContext()) return Context();
+    context = context.previous();
+  }
+  return context;
+}
+
+}  // namespace
+
 void ScopeIterator::Restart() {
   DCHECK_NOT_NULL(frame_inspector_);
   function_ = frame_inspector_->GetFunction();
@@ -87,6 +104,16 @@ void ScopeIterator::Restart() {
   current_scope_ = start_scope_;
   DCHECK_NOT_NULL(current_scope_);
   UnwrapEvaluationContext();
+  // Keep describing only the function scope when TryParseAndRetrieveScopes
+  // fell back to it, see there.
+  if (recordreplay::IsRecordingOrReplaying() &&
+      closure_scope_ && start_scope_ == closure_scope_ &&
+      closure_scope_->is_function_scope()) {
+    Context context =
+        RecordReplayFunctionContext(*context_, closure_scope_, *function_);
+    context_ =
+        context.is_null() ? Handle<Context>() : handle(context, isolate_);
+  }
 }
 
 namespace {
@@ -341,18 +368,10 @@ void ScopeIterator::TryParseAndRetrieveScopes(ReparseStrategy strategy) {
                                          *context_, *shared_info)) {
       current_scope_ = closure_scope_;
       start_scope_ = current_scope_;
-      Context context = function_->context();
-      if (closure_scope_->NeedsContext()) {
-        context = *context_;
-        while (context.scope_info() != *scope_info) {
-          if (context.IsNativeContext()) {
-            context_ = Handle<Context>();
-            return;
-          }
-          context = context.previous();
-        }
-      }
-      context_ = handle(context, isolate_);
+      Context context =
+          RecordReplayFunctionContext(*context_, closure_scope_, *function_);
+      context_ = context.is_null() ? Handle<Context>()
+                                   : handle(context, isolate_);
     }
   } else {
     // A failed reparse indicates that the preparser has diverged from the
