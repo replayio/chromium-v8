@@ -54,6 +54,12 @@ void DebugPropertyIterator::AdvanceToPrototype() {
   if (!prototype_iterator_.HasAccess()) is_done_ = true;
   prototype_iterator_.AdvanceIgnoringProxies();
   if (prototype_iterator_.IsAtEnd()) is_done_ = true;
+  // Listing a proxy's keys runs its traps. Replay code's previews must not run
+  // page JS, so they stop at a proxy in the prototype chain.
+  if (!is_done_ && recordreplay::IsInReplayCode("DebugPropertyIterator") &&
+      PrototypeIterator::GetCurrent(prototype_iterator_)->IsJSProxy()) {
+    is_done_ = true;
+  }
 }
 
 bool DebugPropertyIterator::AdvanceInternal() {
