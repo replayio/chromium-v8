@@ -78,8 +78,8 @@ Handle<JSArray> TemplateObjectDescription::GetTemplateObject(
   // strongly (as the spec's per-realm [[TemplateMap]] does), so the inner
   // functions are reused and template identity matches in both.
   Object cache = native_context->template_weakmap();
-  if (cache.IsObjectHashTable() ||
-      (cache.IsUndefined(isolate) && recordreplay::IsRecordingOrReplaying())) {
+  if (cache.IsUndefined(isolate) ? recordreplay::IsRecordingOrReplaying()
+                                 : !cache.IsEphemeronHashTable()) {
     return GetTemplateObjectImpl<ObjectHashTable>(
         isolate, native_context, description, shared_info, slot_id);
   }
