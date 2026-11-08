@@ -5,6 +5,7 @@
 #include "src/objects/template-objects.h"
 
 #include "src/base/functional.h"
+#include "src/base/replayio.h"
 #include "src/execution/isolate.h"
 #include "src/heap/factory.h"
 #include "src/objects/objects-inl.h"
@@ -14,23 +15,25 @@
 namespace v8 {
 namespace internal {
 
-// static
-Handle<JSArray> TemplateObjectDescription::GetTemplateObject(
+namespace {
+
+template <typename Table>
+Handle<JSArray> GetTemplateObjectImpl(
     Isolate* isolate, Handle<NativeContext> native_context,
     Handle<TemplateObjectDescription> description,
     Handle<SharedFunctionInfo> shared_info, int slot_id) {
   uint32_t hash = shared_info->Hash();
 
   // Check the template weakmap to see if the template object already exists.
-  Handle<EphemeronHashTable> template_weakmap;
+  Handle<Table> template_weakmap;
 
   if (native_context->template_weakmap().IsUndefined(isolate)) {
-    template_weakmap = EphemeronHashTable::New(isolate, 1);
+    template_weakmap = Table::New(isolate, 1);
   } else {
     DisallowGarbageCollection no_gc;
     ReadOnlyRoots roots(isolate);
-    template_weakmap = handle(
-        EphemeronHashTable::cast(native_context->template_weakmap()), isolate);
+    template_weakmap =
+        handle(Table::cast(native_context->template_weakmap()), isolate);
     Object maybe_cached_template = template_weakmap->Lookup(shared_info, hash);
     while (!maybe_cached_template.IsTheHole(roots)) {
       CachedTemplateObject cached_template =
@@ -54,11 +57,34 @@ Handle<JSArray> TemplateObjectDescription::GetTemplateObject(
       HeapObject::cast(template_weakmap->Lookup(shared_info, hash)), isolate);
   Handle<CachedTemplateObject> cached_template = CachedTemplateObject::New(
       isolate, slot_id, template_object, previous_cached_templates);
-  template_weakmap = EphemeronHashTable::Put(
-      isolate, template_weakmap, shared_info, cached_template, hash);
+  template_weakmap = Table::Put(isolate, template_weakmap, shared_info,
+                                cached_template, hash);
   native_context->set_template_weakmap(*template_weakmap);
 
   return template_object;
+}
+
+}  // namespace
+
+// static
+Handle<JSArray> TemplateObjectDescription::GetTemplateObject(
+    Isolate* isolate, Handle<NativeContext> native_context,
+    Handle<TemplateObjectDescription> description,
+    Handle<SharedFunctionInfo> shared_info, int slot_id) {
+  // Recordings run far more major GCs than replays. Once a GC flushes an outer
+  // function's bytecode, its inner functions' SharedFunctionInfos can die, and
+  // recompiling it creates new ones, whose template sites then yield new
+  // template objects. While recording or replaying, the cache holds its keys
+  // strongly (as the spec's per-realm [[TemplateMap]] does), so the inner
+  // functions are reused and template identity matches in both.
+  Object cache = native_context->template_weakmap();
+  if (cache.IsObjectHashTable() ||
+      (cache.IsUndefined(isolate) && recordreplay::IsRecordingOrReplaying())) {
+    return GetTemplateObjectImpl<ObjectHashTable>(
+        isolate, native_context, description, shared_info, slot_id);
+  }
+  return GetTemplateObjectImpl<EphemeronHashTable>(
+      isolate, native_context, description, shared_info, slot_id);
 }
 
 Handle<CachedTemplateObject> CachedTemplateObject::New(
