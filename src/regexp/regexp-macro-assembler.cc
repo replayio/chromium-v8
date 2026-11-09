@@ -291,7 +291,9 @@ int NativeRegExpMacroAssembler::CheckStackGuardState(
   DCHECK_LE(old_pc, re_code.raw_instruction_end());
 
   // When recording or replaying, generated code also calls this periodically
-  // while backtracking, without an interrupt.
+  // while backtracking, without an interrupt. Only x64 code does, since
+  // recordings are made on linux x64; other architectures' long matches still
+  // look hanged to the replay.
   recordreplay::NotifyActivity();
 
   StackLimitCheck check(isolate);
