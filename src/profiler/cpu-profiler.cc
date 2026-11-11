@@ -611,6 +611,12 @@ CpuProfilingResult CpuProfiler::StartProfiling(
 CpuProfilingResult CpuProfiler::StartProfiling(
     const char* title, CpuProfilingOptions options,
     std::unique_ptr<DiscardedSamplesDelegate> delegate) {
+  // Refused before the sampler starts, so the recording stays usable; see
+  // StartProcessorIfNotStarted.
+  if (recordreplay::IsRecordingOrReplaying("no-cpu-profiler")) {
+    return {0, CpuProfilingStatus::kErrorNotSupported};
+  }
+
   CpuProfilingResult result =
       profiles_->StartProfiling(title, std::move(options), std::move(delegate));
 
