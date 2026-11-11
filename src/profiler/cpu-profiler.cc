@@ -630,8 +630,7 @@ CpuProfilingResult CpuProfiler::StartProfiling(
 
   // TODO(nicodubus): Revisit logic for if we want to do anything different for
   // kAlreadyStarted
-  if (result.status == CpuProfilingStatus::kStarted ||
-      result.status == CpuProfilingStatus::kAlreadyStarted) {
+  if (IsCpuProfilingStarted(result.status)) {
     TRACE_EVENT0("v8", "CpuProfiler::StartProfiling");
     AdjustSamplingInterval();
     StartProcessorIfNotStarted();
