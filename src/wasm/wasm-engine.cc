@@ -819,6 +819,12 @@ void WasmEngine::TierUpAllModulesPerIsolate(Isolate* isolate) {
   // deadlocks because of lock inversion. The bool tells whether the module
   // needs recompilation for tier up.
   std::vector<std::pair<std::shared_ptr<NativeModule>, bool>> native_modules;
+  // Which isolate tiers a shared module up depends on the order in which the
+  // isolates sharing it disable their debuggers, but recompiling records calls
+  // on the thread doing it. When recording or replaying, modules stay tiered
+  // down, so that order has no recorded effect.
+  const bool tier_up_allowed = !recordreplay::IsRecordingOrReplaying(
+      "wasm-native-module-sharing", "TierUpAllModulesPerIsolate");
   {
     base::MutexGuard lock(&mutex_);
     isolates_[isolate]->keep_tiered_down = false;
@@ -837,7 +843,7 @@ void WasmEngine::TierUpAllModulesPerIsolate(Isolate* isolate) {
       if (!native_module->IsTieredDown()) continue;
       // Only start tier-up if no other isolate needs this module in tiered
       // down state.
-      bool tier_up = test_can_tier_up(native_module);
+      bool tier_up = tier_up_allowed && test_can_tier_up(native_module);
       if (tier_up) native_module->SetTieringState(kTieredUp);
       native_modules.emplace_back(std::move(shared_ptr), tier_up);
     }
