@@ -61,8 +61,8 @@ bool ReplayFinalizationRegistries::Adopt(
   if (!Enabled() || !AreEventsAvailable()) return false;
   // Cells registered before now have no ids, so the recording could not
   // describe when they are cleared.
-  if (!i::IsUndefined(registry->active_cells(), isolate) ||
-      !i::IsUndefined(registry->cleared_cells(), isolate)) {
+  if (!i::IsUndefined(registry->active_cells()) ||
+      !i::IsUndefined(registry->cleared_cells())) {
     return false;
   }
 
@@ -116,7 +116,7 @@ void ReplayFinalizationRegistries::OnRegister(
   }
 
   i::Handle<i::SimpleNumberDictionary> cells;
-  if (i::IsUndefined(registry->record_replay_cells(), isolate)) {
+  if (i::IsUndefined(registry->record_replay_cells())) {
     cells = i::SimpleNumberDictionary::New(isolate, 1);
     // The recording can deliver callbacks of a registry which is no longer
     // reachable, as long as the recording's GC did not collect it.
@@ -144,7 +144,7 @@ void ReplayFinalizationRegistries::OnUnregisterCell(
       "FinalizationRegistry.prototype.unregister on a tracked registry at a "
       "point which does not replay");
 
-  if (i::IsUndefined(registry->record_replay_cells(), isolate)) return;
+  if (i::IsUndefined(registry->record_replay_cells())) return;
   i::Tagged<i::SimpleNumberDictionary> cells =
       i::Cast<i::SimpleNumberDictionary>(registry->record_replay_cells());
   i::InternalIndex entry = cells->FindEntry(isolate, cell->record_replay_id());
@@ -170,7 +170,7 @@ bool ReplayFinalizationRegistries::NextCell(
   if (!id) return false;
 
   if (recordreplay::IsReplaying()) {
-    CHECK_WITH_MSG(!i::IsUndefined(registry->record_replay_cells(), isolate),
+    CHECK_WITH_MSG(!i::IsUndefined(registry->record_replay_cells()),
                    "Recorded FinalizationRegistry cleanup for unknown cell");
     i::Handle<i::SimpleNumberDictionary> cells = i::handle(
         i::Cast<i::SimpleNumberDictionary>(registry->record_replay_cells()),
@@ -182,7 +182,7 @@ bool ReplayFinalizationRegistries::NextCell(
     i::Tagged<i::WeakCell> cell = i::Cast<i::WeakCell>(cells->ValueAt(entry));
     // The move below assumes an active cell, and the replay's GC clearing a
     // tracked cell on its own would otherwise go unnoticed.
-    CHECK_WITH_MSG(!i::IsUndefined(cell->target(), isolate),
+    CHECK_WITH_MSG(!i::IsUndefined(cell->target()),
                    "Tracked FinalizationRegistry cell cleared while replaying");
     // Do what the recording's GC did when it found the target dead: this moves
     // the cell to the head of the cleared list, where the cleanup loop pops it.

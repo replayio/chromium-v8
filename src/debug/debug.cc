@@ -4557,7 +4557,7 @@ void RecordReplayBeforeInvoke(Isolate* isolate,
     return;
   }
   HandleScope scope(isolate);
-  DirectHandle<Context> context(function->native_context(), isolate);
+  DirectHandle<NativeContext> context(function->native_context(), isolate);
   gRecordReplayInstrumentedScriptBeforeFirstCheckpoint(
       reinterpret_cast<v8::Isolate*>(isolate), Utils::ToLocal(context));
 }
@@ -4845,7 +4845,7 @@ int RecordReplayObjectId(v8::Isolate* v8_isolate, v8::Local<v8::Context> cx,
       Handle<JSWeakMap> object_ids = Cast<JSWeakMap>(Utils::OpenHandle(*object_ids_val));
 
       Handle<Object> existing(Cast<EphemeronHashTable>(object_ids->table())->Lookup(object), isolate);
-      if (!IsTheHole(*existing, isolate)) {
+      if (!IsTheHole(*existing)) {
         v8::Local<v8::Value> id_value = v8::Utils::ToLocal(existing);
         if (id_value->IsInt32()) {
           int id = id_value.As<v8::Int32>()->Value();
@@ -5106,7 +5106,7 @@ void RecordReplayOnPromiseHook(Isolate* isolate, PromiseHookType type,
       std::string new_node_str = StringPrintf("{\"kind\":\"newPromise\",\"persistentId\":%d}",
                                                data.persistent_id);
       data.new_node_id = recordreplay::NewDependencyGraphNode(new_node_str.c_str());
-      if (!IsUndefined(*parent, isolate)) {
+      if (!IsUndefined(*parent)) {
         PromiseDependencyGraphData& parent_data =
           GetOrCreatePromiseDependencyGraphData(isolate, parent);
         if (parent_data.new_node_id) {

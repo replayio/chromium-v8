@@ -5,6 +5,7 @@
 #include "src/api/api.h"
 
 #include <algorithm>  // For min
+#include <array>
 #include <cinttypes>
 #include <cmath>      // For isnan.
 #include <cstdio>
@@ -14349,12 +14350,12 @@ recordreplay::AutoAssertMaybeEventsDisallowed::AutoAssertMaybeEventsDisallowed(
   if (!HasAsserts()) {
     return;
   }
-  base::EmbeddedVector<char, 1024> buf;
+  std::array<char, 1024> buf;
   va_list arguments;
   va_start(arguments, format);
   base::VSNPrintF(buf, format, arguments);
   va_end(arguments);
-  msg_ = std::string(buf.begin());
+  msg_ = std::string(buf.data());
 
   if (!AreEventsDisallowed("AutoAssertMaybeEventsDisallowed")) {
     recordreplay::Assert("%s", msg_.c_str());
