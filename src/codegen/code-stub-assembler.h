@@ -3096,6 +3096,11 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
         ExternalReference::address_of_builtin_subclassing_flag());
   }
 
+  TNode<BoolT> IsRecordingOrReplaying() {
+    return LoadRuntimeFlag(
+        ExternalReference::record_replay_is_recording_or_replaying());
+  }
+
   TNode<BoolT> HasJsPr3883Flag() {
     return LoadRuntimeFlag(ExternalReference::address_of_js_pr_3883_flag());
   }

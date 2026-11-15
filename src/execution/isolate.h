@@ -1431,6 +1431,9 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
 
   THREAD_LOCAL_TOP_ADDRESS(uint8_t, is_on_central_stack_flag)
 
+  THREAD_LOCAL_TOP_ACCESSOR(int, replay_js_frame_depth)
+  THREAD_LOCAL_TOP_ADDRESS(int, replay_js_frame_depth)
+
   MaterializedObjectStore* materialized_object_store() const {
     return materialized_object_store_;
   }
@@ -2851,6 +2854,11 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   // vs. the isolate's thread removing and running them.
   int record_replay_api_interrupts_ordered_lock_id_ = 0;
 
+  // Set while RecordReplayInvokeApiInterruptCallbacksAtProgress runs
+  // callbacks, with the topmost JavaScript frame's fp when it started.
+  bool record_replay_invoking_api_interrupts_ = false;
+  Address record_replay_api_interrupts_js_fp_ = kNullAddress;
+
   std::unique_ptr<replayio::ReplayIsolateData> replay_data_;
 
 #define GLOBAL_BACKING_STORE(type, name, initialvalue) type name##_;
@@ -2972,6 +2980,7 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
 
   base::Mutex managed_ptr_destructors_mutex_;
   ManagedPtrDestructor* managed_ptr_destructors_head_ = nullptr;
+  size_t managed_ptr_destructors_count_ = 0;
   // This is only maintained by the shared-space isolate, otherwise it is
   // always null.
   ManagedPtrDestructor* shared_managed_ptr_destructors_head_ = nullptr;

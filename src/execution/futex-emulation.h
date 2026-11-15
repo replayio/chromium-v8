@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include "include/v8-persistent-handle.h"
+#include "include/v8.h"
 #include "src/base/atomicops.h"
 #include "src/base/macros.h"
 #include "src/base/platform/condition-variable.h"
@@ -123,6 +124,10 @@ class FutexWaitListNode {
     // The task ID of the timeout task.
     CancelableTaskManager::Id timeout_task_id =
         CancelableTaskManager::kInvalidTaskId;
+
+    // While recording or replaying, the id of the task that resolves this
+    // async waiter's promise once it is notified.
+    uint64_t record_replay_resolve_id = 0;
 
     // True if the node is ready to be deleted (has to happen on the main
     // thread).
@@ -273,6 +278,11 @@ class FutexEmulation : public AllStatic {
   // Called before |isolate| dies. Removes async waiters owned by |isolate|.
   static void IsolateDeinit(Isolate* isolate);
 
+  // Creates the ordered lock that orders notifies against waiters entering and
+  // leaving the wait list and going away with their isolate, while recording
+  // or replaying.
+  static void RecordReplayInitialize();
+
   // Return the number of threads or async waiters waiting on |addr|. Should
   // only be used for testing.
   static int NumWaitersForTesting(Tagged<JSArrayBuffer> array_buffer,
@@ -306,21 +316,33 @@ class FutexEmulation : public AllStatic {
                                   size_t addr, T value, bool use_timeout,
                                   int64_t rel_timeout_ns, CallType call_type);
 
+  // |record_replay_ordered_lock| is the caller's hold on the FutexEmulation
+  // ordered lock while recording or replaying, taken before the caller's
+  // replayio::AutoDisallowEvents scope; null for waits that aren't ordered.
   template <typename WaitList, typename T>
   static DirectHandle<Object> WaitSyncImpl(
       Isolate* isolate, WaitList* wait_list, FutexWaitListNode* node,
       NoGarbageCollectionMutexGuard& lock_guard, bool use_timeout,
       base::TimeTicks timeout_time, T value, T loaded_value,
-      std::optional<void*> wait_location);
+      std::optional<void*> wait_location,
+      std::optional<recordreplay::AutoOrderedLock>* record_replay_ordered_lock =
+          nullptr);
 
   // Resolve the Promises of the async waiters which belong to |isolate|.
-  static void ResolveAsyncWaiterPromises(Isolate* isolate);
+  // While recording or replaying, only those given record_replay_resolve_id.
+  static void ResolveAsyncWaiterPromises(Isolate* isolate,
+                                         uint64_t record_replay_resolve_id = 0);
 
   static void ResolveAsyncWaiterPromise(FutexWaitListNode* node);
 
   static void HandleAsyncWaiterTimeout(FutexWaitListNode* node);
 
-  static void NotifyAsyncWaiter(FutexWaitListNode* node);
+  // While recording or replaying, the tasks to post once events are allowed
+  // again.
+  class RecordReplayTasksToPost;
+
+  static void NotifyAsyncWaiter(FutexWaitListNode* node,
+                                RecordReplayTasksToPost* record_replay_tasks);
 
   // Remove the node's Promise from the NativeContext's Promise set.
   static void CleanupAsyncWaiterPromise(FutexWaitListNode* node);

@@ -6,9 +6,12 @@
 
 #include <memory>
 #include <optional>
+#include <string>
+#include <unordered_map>
 
 #include "src/api/api-inl.h"
 #include "src/base/platform/mutex.h"
+#include "src/base/replayio.h"
 #include "src/base/strong-alias.h"
 #include "src/builtins/builtins.h"
 #include "src/codegen/compilation-cache.h"
@@ -25,6 +28,7 @@
 #include "src/execution/v8threads.h"
 #include "src/flags/flags.h"
 #include "src/handles/global-handles-inl.h"
+#include "src/heap/combined-heap.h"
 #include "src/heap/heap-inl.h"  // For NextDebuggingId.
 #include "src/init/bootstrapper.h"
 #include "src/inspector/v8-debugger-agent-impl.h"
@@ -1843,6 +1847,11 @@ class DiscardBaselineCodeVisitor : public ThreadVisitor {
 void Debug::DiscardBaselineCode(Tagged<SharedFunctionInfo> shared) {
   RCS_SCOPE(isolate_, RuntimeCallCounterId::kDebugger);
   DCHECK(shared->HasBaselineCode());
+  // Whether a function has baseline code when this runs (e.g. when a
+  // breakpoint is set) can differ between recording and replaying, and the
+  // heap walk below enters a safepoint, which reads the clock. Like the GC,
+  // the walk runs with events disallowed.
+  replayio::AutoDisallowEvents disallow("Debug::DiscardBaselineCode");
   if (v8_flags.trace_baseline) {
     PrintF("[Sparkplug] discarding baseline code for ");
     ShortPrint(shared);
@@ -2932,6 +2941,19 @@ void Debug::ProcessCompileEvent(bool has_compile_error, DirectHandle<Script> scr
   }
 }
 
+// Registers a top-level script as soon as its main-thread compile finishes.
+// ProcessCompileEvent only sees it once its function is instantiated, which
+// for a module waits for its whole import graph and never happens when that
+// graph fails to load.
+void RecordReplayRegisterCompiledScript(
+    Isolate* isolate, MaybeDirectHandle<SharedFunctionInfo> maybe_function_info) {
+  DirectHandle<SharedFunctionInfo> function_info;
+  if (maybe_function_info.ToHandle(&function_info) &&
+      recordreplay::IsRecordingOrReplaying("register-scripts") && IsMainThread()) {
+    RecordReplayRegisterScript(handle(Cast<Script>(function_info->script()), isolate));
+  }
+}
+
 int Debug::CurrentFrameCount() {
   DebuggableStackFrameIterator it(isolate_);
   if (break_frame_id() != StackFrameId::NO_ID) {
@@ -3735,6 +3757,7 @@ static void ForEachInstrumentationOp(Isolate* isolate, Handle<Script> script,
                                      std::function<void(Handle<SharedFunctionInfo>,
                                                         int)> aCallback) {
   // Based on Debug::GetPossibleBreakpoints.
+  bool tried_top_level_compile = false;
   while (true) {
     HandleScope scope(isolate);
     std::vector<Handle<SharedFunctionInfo>> candidates;
@@ -3745,6 +3768,21 @@ static void ForEachInstrumentationOp(Isolate* isolate, Handle<Script> script,
       if (!info->IsSubjectToDebugging()) continue;
       if (!info->is_compiled() && !info->allows_lazy_compilation()) continue;
       candidates.push_back(i::handle(info, isolate));
+    }
+
+    // The GC collects the top-level function once nothing references it, and
+    // with it the functions only its bytecode referenced. Recompiling it
+    // recreates them, as Debug::FindSharedFunctionInfosIntersectingRange does.
+    if (!tried_top_level_compile && script->infos()->ulength().value() > 0) {
+      Tagged<MaybeObject> top_level =
+          script->infos()->get(kFunctionLiteralIdTopLevel);
+      Tagged<HeapObject> heap_object;
+      if (!top_level.GetHeapObject(&heap_object) || IsUndefined(heap_object)) {
+        tried_top_level_compile = true;
+        if (CompileTopLevel(isolate, script)) continue;
+        recordreplay::Warning("PossibleBreakpointsTopLevelCompileFailed",
+                              {{"scriptId", script->id()}});
+      }
     }
 
     // Compile any uncompiled functions found in the script.
@@ -4294,15 +4332,21 @@ extern void RecordReplayAddInterestingSource(const char* url);
 // Return whether a script is an uninteresting internal URL, but which still needs
 // to be registered with the recorder so that breakpoints can be created.
 bool RecordReplayIsInternalScriptURL(const char* url) {
-  return !strcmp(url, "record-replay-react-devtools") ||
-         !strcmp(url, "record-replay-internal") ||
+  return !strncmp(url, "record-replay-", 14) ||
          !strncmp(url, "extensions::", 12);
 }
 
-extern bool RecordReplayHasDefaultContext();
 
 typedef std::unordered_set<int> ScriptIdSet;
 static ScriptIdSet* gRegisteredScripts;
+
+// Whether a compile emits record/replay instrumentation: its flags say so,
+// which compiles take from the script they compile into, as decided once when
+// the script was created (ParseInfo::CreateScript).
+bool RecordReplayShouldEmitOpcodes(bool record_replay_ignore) {
+  return recordreplay::IsRecordingOrReplaying("emit-opcodes") &&
+         !record_replay_ignore;
+}
 
 bool RecordReplayHasRegisteredScript(Tagged<Script> script) {
   return IsMainThread() &&
@@ -4310,11 +4354,10 @@ bool RecordReplayHasRegisteredScript(Tagged<Script> script) {
     gRegisteredScripts->find(script->id()) != gRegisteredScripts->end();
 }
 
+// Whether we are divergently calling into user JS without having paused first.
 bool RecordReplayIsDivergentUserJSWithoutPause(
     Tagged<SharedFunctionInfo> shared) {
-  return recordreplay::AreEventsDisallowed() &&
-         !recordreplay::HasDivergedFromRecording() &&
-         IsScript(shared->script()) &&
+  return replayio::MustNotRunUserJS() && IsScript(shared->script()) &&
          RecordReplayHasRegisteredScript(
              Cast<Script>(shared->script()));
 }
@@ -4338,49 +4381,27 @@ struct AutoMarkReplayCode {
 
 } // anonymous namespace
 
-static void RecordReplayRegisterScript(Handle<Script> script) {
-  CHECK(IsMainThread());
-
-  if (!gRecordReplayScripts) {
-    gRecordReplayScripts = new ScriptIdMap();
+static std::string RecordReplayScriptURL(Tagged<Script> script) {
+  if (IsUndefined(script->name())) {
+    return "";
   }
-  auto iter = gRecordReplayScripts->find(script->id());
-  if (iter != gRecordReplayScripts->end()) {
-    // Ignore duplicate registers.
+  std::unique_ptr<char[]> name = Cast<String>(script->name())->ToCString();
+  return name.get();
+}
+
+// Tells the recorder and the new script handlers about a registered script.
+static void RecordReplayAnnounceScript(Isolate* isolate, Handle<Script> script,
+                                       const std::string& url) {
+  // Scripts are registered where they are compiled, which only hands V8 their
+  // source with events allowed; announcing would run JS and record events. A
+  // script skipped here stays registered but its source stays unknown.
+  if (recordreplay::AreEventsDisallowed()) {
+    recordreplay::Warning("AnnounceScriptWithEventsDisallowed",
+                          {{"scriptId", script->id()}, {"url", url}});
     return;
   }
-
-  Isolate* isolate = Isolate::Current();
-
-  (*gRecordReplayScripts)[script->id()] =
-    Eternal<Value>((v8::Isolate*)isolate, v8::Utils::ToLocal(script));
-
-  if (!RecordReplayHasDefaultContext()) {
-    return;
-  }
-
   Handle<String> idStr = GetProtocolSourceId(isolate, script);
   std::unique_ptr<char[]> id = Cast<String>(*idStr)->ToCString();
-
-  if (script->type() == Script::Type::kWasm) {
-    return;
-  }
-
-  if (recordreplay::AreEventsDisallowed()) {
-    return;
-  }
-
-  std::string url;
-  if (!IsUndefined(script->name(), isolate)) {
-    std::unique_ptr<char[]> name = Cast<String>(script->name())->ToCString();
-    url = name.get();
-  }
-
-  if (!strcmp(url.c_str(), "record-replay-internal")) {
-    // [TT-1390] Hackfix to not register the sourcemap handling script.
-    // We will have a better fix in the upcoming patch for TT-1112.
-    return;
-  }
 
   if (!RecordReplayIsInternalScriptURL(url.c_str())) {
     RecordReplayAddInterestingSource(url.c_str());
@@ -4402,11 +4423,6 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
 
   recordreplay::Diagnostic("OnNewSource %s %s", id.get(), kind);
 
-  if (!gRegisteredScripts) {
-    gRegisteredScripts = new ScriptIdSet;
-  }
-  gRegisteredScripts->insert(script->id());
-
   if (gNewScriptHandlers) {
     for (auto entry : *gNewScriptHandlers) {
       auto handlerEternalValue = entry.first;
@@ -4415,7 +4431,7 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
       AutoMarkReplayCode amrc;
       std::optional<replayio::AutoDisallowEvents> disallow;
       if (disallowEvents) {
-        disallow.emplace("RecordReplayRegisterScript");
+        disallow.emplace("RecordReplayRegisterScript", (v8::Isolate*)isolate);
       }
 
       Local<v8::Value> handlerValue = handlerEternalValue->Get((v8::Isolate*)isolate);
@@ -4438,6 +4454,114 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
   RecordReplayOnNewSource(isolate, id.get(), kind, url.length() ? url.c_str() : nullptr);
 }
 
+extern bool gRecordReplayHasCheckpoint;
+
+// Ids of the scripts registered before the first checkpoint, in order. The
+// recorder only takes sources from the first checkpoint on.
+static std::vector<int>* gRecordReplayScriptsBeforeFirstCheckpoint;
+
+static void RecordReplayRegisterScript(Handle<Script> script) {
+  CHECK(IsMainThread());
+
+  if (!gRecordReplayScripts) {
+    gRecordReplayScripts = new ScriptIdMap();
+  }
+  auto iter = gRecordReplayScripts->find(script->id());
+  if (iter != gRecordReplayScripts->end()) {
+    // Ignore duplicate registers.
+    return;
+  }
+
+  Isolate* isolate = Isolate::Current();
+
+  (*gRecordReplayScripts)[script->id()] =
+    Eternal<Value>((v8::Isolate*)isolate, v8::Utils::ToLocal(script));
+
+  std::string url = RecordReplayScriptURL(*script);
+
+  // Registered scripts (Pause / CountStackFrames) are exactly the instrumented
+  // ones, so that every frame instrumentation pushes is counted and none other.
+  // Replay's own scripts are compiled in replay code or with events disallowed,
+  // so they aren't instrumented.
+  if (!script->record_replay_instrumented()) {
+    return;
+  }
+
+  if (!gRegisteredScripts) {
+    gRegisteredScripts = new ScriptIdSet;
+  }
+  gRegisteredScripts->insert(script->id());
+
+  if (!gRecordReplayHasCheckpoint) {
+    if (!gRecordReplayScriptsBeforeFirstCheckpoint) {
+      gRecordReplayScriptsBeforeFirstCheckpoint = new std::vector<int>;
+    }
+    gRecordReplayScriptsBeforeFirstCheckpoint->push_back(script->id());
+    return;
+  }
+
+  RecordReplayAnnounceScript(isolate, script, url);
+}
+
+void RecordReplayRegisterScriptsBeforeFirstCheckpoint() {
+  if (!gRecordReplayScriptsBeforeFirstCheckpoint) {
+    return;
+  }
+  std::unique_ptr<std::vector<int>> script_ids(
+      gRecordReplayScriptsBeforeFirstCheckpoint);
+  gRecordReplayScriptsBeforeFirstCheckpoint = nullptr;
+
+  Isolate* isolate = Isolate::Current();
+  HandleScope scope(isolate);
+  // The first checkpoint can be taken between tasks, with no context entered:
+  // when the first replay window isn't a root frame (e.g. an iframe of the
+  // initial about:blank), the root frame's context comes later.
+  std::optional<SaveAndSwitchContext> ssc;
+  EnsureIsolateContext(isolate, ssc);
+  for (int script_id : *script_ids) {
+    Handle<Script> script = GetScript(isolate, script_id);
+    RecordReplayAnnounceScript(isolate, script, RecordReplayScriptURL(*script));
+  }
+}
+
+// Embedder callback for JS of an instrumented script about to run before the
+// first checkpoint, with the context of the function about to run. The embedder can start the
+// recording there, before that JS runs (see RecordReplayBeforeInvoke).
+typedef void (*RecordReplayInstrumentedScriptCallback)(
+    v8::Isolate* isolate, v8::Local<v8::Context> context);
+static RecordReplayInstrumentedScriptCallback gRecordReplayInstrumentedScriptBeforeFirstCheckpoint;
+
+extern "C" void V8RecordReplaySetInstrumentedScriptBeforeFirstCheckpointCallback(
+    RecordReplayInstrumentedScriptCallback callback) {
+  gRecordReplayInstrumentedScriptBeforeFirstCheckpoint = callback;
+}
+
+// Functions of instrumented (registered) scripts, called outside Replay's own
+// code with events allowed: the conditions under which a compile is
+// instrumented, so the embedder never sees calls made by Replay's own JS.
+void RecordReplayBeforeInvoke(Isolate* isolate,
+                              DirectHandle<JSFunction> function) {
+  if (gRecordReplayHasCheckpoint ||
+      !gRecordReplayInstrumentedScriptBeforeFirstCheckpoint || !IsMainThread() ||
+      recordreplay::AreEventsDisallowed() ||
+      recordreplay::IsInReplayCode("RecordReplayBeforeInvoke")) {
+    return;
+  }
+  Tagged<Object> script_object = function->shared()->script();
+  if (!IsScript(script_object)) {
+    return;
+  }
+  // An empty script counts too: entering its top-level function advances the
+  // progress counter.
+  if (!RecordReplayHasRegisteredScript(Cast<Script>(script_object))) {
+    return;
+  }
+  HandleScope scope(isolate);
+  DirectHandle<Context> context(function->native_context(), isolate);
+  gRecordReplayInstrumentedScriptBeforeFirstCheckpoint(
+      reinterpret_cast<v8::Isolate*>(isolate), Utils::ToLocal(context));
+}
+
 // Command callbacks which we handle directly.
 struct InternalCommandCallback {
   const char* mCommand;
@@ -4458,33 +4582,90 @@ static InternalCommandCallback gInternalCommandCallbacks[] = {
 static Eternal<Value>* gCommandCallback;
 
 extern "C" void V8RecordReplayGetDefaultContext(v8::Isolate* isolate, v8::Local<v8::Context>* cx);
+std::string RecordReplayContextAddressToken(v8::Isolate* isolate,
+                                            uintptr_t ctxAddr, bool includeId);
 extern uint64_t* gProgressCounter;
 extern int gRecordReplayCheckProgress;
-static int gPauseContextGroupId = 0;
+int gPauseContextGroupId = 0;
 
 // Make sure that the isolate has a context by switching to the default
 // context if necessary.
 static void EnsureIsolateContext(Isolate* isolate, std::optional<SaveAndSwitchContext>& ssc) {
-  if (isolate->context().is_null()) {
+  Tagged<Context> ctx = isolate->context();
+  v8::Isolate* v8_isolate = reinterpret_cast<v8::Isolate*>(isolate);
+  bool had_slot = !ctx.is_null();
+
+  if (!had_slot) {
     Local<v8::Context> v8_context;
-    V8RecordReplayGetDefaultContext((v8::Isolate*)isolate, &v8_context);
+    V8RecordReplayGetDefaultContext(v8_isolate, &v8_context);
     Handle<Context> context = Utils::OpenHandle(*v8_context);
     ssc.emplace(isolate, *context);
+    ctx = isolate->context();
   }
+
+  if (had_slot) {
+    // [CRASH-0020] Isoluate::context() sometimes gets corrupted and this will trigger a crash.
+    CHECK(ctx.IsHeapObject());
+    CHECK(IsValidHeapObject(isolate->heap(), Cast<HeapObject>(ctx)));
+    CHECK(IsContext(ctx));
+    Tagged<NativeContext> nc = isolate->raw_native_context();
+    if (ctx != nc) {
+      ssc.emplace(isolate, nc);
+      ctx = nc;
+    }
+  }
+
+  CHECK(isolate);
+  CHECK(isolate->heap());
+  CHECK(!ctx.is_null());
+  CHECK(ctx.IsHeapObject());
+  CHECK(IsValidHeapObject(isolate->heap(), Cast<HeapObject>(ctx)));
+  CHECK(IsContext(ctx));
 }
 
+namespace {
+
+// Bypass Trusted Types for runtime-owned command evals.
+// Same approach as V8 Inspector InjectedScript::Scope::allowCodeGenerationFromStrings:
+// AllowCodeGenerationFromStrings(true) short-circuits before the TT callback.
+// Must target native_context: CompileGlobalEval validates against that, and
+// allow_code_gen_from_strings accessors DCHECK(IsNativeContext()).
+struct AutoAllowCodeGenerationFromStrings {
+  Isolate* isolate_;
+  Handle<NativeContext> context_;
+  bool need_restore_;
+
+  explicit AutoAllowCodeGenerationFromStrings(Isolate* isolate)
+      : isolate_(isolate),
+        context_(handle(isolate->context()->native_context(), isolate)),
+        need_restore_(IsFalse(context_->allow_code_gen_from_strings())) {
+    if (need_restore_) {
+      context_->set_allow_code_gen_from_strings(
+          ReadOnlyRoots(isolate).true_value());
+    }
+  }
+
+  ~AutoAllowCodeGenerationFromStrings() {
+    if (need_restore_) {
+      context_->set_allow_code_gen_from_strings(
+          ReadOnlyRoots(isolate_).false_value());
+    }
+  }
+};
+
+}  // namespace
 
 char* CommandCallback(const char* command, const char* params) {
   CHECK(IsMainThread());
   AutoMarkReplayCode amrc;
-  uint64_t startProgressCounter = *gProgressCounter;
-  replayio::AutoDisallowEvents disallow("CommandCallback");
 
   Isolate* isolate = Isolate::Current();
+  replayio::AutoDisallowEvents disallow("CommandCallback", (v8::Isolate*)isolate);
   std::optional<SaveAndSwitchContext> ssc;
   EnsureIsolateContext(isolate, ssc);
 
   HandleScope scope(isolate);
+  AutoAllowCodeGenerationFromStrings allow_codegen(isolate);
 
   if (recordreplay::HasDivergedFromRecording()) {
     v8_inspector::V8Inspector* inspectorRaw = v8::debug::GetInspector((v8::Isolate*)isolate);
@@ -4558,15 +4739,6 @@ char* CommandCallback(const char* command, const char* params) {
           .ToHandleChecked();
   std::unique_ptr<char[]> rvCStr = Cast<String>(*rvStr)->ToCString();
 
-  if (startProgressCounter < *gProgressCounter && !recordreplay::HasDivergedFromRecording()) {
-    // [RUN-1988] Our command handler incremented the PC by accidentally calling
-    // into instrumented user code.
-    // Note that a warning has already been generated due to
-    // gRecordReplayCheckProgress being set.
-    // → Let's reset the PC.
-    *gProgressCounter = startProgressCounter;
-  }
-
   return strdup(rvCStr.get());
 }
 
@@ -4575,13 +4747,14 @@ static Eternal<Value>* gClearPauseDataCallback;
 void ClearPauseDataCallback() {
   CHECK(IsMainThread());
   AutoMarkReplayCode amrc;
-  replayio::AutoDisallowEvents disallow("ClearPauseDataCallback");
 
   if (!gClearPauseDataCallback) {
     return;
   }
 
   Isolate* isolate = Isolate::Current();
+  replayio::AutoDisallowEvents disallow("ClearPauseDataCallback",
+                                        (v8::Isolate*)isolate);
   std::optional<SaveAndSwitchContext> ssc;
   EnsureIsolateContext(isolate, ssc);
 

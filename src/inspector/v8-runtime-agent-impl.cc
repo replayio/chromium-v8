@@ -240,9 +240,8 @@ Response ensureContext(V8InspectorImpl* inspector, int contextGroupId,
         inspector->client()->ensureDefaultContextInGroup(contextGroupId);
     if (defaultContext.IsEmpty()) {
       if (v8::recordreplay::IsInReplayCode("InjectedScript::bindRemoteObjectIfNeeded")) {
-        v8::recordreplay::Warning(
-          "[RUN-2486-2498] Cannot find default execution context %d",
-          contextGroupId);
+        v8::recordreplay::Warning("InspectorDefaultContextNotFound",
+                                  {{"contextGroupId", contextGroupId}});
       }
       return Response::ServerError("Cannot find default execution context");
     }
@@ -358,10 +357,7 @@ V8RuntimeAgentImpl::V8RuntimeAgentImpl(
       m_inspector(session->inspector()),
       m_debuggerBarrier(debuggerBarrier),
       m_enabled(false),
-      m_replay_owned(
-          (!v8::recordreplay::FeatureEnabled("replay-only-command-handling") ||
-           v8::recordreplay::IsReplaying()) &&
-          v8::recordreplay::AreEventsDisallowed()) {}
+      m_replay_owned(session->replayOwned()) {}
 
 V8RuntimeAgentImpl::~V8RuntimeAgentImpl() = default;
 
@@ -1006,6 +1002,11 @@ void V8RuntimeAgentImpl::addBinding(InspectedContext* context,
   }
   v8::HandleScope handles(m_inspector->isolate());
   v8::Local<v8::Context> localContext = context->context();
+  if (localContext.IsEmpty()) {
+    v8::recordreplay::Warning("InspectorAddBindingEmptyContext",
+                              {{"contextId", context->contextId()}});
+    return;
+  }
   v8::Local<v8::Object> global = localContext->Global();
   v8::Local<v8::String> v8Name = toV8String(m_inspector->isolate(), name);
   v8::Local<v8::Value> functionValue;
@@ -1085,8 +1086,6 @@ Response V8RuntimeAgentImpl::getExceptionDetails(
 void V8RuntimeAgentImpl::bindingCalled(const String16& name,
                                        const String16& payload,
                                        int executionContextId) {
-  v8::replayio::AutoMaybeDisallowEvents disallow(
-      m_replay_owned, "V8RuntimeAgentImpl::bindingCalled");
 
   if (!m_activeBindings.count(name)) return;
   m_frontend.bindingCalled(name, payload, executionContextId);
@@ -1123,13 +1122,13 @@ void V8RuntimeAgentImpl::addBindings(InspectedContext* context) {
 }
 
 void V8RuntimeAgentImpl::restore() {
-  v8::replayio::AutoMaybeDisallowEvents disallow(m_replay_owned,
-                                               "V8RuntimeAgentImpl::restore");
+  v8::replayio::AutoMaybeMarkReplayCode mark(m_replay_owned);
+  v8::replayio::AutoMaybeDisallowEvents disallow(
+      m_replay_owned, m_inspector->isolate(), "V8RuntimeAgentImpl::restore");
 
-  if (!m_state->booleanProperty(V8RuntimeAgentImplState::runtimeEnabled,
-                                false)) {
-    return;
-  }
+  int runtimeEnabled = m_state->booleanProperty(
+      V8RuntimeAgentImplState::runtimeEnabled, false);
+  if (!runtimeEnabled) return;
   m_frontend.executionContextsCleared();
   enable();
   if (m_state->booleanProperty(
@@ -1159,9 +1158,9 @@ Response V8RuntimeAgentImpl::enable() {
   m_state->setBoolean(V8RuntimeAgentImplState::runtimeEnabled, true);
   m_inspector->debugger()->setMaxCallStackSizeToCapture(
       this, V8StackTraceImpl::kDefaultMaxCallStackSizeToCapture);
-  m_session->reportAllContexts(this);
   V8ConsoleMessageStorage* storage =
       m_inspector->ensureConsoleMessageStorage(m_session->contextGroupId());
+  m_session->reportAllContexts(this);
   // The message queue can be cleared by a getter during message formatting.
   // Make a copy of the message to avoid a UAF.
   // Also, the storage itself can be destroyed and recreated, so re-fetch the
@@ -1205,8 +1204,6 @@ Response V8RuntimeAgentImpl::disable() {
 }
 
 void V8RuntimeAgentImpl::reset() {
-  v8::replayio::AutoMaybeDisallowEvents disallow(m_replay_owned,
-                                               "V8RuntimeAgentImpl::reset");
 
   m_compiledScripts.clear();
   if (m_enabled) {
@@ -1221,8 +1218,6 @@ void V8RuntimeAgentImpl::reset() {
 
 void V8RuntimeAgentImpl::reportExecutionContextCreated(
     InspectedContext* context) {
-  v8::replayio::AutoMaybeDisallowEvents disallow(
-      m_replay_owned, "V8RuntimeAgentImpl::reportExecutionContextCreated");
 
   if (!m_enabled) return;
   context->setReported(m_session->sessionId(), true);
@@ -1246,8 +1241,6 @@ void V8RuntimeAgentImpl::reportExecutionContextCreated(
 
 void V8RuntimeAgentImpl::reportExecutionContextDestroyed(
     InspectedContext* context) {
-  v8::replayio::AutoMaybeDisallowEvents disallow(
-      m_replay_owned, "V8RuntimeAgentImpl::reportExecutionContextDestroyed");
 
   if (m_enabled && context->isReported(m_session->sessionId())) {
     context->setReported(m_session->sessionId(), false);
@@ -1259,8 +1252,6 @@ void V8RuntimeAgentImpl::reportExecutionContextDestroyed(
 void V8RuntimeAgentImpl::inspect(
     std::unique_ptr<protocol::Runtime::RemoteObject> objectToInspect,
     std::unique_ptr<protocol::DictionaryValue> hints, int executionContextId) {
-  v8::replayio::AutoMaybeDisallowEvents disallow(m_replay_owned,
-                                               "V8RuntimeAgentImpl::inspect");
 
   if (m_enabled) {
     m_frontend.inspectRequested(std::move(objectToInspect), std::move(hints),
@@ -1269,13 +1260,11 @@ void V8RuntimeAgentImpl::inspect(
 }
 
 void V8RuntimeAgentImpl::messageAdded(V8ConsoleMessage* message) {
-  if (m_enabled) reportMessage(message, true);
+  if (m_enabled) reportMessage(message, /*generatePreview=*/!m_replay_owned);
 }
 
 bool V8RuntimeAgentImpl::reportMessage(V8ConsoleMessage* message,
                                        bool generatePreview) {
-  v8::replayio::AutoMaybeDisallowEvents disallow(
-      m_replay_owned, "V8RuntimeAgentImpl::reportMessage");
 
   message->reportToFrontend(&m_frontend, m_session, generatePreview);
   m_frontend.flush();

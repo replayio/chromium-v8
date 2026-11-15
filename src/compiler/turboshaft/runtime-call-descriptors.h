@@ -220,6 +220,20 @@ struct runtime : CallDescriptorBuilder {
     static constexpr Operator::Properties kProperties = Operator::kNoDeopt;
   };
 
+  // Replay: called when the inline progress counter reaches the target
+  // progress. What runs there (pausing, breakpoints, instrumentation changes)
+  // can discard the calling code, which then lazily deoptimizes.
+  struct RecordReplayTargetProgressReached
+      : public Descriptor<RecordReplayTargetProgressReached> {
+    static constexpr auto kFunction =
+        Runtime::kRecordReplayTargetProgressReached;
+    using Arguments = NoArguments;
+    using returns_t = V<Object>;
+
+    static constexpr bool kCanTriggerLazyDeopt = true;
+    static constexpr Operator::Properties kProperties = Operator::kNoThrow;
+  };
+
   struct TerminateExecution : public Descriptor<TerminateExecution> {
     static constexpr auto kFunction = Runtime::kTerminateExecution;
     using Arguments = NoArguments;

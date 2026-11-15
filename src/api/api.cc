@@ -5,9 +5,12 @@
 #include "src/api/api.h"
 
 #include <algorithm>  // For min
+#include <cinttypes>
 #include <cmath>      // For isnan.
+#include <cstdio>
 #include <limits>
 #include <optional>
+#include <set>
 #include <span>
 #include <sstream>
 #include <string>
@@ -65,6 +68,7 @@
 #include "src/execution/embedder-state.h"
 #include "src/execution/execution.h"
 #include "src/execution/frames-inl.h"
+#include "src/execution/futex-emulation.h"
 #include "src/execution/isolate-inl.h"
 #include "src/execution/messages.h"
 #include "src/execution/microtask-queue.h"
@@ -2710,6 +2714,23 @@ namespace internal {
 // If we are compiling a script while replaying that replaces another one,
 // the ID of the script being replaced. Main thread only.
 int gReplaceSourceContentsScriptId;
+// The decisions made for the script whose contents are being replaced: the
+// replacing script has its id, so it gets its decisions too.
+bool gReplaceSourceContentsInstrumented;
+bool gReplaceSourceContentsAssertValues;
+static std::set<int>* gScriptsWithReplacedContents;
+
+void MarkRecordReplayReplacedScript(int script_id) {
+  if (!gScriptsWithReplacedContents) {
+    gScriptsWithReplacedContents = new std::set<int>();
+  }
+  gScriptsWithReplacedContents->insert(script_id);
+}
+
+bool IsRecordReplayReplacedScript(int script_id) {
+  return gScriptsWithReplacedContents &&
+         gScriptsWithReplacedContents->count(script_id);
+}
 
 MaybeHandle<String>
 ReplayingReplaceScriptContents(Isolate* isolate, DirectHandle<String> source) {
@@ -2726,6 +2747,9 @@ ReplayingReplaceScriptContents(Isolate* isolate, DirectHandle<String> source) {
   return isolate->factory()->NewStringFromUtf8(base::CStrVector(new_contents)).ToHandleChecked();
 }
 
+extern void RecordReplayRegisterCompiledScript(
+    Isolate* isolate, MaybeDirectHandle<SharedFunctionInfo> maybe_function_info);
+
 MaybeDirectHandle<SharedFunctionInfo>
 ReplayingMaybeReplaceScript(Isolate* isolate,
                             MaybeDirectHandle<SharedFunctionInfo> maybe_function_info,
@@ -2734,12 +2758,16 @@ ReplayingMaybeReplaceScript(Isolate* isolate,
   MaybeHandle<String> new_source = ReplayingReplaceScriptContents(isolate, source);
 
   if (new_source.is_null() || maybe_function_info.is_null()) {
+    RecordReplayRegisterCompiledScript(isolate, maybe_function_info);
     return maybe_function_info;
   }
 
   CHECK(!gReplaceSourceContentsScriptId);
-  gReplaceSourceContentsScriptId =
-      Cast<Script>(maybe_function_info.ToHandleChecked()->script())->id();
+  Tagged<Script> replaced_script =
+      Cast<Script>(maybe_function_info.ToHandleChecked()->script());
+  gReplaceSourceContentsScriptId = replaced_script->id();
+  gReplaceSourceContentsInstrumented = replaced_script->record_replay_instrumented();
+  gReplaceSourceContentsAssertValues = replaced_script->record_replay_assert_values();
 
   ScriptCompiler::CompilationDetails replay_compilation_details;
   maybe_function_info = Compiler::GetSharedFunctionInfoForScript(
@@ -2748,7 +2776,17 @@ ReplayingMaybeReplaceScript(Isolate* isolate,
       ScriptCompiler::kNoCacheNoReason,
       NOT_NATIVES_CODE, &replay_compilation_details);
 
+  // Only ignore source positions for scripts that successfully compiled from
+  // replacement contents. A failed compile should not weaken progress checks
+  // for the original script.
+  if (!maybe_function_info.is_null()) {
+    MarkRecordReplayReplacedScript(gReplaceSourceContentsScriptId);
+  }
+
   gReplaceSourceContentsScriptId = 0;
+  gReplaceSourceContentsInstrumented = false;
+  gReplaceSourceContentsAssertValues = false;
+  RecordReplayRegisterCompiledScript(isolate, maybe_function_info);
   return maybe_function_info;
 }
 
@@ -12498,7 +12536,11 @@ std::shared_ptr<WasmStreaming> WasmStreaming::Unpack(Isolate* v8_isolate,
 #define DLLEXPORT
 #endif
 
-static bool gRecordingOrReplaying;
+namespace internal {
+// Builtins read this through
+// ExternalReference::record_replay_is_recording_or_replaying.
+bool gRecordReplayIsRecordingOrReplaying;
+}  // namespace internal
 static bool gARMRecording;
 static bool gHasDisabledFeatures;
 static bool gAssertsDisabled;
@@ -12548,7 +12590,9 @@ typedef char* (CommandCallbackRaw)(const char* params);
         (const char* method, CommandCallbackRaw callback))                    \
   Macro(RecordReplayPrint, (const char* format, va_list args))                \
   Macro(RecordReplayDiagnostic, (const char* format, va_list args))           \
-  Macro(RecordReplayWarning, (const char* format, va_list args))              \
+  Macro(RecordReplayWarning,                                                  \
+        (const char* kind, const RecordReplayWarningField* fields,            \
+         size_t count))                                                       \
   Macro(RecordReplayTrace, (const char* format, va_list args))                \
   Macro(RecordReplayOnInstrument,                                             \
         (const char* kind, const char* function, int offset))                 \
@@ -12568,6 +12612,8 @@ typedef char* (CommandCallbackRaw)(const char* params);
   Macro(RecordReplayOrderedUnlock, (int lock))                                \
   Macro(RecordReplayInvalidateRecording, (const char* format, ...))           \
   Macro(RecordReplayNewCheckpoint, ())                                        \
+  Macro(RecordReplayNewCheckpointFlushed, ())                                 \
+  Macro(RecordReplaySetScriptAlive, (bool alive))                             \
   Macro(RecordReplayRegisterPointerWithName,                                  \
         (const char* name, const void* ptr))                                  \
   Macro(RecordReplayUnregisterPointer, (const void* ptr))                     \
@@ -12644,6 +12690,27 @@ namespace internal {
 
 bool gRecordReplayHasCheckpoint;
 
+extern void RecordReplayRegisterScriptsBeforeFirstCheckpoint();
+
+extern uint64_t* gProgressCounter;
+
+// The recording starts the progress counter from zero at the first checkpoint,
+// and nothing should advance it before: the embedder takes the first
+// checkpoint before any instrumented JS runs in a window it starts the
+// recording at (RecordReplayBeforeInvoke), and instrumented JS in other
+// windows (e.g. Chrome's error pages, if theirs is) is expected to run in
+// renderers that never take a checkpoint. The reset is defensive, for a
+// renderer that runs such JS and starts the recording later; it is safe, as
+// nothing before the first checkpoint is addressed by progress and recording
+// and replaying run the same code before it.
+void RecordReplayBeforeFirstCheckpoint() {
+  if (*gProgressCounter) {
+    recordreplay::Warning("ProgressBeforeFirstCheckpoint",
+                          {{"progress", *gProgressCounter}});
+  }
+  *gProgressCounter = 0;
+}
+
 void RecordReplayOnNewSource(Isolate* isolate, const char* id,
                              const char* kind, const char* url) {
   if (gRecordReplayHasCheckpoint) {
@@ -12674,7 +12741,7 @@ extern "C" void V8RecordReplayGetCurrentException(MaybeLocal<Value>* exception) 
 extern bool RecordReplayHasRegisteredScript(Tagged<Script> script);
 
 void RecordReplayOnExceptionUnwind(Isolate* isolate) {
-  CHECK(gRecordingOrReplaying);
+  CHECK(gRecordReplayIsRecordingOrReplaying);
   CHECK(IsMainThread());
   CHECK(!gCurrentException);
 
@@ -12765,14 +12832,14 @@ void RecordReplayOnTargetProgressReached() {
     // We should not have progress updates when events disallowed.
     if (!recordreplay::HasDivergedFromRecording()) {
       // TODO: [RUN-2235] Replace with GetCurrentLocationStringExtended.
-      std::ostringstream os;
-      os << "PC=" << *gProgressCounter;
+      std::ostringstream stack;
       Isolate* isolate = Isolate::Current();
       HandleScope scope(isolate);
-      os << " stack=";
-      isolate->PrintCurrentStackTrace(os);
+      isolate->PrintCurrentStackTrace(stack);
 
-      recordreplay::Warning("OnProgressReached %s", os.str().c_str());
+      recordreplay::Warning("TargetProgressReachedWithEventsDisallowed",
+                            {{"progress", *gProgressCounter},
+                             {"jsStack", stack.str()}});
     }
     return;
   }
@@ -12782,7 +12849,11 @@ void RecordReplayOnTargetProgressReached() {
 static void RecordReplayProgressInterruptCallback() {
   CHECK(IsMainThread());
   Isolate* isolate = Isolate::Current();
-  isolate->RecordReplayInvokeApiInterruptCallbacksAtProgress();
+  isolate->heap()->RecordReplayOnProgressInterrupt();
+  // The memory reducer triggers progress interrupts too.
+  if (recordreplay::IsRecordingOrReplaying("interrupts")) {
+    isolate->RecordReplayInvokeApiInterruptCallbacksAtProgress();
+  }
 }
 
 void RecordReplayInstrument(const char* kind, const char* function, int function_index) {
@@ -12801,7 +12872,6 @@ extern char* CommandCallback(const char* command, const char* params);
 extern void ClearPauseDataCallback();
 
 bool gRecordReplayAssertValues;
-const char* gRecordReplayAssertValuesPattern;
 
 bool gRecordReplayAssertProgress;
 bool gRecordReplayAssertTrackedObjects;
@@ -12809,6 +12879,10 @@ bool gRecordReplayAssertTrackedObjects;
 // Enable reporting the dependency graph while replaying.
 // This is on by default.
 bool gRecordReplayEnableDependencyGraph;
+
+// Use V8's GC as upstream does while recording/replaying.
+// This is on by default and controlled by the v8-flags-gc feature.
+bool gRecordReplayEnableGCFeatures;
 
 // Assert that dependency graph nodes / edges are created consistently.
 // This adds recording overhead and is off by default.
@@ -12900,6 +12974,9 @@ void RecordReplayAddHTMLParse(const char* url) {
   }
   gHasHTMLParse = true;
 
+  // Static pages have no scripts; HTML alone must keep the recording.
+  RecordReplayAddInterestingSource(url);
+
   void* str = gRecordReplayJSONCreateString(url);
 
   const char* property = "uri";
@@ -12921,6 +12998,10 @@ void RecordReplayOnMainThreadIsolateCreated(Isolate* isolate) {
   gMainThreadIsolate = isolate;
 }
 
+bool RecordReplayIsMainThreadIsolate(Isolate* isolate) {
+  return isolate == gMainThreadIsolate;
+}
+
 static Eternal<v8::Context>* gDefaultContext;
 
 extern "C" void V8RecordReplaySetDefaultContext(v8::Isolate* isolate, v8::Local<v8::Context> cx) {
@@ -12934,8 +13015,39 @@ extern "C" void V8RecordReplayGetDefaultContext(v8::Isolate* isolate, v8::Local<
   *cx = gDefaultContext->Get(isolate);
 }
 
-bool RecordReplayHasDefaultContext() {
-  return !!gDefaultContext;
+// Tagged pointer of the DefaultContext for `isolate`, or 0 if none. Deref-free:
+// survives a garbage current Context, so safe from command/teardown diagnostics.
+extern "C" uintptr_t V8RecordReplayGetDefaultContextAddress(v8::Isolate* isolate) {
+  if (!IsMainThread() || !gDefaultContext) return 0;
+  v8::HandleScope scope(isolate);
+  v8::Local<v8::Context> cx = gDefaultContext->Get(isolate);
+  return (*Utils::OpenDirectHandle(*cx)).ptr();
+}
+
+// [crash-0017] ContextAddress token: "iso=.. ctx=.."[, " id=.."].
+// includeId=false: address-only, no heap deref.
+// includeId=true: embeds debug_context_id (NativeContext-only; can fault).
+// Max token length on 64-bit: "iso="(4)+16+" ctx="(5)+16+" id="(4)+11+NUL < 64.
+std::string RecordReplayContextAddressToken(v8::Isolate* isolate,
+                                            uintptr_t ctxAddr,
+                                            bool includeId) {
+  char buf[64];
+  if (!includeId || ctxAddr == 0) {
+    snprintf(buf, sizeof(buf), "iso=%" PRIxPTR " ctx=%" PRIxPTR,
+             reinterpret_cast<uintptr_t>(isolate), ctxAddr);
+    return buf;
+  }
+  Tagged<Object> obj(static_cast<Address>(ctxAddr));
+  if (!IsContext(obj) || !IsNativeContext(Cast<Context>(obj))) {
+    snprintf(buf, sizeof(buf), "iso=%" PRIxPTR " ctx=%" PRIxPTR,
+             reinterpret_cast<uintptr_t>(isolate), ctxAddr);
+    return buf;
+  }
+  Tagged<Object> value = Cast<NativeContext>(obj)->debug_context_id();
+  int id = IsSmi(value) ? Smi::ToInt(value) : 0;
+  snprintf(buf, sizeof(buf), "iso=%" PRIxPTR " ctx=%" PRIxPTR " id=%d",
+           reinterpret_cast<uintptr_t>(isolate), ctxAddr, id);
+  return buf;
 }
 
 extern void RecordReplayInitInstrumentationState();
@@ -12944,14 +13056,10 @@ void RecordReplayDescribeAssertData(const char* text) {
   gRecordReplayDescribeAssertData(text);
 }
 
-bool RecordReplayAssertValues(const std::string& url) {
-  if (!gRecordReplayAssertValues) {
-    return false;
-  }
-  if (!gRecordReplayAssertValuesPattern) {
-    return true;
-  }
-  return url.length() && strstr(url.c_str(), gRecordReplayAssertValuesPattern);
+// Whether an instrumented script created now also asserts the values it loads
+// (RECORD_REPLAY_JS_ASSERTS).
+bool RecordReplayAssertValues() {
+  return gRecordReplayAssertValues;
 }
 
 } // namespace internal
@@ -12998,7 +13106,7 @@ static void RecordReplayInitializeDisabledFeatures() {
 }
 
 bool recordreplay::IsRecordingOrReplaying(const char* feature, const char* subfeature) {
-  return gRecordingOrReplaying && (!feature || FeatureEnabled(feature, subfeature));
+  return internal::gRecordReplayIsRecordingOrReplaying && (!feature || FeatureEnabled(feature, subfeature));
 }
 
 extern "C" DLLEXPORT bool V8IsRecordingOrReplaying(const char* feature, const char* subfeature) {
@@ -13099,19 +13207,17 @@ void recordreplay::CommandDiagnosticTrace(const char* format, ...) {
   }
 }
 
-void recordreplay::Warning(const char* format, ...) {
+void recordreplay::Warning(
+    const char* kind, std::initializer_list<RecordReplayWarningField> fields) {
   if (IsRecordingOrReplaying()) {
-    va_list args;
-    va_start(args, format);
-    gRecordReplayWarning(format, args);
-    va_end(args);
+    gRecordReplayWarning(kind, fields.begin(), fields.size());
   }
 }
 
-extern "C" DLLEXPORT void V8RecordReplayWarning(const char* format,
-                                                va_list args) {
+extern "C" DLLEXPORT void V8RecordReplayWarning(
+    const char* kind, const RecordReplayWarningField* fields, size_t count) {
   if (recordreplay::IsRecordingOrReplaying()) {
-    gRecordReplayWarning(format, args);
+    gRecordReplayWarning(kind, fields, count);
   }
 }
 
@@ -13358,13 +13464,46 @@ void recordreplay::NewCheckpoint() {
   // We can only create checkpoints if a context has been created. A context is
   // needed to process commands which we might get from the driver.
   if (IsRecordingOrReplaying() && IsMainThread() && internal::gDefaultContext) {
+    bool first = !internal::gRecordReplayHasCheckpoint;
+    if (first) {
+      internal::RecordReplayBeforeFirstCheckpoint();
+    }
     internal::gRecordReplayHasCheckpoint = true;
     gRecordReplayNewCheckpoint();
+    if (first) {
+      internal::RecordReplayRegisterScriptsBeforeFirstCheckpoint();
+    }
   }
 }
 
 extern "C" DLLEXPORT void V8RecordReplayNewCheckpoint() {
   recordreplay::NewCheckpoint();
+}
+
+void recordreplay::NewCheckpointFlushed() {
+  // We can only create checkpoints if a context has been created. A context is
+  // needed to process commands which we might get from the driver.
+  if (IsRecordingOrReplaying() && IsMainThread() && internal::gDefaultContext) {
+    bool first = !internal::gRecordReplayHasCheckpoint;
+    if (first) {
+      internal::RecordReplayBeforeFirstCheckpoint();
+    }
+    internal::gRecordReplayHasCheckpoint = true;
+    gRecordReplayNewCheckpointFlushed();
+    if (first) {
+      internal::RecordReplayRegisterScriptsBeforeFirstCheckpoint();
+    }
+  }
+}
+
+extern "C" DLLEXPORT void V8RecordReplayNewCheckpointFlushed() {
+  recordreplay::NewCheckpointFlushed();
+}
+
+extern "C" DLLEXPORT void V8RecordReplaySetScriptAlive(bool alive) {
+  if (recordreplay::IsRecordingOrReplaying()) {
+    gRecordReplaySetScriptAlive(alive);
+  }
 }
 
 // The BrowserEvent callback junction is a support for communicating
@@ -13714,6 +13853,12 @@ extern "C" void V8RecordReplayNotifyActivity() {
   gRecordReplayNotifyActivity();
 }
 
+void recordreplay::NotifyActivity() {
+  if (IsRecordingOrReplaying()) {
+    gRecordReplayNotifyActivity();
+  }
+}
+
 extern "C" void V8RecordReplayAddMetadata(const char* jsonString) {
   gRecordReplayAddMetadata(jsonString);
 }
@@ -13958,7 +14103,7 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
   RecordReplayInitializeDisabledFeatures();
   gHasDisabledFeatures = gRecordReplayHasDisabledFeatures();
 
-  gRecordingOrReplaying = V8RecordReplayFeatureEnabled("record-replay", nullptr);
+  internal::gRecordReplayIsRecordingOrReplaying = V8RecordReplayFeatureEnabled("record-replay", nullptr);
   InitMainThread();
 
   gAssertsDisabled = gRecordReplayAreAssertsDisabled();
@@ -13968,6 +14113,7 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
   gRecordReplaySetCrashReasonCallback(V8RecordReplayCrashReasonCallback);
 
   gFinishRecordingOrderedLockId = (int)CreateOrderedLock("FinishRecording");
+  i::FutexEmulation::RecordReplayInitialize();
   gAssertBufferAllocationStateLSKey = base::Thread::CreateThreadLocalKey();
 
   i::gProgressCounter = gRecordReplayProgressCounter();
@@ -13986,7 +14132,6 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
   gARMRecording = RecordReplayValue("ARMRecording", gARMRecording);
 
   i::gRecordReplayAssertValues = !!getenv("RECORD_REPLAY_JS_ASSERTS");
-  i::gRecordReplayAssertValuesPattern = getenv("RECORD_REPLAY_JS_ASSERTS_PATTERN");
 
   i::gRecordReplayCheckProgress =
       i::gRecordReplayAssertValues || !!getenv("RECORD_REPLAY_JS_PROGRESS_CHECKS");
@@ -14010,11 +14155,10 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
   // Disable wasm background compilation.
   if (V8RecordReplayFeatureEnabled("disable-v8-flags-wasm-compilation-tasks", nullptr)) {
     i::v8_flags.wasm_num_compilation_tasks = 0;
-    i::v8_flags.wasm_async_compilation = false;
   }
 
-  // The baseline JIT's handling of some record/replay opcodes is buggy.
-  if (V8RecordReplayFeatureEnabled("disable-v8-flags-baseline-jit", nullptr)) {
+  // The baseline JIT is used by default but can be disabled via a feature.
+  if (!V8RecordReplayFeatureEnabled("v8-flags-baseline-jit", nullptr)) {
     i::v8_flags.sparkplug = false;
   }
 
@@ -14023,8 +14167,12 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
     i::v8_flags.turbofan = false;
   }
 
-  // Disable some GC settings while replaying for causing mysterious crashes.
-  if (IsReplaying() || !V8RecordReplayFeatureEnabled("v8-flags-gc", nullptr)) {
+  // Concurrent, parallel and incremental GC are used when recording and
+  // replaying by default but can be disabled via a feature, which runs every
+  // GC on the main thread instead.
+  i::gRecordReplayEnableGCFeatures =
+    V8RecordReplayFeatureEnabled("v8-flags-gc", nullptr);
+  if (!i::gRecordReplayEnableGCFeatures) {
     i::v8_flags.concurrent_marking = false;
     i::v8_flags.concurrent_sweeping = false;
     i::v8_flags.incremental_marking_task = false;
@@ -14058,13 +14206,6 @@ extern "C" void V8SetRecordingOrReplaying(void* handle) {
   recordreplay::SetRecordingOrReplaying(handle);
 }
 
-extern "C" void V8InitializeNotRecordingOrReplaying() {
-  // These flags are necessary to avoid hangs in some situations, for unknown
-  // reasons. See https://linear.app/replay/issue/RUN-1071
-  internal::v8_flags.sparkplug = false;
-  internal::v8_flags.incremental_marking_task = false;
-}
-
 extern "C" DLLEXPORT bool V8IsMainThread() {
   return IsMainThread();
 }
@@ -14081,13 +14222,21 @@ extern "C" DLLEXPORT bool V8RecordReplayIsInReplayCode(const char* why) {
   return recordreplay::IsInReplayCode(why);
 }
 
-extern "C" DLLEXPORT void V8RecordReplayEnterReplayCode() {
+void recordreplay::EnterReplayCode() {
   CHECK(IsMainThread());
   gInReplayCode++;
 }
 
-extern "C" DLLEXPORT void V8RecordReplayExitReplayCode() {
+void recordreplay::ExitReplayCode() {
   gInReplayCode--;
+}
+
+extern "C" DLLEXPORT void V8RecordReplayEnterReplayCode() {
+  recordreplay::EnterReplayCode();
+}
+
+extern "C" DLLEXPORT void V8RecordReplayExitReplayCode() {
+  recordreplay::ExitReplayCode();
 }
 
 
@@ -14125,6 +14274,9 @@ extern "C" DLLEXPORT void V8RecordReplayEndAssertBufferAllocations() {
 
 recordreplay::AutoAssertMaybeEventsDisallowed::AutoAssertMaybeEventsDisallowed(
     const char* format, ...) {
+  if (!HasAsserts()) {
+    return;
+  }
   base::EmbeddedVector<char, 1024> buf;
   va_list arguments;
   va_start(arguments, format);
@@ -14132,23 +14284,13 @@ recordreplay::AutoAssertMaybeEventsDisallowed::AutoAssertMaybeEventsDisallowed(
   va_end(arguments);
   msg_ = std::string(buf.begin());
 
-  if (!gAssertsDisabled &&
-      IsRecordingOrReplaying() &&
-      (
-        !AreEventsDisallowed("AutoAssertMaybeEventsDisallowed")
-      )
-  ) {
+  if (!AreEventsDisallowed("AutoAssertMaybeEventsDisallowed")) {
     recordreplay::Assert("%s", msg_.c_str());
   }
 }
 
 recordreplay::AutoAssertMaybeEventsDisallowed::~AutoAssertMaybeEventsDisallowed() {
-  if (!gAssertsDisabled &&
-      IsRecordingOrReplaying() &&
-      (
-        !AreEventsDisallowed("AutoAssertMaybeEventsDisallowed")
-      )
-  ) {
+  if (HasAsserts() && !AreEventsDisallowed("AutoAssertMaybeEventsDisallowed")) {
     recordreplay::Assert("%s", msg_.c_str());
   }
 }

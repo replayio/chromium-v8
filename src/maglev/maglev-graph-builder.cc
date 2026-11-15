@@ -16464,6 +16464,22 @@ ReduceResult MaglevGraphBuilder::VisitRecordReplayIncExecutionProgressCounter() 
   return ReduceResult::Done();
 }
 
+// Replay: the frame depth bytecodes have no Maglev lowering here. Replay's V8
+// 10.8 lowers them to dedicated nodes (ReplayIncrementAndCheckJsFrameDepth,
+// ReplayDecrementJsFrameDepth) in its x64-only Maglev, which is off by default
+// there. Skipping them would unbalance the depth counter across deopts and
+// exception unwinds (Isolate::UnwindAndFindHandler recounts every JavaScript
+// frame), so functions carrying them are not compiled by Maglev.
+ReduceResult MaglevGraphBuilder::VisitReplayIncJsFrameDepth() {
+  should_abort_compilation_ = true;
+  return reducer_.BuildAbort(AbortReason::kUnreachable);
+}
+
+ReduceResult MaglevGraphBuilder::VisitReplayDecJsFrameDepth() {
+  should_abort_compilation_ = true;
+  return reducer_.BuildAbort(AbortReason::kUnreachable);
+}
+
 ReduceResult MaglevGraphBuilder::VisitRecordReplayNotifyActivity() {
   RETURN_IF_ABORT(BuildCallRuntime(Runtime::kRecordReplayNotifyActivity, {}));
   return ReduceResult::Done();

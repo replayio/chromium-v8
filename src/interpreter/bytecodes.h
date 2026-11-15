@@ -516,6 +516,8 @@ namespace interpreter {
   /* Record Replay */                                                          \
   V(RecordReplayIncExecutionProgressCounter, ImplicitRegisterUse::kNone)       \
   V(RecordReplayNotifyActivity, ImplicitRegisterUse::kNone)                    \
+  V(ReplayIncJsFrameDepth, ImplicitRegisterUse::kNone)                         \
+  V(ReplayDecJsFrameDepth, ImplicitRegisterUse::kNone)                         \
   V(RecordReplayInstrumentation, ImplicitRegisterUse::kNone,                   \
     OperandType::kConstantPoolIndex)                                           \
   V(RecordReplayInstrumentationGenerator, ImplicitRegisterUse::kNone,          \

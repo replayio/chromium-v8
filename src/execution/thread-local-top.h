@@ -30,7 +30,8 @@ class ThreadLocalTop {
   // TODO(all): This is not particularly beautiful. We should probably
   // refactor this to really consist of just Addresses and 32-bit
   // integer fields.
-  static constexpr uint32_t kSizeInBytes = 28 * kSystemPointerSize;
+  static constexpr uint32_t kSizeInBytes = 29 * kSystemPointerSize;
+  static constexpr int kReplayMaxJsFrameDepth = 1024;
 
   // Does early low-level initialization that does not depend on the
   // isolate being present.
@@ -200,6 +201,8 @@ class ThreadLocalTop {
   // to use for switching from secondary stacks.
   Address central_stack_sp_;
   Address central_stack_limit_;
+
+  int replay_js_frame_depth_;
 };
 
 static_assert(ThreadLocalTop::kSizeInBytes == sizeof(ThreadLocalTop));

@@ -945,8 +945,19 @@ class Heap final {
           gc_notify_updated_slot,
       WriteBarrierMode write_barrier_mode = UPDATE_WRITE_BARRIER);
 
+  // Record/replay: the dirty list holds both registries whose cleanup is
+  // driven by the recording ("tracked", see src/replay/finalization-registry.h)
+  // and registries with the default handling. These look only at the
+  // registries of one kind. The first returns whether the list has such a
+  // registry, the second removes and returns the first one.
+  enum class RecordReplayTracking { kTracked, kUntracked };
+
+  // Called at each progress interrupt when recording/replaying.
+  void RecordReplayOnProgressInterrupt();
+  bool RecordReplayHasDirtyJSFinalizationRegistries(
+      RecordReplayTracking tracking);
   MaybeDirectHandle<JSFinalizationRegistry>
-  DequeueDirtyJSFinalizationRegistry();
+  RecordReplayDequeueDirtyJSFinalizationRegistry(RecordReplayTracking tracking);
 
   // Called from Heap::NotifyContextDisposed to remove all
   // FinalizationRegistries with {context} from the dirty list when the context
@@ -1907,6 +1918,8 @@ class Heap final {
   void CompleteArrayBufferSweeping();
 
   bool InvokeNearHeapLimitCallback();
+  // Runs the last near-heap-limit callback and applies the limit it returns.
+  bool CallNearHeapLimitCallback();
 
   void InvokeIncrementalMarkingPrologueCallbacks();
   void InvokeIncrementalMarkingEpilogueCallbacks();
@@ -2379,6 +2392,10 @@ class Heap final {
   const AllocationType allocation_type_for_in_place_internalizable_strings_;
 
   std::unique_ptr<CollectionBarrier> collection_barrier_;
+
+  // Record/replay: near-heap-limit callback calls since the last progress
+  // interrupt when recording, see InvokeNearHeapLimitCallback.
+  size_t record_replay_near_heap_limit_calls_ = 0;
 
   int ignore_local_gc_requests_depth_ = 0;
 

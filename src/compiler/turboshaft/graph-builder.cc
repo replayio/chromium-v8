@@ -2932,11 +2932,49 @@ OpIndex GraphBuilder::Process(
 
 #endif  // V8_ENABLE_SANDBOX_HARDWARE_SUPPORT
 
-    // Replay-injected progress-counter instrumentation: effectful no-op marker
-    // with no real lowering. Returning
-    // OpIndex::Invalid() matches the other effectful, value-output-less arms.
-    case IrOpcode::kIncrementAndCheckProgressCounter:
+    // Replay: increment the progress counter inline, and call into the VM
+    // when it reaches the target progress. The value inputs are the frame
+    // state for after the progress bytecode, which the call lazily deoptimizes
+    // to, and the context the call runs in.
+    case IrOpcode::kIncrementAndCheckProgressCounter: {
+      V<LazyFrameState> frame_state = Map<LazyFrameState>(node->InputAt(0));
+      V<Context> context = Map(node->InputAt(1));
+      V<WordPtr> counter_address = __ ExternalConstant(
+          ExternalReference::record_replay_progress_counter());
+      V<Word64> counter =
+          __ Load(counter_address,
+                  LoadOp::Kind::RawAligned().NotLoadEliminable(),
+                  MemoryRepresentation::Uint64());
+      V<Word64> incremented =
+          __ Word64Add(counter, __ Word64Constant(uint64_t{1}));
+      __ Store(counter_address, incremented, StoreOp::Kind::RawAligned(),
+               MemoryRepresentation::Uint64(),
+               WriteBarrierKind::kNoWriteBarrier);
+      V<Word64> target =
+          __ Load(__ ExternalConstant(
+                      ExternalReference::record_replay_target_progress()),
+                  LoadOp::Kind::RawAligned().NotLoadEliminable(),
+                  MemoryRepresentation::Uint64());
+      IF (UNLIKELY(__ Word64Equal(incremented, target))) {
+        __ template CallRuntime<runtime::RecordReplayTargetProgressReached>(
+            frame_state, context, {}, LazyDeoptOnThrow{false});
+      }
       return OpIndex::Invalid();
+    }
+
+    // Replay: see BytecodeGraphBuilder::VisitReplayDecJsFrameDepth.
+    case IrOpcode::kReplayDecrementJsFrameDepth: {
+      V<WordPtr> depth_address = __ ExternalConstant(ExternalReference::Create(
+          IsolateFieldId::kReplayJsFrameDepth, isolate));
+      V<Word32> depth =
+          __ Load(depth_address,
+                  LoadOp::Kind::RawAligned().NotLoadEliminable(),
+                  MemoryRepresentation::Int32());
+      __ Store(depth_address, __ Word32Sub(depth, __ Word32Constant(1)),
+               StoreOp::Kind::RawAligned(), MemoryRepresentation::Int32(),
+               WriteBarrierKind::kNoWriteBarrier);
+      return OpIndex::Invalid();
+    }
 
     default:
       std::cerr << "unsupported node type: " << *node->op() << "\n";

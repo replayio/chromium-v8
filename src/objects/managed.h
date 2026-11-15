@@ -12,6 +12,7 @@
 #include "include/v8-callbacks.h"
 #include "include/v8-external-memory-accounter.h"
 #include "include/v8-object.h"
+#include "include/v8.h"  // For replay.
 #include "include/v8config.h"
 #include "src/base/compiler-specific.h"
 #include "src/handles/handles.h"
@@ -265,6 +266,36 @@ struct ManagedPtrDestructor
 // the template parameter.
 V8_EXPORT_PRIVATE void ManagedObjectFinalizer(
     const v8::WeakCallbackInfo<void>& data);
+
+// When recording or replaying, whether a {Managed}'s GC finalizer that runs
+// with events disallowed leaves its destructor to the isolate's teardown, so
+// that {Managed} destructors only run with events allowed.
+V8_EXPORT_PRIVATE bool ManagedFinalizersDeferredWhenEventsDisallowed();
+
+#if V8_ENABLE_WEBASSEMBLY
+namespace wasm {
+class NativeModule;
+// When recording or replaying, the NativeModuleCache keeps a cached
+// NativeModule for as long as some isolate holds it through a Managed.
+V8_EXPORT_PRIVATE void ManagedNativeModuleAdded(NativeModule* native_module);
+V8_EXPORT_PRIVATE void ManagedNativeModuleRemoved(NativeModule* native_module);
+}  // namespace wasm
+#endif  // V8_ENABLE_WEBASSEMBLY
+
+// Called when a {Managed<T>}, {TrustedManaged<T>} or {CppGCManaged<T>} starts
+// and stops holding its object. Only NativeModules need to know.
+template <class CppType>
+void OnManagedAdded(CppType*) {}
+template <class CppType>
+void OnManagedRemoved(CppType*) {}
+#if V8_ENABLE_WEBASSEMBLY
+inline void OnManagedAdded(wasm::NativeModule* native_module) {
+  wasm::ManagedNativeModuleAdded(native_module);
+}
+inline void OnManagedRemoved(wasm::NativeModule* native_module) {
+  wasm::ManagedNativeModuleRemoved(native_module);
+}
+#endif  // V8_ENABLE_WEBASSEMBLY
 
 // The use of {Managed<T>} is deprecated. Use {CppGCManaged<T>} instead.
 template <class CppType>

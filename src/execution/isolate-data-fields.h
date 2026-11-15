@@ -168,6 +168,8 @@ static constexpr int kFastCCallAlignmentPaddingCount = 1;
     offsetof(ThreadLocalTop, is_on_central_stack_flag_))                       \
   V(JSEntrySP, js_entry_sp, thread_local_top,                                  \
     offsetof(ThreadLocalTop, js_entry_sp_))                                    \
+  V(ReplayJsFrameDepth, replay_js_frame_depth, thread_local_top,               \
+    offsetof(ThreadLocalTop, replay_js_frame_depth_))                          \
                                                                                \
   /* HandleScopeData fields. */                                                \
   V(HandleScopeLevel, handle_scope_level, handle_scope_data,                   \

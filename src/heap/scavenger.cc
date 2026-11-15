@@ -11,6 +11,7 @@
 #include <unordered_map>
 
 #include "absl/container/flat_hash_set.h"
+#include "include/v8.h"  // For replay.
 #include "src/base/utils/random-number-generator.h"
 #include "src/common/globals.h"
 #include "src/execution/isolate-inl.h"
@@ -1656,9 +1657,14 @@ void ScavengerCollector::CollectGarbage() {
       stack_scan_mode != Heap::StackScanMode::kNone && heap_->IsGCWithStack();
   const bool is_using_precise_pinning =
       heap_->ShouldUsePrecisePinningForMinorGC();
+  // Replay: the recording describes when the GC clears the targets of
+  // JSWeakRefs and tracked WeakCells, which only the mark-compact collector
+  // reports (ProcessJSWeakRefs), and the replay keeps them alive in its
+  // marking visitor. Minor GCs keep them alive when recording or replaying.
   const bool should_handle_weak_objects_weakly =
       v8_flags.handle_weak_ref_weakly_in_minor_gc &&
-      !is_using_conservative_stack_scanning && !is_using_precise_pinning;
+      !is_using_conservative_stack_scanning && !is_using_precise_pinning &&
+      !recordreplay::IsRecordingOrReplaying();
 
   const int num_scavenge_tasks = NumberOfScavengeTasks(heap_);
   const bool is_logging = isolate->log_object_relocation();

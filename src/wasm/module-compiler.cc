@@ -568,6 +568,17 @@ class CompilationStateImpl {
   CompilationStateImpl(const std::shared_ptr<NativeModule>& native_module,
                        WasmDetectedFeatures detected_features);
   ~CompilationStateImpl() {
+    // A NativeModule shared between isolates is deleted with events disallowed
+    // (see DeleteNativeModule), where the jobs' state can't be ordered. When
+    // there are no compilation tasks (as while recording or replaying), no
+    // worker ever ran the jobs, so there is nothing to order their cancellation
+    // with.
+    std::optional<replayio::AutoPassThroughEvents> pass_through;
+    if (recordreplay::AreEventsDisallowed() &&
+        v8_flags.wasm_num_compilation_tasks == 0 &&
+        (baseline_compile_job_->IsValid() || top_tier_compile_job_->IsValid())) {
+      pass_through.emplace();
+    }
     if (baseline_compile_job_->IsValid()) {
       baseline_compile_job_->CancelAndDetach();
     }

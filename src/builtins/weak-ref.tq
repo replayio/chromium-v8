@@ -9,10 +9,10 @@ namespace runtime {
 extern runtime JSWeakRefAddToKeptObjects(
     implicit context: Context)(JSReceiver|Symbol): void;
 
-extern runtime JSReplayWeakRefConstruct(implicit context: Context)(
-    JSReceiver | Symbol): void;
+extern runtime RecordReplayWeakRefConstruct(implicit context: Context)(
+    JSWeakRef): void;
 
-extern runtime JSReplayWeakRefDeref(implicit context: Context)(
+extern runtime RecordReplayWeakRefDeref(implicit context: Context)(
     JSWeakRef): JSAny;
 
 }  // namespace runtime
@@ -42,6 +42,7 @@ transitioning javascript builtin WeakRefConstructor(
   // "%WeakRefPrototype%", « [[WeakRefTarget]] »).
   const map = GetDerivedMap(target, UnsafeCast<JSReceiver>(newTarget));
   const weakRef = UnsafeCast<JSWeakRef>(AllocateFastOrSlowJSObjectFromMap(map));
+  weakRef.record_replay_id = 0;
   // 5. Set weakRef.[[WeakRefTarget]] to target.
   // We do step 5 and set the target before step 4 which calls
   // `runtime::JSWeakRefAddToKeptObjects`, as that method can trigger GC and
@@ -52,7 +53,9 @@ transitioning javascript builtin WeakRefConstructor(
   weakRef.target = weakTarget;
   // 4. Perfom ! AddToKeptObjects(target).
   runtime::JSWeakRefAddToKeptObjects(weakTarget);
-  runtime::JSReplayWeakRefConstruct(weakTarget);
+  if (IsRecordingOrReplaying()) {
+    runtime::RecordReplayWeakRefConstruct(weakRef);
+  }
   // 6. Return weakRef.
   return weakRef;
 }
@@ -66,7 +69,12 @@ transitioning javascript builtin WeakRefDeref(
       MessageTemplate::kIncompatibleMethodReceiver, 'WeakRef.prototype.deref',
       receiver);
   // 3. Let target be the value of weakRef.[[WeakRefTarget]].
-  const target = runtime::JSReplayWeakRefDeref(weakRef);
+  let target: JSAny;
+  if (IsRecordingOrReplaying()) {
+    target = runtime::RecordReplayWeakRefDeref(weakRef);
+  } else {
+    target = weakRef.target;
+  }
   // 4. If target is not empty,
   //   a. Perform ! AddToKeptObjects(target).
   //   b. Return target.

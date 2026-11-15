@@ -1211,8 +1211,6 @@ MaybeDirectHandle<Object> ErrorUtils::GetFormattedStack(
 
   if (IsErrorStackData(*lookup.error_stack)) {
     auto error_stack_data = Cast<ErrorStackData>(lookup.error_stack);
-    REPLAY_ASSERT(
-      "[PRO-2368] ErrorUtils::GetFormattedStack A %d", (int)error_stack_data->HasFormattedStack());
     if (error_stack_data->HasFormattedStack()) {
       return direct_handle(error_stack_data->formatted_stack(), isolate);
     }

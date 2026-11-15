@@ -6,6 +6,12 @@
 namespace v8 {
 namespace replayio {
 
+bool AreEventsAvailable() {
+  return !recordreplay::AreEventsDisallowed() &&
+         !recordreplay::AreEventsPassedThrough() &&
+         !recordreplay::HasDivergedFromRecording();
+}
+
 v8::internal::Handle<v8::internal::String> RecordReplayStringHandle(
     const char* why, v8::internal::Isolate* isolate,
     v8::internal::Handle<v8::internal::String> input) {

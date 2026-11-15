@@ -14,6 +14,7 @@
 #include "src/objects/dictionary-inl.h"
 #include "src/objects/heap-object-field-inl.h"
 #include "src/objects/smi-inl.h"
+#include "src/replay/finalization-registry.h"
 
 // Has to be the last include (doesn't have include guards):
 #include "src/objects/object-macros.h"
@@ -63,6 +64,21 @@ void JSFinalizationRegistry::set_key_map(Tagged<Object> value,
   key_map_.store(this, value, mode);
 }
 
+int JSFinalizationRegistry::record_replay_id() const {
+  return record_replay_id_.load().value();
+}
+void JSFinalizationRegistry::set_record_replay_id(int value) {
+  record_replay_id_.store(this, Smi::FromInt(value));
+}
+
+Tagged<Object> JSFinalizationRegistry::record_replay_cells() const {
+  return record_replay_cells_.load();
+}
+void JSFinalizationRegistry::set_record_replay_cells(Tagged<Object> value,
+                                                     WriteBarrierMode mode) {
+  record_replay_cells_.store(this, value, mode);
+}
+
 Tagged<UnionOf<JSFinalizationRegistry, Undefined>>
 JSFinalizationRegistry::next_dirty() const {
   return next_dirty_.load();
@@ -88,6 +104,13 @@ Tagged<UnionOf<Symbol, JSReceiver, Undefined>> JSWeakRef::target() const {
 void JSWeakRef::set_target(Tagged<UnionOf<Symbol, JSReceiver, Undefined>> value,
                            WriteBarrierMode mode) {
   target_.store(this, value, mode);
+}
+
+int JSWeakRef::record_replay_id() const {
+  return record_replay_id_.load().value();
+}
+void JSWeakRef::set_record_replay_id(int value) {
+  record_replay_id_.store(this, Smi::FromInt(value));
 }
 
 void JSFinalizationRegistry::RegisterWeakCellWithUnregisterToken(
@@ -173,6 +196,8 @@ bool JSFinalizationRegistry::RemoveUnregisterToken(
       switch (removal_mode) {
         case kRemoveMatchedCellsFromRegistry:
           weak_cell->RemoveFromFinalizationRegistryCells(isolate);
+          replayio::ReplayFinalizationRegistries::OnUnregisterCell(
+              isolate, Tagged(this), weak_cell);
           break;
         case kKeepMatchedCellsInRegistry:
           // Do nothing.
@@ -292,6 +317,13 @@ Tagged<UnionOf<WeakCell, Undefined>> WeakCell::key_list_next() const {
 void WeakCell::set_key_list_next(Tagged<UnionOf<WeakCell, Undefined>> value,
                                  WriteBarrierMode mode) {
   key_list_next_.store(this, value, mode);
+}
+
+int WeakCell::record_replay_id() const {
+  return record_replay_id_.load().value();
+}
+void WeakCell::set_record_replay_id(int value) {
+  record_replay_id_.store(this, Smi::FromInt(value));
 }
 
 Tagged<HeapObject> WeakCell::relaxed_target() const {

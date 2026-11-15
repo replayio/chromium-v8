@@ -759,6 +759,11 @@ template <typename ConcreteVisitor>
 size_t MarkingVisitorBase<ConcreteVisitor>::VisitJSWeakRef(
     Tagged<Map> map, Tagged<JSWeakRef> weak_ref,
     MaybeObjectSize maybe_object_size) {
+  // When replaying, the recording decides when deref() stops returning the
+  // target.
+  if (record_replay_is_replaying_) {
+    this->VisitPointer(weak_ref, ObjectSlot(&weak_ref->target_));
+  }
   if (IsHeapObject(weak_ref->target())) {
     Tagged<HeapObject> target = Cast<HeapObject>(weak_ref->target());
     SynchronizePageAccess(target);
@@ -783,6 +788,10 @@ template <typename ConcreteVisitor>
 size_t MarkingVisitorBase<ConcreteVisitor>::VisitWeakCell(
     Tagged<Map> map, Tagged<WeakCell> weak_cell,
     MaybeObjectSize maybe_object_size) {
+  // When replaying, the recording decides when a tracked cell is cleared.
+  if (record_replay_is_replaying_ && weak_cell->record_replay_id() != 0) {
+    this->VisitPointer(weak_cell, ObjectSlot(&weak_cell->target_));
+  }
   Tagged<HeapObject> target = weak_cell->relaxed_target();
   Tagged<HeapObject> unregister_token = weak_cell->relaxed_unregister_token();
   SynchronizePageAccess(target);

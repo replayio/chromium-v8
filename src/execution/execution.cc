@@ -25,8 +25,13 @@ namespace v8 {
 namespace internal {
 
 extern bool RecordReplayIsDivergentUserJSWithoutPause(Tagged<SharedFunctionInfo> shared);
+extern bool gRecordReplayIsRecordingOrReplaying;
+extern bool gRecordReplayHasCheckpoint;
+extern void RecordReplayBeforeInvoke(Isolate* isolate,
+                                     DirectHandle<JSFunction> function);
 extern uint64_t* gProgressCounter;
 extern bool gRecordReplayEnableDependencyGraph;
+extern std::string GetScriptName(Handle<Script> script);
 
 namespace {
 
@@ -308,6 +313,15 @@ MaybeDirectHandle<Context> NewScriptContext(
   return result;
 }
 
+static std::string GetFunctionScriptName(Isolate* isolate,
+                                         DirectHandle<JSFunction> function) {
+  if (!IsScript(function->shared()->script())) {
+    return "<not-script>";
+  }
+  Handle<Script> script(Cast<Script>(function->shared()->script()), isolate);
+  return GetScriptName(script);
+}
+
 // Get a description of a function's location for logging etc.
 static std::string GetFunctionLocationInfo(Isolate* isolate, DirectHandle<JSFunction> function) {
   if (!IsScript(function->shared()->script())) {
@@ -320,19 +334,30 @@ static std::string GetFunctionLocationInfo(Isolate* isolate, DirectHandle<JSFunc
   Script::GetPositionInfo(script, function->shared()->StartPosition(),
                           &info, Script::OffsetFlag::kWithOffset);
 
-  std::string name = IsString(script->name())
-    ? Cast<String>(script->name())->ToCString().get()
-    : "(anonymous script)";
-
   std::ostringstream os;
   os << "scriptId=" << (script.is_null() ? script->id() : -1);
-  os << " @" << name << ":" << info.line + 1 << ":" << info.column;
+  os << " @" << GetFunctionScriptName(isolate, function) << ":"
+     << info.line + 1 << ":" << info.column;
   return os.str();
+}
+
+// Block C++→JS entry that can run registered user JS while events are disallowed.
+static MaybeHandle<Object> RecordReplayBlockNonDeterministicUserJs(
+    Isolate* isolate, const char* kind, const std::string& detail) {
+  std::stringstream stack;
+  isolate->PrintCurrentStackTrace(stack);
+  recordreplay::Warning("NonDeterministicUserJSBlocked",
+                        {{"trigger", kind},
+                         {"progress", *gProgressCounter},
+                         {"detail", detail},
+                         {"jsStack", stack.str()}});
+  return isolate->factory()->undefined_value();
 }
 
 V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
                                                  const InvokeParams& params) {
   RCS_SCOPE(isolate, RuntimeCallCounterId::kInvoke);
+  RecordReplayScrubDivergentProgressScope scrub_divergent_progress;
   DCHECK(!IsJSGlobalObject(*params.receiver));
   DCHECK_LE(params.args.size(), FixedArray::kMaxLength);
   DCHECK(!isolate->has_exception());
@@ -401,20 +426,6 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
     }
 #endif
 
-    if (RecordReplayIsDivergentUserJSWithoutPause(function->shared())) {
-      // User JS should not get executed in divergent code paths,
-      // unless we have paused.
-      // → Print log and prevent execution.
-      std::string location = GetFunctionLocationInfo(isolate, function);
-      std::stringstream stack;
-      isolate->PrintCurrentStackTrace(stack);
-
-      recordreplay::Warning(
-          "JS Invoke: Non-deterministic user JS PC=%zu %s stack=%s",
-          *gProgressCounter, location.c_str(), stack.str().c_str());
-      return isolate->factory()->undefined_value();
-    }
-
     if (recordreplay::IsReplaying() &&
         IsMainThread() &&
         gRecordReplayEnableDependencyGraph &&
@@ -424,7 +435,8 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
       static bool show_warning = !!getenv("RECORD_REPLAY_WARN_MISSING_EXECUTION");
       if (show_warning) {
         std::string location = GetFunctionLocationInfo(isolate, function);
-        recordreplay::Warning("DependencyGraph missing execution: %s", location.c_str());
+        recordreplay::Warning("DependencyGraphMissingExecution",
+                              {{"location", location}});
       }
     }
 
@@ -447,6 +459,16 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
     }
   }
 
+  // Replay: JS of an instrumented script about to run before the first
+  // checkpoint can start the recording, before entering it.
+  if (V8_UNLIKELY(gRecordReplayIsRecordingOrReplaying) &&
+      !gRecordReplayHasCheckpoint && IsJSFunction(*params.target) &&
+      AllowJavascriptExecution::IsAllowed(isolate) &&
+      ThrowOnJavascriptExecution::IsAllowed(isolate) &&
+      DumpOnJavascriptExecution::IsAllowed(isolate)) {
+    RecordReplayBeforeInvoke(isolate, Cast<JSFunction>(params.target));
+  }
+
   // Entering JavaScript.
   VMState<JS> state(isolate);
   if (!AllowJavascriptExecution::IsAllowed(isolate)) {
@@ -459,9 +481,35 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
     return MaybeHandle<Object>();
   }
   if (!DumpOnJavascriptExecution::IsAllowed(isolate)) {
-    V8::GetCurrentPlatform()->DumpWithoutCrashing();
+    if (recordreplay::IsRecordingOrReplaying()) {
+      std::string script_name =
+          IsJSFunction(*params.target)
+              ? GetFunctionScriptName(isolate,
+                                      Cast<JSFunction>(params.target))
+              : "<non-function>";
+      std::string message =
+          "DisallowJavascriptExecution: blocked C++→JS entry "
+          "(DUMP_ON_FAILURE) " +
+          script_name;
+      recordreplay::Print("%s", message.c_str());
+      if (recordreplay::IsRecording()) {
+        recordreplay::Crash("%s", message.c_str());
+      }
+    } else {
+      V8::GetCurrentPlatform()->DumpWithoutCrashing();
+    }
     return isolate->factory()->undefined_value();
   }
+
+  // User JS must not run on divergent paths unless paused.
+  if (IsJSFunction(*params.target)) {
+    DirectHandle<JSFunction> function = Cast<JSFunction>(params.target);
+    if (RecordReplayIsDivergentUserJSWithoutPause(function->shared())) {
+      return RecordReplayBlockNonDeterministicUserJs(
+          isolate, "JSInvoke", GetFunctionLocationInfo(isolate, function));
+    }
+  }
+
   isolate->IncrementJavascriptExecutionCounter();
 
   if (params.execution_target == Execution::Target::kCallable) {

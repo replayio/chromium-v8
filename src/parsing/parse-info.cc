@@ -22,9 +22,6 @@
 namespace v8 {
 namespace internal {
 
-extern bool RecordReplayHasRegisteredScript(Tagged<Script> script);
-extern bool RecordReplayAssertValues(const std::string& url);
-
 UnoptimizedCompileFlags::UnoptimizedCompileFlags(Isolate* isolate,
                                                  int script_id)
     : flags_(0),
@@ -161,23 +158,20 @@ void UnoptimizedCompileFlags::SetFlagsForFunctionFromScript(
   set_block_coverage_enabled(block_coverage_enabled() &&
                              script->IsUserJavaScript());
 
-  if (!RecordReplayHasRegisteredScript(*script)) {
-    set_record_replay_ignore(true);
-  } else if (recordreplay::IsRecordingOrReplaying()) {
-    std::string url;
-    if (!IsUndefined(script->name())) {
-      std::unique_ptr<char[]> name = Cast<String>(script->name())->ToCString();
-      url = name.get();
-    }
-    if (RecordReplayAssertValues(url)) {
-      set_record_replay_assert_values(true);
-    }
-  }
+  RecordReplayInheritCompileFlags(*this, script);
 
   if (is_toplevel() && script->compilation_kind() ==
                            Script::CompilationKind::kFunctionConstructor) {
     set_parse_restriction(ONLY_SINGLE_FUNCTION_LITERAL);
   }
+}
+
+// Compiles of an existing script follow the decisions made when the script was
+// created, so that no script is ever decided twice.
+void RecordReplayInheritCompileFlags(UnoptimizedCompileFlags& flags,
+                                     Tagged<Script> script) {
+  flags.set_record_replay_ignore(!script->record_replay_instrumented());
+  flags.set_record_replay_assert_values(script->record_replay_assert_values());
 }
 
 ReusableUnoptimizedCompileState::ReusableUnoptimizedCompileState(
@@ -288,6 +282,15 @@ Handle<Script> ParseInfo::CreateScript(
   }
   raw_script->set_origin_options(origin_options);
   raw_script->set_is_repl_mode(flags().is_repl_mode());
+  // Replay: the one place a script's instrumentation is decided, by the compile
+  // creating it. Compiles of an existing script inherit it
+  // (RecordReplayInheritCompileFlags).
+  const bool record_replay_instrumented =
+      recordreplay::IsRecordingOrReplaying("emit-opcodes") &&
+      !flags().record_replay_ignore();
+  raw_script->set_record_replay_instrumented(record_replay_instrumented);
+  raw_script->set_record_replay_assert_values(
+      record_replay_instrumented && flags().record_replay_assert_values());
   raw_script->set_outer_language_mode(flags().outer_language_mode());
 
   DCHECK_EQ(is_wrapped_as_function(), !maybe_wrapped_arguments.is_null());

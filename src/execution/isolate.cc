@@ -2513,8 +2513,6 @@ bool Isolate::MayAccess(DirectHandle<NativeContext> accessing_context,
 static bool gHasPrintedStack = false;
 
 Tagged<Object> Isolate::StackOverflow() {
-  recordreplay::InvalidateRecording("Stack overflow");
-
   if (recordreplay::IsRecordingOrReplaying() && !gHasPrintedStack) {
     gHasPrintedStack = true;
     std::stringstream stack;
@@ -2685,6 +2683,34 @@ void Isolate::RecordReplayInvokeApiInterruptCallbacksAtProgress() {
   CHECK(recordreplay::IsRecordingOrReplaying("interrupts"));
   CHECK(IsMainThread());
 
+  // A callback that advances progress without running JS (an inspector
+  // command's response adds a bookmark) reaches the progress interrupt
+  // requested for callbacks queued meanwhile. Running them there would nest
+  // every queued callback inside the previous one, thousands deep for a burst
+  // of DevTools commands, until C stack limit checks (e.g. in RegExp parsing)
+  // fail at a depth that differs between recording and replaying. The
+  // outermost invocation's loop runs them instead. JS entered from a callback
+  // (e.g. an evaluation in a debugger pause the callback started) still runs
+  // them, so they can interrupt that JS: the enclosing invocation's topmost JS
+  // frame stays on the stack, so a different topmost fp means newer JS frames.
+  Address js_fp = kNullAddress;
+  {
+    JavaScriptStackFrameIterator it(this);
+    if (!it.done()) js_fp = it.frame()->fp();
+  }
+  if (record_replay_invoking_api_interrupts_ &&
+      record_replay_api_interrupts_js_fp_ == js_fp) {
+    // The interrupt that got us here is used up. Request it again so JS the
+    // enclosing callback runs next still requests a progress interrupt for
+    // whatever is queued, instead of waiting for the callback to return.
+    stack_guard()->RequestApiInterrupt();
+    return;
+  }
+  bool was_invoking = record_replay_invoking_api_interrupts_;
+  Address previous_js_fp = record_replay_api_interrupts_js_fp_;
+  record_replay_invoking_api_interrupts_ = true;
+  record_replay_api_interrupts_js_fp_ = js_fp;
+
   while (true) {
     InterruptEntry entry;
     recordreplay::OrderedLock(record_replay_api_interrupts_ordered_lock_id_);
@@ -2692,7 +2718,7 @@ void Isolate::RecordReplayInvokeApiInterruptCallbacksAtProgress() {
       ExecutionAccess access(this);
       if (api_interrupts_queue_.empty()) {
         recordreplay::OrderedUnlock(record_replay_api_interrupts_ordered_lock_id_);
-        return;
+        break;
       }
       entry = api_interrupts_queue_.front();
       api_interrupts_queue_.pop();
@@ -2702,6 +2728,9 @@ void Isolate::RecordReplayInvokeApiInterruptCallbacksAtProgress() {
     HandleScope handle_scope(this);
     entry.first(reinterpret_cast<v8::Isolate*>(this), entry.second);
   }
+
+  record_replay_invoking_api_interrupts_ = was_invoking;
+  record_replay_api_interrupts_js_fp_ = previous_js_fp;
 }
 
 void Isolate::RequestInvalidateNoProfilingProtector() {
@@ -2947,6 +2976,31 @@ Tagged<Object> Isolate::ReThrow(Tagged<Object> exception,
   return ReThrow(exception);
 }
 
+static void ReplaySyncJsFrameDepth(Isolate* isolate) {
+  if (!recordreplay::IsRecordingOrReplaying("emit-opcodes")) return;
+
+  HandleScope scope(isolate);
+  int skip = static_cast<int>(
+      isolate->thread_local_top()->num_frames_above_pending_handler_);
+  int depth = 0;
+  int index = 0;
+  for (StackFrameIterator it(isolate); !it.done(); it.Advance(), index++) {
+    if (index < skip) continue;
+    StackFrame* frame = it.frame();
+    if (!frame->is_javascript()) continue;
+    FrameSummaries summaries =
+        CommonFrame::cast(frame)->Summarize(AllowAllocation{false});
+    if (summaries.frames.empty()) {
+      depth += 1;  // SyncEmptyCount
+    } else {
+      for (const FrameSummary& summary : summaries.frames) {
+        if (summary.IsJavaScript()) depth++;
+      }
+    }
+  }
+  isolate->set_replay_js_frame_depth(depth);
+}
+
 Tagged<Object> Isolate::UnwindAndFindHandler() {
   // TODO(v8:12676): Fix gcmole failures in this function.
   DisableGCMole no_gcmole;
@@ -2975,6 +3029,8 @@ Tagged<Object> Isolate::UnwindAndFindHandler() {
     thread_local_top()->pending_handler_sp_ = handler_sp;
     thread_local_top()->num_frames_above_pending_handler_ =
         num_frames_above_handler;
+
+    ReplaySyncJsFrameDepth(this);
 
 #if V8_ENABLE_WEBASSEMBLY
     // If the exception was caught in a different stack, process all
@@ -4517,14 +4573,29 @@ char* Isolate::RestoreThread(char* from) {
   return from + sizeof(ThreadLocalTop);
 }
 
+namespace {
+// The number of registered destructors is only the same when replaying if
+// ManagedObjectFinalizerSecondPass leaves unregistering to
+// Isolate::ReleaseSharedPtrs. Otherwise it depends on when the GC runs.
+bool ManagedPtrDestructorCountIsDeterministic() {
+  return recordreplay::IsRecordingOrReplaying("leak-references",
+                                              "ManagedPtrDestructorCount");
+}
+}  // namespace
+
 void Isolate::ReleaseSharedPtrs() {
   base::MutexGuard lock(&managed_ptr_destructors_mutex_);
+  if (ManagedPtrDestructorCountIsDeterministic()) {
+    recordreplay::Assert("Isolate::ReleaseSharedPtrs %zu",
+                         managed_ptr_destructors_count_);
+  }
 
   auto delete_pointers = [this](ManagedPtrDestructor** list) {
     while (*list) {
       ManagedPtrDestructor* l = *list;
       ManagedPtrDestructor* n = nullptr;
       *list = nullptr;
+      managed_ptr_destructors_count_ = 0;
       for (; l != nullptr; l = n) {
         l->external_memory_accounter_.Decrease(
             reinterpret_cast<v8::Isolate*>(this), l->estimated_size_);
@@ -4567,6 +4638,11 @@ void Isolate::RegisterManagedPtrDestructor(ManagedPtrDestructor* destructor) {
   }
   destructor->next_ = *list;
   *list = destructor;
+  managed_ptr_destructors_count_++;
+  if (ManagedPtrDestructorCountIsDeterministic()) {
+    recordreplay::Assert("Isolate::RegisterManagedPtrDestructor %zu",
+                         managed_ptr_destructors_count_);
+  }
 }
 
 void Isolate::UnregisterManagedPtrDestructor(ManagedPtrDestructor* destructor) {
@@ -4588,6 +4664,8 @@ void Isolate::UnregisterManagedPtrDestructor(ManagedPtrDestructor* destructor) {
   if (destructor->next_) destructor->next_->prev_ = destructor->prev_;
   destructor->prev_ = nullptr;
   destructor->next_ = nullptr;
+  DCHECK_GT(managed_ptr_destructors_count_, 0u);
+  managed_ptr_destructors_count_--;
 }
 
 // static
@@ -5212,6 +5290,10 @@ void Isolate::Deinit() {
   // not cause a GC.
   heap_.StartTearDown();
 
+  // Holds v8::Globals, which have to be destroyed before the global handles,
+  // and is used by the GC, which can still run before the heap tear down.
+  replay_data_.reset();
+
   DisallowGarbageCollection no_gc;
   IgnoreLocalGCRequests ignore_gc_requests(heap());
 
@@ -5339,6 +5421,11 @@ void Isolate::Deinit() {
   ast_string_constants_ = nullptr;
 
   heap_.TearDown();
+#if V8_ENABLE_WEBASSEMBLY
+  // Replay: wrappers of wasm native modules this isolate's C++ heap destroyed
+  // with events disallowed left their NativeModuleCache holders for here.
+  wasm::RecordReplayRemoveDeferredNativeModuleHolders(this);
+#endif  // V8_ENABLE_WEBASSEMBLY
   isolate_group()->RemoveIsolate(this);
 
   delete inner_pointer_to_code_cache_;
@@ -6325,6 +6412,26 @@ bool Isolate::Init(SnapshotData* startup_snapshot_data,
   bigint_processor_ = bigint::Processor::New(new BigIntPlatform(this));
 
   if (v8_flags.lazy_compile_dispatcher) {
+    // Replay: the dispatcher compiles functions on worker threads, which post
+    // the main thread's finalize task when they finish (LazyCompileDispatcher::
+    // ScheduleIdleTaskFromAnyThread), and the main thread installs a function's
+    // bytecode in that task or, if it calls the function first, waits for the
+    // worker (FinishNow). Both depend on the workers' timing, so a recording
+    // doesn't replay reliably. Supporting it would take workers that only hand
+    // finished jobs back, with the main thread finalizing them at points that
+    // are the same when replaying (e.g. always on the first call). The flags
+    // are left as requested, so the recording is invalidated instead.
+    if (recordreplay::IsRecordingOrReplaying() && IsMainThread()) {
+      const char* flag =
+          v8_flags.parallel_compile_tasks_for_lazy
+              ? "--parallel-compile-tasks-for-lazy"
+          : v8_flags.parallel_compile_tasks_for_eager_toplevel
+              ? "--parallel-compile-tasks-for-eager-toplevel"
+              : "--lazy-compile-dispatcher";
+      std::string why =
+          std::string("V8 flag ") + flag + " is not supported when recording";
+      recordreplay::InvalidateRecording(why.c_str());
+    }
     lazy_compile_dispatcher_ = std::make_unique<LazyCompileDispatcher>(
         this, V8::GetCurrentPlatform(), v8_flags.stack_size);
   }
@@ -8035,7 +8142,12 @@ void Isolate::CountUsage(
 
 // Start disallowed script IDs at a value that won't conflict with regular IDs,
 // which start at one and increment from there.
-static int gNextDisallowedScriptId = 1 << 30;
+static const int kFirstDisallowedScriptId = 1 << 30;
+static int gNextDisallowedScriptId = kFirstDisallowedScriptId;
+
+bool RecordReplayIsDisallowedScriptId(int script_id) {
+  return script_id >= kFirstDisallowedScriptId;
+}
 
 int Isolate::GetNextScriptId() {
   // Use a separate pool of IDs when events are disallowed, as these scripts

@@ -89,6 +89,53 @@ ScopeIterator::ScopeIterator(Isolate* isolate,
   TryParseAndRetrieveScopes();
 }
 
+namespace {
+
+// The context of |function| on the chain starting at |context|, or an empty
+// context if the chain doesn't hold it.
+Tagged<Context> RecordReplayFunctionContext(Tagged<Context> context,
+                                            bool closure_scope_needs_context,
+                                            Tagged<JSFunction> function) {
+  if (!closure_scope_needs_context) return function->context();
+  while (context->scope_info() != function->shared()->scope_info()) {
+    if (IsNativeContext(context)) return Tagged<Context>();
+    context = context->previous();
+  }
+  return context;
+}
+
+// Whether |context| starts with the contexts that the scopes from |start_scope|
+// up to |closure_scope| create, which holds while execution is inside all of
+// those scopes.
+bool RecordReplayContextsMatchScopes(DebugScriptScope start_scope,
+                                     DebugScriptScope closure_scope,
+                                     Tagged<Context> context,
+                                     Tagged<SharedFunctionInfo> shared) {
+  DisallowGarbageCollection no_gc;
+  for (std::optional<DebugScriptScope> scope = start_scope;
+       scope.has_value() &&
+       scope->scope_index() != closure_scope.scope_index();
+       scope = scope->parent()) {
+    if (!scope->needs_context()) continue;
+    if (IsNativeContext(context) ||
+        context->scope_info()->scope_type() != scope->scope_type()) {
+      return false;
+    }
+    for (int i = 0; i < scope->variable_count(); i++) {
+      DebugVariableInfo var = scope->variable(i);
+      if (var.location == VariableLocation::CONTEXT &&
+          context->scope_info()->ContextSlotIndex(var.name) != var.index) {
+        return false;
+      }
+    }
+    context = context->previous();
+  }
+  return !closure_scope.needs_context() ||
+         context->scope_info() == shared->scope_info();
+}
+
+}  // namespace
+
 void ScopeIterator::Restart() {
   DCHECK_NOT_NULL(frame_inspector_);
   function_ = frame_inspector_->GetFunction();
@@ -100,6 +147,16 @@ void ScopeIterator::Restart() {
   DCHECK_NE(current_scope_index_, -1);
   if (ignore_nested_scopes_) UnwindToClosureContext();
   UnwrapEvaluationContext();
+  // Keep describing only the function scope when TryParseAndRetrieveScopes
+  // fell back to it, see there.
+  if (recordreplay::IsRecordingOrReplaying() && closure_scope_index_ != -1 &&
+      start_scope_index_ == closure_scope_index_ &&
+      closure_scope().is_function_scope()) {
+    Tagged<Context> context = RecordReplayFunctionContext(
+        *context_, closure_scope().needs_context(), *function_);
+    context_ =
+        context.is_null() ? Handle<Context>() : handle(context, isolate_);
+  }
   seen_script_scope_ = false;
 }
 
@@ -160,6 +217,25 @@ void ScopeIterator::TryParseAndRetrieveScopes() {
   }
 
   UnwrapEvaluationContext();
+
+  // While recording or replaying, frames are also described at points the
+  // debugger doesn't pause at, such as the implicit catch handler that
+  // rejects an async function's promise. That handler has no source position
+  // of its own, so the frame reports the last position before it, which can
+  // be inside blocks and catch clauses whose contexts are gone. Describe only
+  // the function scope then, as at a return.
+  if (recordreplay::IsRecordingOrReplaying() &&
+      shared_info->scope_info()->scope_type() == FUNCTION_SCOPE &&
+      !RecordReplayContextsMatchScopes(
+          DebugScriptScope::FromIndex(debug_scope_info_, start_scope_index_),
+          closure_scope(), *context_, *shared_info)) {
+    current_scope_index_ = closure_scope_index_;
+    start_scope_index_ = current_scope_index_;
+    Tagged<Context> context = RecordReplayFunctionContext(
+        *context_, closure_scope().needs_context(), *function_);
+    context_ =
+        context.is_null() ? Handle<Context>() : handle(context, isolate_);
+  }
 }
 
 void ScopeIterator::UnwindToClosureContext() {

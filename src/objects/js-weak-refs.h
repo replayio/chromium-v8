@@ -43,6 +43,17 @@ V8_OBJECT class JSFinalizationRegistry : public JSObject {
   inline void set_key_map(Tagged<Object> value,
                           WriteBarrierMode mode = UPDATE_WRITE_BARRIER);
 
+  // Record/replay: nonzero when cleanup of this registry is driven by the
+  // recording. See src/replay/finalization-registry.h.
+  inline int record_replay_id() const;
+  inline void set_record_replay_id(int value);
+
+  // Record/replay: while replaying, a SimpleNumberDictionary from
+  // WeakCell::record_replay_id to the registered WeakCell.
+  inline Tagged<Object> record_replay_cells() const;
+  inline void set_record_replay_cells(
+      Tagged<Object> value, WriteBarrierMode mode = UPDATE_WRITE_BARRIER);
+
   inline Tagged<UnionOf<JSFinalizationRegistry, Undefined>> next_dirty() const;
   inline void set_next_dirty(
       Tagged<UnionOf<JSFinalizationRegistry, Undefined>> value,
@@ -119,6 +130,8 @@ V8_OBJECT class JSFinalizationRegistry : public JSObject {
   TaggedMember<UnionOf<WeakCell, Undefined>> active_cells_;
   TaggedMember<UnionOf<WeakCell, Undefined>> cleared_cells_;
   TaggedMember<Object> key_map_;
+  TaggedMember<Smi> record_replay_id_;
+  TaggedMember<Object> record_replay_cells_;
   TaggedMember<UnionOf<JSFinalizationRegistry, Undefined>> next_dirty_;
   TaggedMember<Smi> flags_ V8_TQ_TYPE(SmiTagged<FinalizationRegistryFlags>);
 
@@ -162,6 +175,11 @@ V8_OBJECT class WeakCell : public HeapObject {
   inline void set_key_list_next(Tagged<UnionOf<WeakCell, Undefined>> value,
                                 WriteBarrierMode mode = UPDATE_WRITE_BARRIER);
 
+  // Record/replay: identifies this cell in the recording. Zero when the
+  // registry is not tracked, negative when the cell can never be delivered.
+  inline int record_replay_id() const;
+  inline void set_record_replay_id(int value);
+
   EXPORT_DECL_VERIFIER(WeakCell)
 
   DECL_PRINTER(WeakCell)
@@ -199,6 +217,7 @@ V8_OBJECT class WeakCell : public HeapObject {
   TaggedMember<UnionOf<WeakCell, Undefined>> next_;
   TaggedMember<UnionOf<WeakCell, Undefined>> key_list_prev_;
   TaggedMember<UnionOf<WeakCell, Undefined>> key_list_next_;
+  TaggedMember<Smi> record_replay_id_;
 
   friend class JSFinalizationRegistry;
   friend class MarkCompactCollector;
@@ -218,6 +237,11 @@ V8_OBJECT class JSWeakRef : public JSObject {
   inline void set_target(Tagged<UnionOf<Symbol, JSReceiver, Undefined>> value,
                          WriteBarrierMode mode = UPDATE_WRITE_BARRIER);
 
+  // Record/replay: nonzero when the recording describes the GC clearing the
+  // target. See src/replay/weak-refs.h.
+  inline int record_replay_id() const;
+  inline void set_record_replay_id(int value);
+
   DECL_PRINTER(JSWeakRef)
   EXPORT_DECL_VERIFIER(JSWeakRef)
 
@@ -225,6 +249,7 @@ V8_OBJECT class JSWeakRef : public JSObject {
 
  public:
   TaggedMember<UnionOf<Symbol, JSReceiver, Undefined>> target_;
+  TaggedMember<Smi> record_replay_id_;
 } V8_OBJECT_END;
 
 }  // namespace internal

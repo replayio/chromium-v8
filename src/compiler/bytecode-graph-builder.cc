@@ -8,6 +8,7 @@
 #include <optional>
 
 #include "src/ast/ast.h"
+#include "src/codegen/external-reference.h"
 #include "src/codegen/source-position-table.h"
 #include "src/codegen/tick-counter.h"
 #include "src/common/assert-scope.h"
@@ -28,6 +29,8 @@
 #include "src/compiler/operator-properties.h"
 #include "src/compiler/simplified-operator.h"
 #include "src/compiler/state-values-utils.h"
+#include "src/execution/isolate-data-fields.h"
+#include "src/execution/thread-local-top.h"
 #include "src/interpreter/bytecode-array-iterator.h"
 #include "src/interpreter/bytecode-flags-and-tokens.h"
 #include "src/interpreter/bytecode-register.h"
@@ -42,6 +45,7 @@ namespace v8 {
 namespace internal {
 
 extern bool gRecordReplayAssertProgress;
+extern int gRecordReplayCheckProgress;
 extern bool gRecordReplayInstrumentationEnabled;
 
 namespace compiler {
@@ -3968,20 +3972,64 @@ void BytecodeGraphBuilder::VisitIncBlockCounter() {
 void BytecodeGraphBuilder::VisitRecordReplayIncExecutionProgressCounter() {
   PrepareEagerCheckpoint();
 
-  // Use a VM call instead of an optimized path when we need to add assertions
-  // to the recording, or when replaying so that the calling code can be deoptimized
-  // when the target progress value has been reached.
-  if (gRecordReplayAssertProgress || recordreplay::IsReplaying()) {
+  // Assertions and checks on progress need the VM call. Otherwise, as in
+  // baseline code, update the counter inline and only call into the VM at the
+  // target progress, where the call lazily deoptimizes this code if what runs
+  // there (pausing, breakpoints, instrumentation changes) discards it.
+  if (gRecordReplayAssertProgress || gRecordReplayCheckProgress) {
     Node* closure = GetFunctionClosure();
     const Operator* op = javascript()->CallRuntime(Runtime::kRecordReplayAssertExecutionProgress);
 
     Node* node = NewNode(op, closure);
     environment()->RecordAfterState(node, Environment::kAttachFrameState);
   } else {
-    Node* node = NewNode(simplified()->IncrementAndCheckProgressCounter());
+    const int offset = bytecode_iterator().current_offset();
+    Node* frame_state = environment()->Checkpoint(
+        BytecodeOffset(offset), OutputFrameStateCombine::Ignore(),
+        bytecode_analysis().GetOutLivenessFor(offset));
+    Node* node = NewNode(simplified()->IncrementAndCheckProgressCounter(),
+                         frame_state, environment()->Context());
     environment()->RecordAfterState(node, Environment::kAttachFrameState);
   }
   CHECK(needs_eager_checkpoint());
+}
+
+void BytecodeGraphBuilder::VisitReplayIncJsFrameDepth() {
+  // SoftSO before TempSchedule so IfException attaches to ThrowCall.
+  // Simplified ops only — machine value ops are Typer UNREACHABLE.
+  FieldAccess depth_access(kUntaggedBase, 0, MaybeHandle<Name>(),
+                           OptionalMapRef(), Type::Signed32(),
+                           MachineType::Int32(), kNoWriteBarrier,
+                           "ReplayJsFrameDepth");
+  Node* depth_addr = jsgraph()->ExternalConstant(ExternalReference::Create(
+      IsolateFieldId::kReplayJsFrameDepth, isolate()));
+  Node* depth = NewNode(simplified()->LoadField(depth_access), depth_addr);
+  Node* incremented =
+      NewNode(simplified()->NumberAdd(), depth, jsgraph()->SmiConstant(1));
+  NewNode(simplified()->StoreField(depth_access), depth_addr, incremented);
+
+  Node* overflow = NewNode(
+      simplified()->NumberLessThanOrEqual(),
+      jsgraph()->SmiConstant(ThreadLocalTop::kReplayMaxJsFrameDepth),
+      incremented);
+  NewBranch(overflow, BranchHint::kFalse);
+  {
+    SubEnvironment sub_environment(this);
+    NewIfTrue();
+    BuildLoopExitsForFunctionExit(bytecode_analysis().GetInLivenessFor(
+        bytecode_iterator().current_offset()));
+    Node* throw_call =
+        NewNode(javascript()->CallRuntime(Runtime::kThrowStackOverflow));
+    environment()->RecordAfterState(throw_call, Environment::kAttachFrameState);
+    Node* control = NewNode(common()->Throw());
+    MergeControlToLeaveFunction(control);
+  }
+  NewIfFalse();
+}
+
+void BytecodeGraphBuilder::VisitReplayDecJsFrameDepth() {
+  Node* node = NewNode(simplified()->ReplayDecrementJsFrameDepth());
+  environment()->RecordAfterState(node, Environment::kAttachFrameState);
 }
 
 void BytecodeGraphBuilder::VisitRecordReplayNotifyActivity() {

@@ -163,6 +163,7 @@ class V8RuntimeAgentImpl : public protocol::Runtime::Backend {
                int executionContextId);
   void messageAdded(V8ConsoleMessage*);
   bool enabled() const { return m_enabled; }
+  bool replayOwned() const { return m_replay_owned; }
 
  private:
   bool reportMessage(V8ConsoleMessage*, bool generatePreview);
@@ -178,13 +179,11 @@ class V8RuntimeAgentImpl : public protocol::Runtime::Backend {
   V8InspectorImpl* m_inspector;
   std::shared_ptr<V8DebuggerBarrier> m_debuggerBarrier;
   bool m_enabled;
+  bool m_replay_owned;
   std::unordered_map<String16, std::unique_ptr<v8::Global<v8::Script>>>
       m_compiledScripts;
   // Binding name -> executionContextIds mapping.
   std::unordered_map<String16, std::unordered_set<int>> m_activeBindings;
-
-  // Whether this agent is replaying specific, and should not interact with the recording.
-  bool m_replay_owned;
 };
 
 }  // namespace v8_inspector

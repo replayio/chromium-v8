@@ -1802,18 +1802,16 @@ void BytecodeGenerator::GenerateBodyPrologue() {
   // Emit tracing call if requested to do so.
   if (v8_flags.trace) builder()->CallRuntime(Runtime::kTraceEnter);
 
-  if (recordreplay::IsRecordingOrReplaying("emit-opcodes")) {
-    builder()->RecordReplayOnProgress();
+  builder()->RecordReplayOnProgress();
 
-    if (IsResumableFunction(literal->kind())) {
-      builder()->RecordReplayInstrumentationGenerator("generator", generator_object());
-    } else {
-      builder()->RecordReplayInstrumentation("main");
-    }
-
-    // Reset for each function.
-    record_replay_has_track_this_ = false;
+  if (IsResumableFunction(literal->kind())) {
+    builder()->ReplayOnFrameEnterGenerator(generator_object());
+  } else {
+    builder()->ReplayOnFrameEnter();
   }
+
+  // Reset for each function.
+  record_replay_has_track_this_ = false;
 
   // Increment the function-scope block coverage counter.
   BuildIncrementBlockCoverageCounterIfEnabled(literal, SourceRangeKind::kBody);
@@ -2516,7 +2514,7 @@ void BytecodeGenerator::ReplayExpressionShiftedSetStatementPosition(Statement* s
   builder()->SetStatementPosition(stmt, /* record_replay_breakpoint */ false);
   if (expr->position() < 0) {
     // expression is empty, so the breakpoint gets added at the statement itself
-    builder()->RecordReplayInstrumentation("breakpoint", stmt->position());
+    builder()->RecordReplayDeferBreakpoint(stmt->position());
   } else if (expr->IsBinaryOperation()) {
     // given the breakpoint gets shifted to the expression (if that's available) by default
     // we first check if it's not a binary operation, in which case we need to make sure the breakpoint is added at the position of the left operand
@@ -2526,9 +2524,9 @@ void BytecodeGenerator::ReplayExpressionShiftedSetStatementPosition(Statement* s
     // without this specialcase the breakpoints would be added like this (3 would be skipped):
     //
     // return /*2*/foo(), /*1*//*3*/bar();
-    builder()->RecordReplayInstrumentation("breakpoint", expr->AsBinaryOperation()->left()->position());
+    builder()->RecordReplayDeferBreakpoint(expr->AsBinaryOperation()->left()->position());
   } else {
-    builder()->RecordReplayInstrumentation("breakpoint", expr->position());
+    builder()->RecordReplayDeferBreakpoint(expr->position());
   }
 }
 
@@ -4924,11 +4922,11 @@ void BytecodeGenerator::BuildReturn(int source_position) {
   }
   builder()->SetStatementPosition(source_position,
                                   /* record_replay_breakpoint */ false);
-  if (builder()->EmitRecordReplayInstrumentationOpcodes()) {
+  {
     RegisterAllocationScope register_scope(this);
     Register return_value = register_allocator()->NewRegister();
     builder()->StoreAccumulatorInRegister(return_value);
-    builder()->RecordReplayInstrumentationReturn("exit", return_value);
+    builder()->ReplayOnFrameReturn(return_value);
   }
   builder()->Return();
 }
@@ -6193,7 +6191,7 @@ void BytecodeGenerator::BuildSuspendPoint(int position) {
 
   RegisterList registers = register_allocator()->AllLiveRegisters();
 
-  builder()->RecordReplayInstrumentation("exit");
+  builder()->ReplayOnFrameExit();
 
   // Save context, registers, and state. This bytecode then returns the value
   // in the accumulator.
@@ -6208,7 +6206,7 @@ void BytecodeGenerator::BuildSuspendPoint(int position) {
   builder()->ResumeGenerator(generator_object(), registers);
 
   builder()->RecordReplayOnProgress();
-  builder()->RecordReplayInstrumentationGenerator("entry", generator_object());
+  builder()->ReplayOnFrameEnterGenerator(generator_object());
 }
 
 void BytecodeGenerator::VisitYield(Yield* expr) {

@@ -13,6 +13,7 @@
 #include "src/compiler/linkage.h"
 #include "src/compiler/pipeline.h"
 #include "src/compiler/turboshaft/builtin-compiler.h"
+#include "src/execution/thread-local-top.h"
 #include "src/ic/accessor-assembler.h"
 #include "src/ic/binary-op-assembler.h"
 #include "src/ic/ic.h"
@@ -3308,6 +3309,37 @@ IGNITION_HANDLER(RecordReplayIncExecutionProgressCounter, InterpreterAssembler) 
   TNode<Context> context = GetContext();
   TNode<Object> closure = LoadRegister(Register::function_closure());
   CallRuntime(Runtime::kRecordReplayAssertExecutionProgress, context, closure);
+  Dispatch();
+}
+
+IGNITION_HANDLER(ReplayIncJsFrameDepth, InterpreterAssembler) {
+  TNode<ExternalReference> depth_addr =
+      IsolateField(IsolateFieldId::kReplayJsFrameDepth);
+  TNode<Int32T> depth = Load<Int32T>(depth_addr);
+  TNode<Int32T> new_depth = Int32Add(depth, Int32Constant(1));
+  StoreNoWriteBarrier(MachineRepresentation::kWord32, depth_addr, new_depth);
+
+  Label ok(this), overflow(this, Label::kDeferred);
+  GotoIf(Int32GreaterThanOrEqual(
+             new_depth, Int32Constant(ThreadLocalTop::kReplayMaxJsFrameDepth)),
+         &overflow);
+  Goto(&ok);
+
+  BIND(&overflow);
+  CallRuntime(Runtime::kThrowStackOverflow, GetContext());
+  Abort(AbortReason::kUnexpectedReturnFromThrow);
+  Unreachable();
+
+  BIND(&ok);
+  Dispatch();
+}
+
+IGNITION_HANDLER(ReplayDecJsFrameDepth, InterpreterAssembler) {
+  TNode<ExternalReference> depth_addr =
+      IsolateField(IsolateFieldId::kReplayJsFrameDepth);
+  TNode<Int32T> depth = Load<Int32T>(depth_addr);
+  TNode<Int32T> new_depth = Int32Sub(depth, Int32Constant(1));
+  StoreNoWriteBarrier(MachineRepresentation::kWord32, depth_addr, new_depth);
   Dispatch();
 }
 

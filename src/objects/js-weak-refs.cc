@@ -61,7 +61,15 @@ Maybe<bool> JSFinalizationRegistry::Cleanup(
   //    cell.[[WeakRefTarget]] is empty, an implementation may perform the
   //    following steps:
   bool key_map_may_need_shrink = false;
-  while (finalization_registry->NeedsCleanup()) {
+  while (true) {
+    // Record/replay: for a tracked registry the recording says which cell is
+    // delivered next, and when there is none.
+    if (finalization_registry->record_replay_id() != 0 &&
+        !replayio::ReplayFinalizationRegistries::NextCell(
+            isolate, finalization_registry)) {
+      break;
+    }
+    if (!finalization_registry->NeedsCleanup()) break;
     HandleScope scope(isolate);
 
     // a. Choose any such cell.

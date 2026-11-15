@@ -94,6 +94,8 @@ enum class IsolateFieldId : uint8_t;
 
 #define EXTERNAL_REFERENCE_LIST(V)                                             \
   V(abort_with_reason, "abort_with_reason")                                    \
+  V(record_replay_is_recording_or_replaying,                                   \
+    "record_replay_is_recording_or_replaying")                                 \
   V(abort_with_sandbox_violation, "abort_with_sandbox_violation")              \
   V(address_of_log_or_trace_osr, "v8_flags.log_or_trace_osr")                  \
   V(address_of_builtin_subclassing_flag, "v8_flags.builtin_subclassing")       \
@@ -675,6 +677,14 @@ class ExternalReference {
 #undef DECL_EXTERNAL_REFERENCE
 
   V8_EXPORT_PRIVATE static ExternalReference isolate_address();
+
+  // Replay: the record/replay progress counter and target progress. Not in
+  // EXTERNAL_REFERENCE_LIST: the counter's address is only known once
+  // recording/replaying has started (it is null in mksnapshot), so it has no
+  // stable slot in the external reference table. Only for code generated at
+  // runtime (Sparkplug, TurboFan), which is never serialized.
+  V8_EXPORT_PRIVATE static ExternalReference record_replay_progress_counter();
+  V8_EXPORT_PRIVATE static ExternalReference record_replay_target_progress();
 
   V8_EXPORT_PRIVATE V8_NOINLINE static ExternalReference
   runtime_function_table_address_for_unittests(Isolate* isolate);

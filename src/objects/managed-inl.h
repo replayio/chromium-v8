@@ -26,6 +26,17 @@ namespace detail {
 template <typename CppType>
 void Destructor(void* ptr) {
   auto shared_ptr_ptr = reinterpret_cast<std::shared_ptr<CppType>*>(ptr);
+  // Not the shared pointer's use count: other isolates share the object
+  // (e.g. a wasm NativeModule shared with workers) and release their
+  // references on their own threads, which nothing orders with this one,
+  // so the count differs when replaying.
+  // A {CppGCManaged}'s wrapper is destroyed by the C++ heap's sweeper, with
+  // events disallowed, at points that differ when replaying: nothing to
+  // assert there.
+  if (!recordreplay::AreEventsDisallowed()) {
+    recordreplay::Assert("Managed::Destructor");
+  }
+  if (*shared_ptr_ptr) OnManagedRemoved(shared_ptr_ptr->get());
   delete shared_ptr_ptr;
 }
 }  // namespace detail
@@ -38,6 +49,7 @@ DirectHandle<Managed<CppType>> Managed<CppType>::From(
   static constexpr ExternalPointerTag kTag = TagForManaged<CppType>::value;
   static_assert(IsManagedExternalPointerType(kTag));
   SharedFlag shared = SharedFlag(IsSharedAllocationType(allocation_type));
+  if (shared_ptr) OnManagedAdded(shared_ptr.get());
   auto destructor = new ManagedPtrDestructor(
       estimated_size, new std::shared_ptr<CppType>{std::move(shared_ptr)},
       detail::Destructor<CppType>, shared);
@@ -65,6 +77,7 @@ template <class CppType>
 DirectHandle<TrustedManaged<CppType>> TrustedManaged<CppType>::From(
     Isolate* isolate, size_t estimated_size,
     std::shared_ptr<CppType> shared_ptr) {
+  if (shared_ptr) OnManagedAdded(shared_ptr.get());
   auto destructor = new ManagedPtrDestructor(
       estimated_size, new std::shared_ptr<CppType>{std::move(shared_ptr)},
       detail::Destructor<CppType>, SharedFlag{false});
@@ -99,6 +112,7 @@ template <class CppType>
 Handle<CppGCManaged<CppType>> CppGCManaged<CppType>::Create(
     Isolate* isolate, size_t estimated_size,
     std::shared_ptr<CppType> shared_ptr, AllocationType allocation_type) {
+  if (shared_ptr) OnManagedAdded(shared_ptr.get());
   auto* shared_ptr_ptr = new std::shared_ptr<CppType>(std::move(shared_ptr));
   auto* destructor = cppgc::MakeGarbageCollected<CppGCManagedWrapper>(
       reinterpret_cast<v8::Isolate*>(isolate)

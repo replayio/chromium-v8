@@ -57,6 +57,7 @@ class V8DebuggerAgentImpl : public protocol::Debugger::Backend {
   V8DebuggerAgentImpl(const V8DebuggerAgentImpl&) = delete;
   V8DebuggerAgentImpl& operator=(const V8DebuggerAgentImpl&) = delete;
   void restore();
+  bool replayOwned() const { return m_replay_owned; }
   void stop();
   void setSkipAllPausesForInternalUse(bool skip);
 
@@ -294,6 +295,7 @@ class V8DebuggerAgentImpl : public protocol::Debugger::Backend {
   V8InspectorImpl* m_inspector;
   V8Debugger* m_debugger;
   V8InspectorSessionImpl* m_session;
+  bool m_replay_owned;
   EnableState m_enableState;
   protocol::DictionaryValue* m_state;
   protocol::Debugger::Frontend m_frontend;
