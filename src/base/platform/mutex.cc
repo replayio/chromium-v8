@@ -51,7 +51,14 @@ bool RecursiveMutex::TryLock() {
   return false;
 }
 
-Mutex::Mutex() {
+//extern "C" void V8RecordReplayAddOrderedSRWLock(const char* name, void* lock);
+
+Mutex::Mutex(const char* ordered_name) {
+  if (ordered_name) {
+    fprintf(stderr, "FIXME Mutex::Mutex Crashing...\n");
+    CHECK(0);
+    //V8RecordReplayAddOrderedSRWLock(ordered_name, &native_handle_);
+  }
 #ifdef DEBUG
   level_ = 0;
 #endif

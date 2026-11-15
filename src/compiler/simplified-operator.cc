@@ -1009,7 +1009,6 @@ bool operator==(AssertNotNullParameters const& lhs,
   V(StringCodePointAt, Operator::kNoProperties, 2, 1)     \
   V(StringFromCodePointAt, Operator::kNoProperties, 2, 1) \
   V(StringSubstring, Operator::kNoProperties, 3, 1)       \
-  V(DateNow, Operator::kNoProperties, 0, 1)               \
   V(DoubleArrayMax, Operator::kNoProperties, 1, 1)        \
   V(DoubleArrayMin, Operator::kNoProperties, 1, 1)
 
@@ -2699,6 +2698,20 @@ const Operator* SimplifiedOperatorBuilder::TransitionAndStoreNonNumberElement(
       IrOpcode::kTransitionAndStoreNonNumberElement,
       Operator::kNoDeopt | Operator::kNoThrow,
       "TransitionAndStoreNonNumberElement", 3, 1, 1, 0, 1, 0, parameters);
+}
+
+const Operator* SimplifiedOperatorBuilder::DateNow() {
+  return zone()->New<Operator>(IrOpcode::kDateNow,
+                               Operator::kNoDeopt | Operator::kNoThrow,
+                               "DateNow",
+                               0, 1, 1, 1, 1, 0);
+}
+
+const Operator* SimplifiedOperatorBuilder::IncrementAndCheckProgressCounter() {
+  return zone()->New<Operator>(IrOpcode::kIncrementAndCheckProgressCounter,
+                               Operator::kNoDeopt | Operator::kNoThrow,
+                               "IncrementAndCheckProgressCounter",
+                               0, 1, 0, 1, 1, 0);
 }
 
 const Operator* SimplifiedOperatorBuilder::FastApiCall(

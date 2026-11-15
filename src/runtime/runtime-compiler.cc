@@ -13,6 +13,7 @@
 #include "src/execution/arguments-inl.h"
 #include "src/execution/frames-inl.h"
 #include "src/execution/isolate-inl.h"
+#include "src/execution/isolate-utils-inl.h"
 #include "src/objects/abstract-code-inl.h"
 #include "src/objects/js-array-buffer-inl.h"
 #include "src/objects/objects-inl.h"
@@ -232,6 +233,12 @@ RUNTIME_FUNCTION(Runtime_CompileLazy) {
   if (V8_UNLIKELY(
           check.JsHasOverflowed(kStackSpaceRequiredForCompilation * KB))) {
     return isolate->StackOverflow();
+  }
+
+  {
+    Isolate* function_isolate = nullptr;
+    CHECK(GetIsolateFromHeapObject(*function, &function_isolate));
+    CHECK_EQ(isolate, function_isolate);
   }
 
   DirectHandle<SharedFunctionInfo> sfi(function->shared(), isolate);

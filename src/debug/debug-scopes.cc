@@ -870,6 +870,9 @@ bool ScopeIterator::VisitLocals(const Visitor& visitor, Mode mode,
           value = isolate_->factory()->tdz_hole_value();
           break;
         }
+        // This index is sometimes out of range when gathering state using the
+        // Record Replay driver.
+        if (index >= context_->length()) continue;
         DCHECK_EQ(context_->scope_info()->ContextSlotIndex(*name), index);
         // Context::get() only DCHECKs the index. Make sure a context that is
         // out of sync with the parsed scope can't cause an out-of-bounds read.

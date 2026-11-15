@@ -64,6 +64,7 @@
 
 namespace v8 {
 namespace internal {
+
 namespace baseline {
 
 #define __ basm_.
@@ -3009,6 +3010,62 @@ void BaselineCompiler::VisitIncBlockCounter() {
   SaveAccumulatorScope accumulator_scope(this, &basm_);
   CallBuiltin<Builtin::kIncBlockCounter>(
       __ FunctionOperand(), CoverageSlotAsSmi(0));  // coverage array slot
+}
+
+void BaselineCompiler::VisitRecordReplayIncExecutionProgressCounter() {
+  // The optimized path is currently disabled.
+  // See https://linear.app/replay/issue/RUN-744
+  if ((true)/*gRecordReplayAssertProgress*/) {
+    CallRuntime(Runtime::kRecordReplayAssertExecutionProgress,
+                __ FunctionOperand());
+  } else {
+    /*
+    // The previously disabled optimized path inlined the progress-counter
+    // increment via ExternalReference accessors record_replay_progress_counter
+    // / record_replay_target_progress. Those extrefs were removed from
+    // EXTERNAL_REFERENCE_LIST (they baked a serialize-vs-runtime divergent
+    // (idx,encoded) dedup pair into the static snapshot, crashing startup
+    // deserialization), so the optimized path is gone for good.
+    // See https://linear.app/replay/issue/RUN-744
+    */
+  }
+}
+
+void BaselineCompiler::VisitRecordReplayNotifyActivity() {
+  CallRuntime(Runtime::kRecordReplayNotifyActivity);
+}
+
+void BaselineCompiler::VisitRecordReplayInstrumentation() {
+  SaveAccumulatorScope accumulator_scope(this, &basm_);
+  uint32_t index = ConstantPoolIndex(0);
+  CallRuntime(Runtime::kRecordReplayInstrumentation,
+              __ FunctionOperand(), Smi::FromInt(index));
+}
+
+void BaselineCompiler::VisitRecordReplayInstrumentationGenerator() {
+  SaveAccumulatorScope accumulator_scope(this, &basm_);
+  uint32_t index = ConstantPoolIndex(0);
+  CallRuntime(Runtime::kRecordReplayInstrumentationGenerator,
+              __ FunctionOperand(), Smi::FromInt(index), RegisterOperand(1));
+}
+
+void BaselineCompiler::VisitRecordReplayInstrumentationReturn() {
+  SaveAccumulatorScope accumulator_scope(this, &basm_);
+  uint32_t index = ConstantPoolIndex(0);
+  CallRuntime(Runtime::kRecordReplayInstrumentationReturn,
+              __ FunctionOperand(), Smi::FromInt(index), RegisterOperand(1));
+}
+
+void BaselineCompiler::VisitRecordReplayAssertValue() {
+  SaveAccumulatorScope accumulator_scope(this, &basm_);
+  CallRuntime(Runtime::kRecordReplayAssertValue,
+              __ FunctionOperand(), Smi::FromInt(ConstantPoolIndex(0)),
+              kInterpreterAccumulatorRegister);
+}
+
+void BaselineCompiler::VisitRecordReplayTrackObjectId() {
+  SaveAccumulatorScope accumulator_scope(this, &basm_);
+  CallRuntime(Runtime::kRecordReplayTrackObjectId, RegisterOperand(0));
 }
 
 void BaselineCompiler::VisitAbort() {

@@ -2464,6 +2464,9 @@ class Heap final {
   const uint8_t* gc_extra_tracing_category_enabled_ = nullptr;
   size_t notify_context_disposed_counter_ = 1;
 
+  // For ordering allocations of new script IDs.
+  int script_ordered_lock_id_ = 0;
+
   // Classes in "heap" can be friends.
   friend class ActivateMemoryReducerTask;
   friend class AlwaysAllocateScope;

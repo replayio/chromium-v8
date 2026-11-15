@@ -114,6 +114,7 @@
 #include "src/profiler/heap-profiler.h"
 #include "src/profiler/tracing-cpu-profiler.h"
 #include "src/regexp/regexp-stack.h"
+#include "src/replay/replay-isolate-data.h"
 #include "src/roots/roots.h"
 #include "src/roots/static-roots.h"
 #include "src/sandbox/js-dispatch-table-inl.h"
@@ -2458,6 +2459,8 @@ MaybeDirectHandle<Object> Isolate::ReportFailedAccessCheck(
   THROW_NEW_ERROR(this, NewTypeError(MessageTemplate::kNoAccess));
 }
 
+extern "C" bool V8RecordReplayIsInReplayCode();
+
 bool Isolate::MayAccess(DirectHandle<NativeContext> accessing_context,
                         DirectHandle<JSObject> receiver) {
   DCHECK(IsJSGlobalProxy(*receiver) || IsAccessCheckNeeded(*receiver));
@@ -2467,6 +2470,10 @@ bool Isolate::MayAccess(DirectHandle<NativeContext> accessing_context,
 
   // During bootstrapping, callback functions are not enabled yet.
   if (bootstrapper()->IsActive()) return true;
+
+  // Allow all accesses made while replay code is running.
+  if (V8RecordReplayIsInReplayCode()) return true;
+
   {
     DisallowGarbageCollection no_gc;
 
@@ -2503,7 +2510,18 @@ bool Isolate::MayAccess(DirectHandle<NativeContext> accessing_context,
   }
 }
 
+static bool gHasPrintedStack = false;
+
 Tagged<Object> Isolate::StackOverflow() {
+  recordreplay::InvalidateRecording("Stack overflow");
+
+  if (recordreplay::IsRecordingOrReplaying() && !gHasPrintedStack) {
+    gHasPrintedStack = true;
+    std::stringstream stack;
+    PrintCurrentStackTrace(stack);
+    recordreplay::Print("Stack overflow: %s", stack.str().c_str());
+  }
+
   // Whoever calls this method should not have overflown the stack limit by too
   // much. Otherwise we risk actually running out of stack space.
   // We allow for up to 8kB overflow, because we typically allow up to 4KB
@@ -2602,12 +2620,31 @@ void Isolate::CancelTerminateExecution() {
 }
 
 void Isolate::RequestInterrupt(InterruptCallback callback, void* data) {
+  recordreplay::OrderedLock(record_replay_api_interrupts_ordered_lock_id_);
   ExecutionAccess access(this);
   api_interrupts_queue_.push(InterruptEntry(callback, data));
   stack_guard()->RequestApiInterrupt();
+  recordreplay::OrderedUnlock(record_replay_api_interrupts_ordered_lock_id_);
 }
 
+extern void RecordReplayTriggerProgressInterrupt();
+
 void Isolate::InvokeApiInterruptCallbacks() {
+  if (recordreplay::IsRecordingOrReplaying("interrupts")) {
+    // When recording, we can't invoke API interrupt callbacks at arbitrary points
+    // where we check for interrupts, as we won't be able to invoke those callbacks
+    // at the same point when replaying. Instead, after detecting that interrupts
+    // have been added to the queue we trigger an interrupt the next time the progress
+    // counter advances, and will invoke the callbacks then.
+    if (recordreplay::IsRecording() && IsMainThread()) {
+      ExecutionAccess access(this);
+      if (!api_interrupts_queue_.empty()) {
+        RecordReplayTriggerProgressInterrupt();
+      }
+    }
+    return;
+  }
+
   RCS_SCOPE(this, RuntimeCallCounterId::kInvokeApiInterruptCallbacks);
   struct ApiInterruptScope {
     explicit ApiInterruptScope(Isolate* isolate) : isolate_(isolate) {
@@ -2640,6 +2677,29 @@ void Isolate::InvokeApiInterruptCallbacks() {
 #ifdef V8_DISALLOW_JS_IN_API_INTERRUPTS_IS_CHECKED
     DisallowJavascriptExecution no_js(this);
 #endif  // V8_DISALLOW_JS_IN_API_INTERRUPTS_IS_CHECKED
+    entry.first(reinterpret_cast<v8::Isolate*>(this), entry.second);
+  }
+}
+
+void Isolate::RecordReplayInvokeApiInterruptCallbacksAtProgress() {
+  CHECK(recordreplay::IsRecordingOrReplaying("interrupts"));
+  CHECK(IsMainThread());
+
+  while (true) {
+    InterruptEntry entry;
+    recordreplay::OrderedLock(record_replay_api_interrupts_ordered_lock_id_);
+    {
+      ExecutionAccess access(this);
+      if (api_interrupts_queue_.empty()) {
+        recordreplay::OrderedUnlock(record_replay_api_interrupts_ordered_lock_id_);
+        return;
+      }
+      entry = api_interrupts_queue_.front();
+      api_interrupts_queue_.pop();
+    }
+    recordreplay::OrderedUnlock(record_replay_api_interrupts_ordered_lock_id_);
+    VMState<EXTERNAL> state(this);
+    HandleScope handle_scope(this);
     entry.first(reinterpret_cast<v8::Isolate*>(this), entry.second);
   }
 }
@@ -2755,6 +2815,8 @@ DirectHandle<JSMessageObject> Isolate::CreateMessageOrAbort(
 Tagged<Object> Isolate::Throw(Tagged<Object> raw_exception,
                               MessageLocation* location,
                               bool is_stack_overflow) {
+  recordreplay::AssertMaybeEventsDisallowed("[RUN-885] Isolate::ThrowInternal");
+
   if (has_exception()) {
     // A termination exception may have been thrown while preparing
     // {raw_exception}, e.g. by the near heap limit callback
@@ -2894,7 +2956,11 @@ Tagged<Object> Isolate::UnwindAndFindHandler() {
   // unwinding.
   clear_topmost_script_having_context();
 
-  Tagged<Object> exception = this->exception();
+  // hackfix: pending_exception disappears sometimes, but we don't want to
+  // crash. - https://linear.app/replay/issue/RUN-1258/
+  Tagged<Object> exception = has_exception()
+                                 ? this->exception()
+                                 : ReadOnlyRoots(this).undefined_value();
 
   auto FoundHandler = [&](StackFrameIterator& iter, Tagged<Context> context,
                           Address instruction_start, intptr_t handler_offset,
@@ -4825,6 +4891,9 @@ v8::PageAllocator* Isolate::page_allocator() const {
   return isolate_group()->page_allocator();
 }
 
+extern void RecordReplayOnMainThreadIsolateCreated(Isolate* isolate);
+extern bool RecordReplayShouldCallOnPromiseHook();
+
 Isolate::Isolate(IsolateGroup* isolate_group)
     : isolate_data_(this, isolate_group),
       isolate_group_(isolate_group),
@@ -4890,6 +4959,24 @@ Isolate::Isolate(IsolateGroup* isolate_group)
     i::trap_handler::SetLandingPad(landing_pad);
   }
 #endif  // V8_ENABLE_WEBASSEMBLY
+
+  record_replay_api_interrupts_ordered_lock_id_ = (int)recordreplay::CreateOrderedLock("APIInterrupts");
+
+  if (recordreplay::IsRecordingOrReplaying() && IsMainThread()) {
+    RecordReplayOnMainThreadIsolateCreated(this);
+  }
+
+  if (RecordReplayShouldCallOnPromiseHook()) {
+    promise_hook_flags_ =
+      PromiseHookFields::HasIsolatePromiseHook::encode(true);
+  }
+}
+
+replayio::ReplayIsolateData* Isolate::EnsureReplayData() {
+  if (!replay_data_) {
+    replay_data_ = std::make_unique<replayio::ReplayIsolateData>();
+  }
+  return replay_data_.get();
 }
 
 void Isolate::CheckIsolateLayout() {
@@ -7267,7 +7354,7 @@ void Isolate::UpdatePromiseHookProtector() {
 void Isolate::PromiseHookStateUpdated() {
   promise_hook_flags_ =
       (promise_hook_flags_ & PromiseHookFields::HasContextPromiseHook::kMask) |
-      PromiseHookFields::HasIsolatePromiseHook::encode(promise_hook_) |
+      PromiseHookFields::HasIsolatePromiseHook::encode(promise_hook_ || RecordReplayShouldCallOnPromiseHook()) |
       PromiseHookFields::HasAsyncEventDelegate::encode(async_event_delegate_) |
       PromiseHookFields::IsDebugActive::encode(debug()->is_active());
 
@@ -7738,10 +7825,17 @@ void Isolate::RunAllPromiseHooks(PromiseHookType type,
   }
 }
 
+extern void RecordReplayOnPromiseHook(Isolate* isolate, PromiseHookType type,
+                                      DirectHandle<JSPromise> promise, DirectHandle<Object> parent);
+
 void Isolate::RunPromiseHook(PromiseHookType type,
                              DirectHandle<JSPromise> promise,
                              DirectHandle<Object> parent) {
   if (!HasIsolatePromiseHooks()) return;
+  if (RecordReplayShouldCallOnPromiseHook()) {
+    RecordReplayOnPromiseHook(this, type, promise, parent);
+    if (!promise_hook_) return;
+  }
   DCHECK(promise_hook_ != nullptr);
   promise_hook_(type, v8::Utils::ToLocal(promise), v8::Utils::ToLocal(parent));
 }
@@ -7883,11 +7977,19 @@ void Isolate::OnTerminationDuringRunMicrotasks() {
 
 void Isolate::SetPromiseRejectCallback(PromiseRejectCallback callback) {
   promise_reject_callback_ = callback;
+
+  recordreplay::Assert("[TT-1029-1030] Isolate::SetPromiseRejectCallback %d",
+                       !!promise_reject_callback_);
 }
 
 void Isolate::ReportPromiseReject(DirectHandle<JSPromise> promise,
                                   DirectHandle<Object> value,
                                   v8::PromiseRejectEvent event) {
+  v8::recordreplay::AssertMaybeEventsDisallowed(
+    "[TT-1029-1030] Isolate::ReportPromiseReject %d",
+    !!promise_reject_callback_
+  );
+
   if (promise_reject_callback_ == nullptr) return;
   promise_reject_callback_(v8::PromiseRejectMessage(
       v8::Utils::ToLocal(promise), event, v8::Utils::ToLocal(value)));
@@ -7904,6 +8006,13 @@ void Isolate::CountUsage(v8::Isolate::UseCounterFeature feature) {
 
 void Isolate::CountUsage(
     base::Vector<const v8::Isolate::UseCounterFeature> features) {
+  // Don't count usage when recording/replaying, as this can involve posting
+  // tasks to other threads in places that run non-deterministically
+  // (e.g. compilation).
+  if (recordreplay::IsRecordingOrReplaying("no-count-usage")) {
+    return;
+  }
+
   // The counter callback
   // - may cause the embedder to call into V8, which is not generally possible
   //   during GC.
@@ -7924,7 +8033,20 @@ void Isolate::CountUsage(
   }
 }
 
-int Isolate::GetNextScriptId() { return heap()->NextScriptId(); }
+// Start disallowed script IDs at a value that won't conflict with regular IDs,
+// which start at one and increment from there.
+static int gNextDisallowedScriptId = 1 << 30;
+
+int Isolate::GetNextScriptId() {
+  // Use a separate pool of IDs when events are disallowed, as these scripts
+  // won't be created at consistently when recording vs. replaying.
+  if (recordreplay::AreEventsDisallowed("Isolate::GetNextScriptId")) {
+    CHECK(IsMainThread());
+    return gNextDisallowedScriptId++;
+  }
+
+  return heap()->NextScriptId();
+}
 
 // static
 std::string Isolate::GetTurboCfgFileName(Isolate* isolate) {

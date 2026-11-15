@@ -55,6 +55,15 @@
 #include "src/inspector/v8-value-utils.h"
 #include "src/inspector/value-mirror.h"
 
+#include "v8.h"
+
+namespace v8 {
+  namespace internal {
+    extern int RecordReplayObjectId(v8::Isolate* isolate, Local<v8::Context> cx,
+                                    v8::Local<v8::Value> object, bool allow_create);
+  }
+}
+
 namespace v8_inspector {
 
 namespace {
@@ -436,15 +445,19 @@ InjectedScript::~InjectedScript() { discardEvaluateCallbacks(); }
 namespace {
 class PropertyAccumulator : public ValueMirror::PropertyAccumulator {
  public:
-  explicit PropertyAccumulator(std::vector<PropertyMirror>* mirrors)
-      : m_mirrors(mirrors) {}
+  explicit PropertyAccumulator(std::vector<PropertyMirror>* mirrors, const v8::KeyIterationParams* params)
+      : m_mirrors(mirrors), m_params(params) {}
   bool Add(PropertyMirror mirror) override {
     m_mirrors->push_back(std::move(mirror));
+    if (m_mirrors->size() > (size_t)m_params->PageSize((int)m_mirrors->size())) {
+      return false;
+    }
     return true;
   }
 
  private:
   std::vector<PropertyMirror>* m_mirrors;
+  const v8::KeyIterationParams* m_params;
 };
 }  // anonymous namespace
 
@@ -452,6 +465,7 @@ Response InjectedScript::getProperties(
     v8::Local<v8::Object> object, const String16& groupName, bool ownProperties,
     bool accessorPropertiesOnly, bool nonIndexedPropertiesOnly,
     const WrapOptions& wrapOptions,
+    const v8::KeyIterationParams* params,
     std::unique_ptr<Array<PropertyDescriptor>>* properties,
     std::unique_ptr<protocol::Runtime::ExceptionDetails>* exceptionDetails) {
   v8::HandleScope handles(m_context->isolate());
@@ -462,10 +476,14 @@ Response InjectedScript::getProperties(
 
   *properties = std::make_unique<Array<PropertyDescriptor>>();
   std::vector<PropertyMirror> mirrors;
-  PropertyAccumulator accumulator(&mirrors);
+  // [RUN-3149] pass params to the accumulator, which will stop us
+  // by returning false from .Add() after it's added enough properties.
+  PropertyAccumulator accumulator(&mirrors, params);
   if (!ValueMirror::getProperties(context, object, ownProperties,
                                   accessorPropertiesOnly,
-                                  nonIndexedPropertiesOnly, &accumulator)) {
+                                  nonIndexedPropertiesOnly,
+                                  &accumulator,
+                                  params)) {
     return createExceptionDetails(tryCatch, groupName, exceptionDetails);
   }
   for (const PropertyMirror& mirror : mirrors) {
@@ -534,6 +552,7 @@ Response InjectedScript::getProperties(
 Response InjectedScript::getInternalAndPrivateProperties(
     v8::Local<v8::Value> value, const String16& groupName,
     bool accessorPropertiesOnly,
+    const v8::KeyIterationParams* params,
     std::unique_ptr<protocol::Array<InternalPropertyDescriptor>>*
         internalProperties,
     std::unique_ptr<protocol::Array<PrivatePropertyDescriptor>>*
@@ -551,7 +570,7 @@ Response InjectedScript::getInternalAndPrivateProperties(
   if (!accessorPropertiesOnly) {
     std::vector<InternalPropertyMirror> internalPropertiesWrappers;
     ValueMirror::getInternalProperties(m_context->context(), value_obj,
-                                       &internalPropertiesWrappers);
+                                       &internalPropertiesWrappers, params);
     for (const auto& internalProperty : internalPropertiesWrappers) {
       std::unique_ptr<RemoteObject> remoteObject;
       Response response = internalProperty.value->buildRemoteObject(
@@ -868,7 +887,9 @@ Response InjectedScript::resolveCallArgument(
     std::unique_ptr<RemoteObjectId> remoteObjectId;
     Response response =
         RemoteObjectId::parse(callArgument->getObjectId(""), &remoteObjectId);
-    if (!response.IsSuccess()) return response;
+    if (!response.IsSuccess()) {
+      return response;
+    }
     if (remoteObjectId->contextId() != m_context->contextId() ||
         remoteObjectId->isolateId() != m_context->inspector()->isolateId()) {
       return Response::ServerError(
@@ -1082,7 +1103,9 @@ void InjectedScript::Scope::installCommandLineAPI() {
 void InjectedScript::Scope::ignoreExceptionsAndMuteConsole() {
   DCHECK(!m_ignoreExceptionsAndMuteConsole);
   m_ignoreExceptionsAndMuteConsole = true;
-  m_inspector->client()->muteMetrics(m_contextGroupId);
+  if (m_inspector->client()) {
+    m_inspector->client()->muteMetrics(m_contextGroupId);
+  }
   m_inspector->muteExceptions(m_contextGroupId);
   m_previousPauseOnExceptionsState =
       setPauseOnExceptionsState(v8::debug::NoBreakOnException);
@@ -1128,7 +1151,9 @@ void InjectedScript::Scope::cleanup() {
 InjectedScript::Scope::~Scope() {
   if (m_ignoreExceptionsAndMuteConsole) {
     setPauseOnExceptionsState(m_previousPauseOnExceptionsState);
-    m_inspector->client()->unmuteMetrics(m_contextGroupId);
+    if (m_inspector->client()) {
+      m_inspector->client()->unmuteMetrics(m_contextGroupId);
+    }
     m_inspector->unmuteExceptions(m_contextGroupId);
   }
   if (m_userGesture) m_inspector->client()->endUserGesture();
@@ -1158,14 +1183,20 @@ Response InjectedScript::ObjectScope::findInjectedScript(
     V8InspectorSessionImpl* session) {
   std::unique_ptr<RemoteObjectId> remoteId;
   Response response = RemoteObjectId::parse(m_remoteObjectId, &remoteId);
-  if (!response.IsSuccess()) return response;
+  if (!response.IsSuccess()) {
+    return response;
+  }
   std::shared_ptr<InjectedScript> injectedScript;
   response = session->findInjectedScript(remoteId.get(), injectedScript,
                                          &m_inspectedContext);
-  if (!response.IsSuccess()) return response;
+  if (!response.IsSuccess()) {
+    return response;
+  }
   m_objectGroupName = injectedScript->objectGroupName(*remoteId);
   response = injectedScript->findObject(*remoteId, &m_object);
-  if (!response.IsSuccess()) return response;
+  if (!response.IsSuccess()) {
+    return response;
+  }
   m_injectedScript = injectedScript;
   return Response::Success();
 }
@@ -1217,9 +1248,25 @@ Response InjectedScript::bindRemoteObjectIfNeeded(
         inspectedContext ? inspectedContext->getInjectedScript(sessionId)
                          : nullptr;
     if (!injectedScript) {
+      if (v8::recordreplay::IsInReplayCode("InjectedScript::bindRemoteObjectIfNeeded")) {
+        v8::recordreplay::Warning(
+          "[RUN-2486-2498] Cannot find context with specified id A %d %d %d",
+          sessionId, InspectedContext::contextId(context), !!inspectedContext);
+      }
       return Response::ServerError("Cannot find context with specified id");
     }
     remoteObject->setObjectId(injectedScript->bindObject(value, groupName));
+
+    // Persistent IDs should not be provided unless the caller is Replay-internal code.
+    if (v8::recordreplay::IsInReplayCode("InjectedScript::bindRemoteObjectIfNeeded") &&
+        value->IsObject()) {
+      int persistentId = v8::internal::RecordReplayObjectId(isolate, context, value,
+                                                            /* allow_create */ false);
+      if (persistentId) {
+        auto persistentIdString = String16::fromInteger64(static_cast<int64_t>(persistentId));
+        remoteObject->setPersistentId(persistentIdString);
+      }
+    }
   }
   return Response::Success();
 }

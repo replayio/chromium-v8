@@ -585,6 +585,8 @@ MaybeHandle<Code> CodeGenerator::BuildCodeObject(LocalIsolate* local_isolate) {
 }
 
 MaybeHandle<Code> CodeGenerator::FinalizeCode() {
+  replayio::AutoDisallowEvents disallow("CodeGenerator::FinalizeCode");
+
   Handle<Code> code;
   if (code_.ToHandle(&code)) {
     code = handle(*code, isolate());

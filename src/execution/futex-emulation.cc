@@ -142,6 +142,9 @@ bool FutexWaitListNode::CancelTimeoutTask() {
 
 void FutexWaitListNode::NotifyWake() {
   DCHECK(!IsAsync());
+
+  replayio::AutoDisallowEvents disallow("FutexWaitListNode::NotifyWake");
+
   // Lock the global mutex before notifying. We know that the mutex
   // will have been unlocked if we are currently waiting on the condition
   // variable. The mutex will not be locked if FutexEmulation::Wait hasn't
@@ -425,6 +428,8 @@ Tagged<Object> FutexEmulation::Wait(Isolate* isolate, WaitMode mode,
     }
   }
 
+  recordreplay::AutoAssertMaybeEventsDisallowed assrt("[RUN-2378] FutexEmulation::Wait");
+
   if (mode == WaitMode::kSync) {
     return WaitSync(isolate, FutexWaitList::ToWaitLocation(*array_buffer, addr),
                     value, use_timeout, rel_timeout_ns, call_type);
@@ -439,6 +444,7 @@ Tagged<Object> FutexEmulation::WaitSync(Isolate* isolate, void* wait_location,
                                         T value, bool use_timeout,
                                         int64_t rel_timeout_ns,
                                         CallType call_type) {
+  replayio::AutoDisallowEvents disallow("FutexEmulation::WaitSync");
   VMState<ATOMICS_WAIT> state(isolate);
   base::TimeDelta rel_timeout =
       base::TimeDelta::FromNanoseconds(rel_timeout_ns);
@@ -608,6 +614,7 @@ Tagged<Object> FutexEmulation::WaitAsync(
   std::weak_ptr<BackingStore> backing_store{array_buffer->GetBackingStore()};
   FutexWaitList* wait_list = GetWaitList();
   {
+    replayio::AutoDisallowEvents disallow("FutexEmulation::WaitAsync");
     // 16. Perform EnterCriticalSection(WL).
     NoGarbageCollectionMutexGuard lock_guard(wait_list->mutex());
 
@@ -721,6 +728,7 @@ int FutexEmulation::Wake(Tagged<JSArrayBuffer> array_buffer, size_t addr,
 }
 
 int FutexEmulation::Wake(void* wait_location, uint32_t num_waiters_to_wake) {
+  replayio::AutoDisallowEvents disallow("FutexEmulation::Wake");
   int num_waiters_woken = 0;
   FutexWaitList* wait_list = GetWaitList();
   NoGarbageCollectionMutexGuard lock_guard(wait_list->mutex());
@@ -923,6 +931,7 @@ void FutexEmulation::ResolveAsyncWaiterPromises(Isolate* isolate) {
   FutexWaitList* wait_list = GetWaitList();
   FutexWaitListNode* node;
   {
+    replayio::AutoDisallowEvents disallow("FutexEmulation::ResolveAsyncWaiterPromises");
     NoGarbageCollectionMutexGuard lock_guard(wait_list->mutex());
 
     auto& isolate_map = wait_list->isolate_promises_to_resolve_;
@@ -960,6 +969,7 @@ void FutexEmulation::HandleAsyncWaiterTimeout(FutexWaitListNode* node) {
   FutexWaitList* wait_list = GetWaitList();
 
   {
+    replayio::AutoDisallowEvents disallow("FutexEmulation::HandleAsyncWaiterTimeout");
     NoGarbageCollectionMutexGuard lock_guard(wait_list->mutex());
 
     node->async_state_->timeout_task_id = CancelableTaskManager::kInvalidTaskId;
@@ -981,6 +991,7 @@ void FutexEmulation::HandleAsyncWaiterTimeout(FutexWaitListNode* node) {
 }
 
 void FutexEmulation::IsolateDeinit(Isolate* isolate) {
+  replayio::AutoDisallowEvents disallow("FutexEmulation::IsolateDeinit");
   FutexWaitList* wait_list = GetWaitList();
   NoGarbageCollectionMutexGuard lock_guard(wait_list->mutex());
 
@@ -1025,6 +1036,7 @@ void FutexEmulation::IsolateDeinit(Isolate* isolate) {
 
 int FutexEmulation::NumWaitersForTesting(Tagged<JSArrayBuffer> array_buffer,
                                          size_t addr) {
+  replayio::AutoDisallowEvents disallow("FutexEmulation::NumWaitersForTesting");
   void* wait_location = FutexWaitList::ToWaitLocation(array_buffer, addr);
   FutexWaitList* wait_list = GetWaitList();
   NoGarbageCollectionMutexGuard lock_guard(wait_list->mutex());
@@ -1049,6 +1061,7 @@ int FutexEmulation::NumWaitersForTesting(Tagged<JSArrayBuffer> array_buffer,
 
 int FutexEmulation::NumUnresolvedAsyncPromisesForTesting(
     Tagged<JSArrayBuffer> array_buffer, size_t addr) {
+  replayio::AutoDisallowEvents disallow("FutexEmulation::NumUnresolvedAsyncPromisesForTesting");
   void* wait_location = FutexWaitList::ToWaitLocation(array_buffer, addr);
   FutexWaitList* wait_list = GetWaitList();
   NoGarbageCollectionMutexGuard lock_guard(wait_list->mutex());

@@ -160,6 +160,10 @@ class V8DebuggerAgentImpl : public protocol::Debugger::Backend {
       std::optional<int> scopeNumber,
       std::unique_ptr<protocol::Runtime::RemoteObject>* result,
       std::unique_ptr<protocol::Runtime::ExceptionDetails>*) override;
+
+  v8::MaybeLocal<v8::Value> getArgumentsOfCallFrame(
+    const String16& callFrameId);
+
   Response setVariableValue(
       int scopeNumber, const String16& variableName,
       std::unique_ptr<protocol::Runtime::CallArgument> newValue,
@@ -176,6 +180,14 @@ class V8DebuggerAgentImpl : public protocol::Debugger::Backend {
       const String16& scriptId,
       std::unique_ptr<protocol::Array<protocol::Debugger::ScriptPosition>>
           positions) override;
+  Response getCallFrames(
+      std::optional<int> maxFrames, std::optional<bool> noContents,
+      std::optional<String16> objectGroup,
+      std::unique_ptr<protocol::Array<protocol::Debugger::CallFrame>>* out_callFrames) override;
+  Response getTopFrameLocation(std::unique_ptr<protocol::Debugger::Location>* out_location) override;
+  Response getPendingException(
+      std::optional<String16> objectGroup,
+      std::unique_ptr<protocol::Runtime::RemoteObject>* out_exception) override;
 
   bool enabled() const { return m_enableState == kEnabled; }
 
@@ -218,13 +230,18 @@ class V8DebuggerAgentImpl : public protocol::Debugger::Backend {
 
   v8::Isolate* isolate() { return m_isolate; }
 
+  Response currentCallFrames(
+      std::optional<int> maxFrames, std::optional<bool> noContents,
+      std::optional<String16> objectGroup,
+      std::unique_ptr<protocol::Array<protocol::Debugger::CallFrame>>*);
+  std::unique_ptr<protocol::Runtime::RemoteObject> wrapObject(int contextId,
+                                                              v8::Local<v8::Value> val);
+
   void clearBreakDetails();
 
  private:
   void enableImpl();
 
-  Response currentCallFrames(
-      std::unique_ptr<protocol::Array<protocol::Debugger::CallFrame>>*);
   std::unique_ptr<protocol::Runtime::StackTrace> currentAsyncStackTrace();
   std::unique_ptr<protocol::Runtime::StackTraceId> currentExternalStackTrace();
 

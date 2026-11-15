@@ -35,8 +35,17 @@ class Safepoint;
 
 // Do not use this variable directly, use LocalHeap::Current() instead.
 // Defined outside of LocalHeap because LocalHeap uses V8_EXPORT_PRIVATE.
+// Replay intervention: thread_local is not supported on Linux when
+// recording/replaying, so on non-Windows the symbol is replaced by a
+// `.cc`-local `#define g_current_local_heap_ (*CurrentLocalHeap())`
+// (see local-heap.cc). That macro's RHS helpers are file-local to the `.cc`
+// and not visible here, so this `extern thread_local` decl (and the inlined
+// TLS getter below) must NOT be emitted on non-Windows; otherwise TUs that
+// inline the header getter reference an undefined `extern thread_local`.
+#if V8_OS_WIN
 __attribute__((tls_model(V8_TLS_MODEL))) extern thread_local LocalHeap*
     g_current_local_heap_ V8_CONSTINIT;
+#endif  // V8_OS_WIN
 
 // LocalHeap is used by the GC to track all threads with heap access in order to
 // stop them before performing a collection. LocalHeaps can be either Parked or
@@ -169,7 +178,17 @@ class V8_EXPORT_PRIVATE LocalHeap {
 
   // Fetches a pointer to the current LocalHeap from the TLS variable or returns
   // nullptr if not set.
+#if V8_OS_WIN
+  // Windows keeps the upstream TLS getter path (inlined in non-library mode,
+  // out-of-line in library mode) referencing the real `g_current_local_heap_`.
   V8_TLS_DECLARE_GETTER(TryGetCurrent, LocalHeap*, g_current_local_heap_)
+#else   // !V8_OS_WIN
+  // Replay intervention: on non-Windows the TLS getter cannot be inlined here
+  // because `g_current_local_heap_` resolves to `.cc`-local helpers via a
+  // `#define` (see local-heap.cc). Route through a plain, out-of-line getter
+  // defined in the `.cc` (where the `#define` and its helpers are in scope).
+  static LocalHeap* TryGetCurrent();
+#endif  // !V8_OS_WIN
 
   // Fetches a pointer to the current LocalHeap from the TLS variable. DHECKs
   // that LocalHeap is non-null.

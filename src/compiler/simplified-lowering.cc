@@ -4892,6 +4892,8 @@ class RepresentationSelector {
         return VisitUnop<T>(node, UseInfo::AnyTagged(),
                             MachineRepresentation::kTagged);
       }
+      case IrOpcode::kIncrementAndCheckProgressCounter:
+        return;
       case IrOpcode::kFrameState:
         return VisitFrameState<T>(FrameState{node});
       case IrOpcode::kStateValues:

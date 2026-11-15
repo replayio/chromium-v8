@@ -234,6 +234,8 @@ class BaselineAssembler {
   inline void SmiUntag(Register value);
   inline void SmiUntag(Register output, Register value);
 
+  inline void AddPointer(Register output, Immediate value);
+
   inline void Word32And(Register output, Register lhs, int rhs);
 
 #ifdef V8_ENABLE_SPARKPLUG_PLUS

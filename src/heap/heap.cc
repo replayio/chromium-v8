@@ -305,7 +305,8 @@ Heap::Heap()
           TRACE_DISABLED_BY_DEFAULT("v8.gc"))),
       gc_extra_tracing_category_enabled_(
           TRACE_EVENT_API_GET_CATEGORY_GROUP_ENABLED(
-              TRACE_DISABLED_BY_DEFAULT("v8.gc_extra"))) {
+              TRACE_DISABLED_BY_DEFAULT("v8.gc_extra"))),
+      script_ordered_lock_id_((int)recordreplay::CreateOrderedLock("Heap.script_ordered_lock_id_")) {
 #if defined(V8_USE_PERFETTO)
   if (perfetto::Tracing::IsInitialized()) {
     // Because the track may not get any events of its own it must manually emit
@@ -1293,6 +1294,7 @@ void FreeCachesOnMemoryPressure(Isolate* isolate,
 }  // anonymous namespace
 
 void Heap::CollectAllAvailableGarbage(GarbageCollectionReason gc_reason) {
+  replayio::AutoDisallowEvents disallow("Heap::CollectAllAvailableGarbage");
   // Min and max number of attempts for GC. The method will continue with more
   // GCs until the root set is stable.
   static constexpr int kMaxNumberOfAttempts = 7;
@@ -1437,6 +1439,7 @@ void Heap::CollectGarbage(
     const v8::GCCallbackFlags gc_callback_flags,
     PerformHeapLimitCheck perform_heap_limit_check,
     PerformIneffectiveMarkCompactCheck check_ineffective_mark_compact) {
+  replayio::AutoDisallowEvents disallow("Heap::CollectGarbage");
   CHECK(isolate_->IsOnCentralStack());
   // Any handles that are created during GC (eg during API callbacks)
   // should be in a fresh handle scope that is torn down before the GC
@@ -1851,6 +1854,8 @@ void Heap::StartIncrementalMarking(GCFlags gc_flags,
         dict.Add("global_space_available", GlobalSpaceAvailable());
       });
 
+  replayio::AutoDisallowEvents disallow("Heap::StartIncrementalMarking");
+
   if (IsYoungGenerationCollector(collector)) {
     CompleteSweepingYoung(CompleteSweepingReason::kStartMinorMarking);
   } else {
@@ -1939,6 +1944,7 @@ void Heap::StartIncrementalMarkingIfAllocationLimitIsReached(
     LocalHeap* local_heap, GCFlags gc_flags,
     const GCCallbackFlags gc_callback_flags,
     std::optional<GarbageCollectionReason> gc_reason) {
+  replayio::AutoDisallowEvents disallow("Heap::StartIncrementalMarkingIfAllocationLimitIsReached");
   if (incremental_marking()->IsStopped() &&
       incremental_marking()->CanAndShouldBeStarted()) {
     auto [limit, reason] = IncrementalMarkingLimitReached();
@@ -2482,6 +2488,8 @@ void Heap::CompleteSweepingYoung(CompleteSweepingReason reason) {
 }
 
 void Heap::EnsureSweepingCompletedForObject(Tagged<HeapObject> object) {
+  replayio::AutoDisallowEvents disallow("Heap::EnsureSweepingCompletedForObject");
+
   if (!sweeping_in_progress()) return;
 
   MemoryChunk* chunk = MemoryChunk::FromHeapObject(object);
@@ -3666,6 +3674,7 @@ void Heap::ActivateMemoryReducerIfNeededOnMainThread() {
   const int kMinCommittedMemory = 7 * NormalPage::kPageSize;
   if ((v8_flags.memory_reducer_limit_based) ||
       (ms_count_ == 0 && CommittedMemory() > kMinCommittedMemory)) {
+    replayio::AutoDisallowEvents disallow("Heap::ActivateMemoryReducerIfNeeded");
     memory_reducer_->NotifyPossibleGarbage();
   }
 }
@@ -3875,6 +3884,7 @@ void Heap::NotifyObjectLayoutChange(
     InvalidateRecordedSlots invalidate_recorded_slots,
     InvalidateExternalPointerSlots invalidate_external_pointer_slots,
     int new_size) {
+  replayio::AutoDisallowEvents disallow("Heap::NotifyObjectLayoutChange");
   if (invalidate_recorded_slots) {
     const bool may_contain_recorded_slots = MayContainRecordedSlots(object);
     MutablePage* const page = MutablePage::FromHeapObject(isolate(), object);
@@ -4036,6 +4046,8 @@ void Heap::CheckMemoryPressure() {
 }
 
 void Heap::CollectGarbageOnMemoryPressure() {
+  replayio::AutoDisallowEvents disallow("Heap::CollectGarbageOnMemoryPressure");
+
   const int kGarbageThresholdInBytes = 8 * MB;
   const double kGarbageThresholdAsFractionOfTotalMemory = 0.1;
   // This constant is the maximum response time in RAIL performance model.
@@ -4072,6 +4084,8 @@ void Heap::CollectGarbageOnMemoryPressure() {
 
 void Heap::MemoryPressureNotification(MemoryPressureLevel level,
                                       bool is_isolate_locked) {
+  replayio::AutoDisallowEvents disallow("Heap::MemoryPressureNotification");
+
   TRACE_EVENT("devtools.timeline,v8", "V8.MemoryPressureNotification", "level",
               static_cast<int>(level));
   MemoryPressureLevel previous =
@@ -5483,6 +5497,13 @@ bool Heap::IsInputHandlingInitialized() const {
 // - or the incremental marking is not in progress and we cannot start it.
 bool Heap::ShouldExpandOldGenerationOnSlowAllocation(LocalHeap* local_heap,
                                                      AllocationOrigin origin) {
+  replayio::AutoDisallowEvents disallow("Heap::ShouldExpandOldGenerationOnSlowAllocation");
+
+  // Always allow background threads to allocate while replaying without triggering GC.
+  // Waiting on a main thread GC can introduce deadlocks if the main thread
+  // is itself waiting on an ordered lock which this thread is next in line to acquire.
+  if (recordreplay::IsReplaying() && !local_heap->is_main_thread()) return true;
+
   if (always_allocate()) {
     return true;
   }
@@ -5521,7 +5542,9 @@ bool Heap::ShouldExpandOldGenerationOnSlowAllocation(LocalHeap* local_heap,
     return false;
   }
 
-  if (incremental_marking()->IsStopped()) {
+  if (incremental_marking()->IsStopped() &&
+      // Incremental marking is disabled when recording/replaying.
+      !recordreplay::IsRecordingOrReplaying("gc-changes", "NoIncrementalMarking")) {
     auto [limit, reason] = IncrementalMarkingLimitReached();
 
     if (limit == IncrementalMarkingLimit::kNoLimit) {
@@ -6170,6 +6193,8 @@ void Heap::NotifyBootstrapComplete() {
 void Heap::NotifyOldGenerationExpansion(
     LocalHeap* local_heap, AllocationSpace space, MutablePage* chunk_metadata,
     OldGenerationExpansionNotificationOrigin notification_origin) {
+  replayio::AutoDisallowEvents disallow("Heap::NotifyOldGenerationExpansion");
+
   // Pages created during bootstrapping may contain immortal immovable objects.
   if (!deserialization_complete()) {
     DCHECK_NE(NEW_SPACE, chunk_metadata->owner()->identity());
@@ -6245,6 +6270,8 @@ const ::heap::base::Stack& Heap::stack() const {
 }
 
 void Heap::StartTearDown() {
+  replayio::AutoDisallowEvents disallow("Heap::StartTearDown");
+
   // This may invoke a GC in case marking is running to get us into a
   // well-defined state for tear down.
   CppHeap::From(cpp_heap_)->StartDetachingIsolate();
@@ -7008,6 +7035,8 @@ uint64_t Heap::UpdateExternalMemory(int64_t delta) {
     CollectGarbageWithRetry(local_heap, space,
                             GarbageCollectionReason::kExternalMemoryPressure);
   } else if (total_after > external_memory_limit_for_interrupt()) {
+    replayio::AutoDisallowEvents disallow("Heap::HandleExternalMemoryInterrupt");
+
     limits()->UpdateExternalMemoryLimitForInterrupt(external_memory());
     const GCCallbackFlags kGCCallbackFlagsForExternalMemory =
         static_cast<GCCallbackFlags>(
@@ -7554,6 +7583,8 @@ void Heap::FinishSweepingIfOutOfWork(CompleteSweepingReason reason) {
 
 void Heap::EnsureSweepingCompleted(SweepingForcedFinalizationMode mode,
                                    CompleteSweepingReason reason) {
+  replayio::AutoDisallowEvents disallow("Heap::EnsureSweepingCompleted");
+
   TRACE_GC_EPOCH(tracer(), GCTracer::Scope::HEAP_ENSURE_SWEEPING_COMPLETED,
                  ThreadKind::kMain, "value", [&](perfetto::TracedValue ctx) {
                    auto dict = std::move(ctx).WriteDictionary();
@@ -7705,6 +7736,7 @@ void Heap::GCHintState::NotifyEnded(Heap* heap) {
 }
 
 int Heap::NextScriptId() {
+  recordreplay::OrderedLock(script_ordered_lock_id_);
   FullObjectSlot last_script_id_slot(&roots_table()[RootIndex::kLastScriptId]);
   Tagged<Smi> last_id = Cast<Smi>(last_script_id_slot.Relaxed_Load());
   Tagged<Smi> new_id, last_id_before_cas;
@@ -7725,6 +7757,8 @@ int Heap::NextScriptId() {
         Cast<Smi>(last_script_id_slot.Relaxed_CompareAndSwap(last_id, new_id));
   } while (last_id != last_id_before_cas);
 
+  recordreplay::OrderedUnlock(script_ordered_lock_id_);
+  recordreplay::Assert("Heap::NextScriptId %d", new_id.value());
   return new_id.value();
 }
 
