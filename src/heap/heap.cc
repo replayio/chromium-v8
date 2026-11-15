@@ -1189,6 +1189,9 @@ bool GCCallbacksScope::CheckReenter() const {
 }
 
 void Heap::HandleGCRequest() {
+  // Which stack check sees the request depends on when the GC asked for it,
+  // which differs between recording and replaying.
+  replayio::AutoDisallowEvents disallow("Heap::HandleGCRequest");
   if (IsStressingScavenge() && stress_scavenge_observer_->HasRequestedGC()) {
     CollectGarbage(NEW_SPACE, GarbageCollectionReason::kTesting);
     stress_scavenge_observer_->RequestedGCDone();
@@ -2127,6 +2130,7 @@ void Heap::RestoreHeapLimit(size_t heap_limit) {
 
 void Heap::CollectGarbageWithRetry(LocalHeap* local_heap, AllocationSpace space,
                                    GarbageCollectionReason gc_reason) {
+  replayio::AutoDisallowEvents disallow("Heap::CollectGarbageWithRetry");
   AllocationType allocation_type;
 
   switch (space) {
@@ -4028,6 +4032,7 @@ class MemoryPressureInterruptTask : public CancelableTask {
 };
 
 void Heap::CheckMemoryPressure() {
+  replayio::AutoDisallowEvents disallow("Heap::CheckMemoryPressure");
   if (HighMemoryPressure()) {
     FreeCachesOnMemoryPressure(isolate(),
                                GarbageCollectionReason::kMemoryPressure);
@@ -5542,7 +5547,12 @@ bool Heap::ShouldExpandOldGenerationOnSlowAllocation(LocalHeap* local_heap,
   // While recording, the BackgroundCollectionInterruptTask asking the main thread for the
   // GC is posted with events disallowed, as an unordered task, which doesn't wake an idle
   // main thread.
-  if (recordreplay::IsRecordingOrReplaying() && !local_heap->is_main_thread()) return true;
+  // The GC's own allocators ask with no LocalHeap (MainAllocator::in_gc()),
+  // which is left to the answers below.
+  if (recordreplay::IsRecordingOrReplaying() && local_heap &&
+      !local_heap->is_main_thread()) {
+    return true;
+  }
 
   if (always_allocate()) {
     return true;

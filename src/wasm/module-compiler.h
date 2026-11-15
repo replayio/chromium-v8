@@ -71,6 +71,12 @@ std::shared_ptr<wasm::WasmWrapperHandle> CompileImportWrapperForTest(
 // Triggered by the WasmCompileLazy builtin.
 void CompileLazy(Isolate*, NativeModule*, int func_index);
 
+// Replay: whether wasm jobs (compilation, validation, deserialization) are
+// left to the thread that joins them, with their workers never told of the
+// work: when recording or replaying without compilation tasks. See
+// RecordReplayNotifyConcurrencyIncrease in module-compiler.cc.
+bool RecordReplayJoiningThreadRunsWasmJobs();
+
 // Trigger tier-up of a particular function to TurboFan. If tier-up was already
 // triggered, we instead increase the priority with exponential back-off.
 V8_EXPORT_PRIVATE void TriggerTierUp(Isolate*, Tagged<WasmTrustedInstanceData>,

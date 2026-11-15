@@ -1063,7 +1063,12 @@ MaybeDirectHandle<WasmInstanceObject> InstanceBuilder::Build() {
   DisallowJavascriptExecution no_js(isolate_);
   // Remember the start of instantiation, if we have a high resolution timer.
   base::TimeTicks start;
-  if (base::TimeTicks::IsHighResolution()) start = base::TimeTicks::Now();
+  if (base::TimeTicks::IsHighResolution()) {
+    // Replay: reading a clock to time something is passed through, as in
+    // base::ElapsedTimer.
+    replayio::AutoPassThroughEvents pass_through;
+    start = base::TimeTicks::Now();
+  }
 
   // Phase 1: uses a {TrustedPointerPublishingScope} to make the new,
   // partially-initialized instance inaccessible in case of failure.
@@ -1077,7 +1082,11 @@ MaybeDirectHandle<WasmInstanceObject> InstanceBuilder::Build() {
       .success = true,
       .imported_function_count = module_->num_imported_functions};
   if (!start.IsNull()) {
-    base::TimeDelta duration = base::TimeTicks::Now() - start;
+    base::TimeDelta duration;
+    {
+      replayio::AutoPassThroughEvents pass_through;
+      duration = base::TimeTicks::Now() - start;
+    }
     module_instantiated.wall_clock_duration_in_us = duration.InMicroseconds();
     isolate_->counters()->wasm_instantiate_wasm_module_time()->AddTimedSample(
         duration);

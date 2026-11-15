@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "include/v8-function.h"
+#include "include/v8.h"  // For replay.
 #include "src/api/api-inl.h"
 #include "src/base/logging.h"
 #include "src/base/utils/random-number-generator.h"
@@ -1088,11 +1089,18 @@ MaybeLocal<UnboundScript> CompileInspectorScript(Isolate* v8_isolate,
 
 #if V8_ENABLE_WEBASSEMBLY
 void EnterDebuggingForIsolate(Isolate* v8_isolate) {
+  // Replay: wasm isn't debugged when recording or replaying. Going into
+  // debugging throws away the isolate's wasm code, and the next call of each
+  // function compiles it again. Replay's own inspector session enables the
+  // debugger when replaying only, so those compiles would come where the
+  // recording has none.
+  if (recordreplay::IsRecordingOrReplaying()) return;
   i::Isolate* isolate = reinterpret_cast<i::Isolate*>(v8_isolate);
   i::wasm::GetWasmEngine()->EnterDebuggingForIsolate(isolate);
 }
 
 void LeaveDebuggingForIsolate(Isolate* v8_isolate) {
+  if (recordreplay::IsRecordingOrReplaying()) return;
   i::Isolate* isolate = reinterpret_cast<i::Isolate*>(v8_isolate);
   i::wasm::GetWasmEngine()->LeaveDebuggingForIsolate(isolate);
 }

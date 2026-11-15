@@ -6354,6 +6354,12 @@ bool Isolate::Init(SnapshotData* startup_snapshot_data,
                    SnapshotData* shared_heap_snapshot_data, bool can_rehash) {
   TRACE_ISOLATE(init);
 
+  // Replay: the generator is seeded when it is first used, which reads random
+  // bytes. That could be where events are disallowed (Replay's own code asking
+  // for an identity hash) when replaying and somewhere else when recording.
+  // Seed it here, at the same point on both sides.
+  if (recordreplay::IsRecordingOrReplaying()) random_number_generator();
+
 #ifdef V8_COMPRESS_POINTERS_IN_SHARED_CAGE
   CHECK_EQ(V8HeapCompressionScheme::base(), cage_base());
 #endif  // V8_COMPRESS_POINTERS_IN_SHARED_CAGE
@@ -6408,6 +6414,16 @@ bool Isolate::Init(SnapshotData* startup_snapshot_data,
   isolate_data_.set_regexp_static_result_offsets_vector(
       jsregexp_static_offsets_vector());
   date_cache_ = new DateCache();
+  // Replay: the first thing to ask for the local time zone creates the time
+  // zone and reads the clock for its name. Describing a Date for Replay's own
+  // session asks with events disallowed, so the replay could ask before the
+  // recording did, and then not make those calls where the recording has
+  // them. Both sides ask here, for times either side of summer, which is what
+  // the names are kept by (see also DateCache::LocalTimezone).
+  if (recordreplay::IsRecordingOrReplaying()) {
+    date_cache_->LocalTimezone(int64_t{1767225600000});  // January 2026.
+    date_cache_->LocalTimezone(int64_t{1782864000000});  // July 2026.
+  }
   interpreter_ = new interpreter::Interpreter(this);
   bigint_processor_ = bigint::Processor::New(new BigIntPlatform(this));
 

@@ -100,6 +100,27 @@ class V8_NODISCARD BackgroundCompileScope {
 
 enum CompilationTier { kBaseline = 0, kTopTier = 1, kNumTiers = kTopTier + 1 };
 
+}  // namespace
+
+bool RecordReplayJoiningThreadRunsWasmJobs() {
+  return recordreplay::IsRecordingOrReplaying() &&
+         v8_flags.wasm_num_compilation_tasks == 0;
+}
+
+namespace {
+
+// Replay: a job's workers are told of new work by NotifyConcurrencyIncrease,
+// and then they and the thread that joins the job share that work in an order
+// that differs each run. When recording or replaying without compilation
+// tasks, wasm jobs aren't announced to the workers, so only the joining thread
+// does the work. Replay's V8 10.8 got that from --wasm-num-compilation-tasks=0
+// alone, which no longer keeps the workers away: the compile jobs always allow
+// one (BackgroundCompileJob::GetMaxConcurrency).
+void RecordReplayNotifyConcurrencyIncrease(JobHandle* job) {
+  if (RecordReplayJoiningThreadRunsWasmJobs()) return;
+  job->NotifyConcurrencyIncrease();
+}
+
 // A set of work-stealing queues (vectors of units). Each background compile
 // task owns one of the queues and steals from all others once its own queue
 // runs empty.
@@ -2357,7 +2378,7 @@ struct ValidateFunctionsStreamingJobData {
     if ((total_units_added >= 16 &&
          base::bits::IsPowerOfTwo(total_units_added)) ||
         (total_units_added % (16 * 1024)) == 0 || ptr == units.end()) {
-      job_handle->NotifyConcurrencyIncrease();
+      RecordReplayNotifyConcurrencyIncrease(job_handle);
     }
   }
 
@@ -3848,11 +3869,11 @@ void CompilationStateImpl::CommitCompilationUnits(
   }
   if (!baseline_units.empty()) {
     DCHECK(baseline_compile_job_->IsValid());
-    baseline_compile_job_->NotifyConcurrencyIncrease();
+    RecordReplayNotifyConcurrencyIncrease(baseline_compile_job_.get());
   }
   if (!top_tier_units.empty()) {
     DCHECK(top_tier_compile_job_->IsValid());
-    top_tier_compile_job_->NotifyConcurrencyIncrease();
+    RecordReplayNotifyConcurrencyIncrease(top_tier_compile_job_.get());
   }
 }
 
@@ -3867,7 +3888,7 @@ void CompilationStateImpl::AddTopTierPriorityCompilationUnit(
   // We should not have a {CodeSpaceWriteScope} open at this point, as
   // {NotifyConcurrencyIncrease} can spawn new threads which could inherit PKU
   // permissions (which would be a security issue).
-  top_tier_compile_job_->NotifyConcurrencyIncrease();
+  RecordReplayNotifyConcurrencyIncrease(top_tier_compile_job_.get());
 }
 
 CompilationUnitQueues::Queue* CompilationStateImpl::GetQueueForCompileTask(
@@ -4221,7 +4242,16 @@ void CompilationStateImpl::SetError() {
 }
 
 void CompilationStateImpl::WaitForBaselineCompileJob() {
-  if (baseline_compile_job_->IsValid()) baseline_compile_job_->Join();
+  if (RecordReplayJoiningThreadRunsWasmJobs()) {
+    // Joining the job hands it to the thread pool as well, and a worker that
+    // wakes up in time shares the units with this thread, differently each
+    // run. The units are compiled here instead, as the main task, until none
+    // are left.
+    ExecuteCompilationUnits(native_module_weak_, nullptr,
+                            CompilationTier::kBaseline);
+  } else if (baseline_compile_job_->IsValid()) {
+    baseline_compile_job_->Join();
+  }
 #ifdef DEBUG
   base::EnumSet<CompilationEvent> events{
       CompilationEvent::kFinishedBaselineCompilation,

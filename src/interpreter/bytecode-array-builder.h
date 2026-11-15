@@ -529,6 +529,10 @@ class V8_EXPORT_PRIVATE BytecodeArrayBuilder final {
 
   BytecodeArrayBuilder& ReplayOnFrameEnter();
   BytecodeArrayBuilder& ReplayOnFrameEnterGenerator(Register generator_object);
+  // The first half of ReplayOnFrameEnterGenerator, for where a resumable
+  // function's frame starts: its generator object doesn't exist yet there, so
+  // the frame is announced (RecordReplayInstrumentationGenerator) once it does.
+  BytecodeArrayBuilder& ReplayIncJsFrameDepth();
   BytecodeArrayBuilder& ReplayOnFrameExit();
   BytecodeArrayBuilder& ReplayOnFrameReturn(Register return_value);
 
@@ -602,8 +606,10 @@ class V8_EXPORT_PRIVATE BytecodeArrayBuilder final {
 
   void InitializeReturnPosition(FunctionLiteral* literal);
 
-  void SetStatementPosition(Statement* stmt, bool is_breakable = true) {
-    SetStatementPosition(stmt->position(), is_breakable);
+  void SetStatementPosition(Statement* stmt, bool is_breakable = true,
+                            bool record_replay_breakpoint = true) {
+    SetStatementPosition(stmt->position(), is_breakable,
+                         record_replay_breakpoint);
   }
 
   std::optional<BytecodeSourceInfo> MaybePopSourcePosition(int scope_start) {
@@ -627,11 +633,15 @@ class V8_EXPORT_PRIVATE BytecodeArrayBuilder final {
     RecordReplayPushPoppedBreakpoints();
   }
 
-  void SetStatementPosition(int position, bool is_breakable = true) {
+  // |record_replay_breakpoint| is whether a breakable position also gets a
+  // record/replay breakpoint site here: callers that put that site somewhere
+  // else pass false, which leaves the position itself as upstream has it.
+  void SetStatementPosition(int position, bool is_breakable = true,
+                            bool record_replay_breakpoint = true) {
     if (position == kNoSourcePosition) return;
     latest_source_info_.MakeStatementPosition(position, is_breakable);
     most_recent_source_position_ = position;
-    if (is_breakable) {
+    if (is_breakable && record_replay_breakpoint) {
       RecordReplayDeferBreakpoint(position);
     }
   }

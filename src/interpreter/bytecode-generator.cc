@@ -1805,7 +1805,9 @@ void BytecodeGenerator::GenerateBodyPrologue() {
   builder()->RecordReplayOnProgress();
 
   if (IsResumableFunction(literal->kind())) {
-    builder()->ReplayOnFrameEnterGenerator(generator_object());
+    // A resumable function's frame is announced with its generator object,
+    // which doesn't exist yet: see BuildGeneratorObjectVariableInitialization.
+    builder()->ReplayIncJsFrameDepth();
   } else {
     builder()->ReplayOnFrameEnter();
   }
@@ -2511,7 +2513,8 @@ void BytecodeGenerator::VisitStatements(
 }
 
 void BytecodeGenerator::ReplayExpressionShiftedSetStatementPosition(Statement* stmt, Expression* expr) {
-  builder()->SetStatementPosition(stmt, /* record_replay_breakpoint */ false);
+  builder()->SetStatementPosition(stmt, /* is_breakable */ true,
+                                  /* record_replay_breakpoint */ false);
   if (expr->position() < 0) {
     // expression is empty, so the breakpoint gets added at the statement itself
     builder()->RecordReplayDeferBreakpoint(stmt->position());
@@ -4920,7 +4923,7 @@ void BytecodeGenerator::BuildReturn(int source_position) {
     builder()->StoreAccumulatorInRegister(result).CallRuntime(
         Runtime::kTraceExit, result);
   }
-  builder()->SetStatementPosition(source_position,
+  builder()->SetStatementPosition(source_position, /* is_breakable */ true,
                                   /* record_replay_breakpoint */ false);
   {
     RegisterAllocationScope register_scope(this);
@@ -8953,6 +8956,32 @@ void BytecodeGenerator::BuildGeneratorObjectVariableInitialization() {
       .MoveRegister(builder()->Receiver(), args[1])
       .CallRuntime(function_id, args)
       .StoreAccumulatorInRegister(generator_object());
+
+  // Replay: the frame of a resumable function is announced here, where its
+  // generator object exists (GenerateBodyPrologue counted the frame).
+  builder()->RecordReplayInstrumentationGenerator("generator",
+                                                  generator_object());
+
+  // A module's first position is somewhere to stop, whether or not its first
+  // statement is an import, which makes no bytecode of its own. Replay's V8
+  // 10.8 had a breakpoint site there (from the positionless return its parser
+  // ended every module with). Left out when the module's first statement
+  // starts there: its own breakpoint is the one to stop at then, and this one
+  // would take its place (RecordReplayRegisterInstrumentationSite).
+  if (IsModule(info()->literal()->kind())) {
+    const int module_start = info()->literal()->start_position();
+    bool statement_at_start = false;
+    const ZonePtrList<Statement>* body = info()->literal()->body();
+    for (int i = 0; i < body->length(); i++) {
+      const int position = body->at(i)->position();
+      if (position == kNoSourcePosition) continue;
+      statement_at_start = position == module_start;
+      break;
+    }
+    if (!statement_at_start) {
+      builder()->RecordReplayInstrumentation("breakpoint", module_start);
+    }
+  }
 
   if (generator_object_var->location() == VariableLocation::LOCAL) {
     // The generator object register is already set to the variable's local

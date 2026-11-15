@@ -243,6 +243,16 @@ class WeakScriptHandle {
         std::string_view(source_url_.get()).starts_with("wasm://wasm/");
     auto global_handle = isolate->global_handles()->Create(*script);
     location_ = std::make_unique<Address*>(global_handle.location());
+    // Replay: a module compiled again from the same bytes gets the cached
+    // native module, which the NativeModuleCache holds in its record/replay
+    // mode, and then this script if it's still there or a new one, with a new
+    // id, if the collector has taken it. Collections don't come at the same
+    // points when replaying, so the script is held too, for as long as this
+    // handle is.
+    if (recordreplay::IsRecordingOrReplaying("wasm-native-module-sharing",
+                                             "WeakScriptHandle")) {
+      return;
+    }
     GlobalHandles::MakeWeak(location_.get());
   }
 

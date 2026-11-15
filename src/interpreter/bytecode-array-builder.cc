@@ -1738,6 +1738,13 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::ReplayOnFrameEnter() {
   return *this;
 }
 
+BytecodeArrayBuilder& BytecodeArrayBuilder::ReplayIncJsFrameDepth() {
+  if (emit_record_replay_opcodes_) {
+    OutputReplayIncJsFrameDepth();
+  }
+  return *this;
+}
+
 BytecodeArrayBuilder& BytecodeArrayBuilder::ReplayOnFrameEnterGenerator(
     Register generator_object) {
   if (emit_record_replay_opcodes_) {

@@ -3613,6 +3613,11 @@ MaybeDirectHandle<JSFunction> Compiler::GetFunctionFromEval(
     // The script replacing the contents of `script` is that script.
     RecordReplayInheritCompileFlags(flags, *script);
 
+    // Compiling the replacement is the replay's own doing: the recording
+    // compiled nothing here, so nothing this asks the system or tells an
+    // inspector session is in it.
+    replayio::AutoDisallowEvents disallow("ReplaceSourceContents");
+
     UnoptimizedCompileState compile_state;
     ReusableUnoptimizedCompileState reusable_state(isolate);
     ParseInfo parse_info(isolate, flags, &compile_state, &reusable_state);

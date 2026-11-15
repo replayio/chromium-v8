@@ -1254,6 +1254,8 @@ class Sweeper::SweeperImpl final {
   }
 
   void FinishIfOutOfWork() {
+    v8::replayio::AutoDisallowEvents disallow("SweeperImpl::FinishIfOutOfWork");
+
     if (!is_in_progress_ || is_sweeping_on_mutator_thread_) {
       return;
     }
@@ -1295,6 +1297,8 @@ class Sweeper::SweeperImpl final {
   }
 
   void Finish() {
+    v8::replayio::AutoDisallowEvents disallow("SweeperImpl::Finish");
+
     DCHECK(is_in_progress_);
 
     MutatorThreadSweepingScope sweeping_in_progress(*this);
@@ -1360,6 +1364,12 @@ class Sweeper::SweeperImpl final {
   bool PerformSweepOnMutatorThread(v8::base::TimeDelta max_duration,
                                    StatsCollector::ScopeId internal_scope_id,
                                    MutatorThreadSweepingMode sweeping_mode) {
+    // What a sweep finalizes, and when, goes by the heap's layout, which
+    // differs when replaying, and a finalizer can close a Mojo pipe or post a
+    // task.
+    v8::replayio::AutoDisallowEvents disallow(
+        "SweeperImpl::PerformSweepOnMutatorThread");
+
     if (!is_in_progress_) return true;
 
     MutatorThreadSweepingScope sweeping_in_progress(*this);

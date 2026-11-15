@@ -1139,6 +1139,9 @@ Variable* DeclarationScope::DeclareParameter(const AstRawString* name,
   // (RUN-2604)
   if (recordreplay::IsReplaying() &&
       recordreplay::FeatureEnabled("force-variable-context-allocation")) {
+    // Scope::MustAllocate checks that a variable forced into a context is one
+    // that's used.
+    var->set_is_used();
     var->ForceContextAllocation();
   }
   return var;
@@ -1269,7 +1272,10 @@ Variable* Scope::DeclareVariable(
       recordreplay::FeatureEnabled("force-variable-context-allocation") &&
       (kind == VariableKind::NORMAL_VARIABLE ||
        kind == VariableKind::SLOPPY_BLOCK_FUNCTION_VARIABLE)) {
-        var->ForceContextAllocation();
+    // Scope::MustAllocate checks that a variable forced into a context is one
+    // that's used.
+    var->set_is_used();
+    var->ForceContextAllocation();
   }
   return var;
 }

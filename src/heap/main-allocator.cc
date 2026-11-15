@@ -206,6 +206,9 @@ void MainAllocator::InvokeAllocationObservers(Address soon_object,
 AllocationResult MainAllocator::AllocateRawSlow(
     SafeHeapObjectSize size_in_bytes, AllocationAlignment alignment,
     AllocationOrigin origin) {
+  // Whether an allocation gets here depends on what has been allocated and
+  // collected so far, which differs between recording and replaying.
+  replayio::AutoDisallowEvents disallow("MainAllocator::AllocateRawSlow");
   if (!EnsureAllocation(size_in_bytes, alignment, origin)) [[unlikely]] {
     return AllocationResult::Failure();
   }

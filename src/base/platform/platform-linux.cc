@@ -235,6 +235,11 @@ std::vector<OS::SharedLibraryAddress> OS::GetSharedLibraryAddresses() {
 }
 
 // static
+void OS::RecordReplayPrimeKernelChecks() {
+  (void)KernelSupportsRemapDontUnmap();
+}
+
+// static
 bool OS::RemapPages(const void* address, size_t size, void* new_address,
                     MemoryPermission access) {
   uintptr_t address_addr = reinterpret_cast<uintptr_t>(address);

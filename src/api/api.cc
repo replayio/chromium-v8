@@ -2770,11 +2770,17 @@ ReplayingMaybeReplaceScript(Isolate* isolate,
   gReplaceSourceContentsAssertValues = replaced_script->record_replay_assert_values();
 
   ScriptCompiler::CompilationDetails replay_compilation_details;
-  maybe_function_info = Compiler::GetSharedFunctionInfoForScript(
-      isolate, new_source.ToHandleChecked(), script_details,
-      ScriptCompiler::kNoCompileOptions,
-      ScriptCompiler::kNoCacheNoReason,
-      NOT_NATIVES_CODE, &replay_compilation_details);
+  {
+    // Compiling the replacement is the replay's own doing: the recording
+    // compiled nothing here, so nothing this asks the system or tells an
+    // inspector session is in it.
+    replayio::AutoDisallowEvents disallow("ReplaceSourceContents");
+    maybe_function_info = Compiler::GetSharedFunctionInfoForScript(
+        isolate, new_source.ToHandleChecked(), script_details,
+        ScriptCompiler::kNoCompileOptions,
+        ScriptCompiler::kNoCacheNoReason,
+        NOT_NATIVES_CODE, &replay_compilation_details);
+  }
 
   // Only ignore source positions for scripts that successfully compiled from
   // replacement contents. A failed compile should not weaken progress checks
@@ -6099,7 +6105,17 @@ bool Function::Experimental_IsNopFunction() const {
   i::Handle<i::BytecodeArray> bytecode_array(sfi->GetBytecodeArray(i_isolate),
                                              i_isolate);
   i::interpreter::BytecodeArrayIterator it(bytecode_array, 0);
-  if (it.current_bytecode() != i::interpreter::Bytecode::kLdaUndefined) {
+  // Replay: functions without instrumentation start with an activity report
+  // when replaying (BytecodeArrayBuilder::RecordReplayOnProgress), which the
+  // recording's bytecode doesn't have. It isn't part of what the function
+  // does, and the answer has to be the same on both sides.
+  while (!it.done() &&
+         it.current_bytecode() ==
+             i::interpreter::Bytecode::kRecordReplayNotifyActivity) {
+    it.Advance();
+  }
+  if (it.done() ||
+      it.current_bytecode() != i::interpreter::Bytecode::kLdaUndefined) {
     return false;
   }
   it.Advance();
@@ -12780,7 +12796,10 @@ void RecordReplayOnExceptionUnwind(Isolate* isolate) {
     }
   }
 
-  isolate->clear_exception();
+  // Only V8's own: clear_exception() would also reset an embedder's
+  // v8::TryCatch that is waiting for this exception, which then never reports
+  // it (e.g. window.onerror wouldn't fire).
+  isolate->clear_internal_exception();
   Handle<Object> message(isolate->pending_message(), isolate);
   isolate->clear_pending_message();
   gCurrentException = &exception;
@@ -14014,11 +14033,6 @@ static void DoFinishRecording() {
   _exit(0);
 }
 
-class FinishRecordingTask final : public Task {
- public:
-  void Run() final { DoFinishRecording(); }
-};
-
 // Data for making sure we finish the recording if the main thread is stuck
 // doing a synchronous operation.
 static std::atomic<bool> gNeedFinishRecording;
@@ -14027,13 +14041,51 @@ static std::atomic<void*> gUnblockMainThreadCallbackData;
 static int gFinishRecordingOrderedLockId;
 base::Thread::LocalStorageKey gAssertBufferAllocationStateLSKey;
 
+// Whether the main thread can finish the recording where it is: the driver
+// writes nothing of a recording's end with events disallowed or passed
+// through, and a replay that has diverged is past its recording.
+static bool RecordReplayCanFinishRecordingHere() {
+  return !recordreplay::AreEventsDisallowed() &&
+         !recordreplay::AreEventsPassedThrough() &&
+         !recordreplay::HasDivergedFromRecording();
+}
+
+// Finishes the recording if another thread asked for it
+// (V8RecordReplayFinishRecording), on the main thread and only where it can
+// be finished. The embedder calls this where the main thread picks its next
+// task and when it runs out of them, and it is what the task and the interrupt
+// requested by V8RecordReplayFinishRecording run: a request that reaches the
+// main thread with events disallowed (its task was posted from outside the
+// recording) stays pending for the next call.
+extern "C" DLLEXPORT void V8RecordReplayMaybeFinishRecording() {
+  if (!recordreplay::IsRecordingOrReplaying() || !IsMainThread() ||
+      !RecordReplayCanFinishRecordingHere()) {
+    return;
+  }
+  // Another thread sets this, so when the main thread first sees it set is
+  // recorded: a replay finishes where the recording did, and not a task or
+  // two to either side.
+  if (!recordreplay::RecordReplayValue("FinishRecordingRequested",
+                                       gNeedFinishRecording.load())) {
+    return;
+  }
+  DoFinishRecording();
+}
+
+class FinishRecordingTask final : public Task {
+ public:
+  void Run() final { V8RecordReplayMaybeFinishRecording(); }
+};
+
 extern "C" DLLEXPORT void V8RecordReplayMaybeTerminate(void (*callback)(void*), void* data) {
   recordreplay::Assert("V8RecordReplayMaybeTerminate");
   if (IsMainThread()) {
     recordreplay::OrderedLock(gFinishRecordingOrderedLockId);
     gUnblockMainThreadCallback = callback;
     gUnblockMainThreadCallbackData = data;
-    if (gNeedFinishRecording) {
+    // Where the recording can't be finished the request stays pending, see
+    // V8RecordReplayMaybeFinishRecording.
+    if (gNeedFinishRecording && RecordReplayCanFinishRecordingHere()) {
       DoFinishRecording();
     }
     recordreplay::OrderedUnlock(gFinishRecordingOrderedLockId);
@@ -14055,6 +14107,19 @@ extern "C" DLLEXPORT void V8RecordReplayFinishRecording() {
         }
         recordreplay::OrderedUnlock(gFinishRecordingOrderedLockId);
         CHECK(internal::gMainThreadIsolate);
+        // The task below only runs once the main thread is back at its loop,
+        // and the callback above only helps one that is blocked in a sync
+        // wait. A main thread that is busy in JS and never returns (a loop of
+        // calls that fail at once because the browser has gone) does neither.
+        // API interrupts run at a progress point, the same one when replaying
+        // (Isolate::RecordReplayInvokeApiInterruptCallbacksAtProgress). Not
+        // with events disallowed here: the request wouldn't be ordered with
+        // the main thread taking it.
+        if (!recordreplay::AreEventsDisallowed()) {
+          internal::gMainThreadIsolate->RequestInterrupt(
+              [](v8::Isolate*, void*) { V8RecordReplayMaybeFinishRecording(); },
+              nullptr);
+        }
         auto runner = internal::V8::GetCurrentPlatform()->GetForegroundTaskRunner((Isolate*)internal::gMainThreadIsolate);
         runner->PostTask(std::make_unique<FinishRecordingTask>());
 #if V8_OS_WIN
@@ -14188,6 +14253,13 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
   if (IsReplaying() || !V8RecordReplayFeatureEnabled("v8-flags-compilation-cache", nullptr)) {
     i::v8_flags.compilation_cache = false;
   }
+
+  // Whether the code range can be reserved near the binary depends on where
+  // the system put things, which differs when replaying. Where it failed on
+  // one side only, the fallback (CodeRange::InitReservation) initialized its
+  // address hints and their random number generator on that side only. Always
+  // take the fallback.
+  i::v8_flags.better_code_range_allocation = false;
 
   // Write out our pid to a file if specified.
   char* env = getenv("RECORD_REPLAY_PID_FILE");

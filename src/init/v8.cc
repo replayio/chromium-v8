@@ -199,7 +199,30 @@ void V8::Initialize() {
           "disable-v8-flags-wasm-lazy-compilation")) {
     v8_flags.wasm_lazy_compilation = false;
   }
+  // Without compilation tasks (the default when recording or replaying, see
+  // recordreplay::SetRecordingOrReplaying), nothing compiles top tier code:
+  // the jobs' workers aren't told of work (RecordReplayNotifyConcurrencyIncrease
+  // in wasm/module-compiler.cc), as in Replay's V8 10.8, where such a job had
+  // no workers. Wasm then stays in its baseline tier, so don't count calls
+  // towards a tier-up that never comes. When a function tiers up otherwise
+  // depends on how its budget was spent by whichever isolates share its
+  // module.
+  if (recordreplay::IsRecordingOrReplaying() &&
+      v8_flags.wasm_num_compilation_tasks == 0) {
+    v8_flags.wasm_tier_up = false;
+    v8_flags.wasm_dynamic_tiering = false;
+  }
 #endif  // V8_ENABLE_WEBASSEMBLY
+
+#if V8_OS_LINUX
+  // V8 finds out what the kernel's version is the first time it is needed, by
+  // a call that is recorded: on whichever thread sets up an isolate first,
+  // which needn't be the same one when replaying. Find out here, on the thread
+  // that starts V8.
+  if (recordreplay::IsRecordingOrReplaying()) {
+    base::OS::RecordReplayPrimeKernelChecks();
+  }
+#endif  // V8_OS_LINUX
 
   // Initialize the default FlagList::Hash.
   FlagList::Hash();

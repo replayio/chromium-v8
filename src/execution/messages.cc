@@ -103,7 +103,10 @@ Handle<JSMessageObject> MessageHandler::MakeMessageObject(
     Handle<Object> exception;
     if (isolate->has_exception()) {
       exception = Handle<Object>(isolate->exception(), isolate);
-      isolate->clear_exception();
+      // Only V8's own: clear_exception() would also reset an embedder's
+      // v8::TryCatch, which then loses what it knows and never reports the
+      // error.
+      isolate->clear_internal_exception();
       gCurrentException = &exception;
     }
     Handle<Object> pending_message;
@@ -571,7 +574,16 @@ MaybeHandle<String> MessageFormatter::TryFormat(
           args.size() - remaining_args.size(), args.size(), template_string);
   }
 
-  return indirect_handle(builder.Finish(), isolate);
+  MaybeHandle<String> rv = indirect_handle(builder.Finish(), isolate);
+  Handle<String> formatted;
+  if (recordreplay::IsRecordingOrReplaying("MessageFormatter::Format") &&
+      !recordreplay::AreEventsDisallowed() && rv.ToHandle(&formatted)) {
+    // [PRO-1150] Replay error messages.
+    std::string str = formatted->ToCString().get();
+    recordreplay::RecordReplayString("MessageFormatter::Format", str);
+    rv = isolate->factory()->NewStringFromUtf8(base::CStrVector(str.c_str()));
+  }
+  return rv;
 }
 
 MaybeDirectHandle<JSObject> ErrorUtils::Construct(

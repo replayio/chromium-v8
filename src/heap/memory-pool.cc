@@ -4,6 +4,8 @@
 
 #include "src/heap/memory-pool.h"
 
+#include "include/v8.h"  // For replay.
+
 #include <algorithm>
 
 #include "src/base/platform/mutex.h"
@@ -517,6 +519,12 @@ void MemoryPool::PostDelayedReleaseTaskIfNeeded(Isolate* isolate) {
   static constexpr base::TimeDelta kTimeSlack = base::TimeDelta::FromSeconds(4);
   const size_t pool_timeout = config_.timeout_in_sec;
   if (pool_timeout == 0 || task_disabled_.load()) return;
+  // Replay: this is mostly reached from a garbage collection, where nothing
+  // can be recorded, so whether the task is due (clock reads here and when it
+  // was last posted) and when it runs differ when replaying. Replay's V8 10.8
+  // has no such task. Pooled pages are still reused, and released when the
+  // pool is torn down.
+  if (recordreplay::IsRecordingOrReplaying()) return;
 
   const base::TimeDelta delta =
       base::TimeDelta::FromSeconds(pool_timeout) + kTimeSlack;

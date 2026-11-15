@@ -5,6 +5,7 @@
 #include "src/init/bootstrapper.h"
 
 #include "include/v8-function.h"
+#include "include/v8.h"  // For replay.
 #include "src/api/api-inl.h"
 #include "src/api/api-natives.h"
 #include "src/base/hashmap.h"
@@ -5308,7 +5309,16 @@ bool Genesis::CompileExtension(Isolate* isolate, v8::Extension* extension) {
   DirectHandle<Context> context(isolate->context(), isolate);
   DCHECK(IsNativeContext(*context));
 
-  if (!cache->Lookup(isolate, name, &function_info)) {
+  // Replay: a context made with events disallowed is one of Replay's own,
+  // which the recording needn't have. If it filled the cache, the page's next
+  // context would find the script there when replaying and compile it when
+  // recording, and every script id after it would be one off. Such a context
+  // compiles its own copy and leaves the cache alone.
+  const bool record_replay_own_context =
+      recordreplay::IsRecordingOrReplaying() &&
+      recordreplay::AreEventsDisallowed();
+  if (record_replay_own_context ||
+      !cache->Lookup(isolate, name, &function_info)) {
     Handle<String> script_name =
         factory->NewStringFromUtf8(name).ToHandleChecked();
     ScriptCompiler::CompilationDetails compilation_details;
@@ -5318,7 +5328,7 @@ bool Genesis::CompileExtension(Isolate* isolate, v8::Extension* extension) {
             ScriptCompiler::kNoCompileOptions, EXTENSION_CODE,
             &compilation_details);
     if (!maybe_function_info.ToHandle(&function_info)) return false;
-    cache->Add(isolate, name, function_info);
+    if (!record_replay_own_context) cache->Add(isolate, name, function_info);
   }
 
   // Set up the function context. Conceptually, we should clone the

@@ -6,6 +6,7 @@
 
 #include <algorithm>
 
+#include "include/replayio.h"
 #include "include/v8-container.h"
 #include "include/v8-context.h"
 #include "include/v8-function.h"
@@ -103,6 +104,12 @@ V8Debugger::~V8Debugger() {
 
 void V8Debugger::enable() {
   if (m_enableCount++) return;
+  // Replay: which session is the first to enable the debugger differs when
+  // replaying, where Replay's own session is there before any client the page
+  // was recorded with. What the first one sets off (deoptimizing, collecting
+  // source positions, ...) is none of the program's business, so it isn't in
+  // the recording on either side.
+  v8::replayio::AutoDisallowEvents disallowEvents("V8Debugger::enable");
   v8::HandleScope scope(m_isolate);
   v8::debug::SetDebugDelegate(m_isolate, this);
   m_isolate->AddNearHeapLimitCallback(&V8Debugger::nearHeapLimitCallback, this);
@@ -134,6 +141,8 @@ void V8Debugger::disable() {
     }
   }
   if (--m_enableCount) return;
+  // As in enable(): the last session to go differs when replaying.
+  v8::replayio::AutoDisallowEvents disallowEvents("V8Debugger::disable");
   clearContinueToLocation();
   m_taskWithScheduledBreak = nullptr;
   m_externalAsyncTaskPauseRequested = false;
@@ -1516,6 +1525,24 @@ void V8Debugger::setMaxAsyncTaskStacksForTest(int limit) {
 internal::V8DebuggerId V8Debugger::debuggerIdFor(int contextGroupId) {
   auto it = m_contextGroupIdToDebuggerId.find(contextGroupId);
   if (it != m_contextGroupIdToDebuggerId.end()) return it->second;
+  // Replay: an ID is random bytes, read the first time one is asked for.
+  // Replay's own session can ask before the program does, with events
+  // disallowed, and an ID kept from then would leave the program's first ask
+  // with nothing to read where the recording has the read. What is made with
+  // events disallowed is kept apart, and only used until the program has its
+  // own.
+  if (v8::recordreplay::IsRecordingOrReplaying() &&
+      v8::recordreplay::AreEventsDisallowed()) {
+    auto apart = m_contextGroupIdToReplayDebuggerId.find(contextGroupId);
+    if (apart != m_contextGroupIdToReplayDebuggerId.end()) {
+      return apart->second;
+    }
+    internal::V8DebuggerId replayId =
+        internal::V8DebuggerId::generate(m_inspector);
+    m_contextGroupIdToReplayDebuggerId.insert(
+        apart, std::make_pair(contextGroupId, replayId));
+    return replayId;
+  }
   internal::V8DebuggerId debuggerId =
       internal::V8DebuggerId::generate(m_inspector);
   m_contextGroupIdToDebuggerId.insert(

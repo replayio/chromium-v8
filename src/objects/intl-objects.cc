@@ -2776,11 +2776,24 @@ class ICUTimezoneCache : public base::TimezoneCache {
 
   std::string timezone_name_;
   std::string dst_timezone_name_;
+
+  // Replay: the names as asked for with events disallowed or by Replay's own
+  // code, which is how its inspector session describes a logged Date. ICU
+  // reads the clock to make a name, so the program's first ask is a recorded
+  // call. Kept apart, Replay's asks leave the program's first ask where it
+  // was when recording.
+  std::string record_replay_timezone_name_;
+  std::string record_replay_dst_timezone_name_;
 };
 
 const char* ICUTimezoneCache::LocalTimezone(double time_ms) {
   bool is_dst = DaylightSavingsOffset(time_ms) != 0;
   std::string* name = is_dst ? &dst_timezone_name_ : &timezone_name_;
+  if (recordreplay::IsRecordingOrReplaying() &&
+      (recordreplay::AreEventsDisallowed() || recordreplay::IsInReplayCode())) {
+    name = is_dst ? &record_replay_dst_timezone_name_
+                  : &record_replay_timezone_name_;
+  }
   if (name->empty()) {
     icu::UnicodeString result;
     GetTimeZone()->getDisplayName(is_dst, icu::TimeZone::LONG, result);
@@ -2834,6 +2847,8 @@ void ICUTimezoneCache::Clear(TimeZoneDetection time_zone_detection) {
   timezone_ = nullptr;
   timezone_name_.clear();
   dst_timezone_name_.clear();
+  record_replay_timezone_name_.clear();
+  record_replay_dst_timezone_name_.clear();
   if (time_zone_detection == TimeZoneDetection::kRedetect) {
     icu::TimeZone::adoptDefault(icu::TimeZone::detectHostTimeZone());
   }

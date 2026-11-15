@@ -330,6 +330,9 @@ class V8Debugger : public v8::debug::DebugDelegate,
   uintptr_t m_lastStackTraceId = 0;
 
   std::unordered_map<int, internal::V8DebuggerId> m_contextGroupIdToDebuggerId;
+  // Replay: IDs made with events disallowed. See debuggerIdFor.
+  std::unordered_map<int, internal::V8DebuggerId>
+      m_contextGroupIdToReplayDebuggerId;
 
   std::unique_ptr<TerminateExecutionCallback> m_terminateExecutionCallback;
   v8::Global<v8::Context> m_terminateExecutionCallbackContext;
