@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "src/base/logging.h"
+#include "src/base/replayio.h"
 #include "src/common/synchronization-point-support.h"
 #include "src/execution/isolate-inl.h"
 #include "src/heap/gc-tracer-inl.h"
@@ -266,6 +267,12 @@ void ArrayBufferSweeper::EnsureFinished() {
 }
 
 void ArrayBufferSweeper::Finish() {
+  // The sweep is a job the collector started, with events disallowed. Whether
+  // one is under way, and done, when a buffer is next added, resized or
+  // detached is up to the collector and the job's worker, so joining the job
+  // (which takes the thread pool's locks) is kept out of the recording too.
+  replayio::AutoDisallowEvents disallow("ArrayBufferSweeper::Finish");
+
   state_->FinishSweeping();
 
   Finalize();

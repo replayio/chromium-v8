@@ -16,6 +16,7 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>  // For move
 #include <vector>
 
@@ -12825,6 +12826,13 @@ void RecordReplayChangeInstrument(bool enabled) {
   CHECK(!enabled || recordreplay::IsReplaying());
   gRecordReplayInstrumentationEnabled = enabled;
 
+  // The driver only calls this when replaying, at points of its choosing, so
+  // nothing here may read or add to what was recorded: like the driver's
+  // commands, it runs with events disallowed. Discarding the code waits for
+  // running compile jobs and walks the code space in a safepoint, which stops
+  // the isolate's background threads and reads the clock to time that.
+  replayio::AutoDisallowEvents disallow("RecordReplayChangeInstrument");
+
   // All optimized code needs to be recompiled when instrumentation changes,
   // as instrumentation calls will be optimized out when instrumentation is
   // disabled.
@@ -14153,6 +14161,15 @@ bool IsMainThread() {
 }
 #endif
 
+// Turns a flag off. Flags the build doesn't support are constants
+// (FLAG_READONLY in flag-definitions.h), which are off already.
+template <typename Flag>
+static void RecordReplayTurnOffFlag(Flag& flag) {
+  if constexpr (!std::is_const_v<Flag>) {
+    flag = false;
+  }
+}
+
 // Set this process as recording or replaying.
 // Also serves to initializes Replay state.
 void recordreplay::SetRecordingOrReplaying(void* handle) {
@@ -14232,6 +14249,22 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
   if (!V8RecordReplayFeatureEnabled("v8-flags-optimizing-jit", nullptr)) {
     i::v8_flags.turbofan = false;
   }
+
+  // Which tier a function runs in isn't the same when recording and replaying
+  // (compile jobs finish at other times, the collector flushes code, and a
+  // replay discards code where the recording didn't), so what tiering does on
+  // the main thread must not be recorded. TurboFan's jobs are only queued with
+  // events disallowed (Compiler::CompileOptimized) and baseline code is
+  // compiled on the main thread, as in Replay's V8 10.8, which ran no other
+  // tier. Maglev and concurrent Sparkplug are on by default since. Each keeps
+  // a job on the embedder's thread pool, whose locks are recorded, and tells
+  // it of work with events allowed: Maglev when finished jobs are finalized
+  // from the interrupt its worker requests, Sparkplug whenever a batch of
+  // functions is due. Sparkplug's job also compiles on a recorded thread that
+  // the collector has to stop. Maglev wouldn't compile instrumented functions
+  // anyway (MaglevGraphBuilder::VisitReplayIncJsFrameDepth).
+  RecordReplayTurnOffFlag(i::v8_flags.maglev);
+  RecordReplayTurnOffFlag(i::v8_flags.concurrent_sparkplug);
 
   // Concurrent, parallel and incremental GC are used when recording and
   // replaying by default but can be disabled via a feature, which runs every
