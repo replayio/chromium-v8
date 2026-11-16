@@ -2859,6 +2859,11 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   bool record_replay_invoking_api_interrupts_ = false;
   Address record_replay_api_interrupts_js_fp_ = kNullAddress;
 
+  // Entries RecordReplayInvokeApiInterruptCallbacksAtProgress took off
+  // api_interrupts_queue_ and has not run yet. Only the isolate's thread uses
+  // this.
+  std::queue<InterruptEntry> record_replay_api_interrupts_taken_;
+
   std::unique_ptr<replayio::ReplayIsolateData> replay_data_;
 
 #define GLOBAL_BACKING_STORE(type, name, initialvalue) type name##_;

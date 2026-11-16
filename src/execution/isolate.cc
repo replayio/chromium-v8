@@ -2688,11 +2688,12 @@ void Isolate::RecordReplayInvokeApiInterruptCallbacksAtProgress() {
   // requested for callbacks queued meanwhile. Running them there would nest
   // every queued callback inside the previous one, thousands deep for a burst
   // of DevTools commands, until C stack limit checks (e.g. in RegExp parsing)
-  // fail at a depth that differs between recording and replaying. The
-  // outermost invocation's loop runs them instead. JS entered from a callback
-  // (e.g. an evaluation in a debugger pause the callback started) still runs
-  // them, so they can interrupt that JS: the enclosing invocation's topmost JS
-  // frame stays on the stack, so a different topmost fp means newer JS frames.
+  // fail at a depth that differs between recording and replaying. They wait
+  // for the next progress interrupt instead, once the enclosing callback runs
+  // JS or returns. JS entered from a callback (e.g. an evaluation in a debugger
+  // pause the callback started) still runs them, so they can interrupt that
+  // JS: the enclosing invocation's topmost JS frame stays on the stack, so a
+  // different topmost fp means newer JS frames.
   Address js_fp = kNullAddress;
   {
     JavaScriptStackFrameIterator it(this);
@@ -2711,19 +2712,31 @@ void Isolate::RecordReplayInvokeApiInterruptCallbacksAtProgress() {
   record_replay_invoking_api_interrupts_ = true;
   record_replay_api_interrupts_js_fp_ = js_fp;
 
-  while (true) {
-    InterruptEntry entry;
-    recordreplay::OrderedLock(record_replay_api_interrupts_ordered_lock_id_);
-    {
-      ExecutionAccess access(this);
-      if (api_interrupts_queue_.empty()) {
-        recordreplay::OrderedUnlock(record_replay_api_interrupts_ordered_lock_id_);
-        break;
-      }
-      entry = api_interrupts_queue_.front();
+  // One ordered lock round per drain, whatever the queue holds. Taking the
+  // lock is a recorded event of this thread, and the queue's contents are only
+  // the same when replaying for entries whose RequestInterrupt took the lock
+  // too: not for one queued with events disallowed or passed through, nor for
+  // one queued by code which runs only when recording (a binary module an
+  // embedder loads, calling RequestInterrupt). A lock round per entry made the
+  // recorded lock order depend on them.
+  //
+  // The entries taken move to a list only this thread uses, which a nested
+  // drain (JS entered from a callback) goes on with: entries taken by the
+  // enclosing drain still interrupt that JS, and run in the order they were
+  // queued. An entry queued after the lock round waits for the next trigger.
+  recordreplay::OrderedLock(record_replay_api_interrupts_ordered_lock_id_);
+  {
+    ExecutionAccess access(this);
+    while (!api_interrupts_queue_.empty()) {
+      record_replay_api_interrupts_taken_.push(api_interrupts_queue_.front());
       api_interrupts_queue_.pop();
     }
-    recordreplay::OrderedUnlock(record_replay_api_interrupts_ordered_lock_id_);
+  }
+  recordreplay::OrderedUnlock(record_replay_api_interrupts_ordered_lock_id_);
+
+  while (!record_replay_api_interrupts_taken_.empty()) {
+    InterruptEntry entry = record_replay_api_interrupts_taken_.front();
+    record_replay_api_interrupts_taken_.pop();
     VMState<EXTERNAL> state(this);
     HandleScope handle_scope(this);
     entry.first(reinterpret_cast<v8::Isolate*>(this), entry.second);
