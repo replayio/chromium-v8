@@ -13,6 +13,7 @@
 #include "src/debug/debug.h"
 #include "src/execution/frames-inl.h"
 #include "src/objects/js-generator-inl.h"
+#include "src/objects/scope-info-inl.h"
 #include "src/objects/source-text-module.h"
 #include "src/objects/string-set.h"
 #include "src/utils/ostreams.h"
@@ -1205,6 +1206,33 @@ bool ScopeIterator::SetLocalVariableValue(DirectHandle<String> variable_name,
           if (context_->scope_info()->ContextSlotIndex(*variable_name) !=
               index) {
             return false;
+          }
+          // Replay: a recording keeps a parameter the replay moved into the
+          // context (see Variable::RecordReplayForce) in the frame, so it is
+          // set there as a recording sets it, as the replay's own stores to
+          // it are (see BytecodeGenerator::RecordReplayStoreMovedParameter),
+          // and the write fails where a recording's fails. Only the
+          // parameter's own function has it in its frame.
+          if (var.record_replay_moved_from_stack && InInnerScope()) {
+            Tagged<ScopeInfo> scope_info = context_->scope_info();
+            int local = index - scope_info->ContextHeaderLength();
+            if (local >= 0 && local < scope_info->ContextLocalCount() &&
+                scope_info->ContextLocalIsParameter(local)) {
+              int parameter = static_cast<int>(
+                  scope_info->ContextLocalParameterNumber(local));
+              if (frame_inspector_ == nullptr) {
+                DCHECK(!generator_.is_null());
+                DirectHandle<FixedArray> parameters_and_registers(
+                    generator_->parameters_and_registers(), isolate_);
+                CHECK_LT(static_cast<uint32_t>(parameter),
+                         parameters_and_registers->ulength().value());
+                parameters_and_registers->set(parameter, *new_value);
+              } else {
+                JavaScriptFrame* frame = GetFrame();
+                if (!frame->is_unoptimized()) return false;
+                frame->SetParameterValue(parameter, *new_value);
+              }
+            }
           }
           Context::Set(context_, index, new_value, isolate_);
           return true;
