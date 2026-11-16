@@ -2488,7 +2488,9 @@ Maybe<bool> Module::InstantiateModule(Local<Context> context,
 
 MaybeLocal<Promise> Module::Evaluate(Local<Context> context) {
   // TODO: IsInReplayCode (RUN-1502)
-  v8::recordreplay::AssertMaybeEventsDisallowed("JS Module::Evaluate %d", ScriptId());
+  // A synthetic module has no script.
+  v8::recordreplay::AssertMaybeEventsDisallowed(
+      "JS Module::Evaluate %d", IsSourceTextModule() ? ScriptId() : 0);
 
   auto i_isolate = i::Isolate::Current();
   TRACE_EVENT_CALL_STATS_SCOPED(i_isolate, "v8", "V8.Execute");
