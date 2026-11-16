@@ -16,6 +16,10 @@ namespace replayio {
 // and ids handed out consistently.
 bool AreEventsAvailable();
 
+// Records a string's UTF-16 code units when recording and returns a string
+// made of the recorded ones when replaying. Any string comes back unchanged
+// when recording: NULs and unpaired surrogates are kept. An empty MaybeHandle
+// is returned as it is and records nothing.
 v8::internal::Handle<v8::internal::String> RecordReplayStringHandle(
     const char* why, v8::internal::Isolate* isolate,
     v8::internal::Handle<v8::internal::String> input);
