@@ -62,6 +62,12 @@ Address MathRandom::InitializeAndMaybeRefillCache(Isolate* isolate,
     }
     state.s0 = base::RandomNumberGenerator::MurmurHash3(seed);
     state.s1 = base::RandomNumberGenerator::MurmurHash3(~seed);
+    // The isolate's RNG is also drawn from at points which differ between
+    // recording and replaying (identity hashes for Replay's own code), so the
+    // seed it gives here differs too. Every number Math.random() returns in
+    // this context follows from this state: on 64-bit the builtin steps it
+    // inline and never comes back here.
+    recordreplay::RecordReplayBytes("MathRandom", &state, sizeof(state));
     CHECK(state.s0 != 0 || state.s1 != 0);
   }
 
@@ -78,12 +84,6 @@ Address MathRandom::InitializeAndMaybeRefillCache(Isolate* isolate,
     uint64_t random =
         base::RandomNumberGenerator::XorShift128(&state.s0, &state.s1);
     double v = base::RandomNumberGenerator::ToDouble(random);
-
-    // The RNG can be used at non-deterministic points within the VM,
-    // so we ensure that we're getting the same values whenever refilling
-    // the cache used for Math.random().
-    recordreplay::RecordReplayBytes("MathRandom", &v, sizeof(v));
-
     cache->set(i, v);
   }
   pod->set(0, state);
