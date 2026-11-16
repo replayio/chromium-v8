@@ -14268,6 +14268,18 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
   RecordReplayTurnOffFlag(i::v8_flags.maglev);
   RecordReplayTurnOffFlag(i::v8_flags.concurrent_sparkplug);
 
+  // A default derived constructor (`class B extends A {}`) is a function like
+  // any other: running it advances the progress counter. With this flag its
+  // caller skips it, and whether it does isn't the same when recording and
+  // replaying. Unoptimized code decides each time and doesn't skip while a
+  // debugger is active (CodeStubAssembler::FindNonDefaultConstructor), which
+  // Replay's own session makes it when replaying; TurboFan decides when it
+  // compiles, without that check
+  // (JSNativeContextSpecialization::ReduceJSFindNonDefaultConstructorOrConstruct),
+  // and which tier runs differs too (see above). Without the flag no bytecode
+  // asks for the skip, as in Replay's V8 10.8, where it was off by default.
+  RecordReplayTurnOffFlag(i::v8_flags.omit_default_ctors);
+
   // Concurrent, parallel and incremental GC are used when recording and
   // replaying by default but can be disabled via a feature, which runs every
   // GC on the main thread instead.
