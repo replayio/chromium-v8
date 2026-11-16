@@ -168,15 +168,24 @@ bool StackGuard::CheckInterrupt(InterruptFlag flag) {
 
 void StackGuard::RequestInterrupt(InterruptFlag flag) {
   // Terminating execution stops the isolate's thread at whichever check for
-  // it the thread reaches next: a stack check, Atomics.wait, a loop in the
-  // runtime. Requested by that thread itself (the inspector's
-  // Runtime.terminateExecution, an embedder's worker exiting), those are the
-  // checks which follow the request in the thread's own code, and the replay
-  // makes the request at the same point. Requested from another thread (a
-  // worker the page's thread stops while it runs script, an evaluation's
-  // timeout), which check comes next is a race the replay can't reproduce,
-  // also when the thread happens not to reach one. Only a recording can be
-  // invalidated: when replaying, such a request is Replay's own work.
+  // it the thread reaches next. A replay stops at the same point when both
+  // the request and that check are points of the thread's own execution
+  // which don't depend on timing or on the tier its code runs in.
+  //
+  // The request is one when the thread makes it itself (the inspector's
+  // Runtime.terminateExecution, an embedder's worker exiting): the replay
+  // makes it at the same point. Requested from another thread (a worker the
+  // page's thread stops while it runs script, an evaluation's timeout), which
+  // check comes next is a race, also when the thread happens not to reach
+  // one, so the request invalidates the recording here. Only a recording can
+  // be invalidated: when replaying, such a request is Replay's own work.
+  //
+  // The check is one when it is Atomics.wait's, or the stack check at the
+  // entry of a function that is called. It isn't when a loop makes it:
+  // unoptimized code only checks there once the function's interrupt budget
+  // is used up, optimized code in every iteration. See
+  // RecordReplayLoopCheckLeavesInterrupts. (Optimized code has no check at
+  // the entry of a function it inlined, which nothing accounts for.)
   if (flag == TERMINATE_EXECUTION && recordreplay::IsRecording() &&
       isolate_->thread_id() != ThreadId::Current()) {
     recordreplay::InvalidateRecording(
@@ -222,6 +231,25 @@ bool StackGuard::HasTerminationRequest() {
     return true;
   }
   return false;
+}
+
+bool StackGuard::RecordReplayLoopCheckLeavesInterrupts() {
+  // HandleInterrupts leaves everything pending while events are disallowed.
+  if (!recordreplay::IsRecordingOrReplaying() ||
+      recordreplay::AreEventsDisallowed() || !CheckTerminateExecution()) {
+    return false;
+  }
+  if (recordreplay::IsRecording()) {
+    // The first reason given is the one kept: a request from another thread
+    // has invalidated the recording already.
+    recordreplay::InvalidateRecording(
+        "Terminate execution from execution interrupt");
+    return false;
+  }
+  // A recording which is still valid took this termination at a check that
+  // every tier makes, which this thread has yet to reach. Code that has
+  // diverged from the recording has nothing to reproduce.
+  return !recordreplay::HasDivergedFromRecording();
 }
 
 int StackGuard::FetchAndClearInterrupts(InterruptLevel level) {

@@ -165,6 +165,14 @@ class V8_EXPORT_PRIVATE V8_NODISCARD StackGuard final {
   // long-running computations that are not GC-safe.
   bool HasTerminationRequest();
 
+  // Replay: called by an interrupt check a loop makes, before it handles
+  // interrupts. Where these checks are depends on the code's tier (see
+  // RequestInterrupt), so a termination taken at one can't be replayed: a
+  // recording is invalidated, and the check goes on to handle it. Returns
+  // true when the check has to leave the interrupts pending instead, which
+  // is when replaying: the recording took the termination elsewhere.
+  bool RecordReplayLoopCheckLeavesInterrupts();
+
   static constexpr int kSizeInBytes = 8 * kSystemPointerSize;
 
   static char* Iterate(RootVisitor* v, char* thread_storage) {

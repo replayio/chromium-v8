@@ -432,6 +432,11 @@ RUNTIME_FUNCTION(Runtime_HandleNoHeapWritesInterrupts) {
     return isolate->StackOverflow();
   }
 
+  // Replay: optimized code's loops call this in every iteration.
+  if (isolate->stack_guard()->RecordReplayLoopCheckLeavesInterrupts()) {
+    return ReadOnlyRoots(isolate).undefined_value();
+  }
+
   return isolate->stack_guard()->HandleInterrupts(
       StackGuard::InterruptLevel::kNoHeapWrites);
 }
@@ -471,6 +476,12 @@ Tagged<Object> BytecodeBudgetInterruptWithStackCheck(Isolate* isolate,
     // the runtime function call being what overflows the stack.
     return isolate->StackOverflow();
   } else if (check.InterruptRequested()) {
+    // Replay: unoptimized code's loops only get here once the function's
+    // budget is used up. A termination left pending is taken before the
+    // function tiers up: optimized code has no check where it inlined a call.
+    if (isolate->stack_guard()->RecordReplayLoopCheckLeavesInterrupts()) {
+      return ReadOnlyRoots(isolate).undefined_value();
+    }
     Tagged<Object> return_value = isolate->stack_guard()->HandleInterrupts();
     if (!IsUndefined(return_value)) {
       return return_value;
@@ -533,6 +544,10 @@ RUNTIME_FUNCTION(Runtime_BytecodeBudgetLoopInterrupt_Maglev) {
     return isolate->StackOverflow();
   } else if (check.InterruptRequested(
                  StackGuard::InterruptLevel::kNoHeapWrites)) {
+    // Replay: see BytecodeBudgetInterruptWithStackCheck.
+    if (isolate->stack_guard()->RecordReplayLoopCheckLeavesInterrupts()) {
+      return ReadOnlyRoots(isolate).undefined_value();
+    }
     Tagged<Object> return_value = isolate->stack_guard()->HandleInterrupts(
         StackGuard::InterruptLevel::kNoHeapWrites);
     if (!IsUndefined(return_value)) {
