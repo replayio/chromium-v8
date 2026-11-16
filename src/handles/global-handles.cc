@@ -875,8 +875,15 @@ void GlobalHandles::PostGarbageCollectionProcessing(
 
   if (second_pass_callbacks_.empty()) return;
 
+  // Replay: which handles a GC clears, and when, differs when replaying, so
+  // the second pass is no event of a recording. It runs here, inside the
+  // collection, where events are disallowed (Heap::CollectGarbage) whatever
+  // the embedder's platform does with a task: a callback can tell from that
+  // that the GC called it (ManagedObjectFinalizerSecondPass). A collection
+  // already runs the callbacks the one before it left pending this way.
   const bool synchronous_second_pass =
       isolate_->MemorySaverModeEnabled() || v8_flags.predictable ||
+      recordreplay::IsRecordingOrReplaying() ||
       isolate_->heap()->IsTearingDown() ||
       (gc_callback_flags &
        (kGCCallbackFlagForced | kGCCallbackFlagCollectAllAvailableGarbage |

@@ -4066,10 +4066,12 @@ static void EnsureIsolateContext(Isolate* isolate, std::optional<SaveAndSwitchCo
 
 void RecordReplayGetPossibleBreakpointsCallback(const char* script_id_str) {
   Isolate* isolate = Isolate::Current();
+  // Before the context switch, which makes handles: the driver calls from
+  // wherever the embedder got to, which may be an interrupt or a task with no
+  // handle scope of its own.
+  HandleScope scope(isolate);
   std::optional<SaveAndSwitchContext> ssc;
   EnsureIsolateContext(isolate, ssc);
-
-  HandleScope scope(isolate);
 
   int script_id = atoi(script_id_str);
   MaybeHandle<Script> maybe_script = MaybeGetScript(isolate, script_id);
@@ -4661,10 +4663,12 @@ char* CommandCallback(const char* command, const char* params) {
 
   Isolate* isolate = Isolate::Current();
   replayio::AutoDisallowEvents disallow("CommandCallback", (v8::Isolate*)isolate);
+  // Before the context switch, which makes handles (see
+  // RecordReplayGetPossibleBreakpointsCallback).
+  HandleScope scope(isolate);
   std::optional<SaveAndSwitchContext> ssc;
   EnsureIsolateContext(isolate, ssc);
 
-  HandleScope scope(isolate);
   AutoAllowCodeGenerationFromStrings allow_codegen(isolate);
 
   if (recordreplay::HasDivergedFromRecording()) {
@@ -4755,10 +4759,11 @@ void ClearPauseDataCallback() {
   Isolate* isolate = Isolate::Current();
   replayio::AutoDisallowEvents disallow("ClearPauseDataCallback",
                                         (v8::Isolate*)isolate);
+  // Before the context switch, which makes handles (see
+  // RecordReplayGetPossibleBreakpointsCallback).
+  HandleScope scope(isolate);
   std::optional<SaveAndSwitchContext> ssc;
   EnsureIsolateContext(isolate, ssc);
-
-  HandleScope scope(isolate);
 
   Local<v8::Value> callbackValue = gClearPauseDataCallback->Get((v8::Isolate*)isolate);
   Handle<Object> callback = Utils::OpenHandle(*callbackValue);

@@ -228,6 +228,11 @@ class ClearWeakScriptHandleTask : public CancelableTask {
     handle_ = nullptr;
   }
 
+  // Whether a Script outlives its NativeModule, which posts this, is up to the
+  // GC, and a replay's GC decides otherwise (see
+  // Task::IsRecordReplayNonDeterministic).
+  bool IsRecordReplayNonDeterministic() const override { return true; }
+
  private:
   // This is owned by the Isolate to ensure correct shutdown ordering.
   WasmOrphanedGlobalHandle* handle_;

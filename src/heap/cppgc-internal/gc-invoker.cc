@@ -60,6 +60,10 @@ class GCInvoker::GCInvokerImpl final : public GarbageCollector {
           saved_epoch_(collector->epoch()) {}
 
    private:
+    // The GC decides when this is posted, and a replay's GC decides otherwise
+    // (see Task::IsRecordReplayNonDeterministic).
+    bool IsRecordReplayNonDeterministic() const override { return true; }
+
     void Run() final {
       if (handle_.IsCanceled() || (collector_->epoch() != saved_epoch_)) return;
 

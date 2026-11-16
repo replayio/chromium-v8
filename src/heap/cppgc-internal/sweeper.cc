@@ -1470,6 +1470,10 @@ class Sweeper::SweeperImpl final {
           handle_(Handle::NonEmptyTag{}),
           priority_(priority) {}
 
+    // The GC decides when this is posted, and a replay's GC decides otherwise
+    // (see Task::IsRecordReplayNonDeterministic).
+    bool IsRecordReplayNonDeterministic() const override { return true; }
+
     static Handle Post(SweeperImpl& sweeper,
                        const std::shared_ptr<cppgc::TaskRunner>& runner,
                        cppgc::TaskPriority priority,

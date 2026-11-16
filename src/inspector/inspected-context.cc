@@ -23,6 +23,10 @@ class InspectedContext::ContextCollectedCallbacks final : public v8::Task {
 
   void Run() override;
 
+  // The GC decides when a context is collected, which posts this, and a
+  // replay's GC decides otherwise (see Task::IsRecordReplayNonDeterministic).
+  bool IsRecordReplayNonDeterministic() const override { return true; }
+
  private:
   std::unique_ptr<InspectedContext::WeakCallbackData> data_;
 };

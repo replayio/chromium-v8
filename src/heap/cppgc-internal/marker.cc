@@ -98,6 +98,10 @@ class MarkerBase::IncrementalMarkingTask final : public cppgc::Task {
  private:
   void Run() final;
 
+  // The GC decides when this is posted, and a replay's GC decides otherwise
+  // (see Task::IsRecordReplayNonDeterministic).
+  bool IsRecordReplayNonDeterministic() const override { return true; }
+
   MarkerBase* const marker_;
   StackState stack_state_;
   // TODO(chromium:1056170): Change to CancelableTask.
