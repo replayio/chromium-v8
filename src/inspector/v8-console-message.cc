@@ -4,6 +4,7 @@
 
 #include "src/inspector/v8-console-message.h"
 
+#include <array>
 #include <span>
 
 #include "include/v8-container.h"
@@ -584,8 +585,38 @@ void TraceV8ConsoleMessageEvent(V8MessageOrigin origin, ConsoleAPIType type) {
 }  // anonymous namespace
 
 extern "C" void V8RecordReplayOnConsoleMessage(size_t bookmark);
-extern "C" void SetContextGroupIdForSendCDPMessage(int contextGroupId);
-extern "C" void ClearContextGroupIdForSendCDPMessage();
+
+// The context groups of the console messages being reported to the recorder,
+// innermost last: handling one can evaluate code which reports another.
+static constexpr size_t kMaxContextGroupIdOverrideDepth = 16;
+static std::array<int, kMaxContextGroupIdOverrideDepth>
+    gContextGroupIdForSendCDPMessageStack;
+static size_t gContextGroupIdForSendCDPMessageDepth = 0;
+
+static void SetContextGroupIdForSendCDPMessage(int contextGroupId) {
+  CHECK(v8::IsMainThread());
+  CHECK_GT(contextGroupId, 0);
+  CHECK_LT(gContextGroupIdForSendCDPMessageDepth,
+           kMaxContextGroupIdOverrideDepth);
+  gContextGroupIdForSendCDPMessageStack[
+      gContextGroupIdForSendCDPMessageDepth++] = contextGroupId;
+}
+
+static void ClearContextGroupIdForSendCDPMessage() {
+  CHECK(v8::IsMainThread());
+  CHECK_GT(gContextGroupIdForSendCDPMessageDepth, 0u);
+  gContextGroupIdForSendCDPMessageDepth--;
+}
+
+// The context group the embedder sends the recorder's CDP commands to while a
+// console message is being reported, 0 otherwise.
+extern "C" V8_EXPORT int V8RecordReplayContextGroupIdForSendCDPMessage() {
+  if (gContextGroupIdForSendCDPMessageDepth == 0) {
+    return 0;
+  }
+  return gContextGroupIdForSendCDPMessageStack[
+      gContextGroupIdForSendCDPMessageDepth - 1];
+}
 
 void V8ConsoleMessageStorage::addMessage(
     std::unique_ptr<V8ConsoleMessage> message) {
