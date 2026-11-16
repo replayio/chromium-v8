@@ -121,7 +121,11 @@ using VariableLocationBits = base::BitField<VariableLocation, 0, 4, uint16_t>;
 using VariableModeBits = VariableLocationBits::Next<VariableMode, 4>;
 using IsSyntheticBit = VariableModeBits::Next<bool, 1>;
 using IsReceiverBit = IsSyntheticBit::Next<bool, 1>;
-static_assert(IsReceiverBit::kLastUsedBit < 16);
+// See Variable::RecordReplayForce.
+using RecordReplayUnreferencedBit = IsReceiverBit::Next<bool, 1>;
+using RecordReplayMovedFromStackBit =
+    RecordReplayUnreferencedBit::Next<bool, 1>;
+static_assert(RecordReplayMovedFromStackBit::kLastUsedBit < 16);
 
 // Encodes receiver, arguments, or function variable allocation info into a
 // 32-bit word:
@@ -444,6 +448,10 @@ DebugVariableInfo DebugScriptScope::variable(int index) const {
       .initializer_position = entry.initializer_position,
       .is_synthetic = IsSyntheticBit::decode(entry.location_mode_flags),
       .is_receiver = IsReceiverBit::decode(entry.location_mode_flags),
+      .record_replay_unreferenced =
+          RecordReplayUnreferencedBit::decode(entry.location_mode_flags),
+      .record_replay_moved_from_stack =
+          RecordReplayMovedFromStackBit::decode(entry.location_mode_flags),
   };
 }
 
@@ -645,6 +653,10 @@ Handle<DebugScriptScopeInfo> SerializeDebugScriptScopeInfo(
       var_flags = VariableModeBits::update(var_flags, var->mode());
       var_flags = IsSyntheticBit::update(var_flags, is_synthetic);
       var_flags = IsReceiverBit::update(var_flags, is_receiver);
+      var_flags = RecordReplayUnreferencedBit::update(
+          var_flags, var->RecordReplayIsUnreferenced());
+      var_flags = RecordReplayMovedFromStackBit::update(
+          var_flags, var->RecordReplayIsMovedFromStack());
 
       writer.Write<DebugVariableEntry>(DebugVariableEntry{
           .slot_index = var->index(),

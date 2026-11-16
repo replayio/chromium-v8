@@ -84,9 +84,57 @@ class Variable final : public ZoneObject {
     DCHECK(IsUnallocated() || IsContextSlot() || IsLookupSlot() ||
            location() == VariableLocation::MODULE);
     bit_field_ = ForceContextAllocationBit::update(bit_field_, true);
+    record_replay_bits_ |= kRecordReplayProgramForcesContext;
   }
   bool is_used() { return IsUsedField::decode(bit_field_); }
-  void set_is_used() { bit_field_ = IsUsedField::update(bit_field_, true); }
+  void set_is_used() {
+    bit_field_ = IsUsedField::update(bit_field_, true);
+    record_replay_bits_ |= kRecordReplayProgramUses;
+  }
+  // While replaying, force-variable-context-allocation (RUN-2604) marks the
+  // variables and parameters a function declares as used and puts them in a
+  // context, for Replay's own session to read them in a pause (see
+  // DeclarationScope::DeclareParameter and Scope::DeclareVariable). A
+  // recording doesn't: there a variable which nothing references
+  // (`var unused;`) isn't allocated at all, and one which no inner function
+  // references stays on the stack. A session other than Replay's own has to
+  // see the variables a recording has, as what it is told can reach the
+  // program.
+  //
+  // So what the program itself makes of a variable is kept next to what the
+  // replay forces: set_is_used() and ForceContextAllocation() note that the
+  // program has a reason, RecordReplayForce() sets the same two fields
+  // without one. Nothing which allocates variables or generates code reads the
+  // notes.
+  void RecordReplayForce() {
+    DCHECK(IsUnallocated() || IsContextSlot() || IsLookupSlot() ||
+           location() == VariableLocation::MODULE);
+    bit_field_ = IsUsedField::update(bit_field_, true);
+    bit_field_ = ForceContextAllocationBit::update(bit_field_, true);
+    record_replay_bits_ |= kRecordReplayForced;
+  }
+  // Whether only the replay's forcing asks for a context slot, so that a
+  // recording's Scope::MustAllocateInContext() answers by the scope alone.
+  bool RecordReplayOnlyReplayForcesContext() const {
+    return (record_replay_bits_ & kRecordReplayForced) &&
+           !(record_replay_bits_ & kRecordReplayProgramForcesContext);
+  }
+  // A forced variable which nothing in the program references: a recording
+  // doesn't allocate it. Never a parameter, which the caller puts in the
+  // frame whether or not the function mentions it.
+  bool RecordReplayIsUnreferenced() const {
+    return (record_replay_bits_ & kRecordReplayForced) &&
+           !(record_replay_bits_ & kRecordReplayProgramUses) &&
+           !is_parameter();
+  }
+  // A forced variable which a recording keeps on the stack (see
+  // Scope::MustAllocateInContext).
+  bool RecordReplayIsMovedFromStack() const {
+    return record_replay_bits_ & kRecordReplayMovedFromStack;
+  }
+  void RecordReplaySetMovedFromStack() {
+    record_replay_bits_ |= kRecordReplayMovedFromStack;
+  }
   MaybeAssignedFlag maybe_assigned() const {
     return MaybeAssignedFlagField::decode(bit_field_);
   }
@@ -359,6 +407,13 @@ class Variable final : public ZoneObject {
   int initializer_position_;
   uint16_t bit_field_;
   uint16_t hole_check_analysis_bit_field_;
+
+  // See RecordReplayForce().
+  static constexpr uint8_t kRecordReplayForced = 1 << 0;
+  static constexpr uint8_t kRecordReplayProgramUses = 1 << 1;
+  static constexpr uint8_t kRecordReplayProgramForcesContext = 1 << 2;
+  static constexpr uint8_t kRecordReplayMovedFromStack = 1 << 3;
+  uint8_t record_replay_bits_ = 0;
 
   uint8_t HoleCheckBitmapIndex() const {
     return HoleCheckBitmapIndexField::decode(hole_check_analysis_bit_field_);

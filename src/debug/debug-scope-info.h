@@ -30,6 +30,10 @@ struct DebugVariableInfo {
   int initializer_position;
   bool is_synthetic;
   bool is_receiver;
+  // See Variable::RecordReplayForce: a variable only a replay allocates, and
+  // one a replay moved from the stack into a context.
+  bool record_replay_unreferenced;
+  bool record_replay_moved_from_stack;
 
   // LINT.IfChange(VariableIsExport)
   bool is_export() const {

@@ -402,10 +402,15 @@ void PreparseDataBuilder::SaveDataForVariable(Variable* var) {
   }
 #endif
 
+  // Not what only the replay forces (a parameter, see
+  // Variable::RecordReplayForce): restoring this marks the variable as one
+  // the program needs in a context, and the parse which restores it forces
+  // the variable again anyway.
   uint8_t variable_data = VariableMaybeAssignedField::encode(
                               var->maybe_assigned() == kMaybeAssigned) |
                           VariableContextAllocatedField::encode(
-                              var->has_forced_context_allocation());
+                              var->has_forced_context_allocation() &&
+                              !var->RecordReplayOnlyReplayForcesContext());
   byte_data_.Reserve(kUint8Size);
   byte_data_.WriteQuarter(variable_data);
 }

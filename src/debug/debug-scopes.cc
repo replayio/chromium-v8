@@ -8,6 +8,7 @@
 #include <optional>
 
 #include "src/ast/modules.h"
+#include "src/base/replayio.h"
 #include "src/debug/debug-scope-info.h"
 #include "src/debug/debug.h"
 #include "src/execution/frames-inl.h"
@@ -349,7 +350,31 @@ ScopeIterator::VariableInfo ScopeIterator::GetVariableInfo(Mode mode) const {
   return result;
 }
 
+namespace {
+// A session other than Replay's own sees the variables a recording has (see
+// Variable::RecordReplayForce): not the ones only a replay allocates, and the
+// ones a replay moves from the stack into a context as the stack locals they
+// are when recording, there in their own frame and not available from an
+// inner function's.
+bool RecordReplayHidesVariable(const DebugVariableInfo& var) {
+  return var.record_replay_unreferenced && !replayio::CheckReplayOwned();
+}
+bool RecordReplayIsStackLocalWhenRecording(const DebugVariableInfo& var) {
+  return var.record_replay_moved_from_stack && !replayio::CheckReplayOwned();
+}
+}  // namespace
+
 bool ScopeIterator::ShouldIgnore() const {
+  // A context which holds nothing but what a replay forced into it isn't there
+  // when recording, so a walk along the contexts reports no scope for it to a
+  // session other than Replay's own. A walk along the parsed scopes reports
+  // the same scopes on both sides.
+  if (!HasScope() && !replayio::CheckReplayOwned() &&
+      (context_->IsFunctionContext() || context_->IsBlockContext()) &&
+      context_->scope_info()->RecordReplayContextIsForcedOnly()) {
+    return true;
+  }
+
   // Empty scopes are reported (e.g. so that they can be matched against
   // source maps), except for an empty script scope or eval scope. The latter
   // is also the root scope of wrapped functions and Function() functions.
@@ -368,7 +393,29 @@ bool ScopeIterator::AdvanceToScopeNumber(int scope_number) {
   return scope_number == 0 && !Done();
 }
 
+// While replaying, force-variable-context-allocation (RUN-2604) gives a
+// context to functions which wouldn't have one otherwise, also in the parse
+// which describes a script's scopes for this iterator. The code in the frame
+// may not have been compiled with the forcing: an embedder's startup snapshot
+// is built before any replay. The scope then needs a context the function
+// never pushed, which is what the CHECK in NeedsContext() rules out upstream,
+// and the context the walk would consume for the scope belongs to the scope
+// around the function, which would go missing from the chain.
+bool ScopeIterator::RecordReplayClosureContextNotPushed() const {
+  if (!HasScope() || current_scope_index_ != closure_scope_index_ ||
+      function_.is_null() || !current_scope().is_function_scope() ||
+      !current_scope().needs_context() || function_->context() != *context_) {
+    return false;
+  }
+  return recordreplay::IsReplaying() &&
+         recordreplay::FeatureEnabled("force-variable-context-allocation");
+}
+
 bool ScopeIterator::HasContext() const {
+  // The replay-forced case is the one function scope which may not have pushed
+  // its context.
+  if (RecordReplayClosureContextNotPushed()) return false;
+
   // In rare cases we pause in a scope that doesn't have its context pushed yet.
   // E.g. when pausing in for-of loop headers (see https://crbug.com/399002824).
   //
@@ -398,7 +445,8 @@ bool ScopeIterator::NeedsContext() const {
   CHECK_IMPLIES(needs_context && current_scope_index_ == closure_scope_index_ &&
                     (current_scope().is_function_scope() ||
                      current_scope().is_eval_scope()) &&
-                    !function_.is_null(),
+                    !function_.is_null() &&
+                    !RecordReplayClosureContextNotPushed(),
                 function_->context() != *context_);
 
   return needs_context;
@@ -796,6 +844,7 @@ bool ScopeIterator::VisitContextLocals(const Visitor& visitor,
   for (auto it : ScopeInfo::IterateLocalNames(scope_info)) {
     Handle<String> name(it->name(), isolate_);
     if (ScopeInfo::VariableIsSynthetic(*name)) continue;
+    if (scope_info->RecordReplayHidesContextLocal(it->index())) continue;
     int context_index = scope_info->ContextHeaderLength() + it->index();
     Handle<Object> value = indirect_handle(
         Context::Get(context, context_index, isolate_), isolate_);
@@ -852,6 +901,7 @@ bool ScopeIterator::VisitLocals(const Visitor& visitor, Mode mode,
     // allocate (e.g. Context::Get boxing a double ContextCell), and the GC may
     // move the string.
     DirectHandle<InternalizedString> name(var.name, isolate_);
+    if (RecordReplayHidesVariable(var)) continue;
     if (var.is_synthetic) {
       // We want to materialize "new.target" for debug-evaluate.
       if (mode != Mode::STACK ||
@@ -939,7 +989,16 @@ bool ScopeIterator::VisitLocals(const Visitor& visitor, Mode mode,
         break;
 
       case VariableLocation::CONTEXT:
-        if (mode == Mode::STACK) continue;
+        if (RecordReplayIsStackLocalWhenRecording(var)) {
+          // As for PARAMETER and LOCAL above: not available from an inner
+          // function's frame, and one of the stack locals of its own.
+          if (!InInnerScope()) {
+            value = isolate_->factory()->optimized_out();
+            break;
+          }
+        } else if (mode == Mode::STACK) {
+          continue;
+        }
         if (!HasContext()) {
           // If the context was not yet pushed we report the variable as
           // unavailable.
@@ -1073,6 +1132,8 @@ bool ScopeIterator::SetLocalVariableValue(DirectHandle<String> variable_name,
   for (int i = 0; i < scope.variable_count(); ++i) {
     DebugVariableInfo var = scope.variable(i);
     if (var.name == internalized_name) {
+      // As for a variable a recording leaves unallocated, below.
+      if (RecordReplayHidesVariable(var)) return false;
       int index = var.index;
       switch (var.location) {
         case VariableLocation::LOOKUP:
@@ -1132,6 +1193,10 @@ bool ScopeIterator::SetLocalVariableValue(DirectHandle<String> variable_name,
           return true;
 
         case VariableLocation::CONTEXT:
+          // As for LOCAL above.
+          if (RecordReplayIsStackLocalWhenRecording(var) && !InInnerScope()) {
+            return false;
+          }
           if (!HasContext()) return false;
           // We know of at least one open bug where the context and scope chain
           // don't match (https://crbug.com/753338).
@@ -1176,6 +1241,10 @@ bool ScopeIterator::SetContextVariableValue(DirectHandle<String> variable_name,
                                             DirectHandle<Object> new_value) {
   int slot_index = context_->scope_info()->ContextSlotIndex(*variable_name);
   if (slot_index < 0) return false;
+  if (context_->scope_info()->RecordReplayHidesContextLocal(
+          slot_index - context_->scope_info()->ContextHeaderLength())) {
+    return false;
+  }
   Context::Set(context_, slot_index, new_value, isolate_);
   return true;
 }

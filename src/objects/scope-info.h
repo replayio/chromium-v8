@@ -232,6 +232,16 @@ V8_OBJECT class ScopeInfo : public HeapObject {
   // Return the initialization flag of the given context local.
   MaybeAssignedFlag ContextLocalMaybeAssignedFlag(int var) const;
 
+  // Whether a session other than Replay's own is looking at a context local
+  // which a recording doesn't have in a context (see
+  // Variable::RecordReplayForce), so that session doesn't see it there.
+  bool RecordReplayHidesContextLocal(int var) const;
+  // Whether that context local is on the stack when recording.
+  bool RecordReplayContextLocalIsMovedFromStack(int var) const;
+  // Whether a recording has no context for this scope: every slot is one only
+  // the replay put there.
+  bool RecordReplayContextIsForcedOnly() const;
+
   // Return true if this local was introduced by the compiler, and should not be
   // exposed to the user in a debugger.
   static bool VariableIsSynthetic(Tagged<String> name);
@@ -546,6 +556,10 @@ V8_OBJECT class ScopeInfo : public HeapObject {
   using IsParameterBit = MaybeAssignedFlagBit::Next<bool, 1>;
   using ParameterNumberOrPositionBits = IsParameterBit::Next<uint32_t, 16>;
   using IsStaticFlagBit = ParameterNumberOrPositionBits::Next<IsStaticFlag, 1>;
+  // See Variable::RecordReplayForce.
+  using RecordReplayUnreferencedBit = IsStaticFlagBit::Next<bool, 1>;
+  using RecordReplayMovedFromStackBit =
+      RecordReplayUnreferencedBit::Next<bool, 1>;
 
   friend class ScopeIterator;
   friend class CodeStubAssembler;

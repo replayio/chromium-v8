@@ -11,6 +11,7 @@
 
 #include "src/ast/scopes.h"
 #include "src/ast/variables.h"
+#include "src/base/replayio.h"
 #include "src/heap/factory-inl.h"
 #include "src/heap/local-factory-inl.h"
 #include "src/init/bootstrapper.h"
@@ -335,7 +336,11 @@ Handle<ScopeInfo> ScopeInfo::Create(IsolateT* isolate, Zone* zone, Scope* scope,
                           InitFlagBit::encode(var->initialization_flag()) |
                           MaybeAssignedFlagBit::encode(var->maybe_assigned()) |
                           IsParameterBit::encode(false) |
-                          IsStaticFlagBit::encode(var->is_static_flag());
+                          IsStaticFlagBit::encode(var->is_static_flag()) |
+                          RecordReplayUnreferencedBit::encode(
+                              var->RecordReplayIsUnreferenced()) |
+                          RecordReplayMovedFromStackBit::encode(
+                              var->RecordReplayIsMovedFromStack());
           int position = var->initializer_position();
           if (position != kNoSourcePosition) {
             int relative_position =
@@ -1028,6 +1033,40 @@ InitializationFlag ScopeInfo::ContextLocalInitFlag(int var) const {
 bool ScopeInfo::ContextLocalIsParameter(int var) const {
   int value = context_local_infos(var);
   return IsParameterBit::decode(value);
+}
+
+bool ScopeInfo::RecordReplayHidesContextLocal(int var) const {
+  int value = context_local_infos(var);
+  return (RecordReplayUnreferencedBit::decode(value) ||
+          RecordReplayMovedFromStackBit::decode(value)) &&
+         !v8::replayio::CheckReplayOwned();
+}
+
+bool ScopeInfo::RecordReplayContextLocalIsMovedFromStack(int var) const {
+  return RecordReplayMovedFromStackBit::decode(context_local_infos(var));
+}
+
+bool ScopeInfo::RecordReplayContextIsForcedOnly() const {
+  ScopeType type = scope_type();
+  if (type != FUNCTION_SCOPE && type != BLOCK_SCOPE) return false;
+  // Slots a recording has too: the function's own name, and whatever makes a
+  // scope keep a context without a variable in it.
+  if (FunctionVariableBits::decode(Flags()) ==
+          VariableAllocationInfo::CONTEXT ||
+      ForceContextAllocationBit::decode(Flags()) ||
+      SloppyEvalCanExtendVars()) {
+    return false;
+  }
+  int count = ContextLocalCount();
+  if (count == 0) return false;
+  for (int var = 0; var < count; var++) {
+    int value = context_local_infos(var);
+    if (!RecordReplayUnreferencedBit::decode(value) &&
+        !RecordReplayMovedFromStackBit::decode(value)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 uint32_t ScopeInfo::ContextLocalParameterNumber(int var) const {

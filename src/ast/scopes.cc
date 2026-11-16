@@ -1140,9 +1140,9 @@ Variable* DeclarationScope::DeclareParameter(const AstRawString* name,
   if (recordreplay::IsReplaying() &&
       recordreplay::FeatureEnabled("force-variable-context-allocation")) {
     // Scope::MustAllocate checks that a variable forced into a context is one
-    // that's used.
-    var->set_is_used();
-    var->ForceContextAllocation();
+    // that's used. What the program makes of the variable is kept apart (see
+    // Variable::RecordReplayForce).
+    var->RecordReplayForce();
   }
   return var;
 }
@@ -1273,9 +1273,9 @@ Variable* Scope::DeclareVariable(
       (kind == VariableKind::NORMAL_VARIABLE ||
        kind == VariableKind::SLOPPY_BLOCK_FUNCTION_VARIABLE)) {
     // Scope::MustAllocate checks that a variable forced into a context is one
-    // that's used.
-    var->set_is_used();
-    var->ForceContextAllocation();
+    // that's used. What the program makes of the variable is kept apart (see
+    // Variable::RecordReplayForce).
+    var->RecordReplayForce();
   }
   return var;
 }
@@ -2614,7 +2614,17 @@ bool Scope::MustAllocateInContext(Variable* var) {
       return true;
     }
   }
-  return var->has_forced_context_allocation() || inner_scope_calls_eval();
+  if (inner_scope_calls_eval()) return true;
+  // From here only the variable's own forcing decides. Where that is the
+  // replay's alone, a recording keeps the variable on the stack, so sessions
+  // other than Replay's own see it as on the stack (see
+  // Variable::RecordReplayForce). One which nothing references isn't
+  // allocated in a recording at all, and is hidden from them instead.
+  if (var->RecordReplayOnlyReplayForcesContext() &&
+      !var->RecordReplayIsUnreferenced()) {
+    var->RecordReplaySetMovedFromStack();
+  }
+  return var->has_forced_context_allocation();
 }
 
 void Scope::AllocateStackSlot(Variable* var) {
