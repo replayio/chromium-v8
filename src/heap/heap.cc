@@ -5562,7 +5562,16 @@ bool Heap::ShouldExpandOldGenerationOnSlowAllocation(LocalHeap* local_heap,
   // While recording, the BackgroundCollectionInterruptTask asking the main thread for the
   // GC is posted with events disallowed, as an unordered task, which doesn't wake an idle
   // main thread.
-  if (recordreplay::IsRecordingOrReplaying() && !local_heap->is_main_thread()) return true;
+  // [Replay] A null local_heap means the caller is the GC itself --
+  // MainAllocator::in_gc() is defined as `local_heap_ == nullptr` -- not a
+  // background mutator thread that could deadlock waiting on a main-thread GC,
+  // which is what this escape exists for. Upstream dereferences local_heap
+  // only below its `origin == AllocationOrigin::kGC` return, so fall through
+  // to that instead of faulting here. DV8-127.
+  if (recordreplay::IsRecordingOrReplaying() && local_heap &&
+      !local_heap->is_main_thread()) {
+    return true;
+  }
 
   if (always_allocate()) {
     return true;

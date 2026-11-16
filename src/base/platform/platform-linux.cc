@@ -188,6 +188,16 @@ MemoryRegion FindEnclosingMapping(uintptr_t target_start, size_t size) {
 }
 
 bool KernelSupportsRemapDontUnmap() {
+  // [Replay] A host-capability probe behind a function-local static. The
+  // static's guard is not serialized in a replay, so the initializer -- and
+  // the recorded uname() inside it -- can run at a different point than it did
+  // while recording, desynchronizing the recorded call stream. Answer the same
+  // way on both sides without probing; declining the MREMAP_DONTUNMAP
+  // optimization costs a remap path and nothing else. DV8-128.
+  if (recordreplay::IsRecordingOrReplaying()) {
+    return false;
+  }
+
   static bool supported = [] {
     struct utsname buffer;
     CHECK_EQ(uname(&buffer), 0);
