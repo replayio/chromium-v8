@@ -167,6 +167,22 @@ bool StackGuard::CheckInterrupt(InterruptFlag flag) {
 }
 
 void StackGuard::RequestInterrupt(InterruptFlag flag) {
+  // Terminating execution stops the isolate's thread at whichever check for
+  // it the thread reaches next: a stack check, Atomics.wait, a loop in the
+  // runtime. Requested by that thread itself (the inspector's
+  // Runtime.terminateExecution, an embedder's worker exiting), those are the
+  // checks which follow the request in the thread's own code, and the replay
+  // makes the request at the same point. Requested from another thread (a
+  // worker the page's thread stops while it runs script, an evaluation's
+  // timeout), which check comes next is a race the replay can't reproduce,
+  // also when the thread happens not to reach one. Only a recording can be
+  // invalidated: when replaying, such a request is Replay's own work.
+  if (flag == TERMINATE_EXECUTION && recordreplay::IsRecording() &&
+      isolate_->thread_id() != ThreadId::Current()) {
+    recordreplay::InvalidateRecording(
+        "Requested terminate execution from another thread");
+  }
+
   ExecutionAccess access(isolate_);
   // Check the chain of InterruptsScope for interception.
   if (thread_local_.interrupt_scopes_ &&
@@ -321,7 +337,6 @@ Tagged<Object> StackGuard::HandleInterrupts(InterruptLevel level) {
 
   if (TestAndClear(&interrupt_flags, TERMINATE_EXECUTION)) {
     TRACE_EVENT("v8.execute", "V8.TerminateExecution");
-    recordreplay::InvalidateRecording("Terminate execution from execution interrupt");
     return isolate_->TerminateExecution();
   }
 

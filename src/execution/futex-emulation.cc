@@ -694,15 +694,13 @@ DirectHandle<Object> FutexEmulation::WaitSyncImpl(
       Tagged<Object> interrupt_object =
           isolate->stack_guard()->HandleInterrupts();
       // HandleInterrupts leaves interrupts pending while events are
-      // disallowed, as they are here, so it doesn't terminate.
-      // Only another thread can ask for that while this one is blocked here,
-      // and going back to waiting would ignore it, so the termination is
-      // handled here. When it arrives can't be replayed, so the recording is
-      // invalidated.
+      // disallowed, as they are here, so it doesn't terminate, and going back
+      // to waiting would ignore the termination, so it is handled here. Either
+      // this thread requested it before it waited (an embedder's worker
+      // exiting), which the replay reaches the same way, or another thread
+      // did, which invalidated the recording (StackGuard::RequestInterrupt).
       if (!IsExceptionHole(interrupt_object) &&
           isolate->stack_guard()->HasTerminationRequest()) {
-        recordreplay::InvalidateRecording(
-            "Terminate execution while blocked in Atomics.wait");
         interrupt_object = isolate->TerminateExecution();
       }
 
