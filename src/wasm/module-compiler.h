@@ -72,10 +72,15 @@ std::shared_ptr<wasm::WasmWrapperHandle> CompileImportWrapperForTest(
 void CompileLazy(Isolate*, NativeModule*, int func_index);
 
 // Replay: whether wasm jobs (compilation, validation, deserialization) are
-// left to the thread that joins them, with their workers never told of the
-// work: when recording or replaying without compilation tasks. See
-// RecordReplayNotifyConcurrencyIncrease in module-compiler.cc.
+// left to the thread that joins them: when recording or replaying without
+// compilation tasks. A job's workers and its joining thread share the job's
+// work by whoever gets to it first, which no recording orders.
 bool RecordReplayJoiningThreadRunsWasmJobs();
+
+// Creates a wasm job that something joins. It has no workers when the joining
+// thread runs wasm jobs.
+std::unique_ptr<JobHandle> RecordReplayCreateWasmJob(
+    TaskPriority priority, std::unique_ptr<JobTask> task);
 
 // Trigger tier-up of a particular function to TurboFan. If tier-up was already
 // triggered, we instead increase the priority with exponential back-off.

@@ -851,11 +851,7 @@ class DeserializeCodeTask : public JobTask {
         deserializer_->CopyAndRelocate(unit);
       }
       publish_queue_.Add(std::move(batch));
-      // Replay: the joining thread does all of it, see
-      // RecordReplayJoiningThreadRunsWasmJobs.
-      if (!RecordReplayJoiningThreadRunsWasmJobs()) {
-        delegate->NotifyConcurrencyIncrease();
-      }
+      delegate->NotifyConcurrencyIncrease();
     }
   }
 
@@ -918,7 +914,7 @@ void NativeModuleDeserializer::Read(Reader* reader) {
 
   // Create a new job without any workers; those are spawned on
   // {NotifyConcurrencyIncrease}.
-  std::unique_ptr<JobHandle> job_handle = V8::GetCurrentPlatform()->CreateJob(
+  std::unique_ptr<JobHandle> job_handle = RecordReplayCreateWasmJob(
       TaskPriority::kUserVisible,
       std::make_unique<DeserializeCodeTask>(this, &reloc_queue));
 
@@ -939,9 +935,7 @@ void NativeModuleDeserializer::Read(Reader* reader) {
       reloc_queue.Add(std::move(batch));
       DCHECK(batch.empty());
       batch_size = 0;
-      if (!RecordReplayJoiningThreadRunsWasmJobs()) {
-        job_handle->NotifyConcurrencyIncrease();
-      }
+      job_handle->NotifyConcurrencyIncrease();
     }
   }
 
@@ -952,9 +946,7 @@ void NativeModuleDeserializer::Read(Reader* reader) {
 
   if (!batch.empty()) {
     reloc_queue.Add(std::move(batch));
-    if (!RecordReplayJoiningThreadRunsWasmJobs()) {
-      job_handle->NotifyConcurrencyIncrease();
-    }
+    job_handle->NotifyConcurrencyIncrease();
   }
 
   // Wait for all tasks to finish, while participating in their work.

@@ -11,6 +11,7 @@
 #include "src/tracing/trace-event.h"
 #include "src/wasm/constant-expression.h"
 #include "src/wasm/decoder.h"
+#include "src/wasm/module-compiler.h"
 #include "src/wasm/module-decoder-impl.h"
 #include "src/wasm/struct-types.h"
 #include "src/wasm/wasm-constants.h"
@@ -581,7 +582,7 @@ WasmError ValidateFunctions(const WasmModule* module,
     validate_job->Run(&delegate);
   } else {
     // Spawn the task and join it.
-    std::unique_ptr<JobHandle> job_handle = V8::GetCurrentPlatform()->CreateJob(
+    std::unique_ptr<JobHandle> job_handle = RecordReplayCreateWasmJob(
         TaskPriority::kUserVisible, std::move(validate_job));
     job_handle->Join();
   }

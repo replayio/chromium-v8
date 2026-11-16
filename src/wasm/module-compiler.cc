@@ -109,13 +109,56 @@ bool RecordReplayJoiningThreadRunsWasmJobs() {
 
 namespace {
 
+// Replay: a job that is never given to the platform, so it has no workers. The
+// thread that joins it does all of its work.
+class JoiningThreadJobHandle final : public JobHandle {
+ public:
+  explicit JoiningThreadJobHandle(std::unique_ptr<JobTask> task)
+      : task_(std::move(task)) {}
+
+  void NotifyConcurrencyIncrease() override {}
+  void Join() override {
+    Delegate delegate;
+    while (task_->GetMaxConcurrency(0) > 0) task_->Run(&delegate);
+    task_.reset();
+  }
+  void Cancel() override { task_.reset(); }
+  void CancelAndDetach() override { task_.reset(); }
+  bool IsActive() override { return task_ && task_->GetMaxConcurrency(0) > 0; }
+  bool IsValid() override { return task_ != nullptr; }
+
+ private:
+  class Delegate final : public JobDelegate {
+   public:
+    bool ShouldYield() override { return false; }
+    void NotifyConcurrencyIncrease() override {}
+    uint8_t GetTaskId() override { return 0; }
+    bool IsJoiningThread() const override { return true; }
+  };
+
+  std::unique_ptr<JobTask> task_;
+};
+
+}  // namespace
+
+std::unique_ptr<JobHandle> RecordReplayCreateWasmJob(
+    TaskPriority priority, std::unique_ptr<JobTask> task) {
+  if (RecordReplayJoiningThreadRunsWasmJobs()) {
+    return std::make_unique<JoiningThreadJobHandle>(std::move(task));
+  }
+  return V8::GetCurrentPlatform()->CreateJob(priority, std::move(task));
+}
+
+namespace {
+
 // Replay: a job's workers are told of new work by NotifyConcurrencyIncrease,
 // and then they and the thread that joins the job share that work in an order
 // that differs each run. When recording or replaying without compilation
-// tasks, wasm jobs aren't announced to the workers, so only the joining thread
-// does the work. Replay's V8 10.8 got that from --wasm-num-compilation-tasks=0
-// alone, which no longer keeps the workers away: the compile jobs always allow
-// one (BackgroundCompileJob::GetMaxConcurrency).
+// tasks, the compile jobs aren't announced to the workers, and nothing joins
+// them (see WaitForBaselineCompileJob). Replay's V8 10.8 got that from
+// --wasm-num-compilation-tasks=0 alone, which no longer keeps the workers
+// away: the compile jobs always allow one
+// (BackgroundCompileJob::GetMaxConcurrency).
 void RecordReplayNotifyConcurrencyIncrease(JobHandle* job) {
   if (RecordReplayJoiningThreadRunsWasmJobs()) return;
   job->NotifyConcurrencyIncrease();
@@ -2378,7 +2421,7 @@ struct ValidateFunctionsStreamingJobData {
     if ((total_units_added >= 16 &&
          base::bits::IsPowerOfTwo(total_units_added)) ||
         (total_units_added % (16 * 1024)) == 0 || ptr == units.end()) {
-      RecordReplayNotifyConcurrencyIncrease(job_handle);
+      job_handle->NotifyConcurrencyIncrease();
     }
   }
 
@@ -3188,7 +3231,7 @@ bool AsyncStreamingProcessor::ProcessFunctionBody(
   if (!compiled) {
     if (!validate_functions_job_handle_) {
       validate_functions_job_data_.Initialize(module->num_declared_functions);
-      validate_functions_job_handle_ = V8::GetCurrentPlatform()->CreateJob(
+      validate_functions_job_handle_ = RecordReplayCreateWasmJob(
           TaskPriority::kUserVisible,
           std::make_unique<ValidateFunctionsStreamingJob>(
               module, enabled_features, &validate_functions_job_data_));
