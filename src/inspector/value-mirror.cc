@@ -1713,8 +1713,18 @@ bool ValueMirror::getProperties(v8::Local<v8::Context> context,
             setterMirror = ValueMirror::create(context, descriptor.set);
           }
           isAccessorProperty = getterMirror || setterMirror;
+          // Reading a builtin getter, to show its value instead of the
+          // accessor, still runs the page's code: any builtin can be installed
+          // as a getter (Array.prototype.toString calls the object's join,
+          // Object.prototype.toString reads its Symbol.toStringTag), an Error's
+          // stack getter calls prepareStackTrace, and an API function is the
+          // embedder's code. Replay's own session describes values with events
+          // disallowed, where nothing the page does is recorded (see
+          // MustNotRunUserJS), so there the property has to stay an accessor
+          // for the viewer to call.
           if (name != "__proto__" && !getterFunction.IsEmpty() &&
               isBuiltinGetter(getterFunction) &&
+              !v8::replayio::MustNotRunUserJS() &&
               !doesAttributeHaveObservableSideEffectOnGet(context, object,
                                                           v8Name)) {
             v8::TryCatch tryCatchFunction(isolate);
