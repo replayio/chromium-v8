@@ -575,7 +575,21 @@ void V8InspectorImpl::forEachSession(
 
 int64_t V8InspectorImpl::generateUniqueId() {
   int64_t id = m_client->generateUniqueId();
-  if (!id) id = v8::debug::GetNextRandomInt64(m_isolate);
+  if (!id) {
+    id = v8::debug::GetNextRandomInt64(m_isolate);
+    // Replay: a session the program attached reads these ids (the isolate's,
+    // an execution context's uniqueId, Debugger.enable's debuggerId). The
+    // isolate's generator is also drawn from at points which differ between
+    // recording and replaying (identity hashes for Replay's own code), so what
+    // it gives a client without ids of its own is recorded. Not with events
+    // disallowed, where Replay's own session asks and nothing is recorded (see
+    // V8Debugger::debuggerIdFor).
+    if (v8::recordreplay::IsRecordingOrReplaying() &&
+        !v8::recordreplay::AreEventsDisallowed()) {
+      v8::recordreplay::RecordReplayBytes("V8InspectorImpl::generateUniqueId",
+                                          &id, sizeof(id));
+    }
+  }
   if (!id) id = 1;
   return id;
 }
