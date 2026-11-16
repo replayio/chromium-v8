@@ -8175,8 +8175,10 @@ void Isolate::CountUsage(
 }
 
 // Start disallowed script IDs at a value that won't conflict with regular IDs,
-// which start at one and increment from there.
-static const int kFirstDisallowedScriptId = 1 << 30;
+// which start at one and increment from there. Script IDs are Smis, which
+// only have 31 bits with pointer compression.
+static constexpr int kFirstDisallowedScriptId = 1 << 29;
+static_assert(kFirstDisallowedScriptId <= Smi::kMaxValue);
 static int gNextDisallowedScriptId = kFirstDisallowedScriptId;
 
 bool RecordReplayIsDisallowedScriptId(int script_id) {
