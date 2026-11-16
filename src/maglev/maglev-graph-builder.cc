@@ -16498,12 +16498,12 @@ ReduceResult MaglevGraphBuilder::VisitRecordReplayIncExecutionProgressCounter() 
 }
 
 ReduceResult MaglevGraphBuilder::VisitReplayIncJsFrameDepth() {
-  AddNewNode<ReplayIncrementAndCheckJsFrameDepth>({});
+  RETURN_IF_ABORT(AddNewNode<ReplayIncrementAndCheckJsFrameDepth>({}));
   return ReduceResult::Done();
 }
 
 ReduceResult MaglevGraphBuilder::VisitReplayDecJsFrameDepth() {
-  AddNewNode<ReplayDecrementJsFrameDepth>({});
+  RETURN_IF_ABORT(AddNewNode<ReplayDecrementJsFrameDepth>({}));
   return ReduceResult::Done();
 }
 

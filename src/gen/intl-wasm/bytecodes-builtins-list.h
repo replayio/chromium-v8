@@ -212,6 +212,15 @@ namespace internal {
   V(ArrayDestructureHandler, interpreter::OperandScale::kSingle, interpreter::Bytecode::kArrayDestructure) \
   V(DebuggerHandler, interpreter::OperandScale::kSingle, interpreter::Bytecode::kDebugger) \
   V(IncBlockCounterHandler, interpreter::OperandScale::kSingle, interpreter::Bytecode::kIncBlockCounter) \
+  V(RecordReplayIncExecutionProgressCounterHandler, interpreter::OperandScale::kSingle, interpreter::Bytecode::kRecordReplayIncExecutionProgressCounter) \
+  V(RecordReplayNotifyActivityHandler, interpreter::OperandScale::kSingle, interpreter::Bytecode::kRecordReplayNotifyActivity) \
+  V(ReplayIncJsFrameDepthHandler, interpreter::OperandScale::kSingle, interpreter::Bytecode::kReplayIncJsFrameDepth) \
+  V(ReplayDecJsFrameDepthHandler, interpreter::OperandScale::kSingle, interpreter::Bytecode::kReplayDecJsFrameDepth) \
+  V(RecordReplayInstrumentationHandler, interpreter::OperandScale::kSingle, interpreter::Bytecode::kRecordReplayInstrumentation) \
+  V(RecordReplayInstrumentationGeneratorHandler, interpreter::OperandScale::kSingle, interpreter::Bytecode::kRecordReplayInstrumentationGenerator) \
+  V(RecordReplayInstrumentationReturnHandler, interpreter::OperandScale::kSingle, interpreter::Bytecode::kRecordReplayInstrumentationReturn) \
+  V(RecordReplayAssertValueHandler, interpreter::OperandScale::kSingle, interpreter::Bytecode::kRecordReplayAssertValue) \
+  V(RecordReplayTrackObjectIdHandler, interpreter::OperandScale::kSingle, interpreter::Bytecode::kRecordReplayTrackObjectId) \
   V(AbortHandler, interpreter::OperandScale::kSingle, interpreter::Bytecode::kAbort) \
   V(ShortStarHandler, interpreter::OperandScale::kSingle, interpreter::Bytecode::kStar0) \
   V(IllegalHandler, interpreter::OperandScale::kSingle, interpreter::Bytecode::kIllegal) \
@@ -377,6 +386,11 @@ namespace internal {
   V(GetIteratorWideHandler, interpreter::OperandScale::kDouble, interpreter::Bytecode::kGetIterator) \
   V(ArrayDestructureWideHandler, interpreter::OperandScale::kDouble, interpreter::Bytecode::kArrayDestructure) \
   V(IncBlockCounterWideHandler, interpreter::OperandScale::kDouble, interpreter::Bytecode::kIncBlockCounter) \
+  V(RecordReplayInstrumentationWideHandler, interpreter::OperandScale::kDouble, interpreter::Bytecode::kRecordReplayInstrumentation) \
+  V(RecordReplayInstrumentationGeneratorWideHandler, interpreter::OperandScale::kDouble, interpreter::Bytecode::kRecordReplayInstrumentationGenerator) \
+  V(RecordReplayInstrumentationReturnWideHandler, interpreter::OperandScale::kDouble, interpreter::Bytecode::kRecordReplayInstrumentationReturn) \
+  V(RecordReplayAssertValueWideHandler, interpreter::OperandScale::kDouble, interpreter::Bytecode::kRecordReplayAssertValue) \
+  V(RecordReplayTrackObjectIdWideHandler, interpreter::OperandScale::kDouble, interpreter::Bytecode::kRecordReplayTrackObjectId) \
   V(DebugBreak1ExtraWideHandler, interpreter::OperandScale::kQuadruple, interpreter::Bytecode::kDebugBreak1) \
   V(DebugBreak2ExtraWideHandler, interpreter::OperandScale::kQuadruple, interpreter::Bytecode::kDebugBreak2) \
   V(DebugBreak3ExtraWideHandler, interpreter::OperandScale::kQuadruple, interpreter::Bytecode::kDebugBreak3) \
@@ -538,17 +552,22 @@ namespace internal {
   V(ResumeGeneratorExtraWideHandler, interpreter::OperandScale::kQuadruple, interpreter::Bytecode::kResumeGenerator) \
   V(GetIteratorExtraWideHandler, interpreter::OperandScale::kQuadruple, interpreter::Bytecode::kGetIterator) \
   V(ArrayDestructureExtraWideHandler, interpreter::OperandScale::kQuadruple, interpreter::Bytecode::kArrayDestructure) \
-  V(IncBlockCounterExtraWideHandler, interpreter::OperandScale::kQuadruple, interpreter::Bytecode::kIncBlockCounter)
+  V(IncBlockCounterExtraWideHandler, interpreter::OperandScale::kQuadruple, interpreter::Bytecode::kIncBlockCounter) \
+  V(RecordReplayInstrumentationExtraWideHandler, interpreter::OperandScale::kQuadruple, interpreter::Bytecode::kRecordReplayInstrumentation) \
+  V(RecordReplayInstrumentationGeneratorExtraWideHandler, interpreter::OperandScale::kQuadruple, interpreter::Bytecode::kRecordReplayInstrumentationGenerator) \
+  V(RecordReplayInstrumentationReturnExtraWideHandler, interpreter::OperandScale::kQuadruple, interpreter::Bytecode::kRecordReplayInstrumentationReturn) \
+  V(RecordReplayAssertValueExtraWideHandler, interpreter::OperandScale::kQuadruple, interpreter::Bytecode::kRecordReplayAssertValue) \
+  V(RecordReplayTrackObjectIdExtraWideHandler, interpreter::OperandScale::kQuadruple, interpreter::Bytecode::kRecordReplayTrackObjectId)
 
-constexpr int kNumberOfBytecodeHandlers = 202;
-constexpr int kNumberOfWideBytecodeHandlers = 162;
+constexpr int kNumberOfBytecodeHandlers = 211;
+constexpr int kNumberOfWideBytecodeHandlers = 167;
 
 constexpr uint8_t kIllegalBytecodeHandlerEncoding = 255;
 
 // Mapping from Bytecode to a dense form with all the illegal
 // wide Bytecodes removed. Used to index into the builtins table.
-constexpr uint8_t kWideBytecodeToBuiltinsMapping[217] = {
-255, 255, 255, 255, 255, 0, 1, 2, 3, 4, 5, 6, 255, 7, 255, 255, 255, 255, 255, 255, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 255, 255, 255, 255, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 255, 255, 255, 255, 255, 255, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 255, 107, 108, 109, 255, 255, 110, 111, 255, 112, 113, 255, 114, 115, 116, 117, 118, 119, 120, 121, 122, 255, 255, 255, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 255, 255, 255, 255, 154, 255, 255, 155, 156, 157, 158, 159, 160, 255, 161, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, };
+constexpr uint8_t kWideBytecodeToBuiltinsMapping[226] = {
+255, 255, 255, 255, 255, 0, 1, 2, 3, 4, 5, 6, 255, 7, 255, 255, 255, 255, 255, 255, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 255, 255, 255, 255, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 255, 255, 255, 255, 255, 255, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 255, 107, 108, 109, 255, 255, 110, 111, 255, 112, 113, 255, 114, 115, 116, 117, 118, 119, 120, 121, 122, 255, 255, 255, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 255, 255, 255, 255, 154, 255, 255, 155, 156, 157, 158, 159, 160, 255, 161, 255, 255, 255, 255, 162, 163, 164, 165, 166, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, };
 
 }  // namespace internal
 }  // namespace v8

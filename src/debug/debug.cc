@@ -3849,10 +3849,10 @@ static void ForEachInstrumentationOp(Isolate* isolate, Handle<Script> script,
 
       for (interpreter::BytecodeArrayIterator it(bytecode); !it.done();
            it.Advance()) {
-        interpreter::Bytecode bytecode = it.current_bytecode();
-        if (bytecode == interpreter::Bytecode::kRecordReplayInstrumentation ||
-            bytecode == interpreter::Bytecode::kRecordReplayInstrumentationGenerator ||
-            bytecode == interpreter::Bytecode::kRecordReplayInstrumentationReturn) {
+        interpreter::Bytecode opcode = it.current_bytecode();
+        if (opcode == interpreter::Bytecode::kRecordReplayInstrumentation ||
+            opcode == interpreter::Bytecode::kRecordReplayInstrumentationGenerator ||
+            opcode == interpreter::Bytecode::kRecordReplayInstrumentationReturn) {
           int index = it.GetUnsignedImmediateOperand(0);
           aCallback(candidate, index);
         }

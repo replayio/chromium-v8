@@ -600,7 +600,7 @@ Handle<FixedArray> FastKeyAccumulator::InitializeFastPropertyEnumCache(
     if (details.location() != PropertyLocation::kField) fields_only = false;
     index++;
 
-    if (*params && index == pageSize) break;
+    if (*params && static_cast<int>(index) == pageSize) break;
   }
   DCHECK_EQ(index, keys->ulength().value());
 
@@ -624,7 +624,7 @@ Handle<FixedArray> FastKeyAccumulator::InitializeFastPropertyEnumCache(
       raw_indices->set(index, Smi::FromInt(field_index.GetLoadByFieldIndex()));
       index++;
 
-      if (*params && index == pageSize) break;
+      if (*params && static_cast<int>(index) == pageSize) break;
     }
     DCHECK_EQ(index, indices->ulength().value());
   }

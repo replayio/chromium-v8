@@ -8897,7 +8897,7 @@ i::DirectHandle<i::JSArray> MapAsArray(i::Isolate* i_isolate,
       if (collect_keys) result->set(result_index++, key);
       if (collect_values) result->set(result_index++, table->ValueAt(entry));
 
-      if (*params && result_index == max_length) break;
+      if (*params && static_cast<int>(result_index) == max_length) break;
     }
   }
   CHECK_GE(max_length, result_index);
@@ -9005,7 +9005,7 @@ i::DirectHandle<i::JSArray> SetAsArray(i::Isolate* i_isolate,
       result->set(result_index++, key);
       if (collect_key_values) result->set(result_index++, key);
       
-      if (result_index == max_length) break;
+      if (static_cast<int>(result_index) == max_length) break;
     }
   }
   DCHECK_GE(max_length, result_index);
