@@ -1799,6 +1799,43 @@ void BytecodeGenerator::GenerateBodyPrologue() {
   VisitNewTargetVariable(closure_scope()->new_target_var());
 
   FunctionLiteral* literal = info()->literal();
+
+  // RECORD REPLAY: ReplayOnFrameEnterGenerator() below reads the generator
+  // object register, so the generator object has to exist by then. Upstream
+  // creates it after this prologue, where the register still holds the
+  // incoming new.target -- undefined on a generator's first activation.
+  // RecordReplayObjectId() returns 0 for a non-object and the driver drops a
+  // generator entry whose id is 0, so every generator loses its creation
+  // point. Creating it here is where M108 created it, for every resumable
+  // kind; the calls upstream makes later find it done.
+  //
+  // THIS DELIBERATELY UNDOES AN UPSTREAM SPEC FIX. 5fbb6ba2d010d6c (v8:7831,
+  // crrev.com/c/6462591, first in M138) moved the creation after the parameter
+  // initialization block because the spec creates the generator object after
+  // function declaration instantiation
+  // (tc39.es/ecma262/#sec-asyncgenerator-definitions-evaluatebody). Restoring
+  // the old order means a generator or async generator with NON-SIMPLE
+  // PARAMETERS samples f.prototype before its parameter initializers run
+  // again, and the four test262 generator-created-after-decl-inst cases that
+  // CL fixed would fail again. Nothing else it touched is affected: the
+  // parameter block opens no ContextScope, so the context captured by
+  // Runtime_CreateJSGeneratorObject is the same function context either way,
+  // and SuspendGenerator overwrites it at every suspend regardless.
+  //
+  // The deviation is accepted because the "generator" instrumentation site is
+  // the frame-ENTER site -- it also emits ReplayIncJsFrameDepth, and the
+  // driver registers the creation point from the same site -- so it has to
+  // precede any user JS in the frame. Honouring upstream's order instead would
+  // put calls and breakpoint sites inside default-parameter expressions before
+  // their frame had entered, and a throw there would unwind a frame that never
+  // entered, a stream shape M108 never produced. Doing it properly needs the
+  // driver to split frame entry from creation-point registration, which is a
+  // driver change and out of scope for a rebase. M108 had this same deviation.
+  // DSRC-393.
+  if (IsResumableFunction(literal->kind())) {
+    BuildGeneratorObjectVariableInitialization();
+  }
+
   // Emit tracing call if requested to do so.
   if (v8_flags.trace) builder()->CallRuntime(Runtime::kTraceEnter);
 
@@ -8978,6 +9015,13 @@ void BytecodeGenerator::VisitNewTargetVariable(Variable* variable) {
 // {.generator_object} variable.
 void BytecodeGenerator::BuildGeneratorObjectVariableInitialization() {
   DCHECK(IsResumableFunction(info()->literal()->kind()));
+
+  // RECORD REPLAY: GenerateBodyPrologue() already did this, so that the frame
+  // enter instrumentation could read the generator object.
+  if (record_replay_generator_object_initialized_) {
+    return;
+  }
+  record_replay_generator_object_initialized_ = true;
 
   Variable* generator_object_var = closure_scope()->generator_object_var();
   RegisterAllocationScope register_scope(this);

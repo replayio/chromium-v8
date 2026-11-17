@@ -698,6 +698,11 @@ class BytecodeGenerator final : public AstVisitor<BytecodeGenerator> {
   // most once per function.
   bool record_replay_has_track_this_ = false;
 
+  // Whether GenerateBodyPrologue() has created the generator object, which it
+  // does for a resumable function so that the frame enter instrumentation can
+  // read it.
+  bool record_replay_generator_object_initialized_ = false;
+
   LoopScope* current_loop_scope_;
   ForInScope* current_for_in_scope_;
 
