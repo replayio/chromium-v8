@@ -267,6 +267,35 @@ void V8::Initialize() {
     DisableFlag(v8_flags.concurrent_sparkplug);
   }
 
+  // Sweep array buffer extensions inside the GC that asked for the sweep when
+  // recording or replaying. Upstream moved ArrayBufferSweeper from a cancelable
+  // task to a job after the fork's M108 baseline, and every way of finishing a
+  // sweep now runs SweepingState::FinishSweeping, which joins that job. With
+  // concurrent sweeping on, the job is created and started inside
+  // Heap::CollectGarbage's disallow scope, so it is queued in the unordered
+  // thread group, but it is joined much later from ArrayBufferSweeper::Append,
+  // Resize or Detach, on whichever allocation first observes the worker's
+  // racy IsDone(). Events are allowed at that point, so ThreadPoolImpl::
+  // GetThreadGroup no longer returns the unordered group and
+  // base::JobHandle::Join -> UpdatePriority -> ThreadGroup::UpdateSortKeyImpl
+  // takes the ordered lock of the foreground group, for a task source that
+  // lives in another group, at a moment a worker thread chose. Measured on the
+  // M158 leapfrog stack: a renderer main thread blocked there while resolving
+  // Blob.arrayBuffer(), reached from an ordinary allocation rather than from a
+  // compile path that already disallows events. With the flag off RequestSweep
+  // finishes the sweep before it returns, which is the path upstream itself
+  // takes for --single-threaded-gc and for memory-reducing GCs. The join still
+  // happens, but inside the GC's disallow scope, where the job, its locks and
+  // the thread group holding it are all unordered, and no sweep is ever in
+  // progress while the mutator runs. That also covers ~ArrayBufferSweeper from
+  // Heap::TearDown, which has no disallow scope of its own. Gated on recording
+  // OR replaying because the two sides must agree. FlagList::Hash() already
+  // excludes this flag, so turning it off costs no code cache churn. DV8-136.
+  if (recordreplay::IsRecordingOrReplaying(
+          "disable-v8-flags-concurrent-array-buffer-sweeping")) {
+    v8_flags.concurrent_array_buffer_sweeping = false;
+  }
+
   // Initialize the default FlagList::Hash.
   FlagList::Hash();
 
