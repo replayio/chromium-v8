@@ -204,6 +204,30 @@ void V8::Initialize() {
   }
 #endif  // V8_ENABLE_WEBASSEMBLY
 
+  // Compile optimized code on the main thread when recording or replaying.
+  // Compiler::CompileOptimized already concedes that "the point at which
+  // optimized compilations occur can vary between recording and replaying" and
+  // disallows events for the whole path, but a CONCURRENT compilation does not
+  // stay on that path: the main thread later parks in
+  // MaglevConcurrentDispatcher::AwaitCompileJobs and waits on the job handle,
+  // outside the guard, where base::JobHandle::Join -> UpdatePriority ->
+  // ThreadGroup::UpdateSortKeyImpl records a lock. Whether it waits, and for
+  // how long, is decided by worker threads, so the main thread reaches the next
+  // recorded event from a different place. Measured on the M158 leapfrog stack:
+  // the renderer's main thread matched for 28,693 assert events and then the
+  // recording took a browser event while the replay was inside that Join.
+  // One flag turns off both optimizing dispatchers -- the maglev one gates on
+  // concurrent_recompilation too -- and upstream's own CompileMaglev and
+  // CompileTurbofan then fall back to ConcurrencyMode::kSynchronous, which runs
+  // inside the existing disallow scope. Set here, with the wasm overrides
+  // above, because embedders apply --js-flags after the recorder attaches, and
+  // because this has to follow EnforceFlagImplications and precede
+  // FreezeFlags(). DV8-131.
+  if (recordreplay::IsRecordingOrReplaying(
+          "disable-v8-flags-concurrent-recompilation")) {
+    v8_flags.concurrent_recompilation = false;
+  }
+
   // Initialize the default FlagList::Hash.
   FlagList::Hash();
 
