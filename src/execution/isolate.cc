@@ -3633,11 +3633,6 @@ Isolate::Isolate(std::unique_ptr<i::IsolateAllocator> isolate_allocator,
   if (recordreplay::IsRecordingOrReplaying() && IsMainThread()) {
     RecordReplayOnMainThreadIsolateCreated(this);
   }
-
-  if (RecordReplayShouldCallOnPromiseHook()) {
-    promise_hook_flags_ =
-      PromiseHookFields::HasIsolatePromiseHook::encode(true);
-  }
 }
 
 replayio::ReplayIsolateData* Isolate::EnsureReplayData() {
@@ -4717,6 +4712,13 @@ bool Isolate::Init(SnapshotData* startup_snapshot_data,
   // pretentured to old space.
   DCHECK_IMPLIES(heap()->new_space(), (heap()->new_space()->Size() == 0) &&
                                           (heap()->gc_count() == 0));
+
+  // Force the promise hook once the roots exist, so that the promise hook
+  // protector is invalidated with it: optimized code must not inline promise
+  // operations that skip the hook.
+  if (RecordReplayShouldCallOnPromiseHook()) {
+    PromiseHookStateUpdated();
+  }
 
   initialized_ = true;
 

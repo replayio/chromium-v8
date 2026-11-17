@@ -4189,7 +4189,6 @@ static Local<v8::Value> GetObjectIdMapForContext(v8::Isolate* v8_isolate, Local<
 }
 
 extern bool gRecordReplayAssertTrackedObjects;
-extern bool gRecordReplayAssertDependencyGraph;
 extern int (*gGetAPIObjectIdCallback)(v8::Local<v8::Object> object);
 
 static int gNextObjectId = 1;
@@ -4443,7 +4442,8 @@ void AddPromiseDependencyGraphAdoption(Isolate* isolate, Handle<Object> promise,
   }
 }
 
-extern bool gRecordReplayEnableDependencyGraph;
+extern bool gRecordReplayDependencyGraphInstrumented;
+extern bool gRecordReplayReportPromises;
 
 bool RecordReplayShouldCallOnPromiseHook() {
   // Ideally we would be able to avoid calling the promise hook when recording
@@ -4454,22 +4454,15 @@ bool RecordReplayShouldCallOnPromiseHook() {
   // See https://linear.app/replay/issue/TT-1361
   //
   // For now we workaround this problem by setting this state consistently and
-  // add a small amount of recording overhead.
-  return gRecordReplayEnableDependencyGraph && IsMainThread();
+  // add a small amount of recording overhead. The value is recorded, so it is
+  // the same when replaying even where the dependency-graph feature is only
+  // disabled when replaying.
+  return gRecordReplayDependencyGraphInstrumented && IsMainThread();
 }
 
 void RecordReplayOnPromiseHook(Isolate* isolate, PromiseHookType type,
                                Handle<JSPromise> promise, Handle<Object> parent) {
-  if (!gRecordReplayEnableDependencyGraph) {
-    return;
-  }
-
-  // The promise hook only needs to report nodes/edges while replaying,
-  // but can assign persistent IDs to objects so the calls below are needed
-  // while recording if we are asserting on those IDs.
-  if (!recordreplay::IsReplaying() &&
-      !gRecordReplayAssertTrackedObjects &&
-      !gRecordReplayAssertDependencyGraph) {
+  if (!gRecordReplayReportPromises) {
     return;
   }
 
