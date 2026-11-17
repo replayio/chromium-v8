@@ -118,12 +118,47 @@ Handle<CppGCManaged<CppType>> CppGCManaged<CppType>::Create(
     std::shared_ptr<CppType> shared_ptr, AllocationType allocation_type) {
   if (shared_ptr) OnManagedAdded(shared_ptr.get());
   auto* shared_ptr_ptr = new std::shared_ptr<CppType>(std::move(shared_ptr));
+
+  // RECORD REPLAY: a CppGCManagedWrapper is only ever destroyed by the cppgc
+  // sweeper, at a moment that depends on when the GC runs, and its destructor
+  // runs detail::Destructor there -- the "Managed::Destructor" assert and, for
+  // a wasm NativeModule, NativeModuleCache::RemoveHolder, which takes an
+  // ordered lock and mutates the cache. {Managed} has never allowed that: its
+  // ManagedObjectFinalizerSecondPass returns early while events are
+  // disallowed and leaves the payload to Isolate::ReleaseSharedPtrs, which
+  // runs every registered destructor at Isolate::Deinit in creation order
+  // with events allowed. Upstream's CppGCManaged (M153) is not registered with
+  // the isolate, so the migration lost BOTH the skip and that reclaim, and the
+  // recorder dies on AssertWithEventsDisallowed{"Managed::Destructor"}.
+  //
+  // Give the isolate ownership from the start when the deferral is on, exactly
+  // as a {Managed} has, and leave the wrapper no destructor to run --
+  // ~CppGCManagedWrapper already null-checks it. The payload is then released
+  // at isolate teardown, at the same point when replaying.
+  //
+  // Not a bare early return in detail::Destructor: that would skip the
+  // cleanup with nothing to run it later, leaking one NativeModule per worker
+  // generation with no reclaim path, which is the very thing
+  // webassembly/module-freed-by-last-worker-teardown checks. Registering keeps
+  // the leak bounded by the isolate's lifetime.
+  //
+  // Size 0 on the registration because the wrapper keeps the external memory
+  // accounting; gating on the same predicate as the classic path because
+  // NativeModuleCache's record/replay mode is keyed to it and the two must not
+  // be separable. DV8-135.
+  void (*wrapper_destructor)(void*) = detail::Destructor<CppType>;
+  if (ManagedFinalizersDeferredWhenEventsDisallowed()) {
+    isolate->RegisterManagedPtrDestructor(new ManagedPtrDestructor(
+        0, shared_ptr_ptr, detail::Destructor<CppType>, SharedFlag{false}));
+    wrapper_destructor = nullptr;
+  }
+
   auto* destructor = cppgc::MakeGarbageCollected<CppGCManagedWrapper>(
       reinterpret_cast<v8::Isolate*>(isolate)
           ->GetCppHeap()
           ->GetAllocationHandle(),
       TypeIdForManaged<CppType>::value, estimated_size, shared_ptr_ptr,
-      detail::Destructor<CppType>, reinterpret_cast<v8::Isolate*>(isolate),
+      wrapper_destructor, reinterpret_cast<v8::Isolate*>(isolate),
       isolate->cpp_heap_isolate_alive_token());
   Tagged<CppGCManagedBase> raw =
       *isolate->factory()->NewCppGCManagedBase(allocation_type);
