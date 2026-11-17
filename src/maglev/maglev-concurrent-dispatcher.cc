@@ -4,6 +4,7 @@
 
 #include "src/maglev/maglev-concurrent-dispatcher.h"
 
+#include "include/replayio.h"
 #include "src/codegen/compiler.h"
 #include "src/common/synchronization-point-support.h"
 #include "src/compiler/compilation-dependencies.h"
@@ -355,8 +356,19 @@ MaglevConcurrentDispatcher::MaglevConcurrentDispatcher(Isolate* isolate)
     TaskPriority priority = v8_flags.concurrent_maglev_high_priority_threads
                                 ? TaskPriority::kUserBlocking
                                 : TaskPriority::kUserVisible;
-    job_handle_ = V8::GetCurrentPlatform()->PostJob(
-        priority, std::make_unique<JobTask>(this));
+    // [Replay] src decides at task-source CONSTRUCTION time whether a
+    // thread-pool task source is ordered, and this handle is created from
+    // Isolate::Init with events allowed but used from inside
+    // Compiler::CompileOptimized's disallow scope, so the first maglev
+    // tier-up takes an ordered lock where nothing may be recorded.  Create
+    // the handle with events disallowed instead, as the GC's job already
+    // does in ConcurrentMarking::ScheduleJob.  DV8-126.
+    {
+      replayio::AutoDisallowEvents disallow(
+          "MaglevConcurrentDispatcher::PostJob");
+      job_handle_ = V8::GetCurrentPlatform()->PostJob(
+          priority, std::make_unique<JobTask>(this));
+    }
     DCHECK(is_enabled());
   } else {
     DCHECK(!is_enabled());
@@ -414,8 +426,15 @@ void MaglevConcurrentDispatcher::AwaitCompileJobs() {
   TaskPriority priority = v8_flags.concurrent_maglev_high_priority_threads
                               ? TaskPriority::kUserBlocking
                               : TaskPriority::kUserVisible;
-  job_handle_ = V8::GetCurrentPlatform()->PostJob(
-      priority, std::make_unique<JobTask>(this));
+  // [Replay] Join kills the handle, so this re-post creates a new task source
+  // and has to disallow events for the same reason as the constructor's.
+  // DV8-126.
+  {
+    replayio::AutoDisallowEvents disallow(
+        "MaglevConcurrentDispatcher::PostJob");
+    job_handle_ = V8::GetCurrentPlatform()->PostJob(
+        priority, std::make_unique<JobTask>(this));
+  }
   DCHECK(incoming_queue_.IsEmpty());
 }
 

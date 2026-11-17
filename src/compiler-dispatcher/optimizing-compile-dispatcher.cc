@@ -4,6 +4,7 @@
 
 #include "src/compiler-dispatcher/optimizing-compile-dispatcher.h"
 
+#include "include/replayio.h"
 #include "src/base/atomicops.h"
 #include "src/base/logging.h"
 #include "src/base/platform/mutex.h"
@@ -112,8 +113,15 @@ void OptimizingCompileTaskExecutor::EnsureStarted() {
 
     task_states_ =
         base::UniqueArray<OptimizingCompileTaskState>::New(max_tasks);
-    job_handle_ = V8::GetCurrentPlatform()->PostJob(
-        kTaskPriority, std::make_unique<CompileTask>(this));
+    // [Replay] Created from IsolateGroup init with events allowed, used from
+    // TryQueueForOptimization inside Compiler::CompileOptimized's disallow
+    // scope.  See DV8-126 and the maglev dispatcher's two sites.
+    {
+      replayio::AutoDisallowEvents disallow(
+          "OptimizingCompileTaskExecutor::PostJob");
+      job_handle_ = V8::GetCurrentPlatform()->PostJob(
+          kTaskPriority, std::make_unique<CompileTask>(this));
+    }
   }
 }
 
