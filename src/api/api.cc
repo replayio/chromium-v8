@@ -32,6 +32,7 @@
 #include "include/v8-platform.h"
 #include "include/v8-primitive-object.h"
 #include "include/v8-profiler.h"
+#include "include/replayio.h"
 #include "include/v8-source-location.h"
 #include "include/v8-template.h"
 #include "include/v8-unwinder-state.h"
@@ -12869,6 +12870,21 @@ void RecordReplayChangeInstrument(bool enabled) {
   // as instrumentation calls will be optimized out when instrumentation is
   // disabled.
   Isolate* isolate = Isolate::Current();
+
+  // [Replay] The CHECK above says this runs only while replaying, so nothing
+  // it does has a counterpart in the recording and it must take nothing from
+  // the event stream. It did not used to touch it: when this function was
+  // written DeoptimizeAll walked the native-context list under a
+  // DisallowGarbageCollection, but upstream now iterates with
+  // DeoptimizableCodeIterator, which enters a local safepoint, and
+  // IsolateSafepoint::EnterLocalSafepointScope times itself with
+  // TimedHistogramScope -- so the deopt reads the clock. Measured: the linker
+  // starting a scan (ScanRecordingHandler::Start ->
+  // recordreplay::StartScanningExecution -> SetInstrumentationEnabled(true) ->
+  // here) consumed a `Call clock_gettime` where the recording was delivering a
+  // browser event. Pass events through, which here means perform the call for
+  // real rather than reading a recorded value. DV8-132.
+  replayio::AutoPassThroughEvents pass_through;
   Deoptimizer::DeoptimizeAll(isolate);
 }
 
