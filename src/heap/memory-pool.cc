@@ -6,6 +6,7 @@
 
 #include <algorithm>
 
+#include "include/replayio.h"
 #include "src/base/platform/mutex.h"
 #include "src/common/ptr-compr-inl.h"
 #include "src/execution/isolate.h"
@@ -493,6 +494,27 @@ void MemoryPool::PostDelayedReleaseTask(Isolate* isolate,
                                         base::TimeDelta delay) {
   DCHECK(config_.timeout_in_sec != 0);
   DCHECK(!task_disabled_.load());
+
+  // [Replay] ReleasePooledChunksTask re-posts itself from its own Run, which
+  // happens on a thread-pool worker -- and the fork runs the unordered pool
+  // workers' whole ThreadMain inside AutoDisallowEvents, so the re-post walks
+  // ThreadPoolImpl::PostDelayedTask into DelayedTaskManager::AddDelayedTask,
+  // taking the ordered queue_lock_ and recording a ThreadPoolTaskSequenceNum
+  // where nothing may be recorded.  Skip the post; the pool keeps its chunks.
+  //
+  // The leak is BOUNDED by upstream's own recovery: posted_time_ is stored at
+  // the END of this function, so returning here leaves it stale, and
+  // PostDelayedReleaseTaskIfNeeded -- called from the main thread whenever
+  // chunks are added to the pool -- sees `now > posted_time_ + timeout +
+  // kTimeSlack` and posts again with events allowed.  That slack exists for
+  // exactly this case ("if the worker thread on which the task was scheduled
+  // has died").  DV8-133.
+  if (recordreplay::AreEventsDisallowed(
+          "MemoryPool::PostDelayedReleaseTask") &&
+      recordreplay::IsRecordingOrReplaying(
+          "leak-references", "MemoryPool::PostDelayedReleaseTask")) {
+    return;
+  }
   // With these scheme, a pooled page may be reclaimed in [timeout, 2 * timeout)
   // second. This helps to prevent the case when a page is too prematurely
   // freed, e.g. when a GC runs right before the task is executed.
