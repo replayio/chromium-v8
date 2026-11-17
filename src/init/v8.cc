@@ -170,6 +170,20 @@ base::AbortMode ChooseAbortMode() {
   }
   return base::AbortMode::kDefault;
 }
+
+// [Replay] Turns off a flag that some configurations define with
+// DEFINE_BOOL_READONLY. A read-only flag is a static constexpr member, so
+// assigning to it does not compile; overload resolution on constness picks the
+// second function there instead of restating the flag's #if from
+// flag-definitions.h, which would silently go stale when upstream edits that
+// condition. A read-only flag has to be off already: if upstream ever pins one
+// on, fail at startup rather than record with it. Exactly one of the two is
+// reachable in any given configuration, so both are [[maybe_unused]]: the
+// overload that loses resolution is never referenced, and an unreferenced
+// function in an anonymous namespace is a -Werror warning.
+[[maybe_unused]] void DisableFlag(FlagValue<bool>& flag) { flag = false; }
+[[maybe_unused]] void DisableFlag(const FlagValue<bool>& flag) { CHECK(!flag); }
+
 }  // namespace
 
 void V8::Initialize() {
@@ -226,6 +240,31 @@ void V8::Initialize() {
   if (recordreplay::IsRecordingOrReplaying(
           "disable-v8-flags-concurrent-recompilation")) {
     v8_flags.concurrent_recompilation = false;
+  }
+
+  // Compile baseline code on the main thread when recording or replaying.
+  // --concurrent-sparkplug, on by default upstream since M110 (it was false at
+  // v8-m109 and ENABLE_SPARKPLUG_BY_DEFAULT at v8-m110, so the fork's M108
+  // baseline never needed this gate), hands each batch to a job:
+  // BaselineBatchCompiler::EnqueueFunction -> ConcurrentBaselineCompiler::
+  // CompileBatch -> JobHandle::NotifyConcurrencyIncrease, which takes the
+  // ordered JobTaskSource::worker_lock_. The batch is enqueued from the
+  // bytecode budget interrupt, so it fires wherever JS happens to run,
+  // including in the replay under recordreplay::SendCommand, where events are
+  // disallowed and the recording has no such lock. With the flag off no
+  // ConcurrentBaselineCompiler is constructed -- its constructor is what posts
+  // the job -- and batches compile synchronously in
+  // BaselineBatchCompiler::CompileBatch, the path upstream itself takes for
+  // --predictable and --single-threaded; FlagList::Hash() excludes this flag
+  // from the code-caching hash for that same reason, so turning it off costs no
+  // cache churn. Gated on recording OR replaying because the two sides must
+  // agree: compiling baseline code on a background thread on one side and the
+  // main thread on the other would be a divergence in itself. The flag is
+  // read-only, and already off, on macOS arm64 without JIT write protection and
+  // in builds without Sparkplug, hence DisableFlag. DV8-134.
+  if (recordreplay::IsRecordingOrReplaying(
+          "disable-v8-flags-concurrent-sparkplug")) {
+    DisableFlag(v8_flags.concurrent_sparkplug);
   }
 
   // Initialize the default FlagList::Hash.
