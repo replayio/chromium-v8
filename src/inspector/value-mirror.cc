@@ -1721,10 +1721,13 @@ bool ValueMirror::getProperties(v8::Local<v8::Context> context,
           // embedder's code. Replay's own session describes values with events
           // disallowed, where nothing the page does is recorded (see
           // MustNotRunUserJS), so there the property has to stay an accessor
-          // for the viewer to call.
+          // for the viewer to call. An Error's stack that the page has already
+          // formatted is the exception: reading it formats nothing, so it runs
+          // no page code and gives the string the recording saw.
           if (name != "__proto__" && !getterFunction.IsEmpty() &&
               isBuiltinGetter(getterFunction) &&
-              !v8::replayio::MustNotRunUserJS() &&
+              (!v8::replayio::MustNotRunUserJS() ||
+               v8::replayio::ReadsFormattedErrorStack(object, v8Name)) &&
               !doesAttributeHaveObservableSideEffectOnGet(context, object,
                                                           v8Name)) {
             v8::TryCatch tryCatchFunction(isolate);
