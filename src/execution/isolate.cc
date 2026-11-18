@@ -5511,17 +5511,19 @@ void Isolate::RunAllPromiseHooks(PromiseHookType type,
   }
 }
 
+extern bool RecordReplayReportsPromises();
 extern void RecordReplayOnPromiseHook(Isolate* isolate, PromiseHookType type,
                                       Handle<JSPromise> promise, Handle<Object> parent);
 
 void Isolate::RunPromiseHook(PromiseHookType type, Handle<JSPromise> promise,
                              Handle<Object> parent) {
   if (!HasIsolatePromiseHooks()) return;
-  if (RecordReplayShouldCallOnPromiseHook()) {
+  if (RecordReplayReportsPromises()) {
     RecordReplayOnPromiseHook(this, type, promise, parent);
-    if (!promise_hook_) return;
   }
-  DCHECK(promise_hook_ != nullptr);
+  // Without an embedder hook, RecordReplayShouldCallOnPromiseHook() forces
+  // the flag.
+  if (!promise_hook_) return;
   promise_hook_(type, v8::Utils::PromiseToLocal(promise),
                 v8::Utils::ToLocal(parent));
 }

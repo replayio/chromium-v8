@@ -11170,12 +11170,8 @@ bool gRecordReplayAssertTrackedObjects;
 // selects promise builtin paths (TT-1361).
 bool gRecordReplayDependencyGraphInstrumented;
 
-// Enable reporting the dependency graph while replaying.
-// This is on by default.
-bool gRecordReplayEnableDependencyGraph;
-
 // Whether the dependency graph is updated (V8RecordReplayUpdateDependencyGraph)
-// and whether promise hooks report to it (RecordReplayOnPromiseHook), on the
+// and whether promise hooks report to it (RecordReplayReportsPromises), on the
 // main thread. Set once, so checking them makes no driver calls.
 bool gRecordReplayUpdateDependencyGraph;
 bool gRecordReplayReportPromises;
@@ -12448,15 +12444,17 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
   // only when replaying stops the reporting, not the instrumentation.
   bool dependency_graph = V8RecordReplayFeatureEnabled("dependency-graph", nullptr);
   i::gRecordReplayDependencyGraphInstrumented =
+    IsRecordingOrReplaying() &&
     RecordReplayValue("DependencyGraphInstrumented", dependency_graph);
-  i::gRecordReplayEnableDependencyGraph =
-    i::gRecordReplayDependencyGraphInstrumented && dependency_graph;
 
   i::gRecordReplayAssertDependencyGraph = !!getenv("RECORD_REPLAY_DEPENDENCY_GRAPH_ASSERTS");
 
+  // Asserted updates follow the recording: with dependency graph asserts, the
+  // graph is updated as when recording, whatever the replay-time feature.
   i::gRecordReplayUpdateDependencyGraph =
-    i::gRecordReplayEnableDependencyGraph &&
-    (IsReplaying() || i::gRecordReplayAssertDependencyGraph);
+    i::gRecordReplayDependencyGraphInstrumented &&
+    ((IsReplaying() && dependency_graph) ||
+     i::gRecordReplayAssertDependencyGraph);
   // Promise hooks assign object IDs, so they report whenever those are
   // asserted, as when recording.
   i::gRecordReplayReportPromises =

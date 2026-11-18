@@ -5471,7 +5471,7 @@ void JSPromise::set_async_task_id(int id) {
 }
 
 
-extern bool RecordReplayShouldCallOnPromiseHook();
+extern bool RecordReplayReportsPromises();
 void AddPromiseDependencyGraphAdoption(Isolate* isolate, Handle<Object> promise, Handle<Object> adoption);
 
 // static
@@ -5629,7 +5629,7 @@ MaybeHandle<Object> JSPromise::Resolve(Handle<JSPromise> promise,
     return Fulfill(promise, resolution);
   }
 
-  if (RecordReplayShouldCallOnPromiseHook()) {
+  if (RecordReplayReportsPromises()) {
     // Fulfillment of this promise is delayed by adopted resolution.
     // Ref: Promise/A+ 2.3.2
     AddPromiseDependencyGraphAdoption(isolate, Handle<Object>::cast(promise), resolution);

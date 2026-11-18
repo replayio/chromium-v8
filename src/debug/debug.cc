@@ -4460,11 +4460,13 @@ bool RecordReplayShouldCallOnPromiseHook() {
   return gRecordReplayDependencyGraphInstrumented && IsMainThread();
 }
 
+bool RecordReplayReportsPromises() {
+  return gRecordReplayReportPromises && IsMainThread();
+}
+
 void RecordReplayOnPromiseHook(Isolate* isolate, PromiseHookType type,
                                Handle<JSPromise> promise, Handle<Object> parent) {
-  if (!gRecordReplayReportPromises) {
-    return;
-  }
+  DCHECK(RecordReplayReportsPromises());
 
   PromiseDependencyGraphData& data =
     GetOrCreatePromiseDependencyGraphData(isolate, promise);
