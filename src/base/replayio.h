@@ -50,10 +50,12 @@ inline bool MustNotRunUserJS() {
 }
 
 // Whether reading |name| on |object| returns a stack the page has already
-// formatted: the read calls V8's own Error stack getter and the formatted stack
-// is already stored in the Error, so it formats nothing, runs no user JS (no
-// Error.prepareStackTrace) and gives the string the recording saw, which is
-// what the read returns when recording and when nothing is recorded at all.
+// formatted: |name| is "stack", the read calls V8's own Error stack getter as an
+// own property of |object|, and the formatted stack is already stored there. The
+// read then formats nothing, so it runs no user JS and gives the string the
+// recording saw, which is what the read returns when recording and when nothing
+// is recorded at all. False for everything else, including an Error whose stack
+// has not been formatted yet: formatting it is what runs the page's code.
 // Defined in src/replay/replayio.cc.
 bool ReadsFormattedErrorStack(v8::Local<v8::Object> object,
                               v8::Local<v8::Name> name);

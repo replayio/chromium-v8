@@ -62,22 +62,18 @@ v8::internal::MaybeHandle<v8::internal::String> RecordReplayStringHandle(
 
 namespace {
 
-// V8's own Error stack getter, as an Error's accessor pair holds it: the
-// template, or the function instantiated from it.
+// V8's own Error stack getter, as an Error's accessor pair holds it once the
+// template it is installed from has been instantiated.
 bool IsErrorStackGetter(v8::internal::Isolate* isolate,
                         v8::internal::Tagged<v8::internal::Object> getter) {
-  v8::internal::Tagged<v8::internal::FunctionTemplateInfo> error_stack_getter =
-      *isolate->factory()->error_stack_getter_fun_template();
-  if (getter == error_stack_getter) {
-    return true;
-  }
   if (!v8::internal::IsJSFunction(getter)) {
     return false;
   }
   v8::internal::Tagged<v8::internal::SharedFunctionInfo> shared =
       v8::internal::Cast<v8::internal::JSFunction>(getter)->shared();
   return shared->IsApiFunction() &&
-         shared->api_func_data() == error_stack_getter;
+         shared->api_func_data() ==
+             *isolate->factory()->error_stack_getter_fun_template();
 }
 
 }  // namespace
@@ -85,14 +81,27 @@ bool IsErrorStackGetter(v8::internal::Isolate* isolate,
 bool ReadsFormattedErrorStack(v8::Local<v8::Object> object,
                               v8::Local<v8::Name> name) {
   v8::internal::Isolate* isolate = v8::internal::Isolate::Current();
+
+  // Only an Error's own "stack". Naming the property before looking anything up
+  // keeps every other builtin getter a description walks out of here, Blink's
+  // attributes on an access-checked global proxy among them.
+  if (*Utils::OpenDirectHandle(*name) != *isolate->factory()->stack_string()) {
+    return false;
+  }
   v8::internal::DirectHandle<v8::internal::JSReceiver> receiver =
       Utils::OpenDirectHandle(*object);
+  if (!v8::internal::IsJSObject(*receiver)) {
+    return false;
+  }
+  v8::internal::DirectHandle<v8::internal::JSObject> error =
+      v8::internal::Cast<v8::internal::JSObject>(receiver);
 
-  // What reading |name| on |object| calls, found the way the read finds it: V8's
-  // own Error stack getter, and not a page getter shadowing it, a proxy trap, an
-  // interceptor or another builtin, whose reads can run user JS of their own.
-  v8::internal::PropertyKey key(isolate, Utils::OpenDirectHandle(*name));
-  v8::internal::LookupIterator it(isolate, receiver, key);
+  // V8's own Error stack getter, as an own property, so that reading "stack" on
+  // |object| really calls it: a page getter shadowing an inherited one, a proxy
+  // trap, an interceptor and an access check all end the lookup elsewhere.
+  v8::internal::LookupIterator it(isolate, error,
+                                  isolate->factory()->stack_string(), error,
+                                  v8::internal::LookupIterator::OWN);
   if (it.state() != v8::internal::LookupIterator::ACCESSOR) {
     return false;
   }
@@ -106,17 +115,18 @@ bool ReadsFormattedErrorStack(v8::Local<v8::Object> object,
     return false;
   }
 
-  // The stack as ErrorUtils::GetFormattedStack, which that getter calls with
-  // |object| as its receiver, reads it: an already formatted stack, or no call
-  // site infos for it to format. Formatting is what would call the page's
-  // Error.prepareStackTrace.
+  // The formatted stack is already stored, so the getter's
+  // ErrorUtils::GetFormattedStack hands that back and never calls
+  // FormatStackTrace, which is what reaches the page: its
+  // Error.prepareStackTrace, the lookup of that property on the Error
+  // constructor, and the name and message it reads when there is none.
   v8::internal::ErrorUtils::StackPropertyLookupResult lookup =
-      v8::internal::ErrorUtils::GetErrorStackProperty(isolate, receiver);
+      v8::internal::ErrorUtils::GetErrorStackProperty(isolate, error);
   if (v8::internal::IsErrorStackData(*lookup.error_stack)) {
     return v8::internal::Cast<v8::internal::ErrorStackData>(lookup.error_stack)
         ->HasFormattedStack();
   }
-  return !v8::internal::IsFixedArray(*lookup.error_stack);
+  return v8::internal::IsString(*lookup.error_stack);
 }
 
 }  // namespace replayio
