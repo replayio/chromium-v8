@@ -585,6 +585,11 @@ V8_EXPORT_PRIVATE v8::MaybeLocal<v8::Value> EvaluateGlobal(
 
 int GetDebuggingId(v8::Local<v8::Function> function);
 
+// [RecordReplay] Whether |getter| is the accessor V8 itself installs for an
+// Error's own "stack" property.
+V8_EXPORT_PRIVATE bool RecordReplayIsErrorStackGetter(
+    v8::Local<v8::Function> getter);
+
 V8_EXPORT_PRIVATE bool SetFunctionBreakpoint(v8::Local<v8::Function> function,
                                              v8::Local<v8::String> condition,
                                              BreakpointId* id);

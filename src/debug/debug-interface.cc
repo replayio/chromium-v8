@@ -1338,6 +1338,17 @@ int GetDebuggingId(v8::Local<v8::Function> function) {
   return id;
 }
 
+// [RecordReplay] See the declaration.
+bool RecordReplayIsErrorStackGetter(v8::Local<v8::Function> getter) {
+  auto callable = Utils::OpenDirectHandle(*getter);
+  if (!IsJSFunction(*callable)) return false;
+  i::Tagged<i::SharedFunctionInfo> shared =
+      i::Cast<i::JSFunction>(*callable)->shared();
+  return shared->IsApiFunction() &&
+         shared->api_func_data() ==
+             *i::Isolate::Current()->factory()->error_stack_getter_fun_template();
+}
+
 bool SetFunctionBreakpoint(v8::Local<v8::Function> function,
                            v8::Local<v8::String> condition, BreakpointId* id) {
   auto callable = Utils::OpenDirectHandle(*function);

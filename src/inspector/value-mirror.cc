@@ -1666,13 +1666,30 @@ static const char* allowed_getters[] = {
 
 bool doesAttributeHaveObservableSideEffectOnGet(v8::Local<v8::Context> context,
                                                 v8::Local<v8::Object> object,
-                                                v8::Local<v8::Name> name) {
+                                                v8::Local<v8::Name> name,
+                                                v8::Local<v8::Function> getter) {
   // TODO(dgozman): we should remove this, annotate more embedder properties as
   // side-effect free, and call all getters which do not produce side effects.
   if (!name->IsString()) return false;
 
   if (v8::recordreplay::IsRecordingOrReplaying() &&
       v8::recordreplay::AreEventsDisallowed()) {
+    // [RecordReplay] An Error's own "stack" used to be an AccessorInfo, which a
+    // property descriptor reports as a value, so describing an Error never came
+    // through this list at all and the fork's M108 baseline showed the stack's
+    // value in a preview. Upstream has since made it an accessor pair holding
+    // V8's own getter, so it has to be let through here for that value to come
+    // back. Only that one getter is exempt, and deliberately not the name
+    // "stack": a page can install any builtin under that name, and one such as
+    // Array.prototype.toString calls back into the page from generated code,
+    // which would run page code in the replay that the recording never ran.
+    // V8's own getter reaches the page only through Execution::Call, which
+    // refuses to run user JS here. DSRC-436.
+    if (!getter.IsEmpty() &&
+        v8::debug::RecordReplayIsErrorStackGetter(getter)) {
+      return false;
+    }
+
     // Disallow most native getters while in Replay code, since they cause
     // unwanted crashes.
     // -> https://linear.app/replay/issue/RUN-1478
@@ -1859,8 +1876,8 @@ bool ValueMirror::getProperties(v8::Local<v8::Context> context,
           isAccessorProperty = getterMirror || setterMirror;
           if (name != "__proto__" && !getterFunction.IsEmpty() &&
               isBuiltinGetter(getterFunction) &&
-              !doesAttributeHaveObservableSideEffectOnGet(context, object,
-                                                          v8Name)) {
+              !doesAttributeHaveObservableSideEffectOnGet(
+                  context, object, v8Name, getterFunction)) {
             v8::TryCatch tryCatchFunction(isolate);
             v8::Local<v8::Value> value;
             if (object->Get(context, v8Name).ToLocal(&value)) {
