@@ -575,7 +575,21 @@ WasmError ValidateFunctions(const WasmModule* module,
           wire_bytes, module, enabled_features, &validation_error,
           &detected_features);
 
-  if (v8_flags.single_threaded) {
+  // [RecordReplay] ValidateFunctions is new since the fork's M108 baseline,
+  // which validated on the calling thread through ValidateSequentially. At
+  // M158 the synchronous path is gated on --single-threaded alone, which the
+  // fork does not set because it would also force single-threaded GC, so
+  // validation always goes through CreateJob and Join. That Join diverges on
+  // the ordered locks inside it: it enqueues the task source only when some
+  // concurrency remains, and signals a waitable event only when an idle worker
+  // has to be woken, so the recording and the replay take the lock pair in
+  // different orders. Measured on the M158 leapfrog stack: four different
+  // thread and order pairs across five replay processes, in both directions.
+  // Running the job on the calling thread removes both locks, because there is
+  // then no job and no join. wasm_num_compilation_tasks is zero while
+  // recording or replaying, and module-compiler.cc already uses it this way to
+  // pick its own synchronous paths. DV8-138.
+  if (v8_flags.single_threaded || v8_flags.wasm_num_compilation_tasks == 0) {
     // In single-threaded mode, run the {ValidateFunctionsTask} synchronously.
     NeverYieldDelegate delegate;
     validate_job->Run(&delegate);
