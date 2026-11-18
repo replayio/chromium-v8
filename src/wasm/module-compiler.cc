@@ -2066,6 +2066,20 @@ class BackgroundCompileJob final : public JobTask {
   }
 
   size_t GetMaxConcurrency(size_t worker_count) const override {
+    // [RecordReplay] With no compilation tasks, as when recording or
+    // replaying, no worker may run this job. The fork's M108 baseline got that
+    // for free from upstream, which took the minimum with the flag itself.
+    // Upstream has since clamped the flag to at least one so that Join() can
+    // make progress under --single-threaded, and base::JobHandle::Join then
+    // enqueues the task source and a pool worker compiles units alongside the
+    // joining thread. Which thread compiles which unit depends on timing, but
+    // compiling records calls on the thread doing it, so the two sides take
+    // their next recorded event from different threads. The units are compiled
+    // by WaitForBaselineCompileJob on the calling thread instead. Several
+    // pieces of fork code still rely on this invariant, including this class's
+    // own destructor comment and the NativeModuleCache's reasoning about who
+    // may hold a module without a Managed. DV8-139.
+    if (v8_flags.wasm_num_compilation_tasks == 0) return 0;
     BackgroundCompileScope compile_scope(native_module_);
     if (compile_scope.cancelled()) return 0;
     size_t flag_limit = static_cast<size_t>(
@@ -4213,7 +4227,22 @@ void CompilationStateImpl::SetError() {
 }
 
 void CompilationStateImpl::WaitForBaselineCompileJob() {
-  if (baseline_compile_job_->IsValid()) baseline_compile_job_->Join();
+  // [RecordReplay] With no compilation tasks the job's maximum concurrency is
+  // zero, see BackgroundCompileJob::GetMaxConcurrency, and joining a job in
+  // that state does not run it: JobTaskSource::WillJoin falls through to
+  // WaitForParticipationOpportunity, which cancels the task source and
+  // returns false, so base::JobHandle::Join never runs the join task. Compile
+  // the baseline units on this thread instead, as the fork's M108 baseline
+  // did, leaving the job alone so that it never runs. Jitless modules have no
+  // units to compile and ExecuteCompilationUnits must not be reached for
+  // them, since compilation is disabled there. DV8-139.
+  if (v8_flags.wasm_num_compilation_tasks == 0 && !v8_flags.wasm_jitless) {
+    constexpr JobDelegate* kNoDelegate = nullptr;
+    ExecuteCompilationUnits(native_module_weak_, kNoDelegate,
+                            CompilationTier::kBaseline);
+  } else if (baseline_compile_job_->IsValid()) {
+    baseline_compile_job_->Join();
+  }
 #ifdef DEBUG
   base::EnumSet<CompilationEvent> events{
       CompilationEvent::kFinishedBaselineCompilation,
