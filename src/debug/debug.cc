@@ -43,6 +43,7 @@
 #include "src/objects/js-generator-inl.h"
 #include "src/objects/js-promise-inl.h"
 #include "src/objects/slots.h"
+#include "src/replay/replayio.h"
 #include "src/snapshot/embedded/embedded-data.h"
 
 #if V8_ENABLE_WEBASSEMBLY
@@ -4189,7 +4190,6 @@ static Local<v8::Value> GetObjectIdMapForContext(v8::Isolate* v8_isolate, Local<
 }
 
 extern bool gRecordReplayAssertTrackedObjects;
-extern bool gRecordReplayAssertDependencyGraph;
 extern int (*gGetAPIObjectIdCallback)(v8::Local<v8::Object> object);
 
 static int gNextObjectId = 1;
@@ -4433,6 +4433,7 @@ GetOrCreatePromiseDependencyGraphData(Isolate* isolate, Handle<Object> promise) 
 }
 
 void AddPromiseDependencyGraphAdoption(Isolate* isolate, Handle<Object> promise, Handle<Object> adopted) {
+  DCHECK(RecordReplayReportsPromises());
   PromiseDependencyGraphData& data = GetOrCreatePromiseDependencyGraphData(isolate, promise);
   PromiseDependencyGraphData& adopted_data = GetOrCreatePromiseDependencyGraphData(isolate, adopted);
 
@@ -4443,35 +4444,9 @@ void AddPromiseDependencyGraphAdoption(Isolate* isolate, Handle<Object> promise,
   }
 }
 
-extern bool gRecordReplayEnableDependencyGraph;
-
-bool RecordReplayShouldCallOnPromiseHook() {
-  // Ideally we would be able to avoid calling the promise hook when recording
-  // and its results aren't needed, but the isolate state we set to ensure
-  // the hook gets called have effects on the state of certain promises that
-  // affect how the process behaves and are not fully understood.
-  //
-  // See https://linear.app/replay/issue/TT-1361
-  //
-  // For now we workaround this problem by setting this state consistently and
-  // add a small amount of recording overhead.
-  return gRecordReplayEnableDependencyGraph && IsMainThread();
-}
-
 void RecordReplayOnPromiseHook(Isolate* isolate, PromiseHookType type,
                                Handle<JSPromise> promise, Handle<Object> parent) {
-  if (!gRecordReplayEnableDependencyGraph) {
-    return;
-  }
-
-  // The promise hook only needs to report nodes/edges while replaying,
-  // but can assign persistent IDs to objects so the calls below are needed
-  // while recording if we are asserting on those IDs.
-  if (!recordreplay::IsReplaying() &&
-      !gRecordReplayAssertTrackedObjects &&
-      !gRecordReplayAssertDependencyGraph) {
-    return;
-  }
+  DCHECK(RecordReplayReportsPromises());
 
   PromiseDependencyGraphData& data =
     GetOrCreatePromiseDependencyGraphData(isolate, promise);
