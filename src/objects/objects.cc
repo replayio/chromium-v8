@@ -72,6 +72,7 @@
 #include "src/objects/objects-body-descriptors-inl.h"
 #include "src/objects/objects-inl.h"
 #include "src/objects/property-details.h"
+#include "src/replay/replayio.h"
 #include "src/roots/roots.h"
 #include "src/snapshot/deserializer.h"
 #include "src/utils/identity-map.h"
@@ -5471,7 +5472,6 @@ void JSPromise::set_async_task_id(int id) {
 }
 
 
-extern bool RecordReplayReportsPromises();
 void AddPromiseDependencyGraphAdoption(Isolate* isolate, Handle<Object> promise, Handle<Object> adoption);
 
 // static

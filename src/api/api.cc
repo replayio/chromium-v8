@@ -119,6 +119,7 @@
 #include "src/profiler/profile-generator-inl.h"
 #include "src/profiler/tick-sample.h"
 #include "src/regexp/regexp-utils.h"
+#include "src/replay/replayio.h"
 #include "src/runtime/runtime.h"
 #include "src/sandbox/external-pointer.h"
 #include "src/sandbox/sandbox.h"

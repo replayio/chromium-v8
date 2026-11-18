@@ -43,6 +43,7 @@
 #include "src/objects/js-generator-inl.h"
 #include "src/objects/js-promise-inl.h"
 #include "src/objects/slots.h"
+#include "src/replay/replayio.h"
 #include "src/snapshot/embedded/embedded-data.h"
 
 #if V8_ENABLE_WEBASSEMBLY
@@ -4430,8 +4431,6 @@ GetOrCreatePromiseDependencyGraphData(Isolate* isolate, Handle<Object> promise) 
   }
   return iter->second;
 }
-
-extern bool RecordReplayReportsPromises();
 
 void AddPromiseDependencyGraphAdoption(Isolate* isolate, Handle<Object> promise, Handle<Object> adopted) {
   DCHECK(RecordReplayReportsPromises());

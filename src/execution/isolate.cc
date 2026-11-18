@@ -100,6 +100,7 @@
 #include "src/profiler/tracing-cpu-profiler.h"
 #include "src/regexp/regexp-stack.h"
 #include "src/replay/replay-isolate-data.h"
+#include "src/replay/replayio.h"
 #include "src/snapshot/embedded/embedded-data-inl.h"
 #include "src/snapshot/embedded/embedded-file-writer-interface.h"
 #include "src/snapshot/read-only-deserializer.h"
@@ -5510,7 +5511,6 @@ void Isolate::RunAllPromiseHooks(PromiseHookType type,
   }
 }
 
-extern bool RecordReplayReportsPromises();
 extern void RecordReplayOnPromiseHook(Isolate* isolate, PromiseHookType type,
                                       Handle<JSPromise> promise, Handle<Object> parent);
 
