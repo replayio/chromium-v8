@@ -326,6 +326,32 @@ void V8::Initialize() {
     v8_flags.memory_pool_timeout = 0;
   }
 
+  // Let the major collector decide a FinalizationRegistry cell's fate when
+  // recording or replaying. The fork tracks those cells and refuses in the
+  // replay any clearing the recording did not do, which is what
+  // replay/finalization-registry.cc reports as a tracked cell cleared while
+  // replaying. Its hook sits in the major GC's visitor, which was enough at
+  // the fork's M108 baseline because the scavenger did not touch weak cells at
+  // all. M158's scavenger does: it grew its own weak-cell and weak-ref
+  // processing, with no record/replay guard anywhere in the file, and whether a
+  // minor collection reaches a given cell before the next major one depends on
+  // how the young generation happened to fill, which is not something the
+  // recording pins down. Measured on the M158 leapfrog stack:
+  // gc/finalization-registry-heap-pressure fails deterministically with
+  // exactly that report, while gc/finalization-registry, which applies no
+  // pressure and so takes no scavenge at the decisive moment, passes in the
+  // same draw.
+  //
+  // With the flag off, should_handle_weak_objects_weakly is false in
+  // ScavengerCollector::CollectGarbage and the minor collector leaves those
+  // cells to the major one, as it did at M108. Turning it off is a supported
+  // configuration rather than a fork invention: upstream already implies it
+  // off for --minor-ms and for both of its object-pinning modes. DV8-140.
+  if (recordreplay::IsRecordingOrReplaying(
+          "disable-v8-flags-weak-refs-in-minor-gc")) {
+    v8_flags.handle_weak_ref_weakly_in_minor_gc = false;
+  }
+
   // Initialize the default FlagList::Hash.
   FlagList::Hash();
 
