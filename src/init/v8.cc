@@ -296,6 +296,36 @@ void V8::Initialize() {
     v8_flags.concurrent_array_buffer_sweeping = false;
   }
 
+  // Release pooled pages at a garbage collection rather than on a timer when
+  // recording or replaying. The memory pool is new since the fork's M108
+  // baseline, where pooled chunks lived in MemoryAllocator and were freed
+  // synchronously, so nothing here could diverge. At M158 the pool keeps a
+  // delayed release task that re-posts itself on an eight second wall clock
+  // timer, and MemoryPool::Add consults that timer through
+  // PostDelayedReleaseTaskIfNeeded, which reads base::TimeTicks::Now(). How
+  // many times the timer has fired before a worker isolate reaches
+  // Heap::TearDown is decided by wall clock alone, so the two sides reach that
+  // thread's next recorded event from different places. Measured on the M158
+  // leapfrog stack: several webassembly worker-teardown cases diverge with the
+  // recording taking a clock_gettime inside MemoryPool::Add while the replay
+  // creates the pool's next delayed task. DV8-133 already gated the re-post
+  // that happens with events disallowed, and every divergence measured here is
+  // on the path where events are allowed, which that gate deliberately left
+  // open.
+  //
+  // At a timeout of zero PostDelayedReleaseTaskIfNeeded returns before the
+  // clock read, so no task is ever created or re-posted and the clock read in
+  // MemoryPool::Add goes away with it. Nothing accumulates: upstream supports
+  // this value and bounds the pool itself, releasing it on every mark-compact
+  // collection "to prevent unbounded growth of the pool for the non-default
+  // configuration" (Heap::GarbageCollectionEpilogue), inside the collection's
+  // existing disallow scope. IsolateGroup::InitializeOncePerProcess, which
+  // copies the flag into MemoryPool::Config, runs after this point. DV8-137.
+  if (recordreplay::IsRecordingOrReplaying(
+          "disable-v8-flags-memory-pool-timeout")) {
+    v8_flags.memory_pool_timeout = 0;
+  }
+
   // Initialize the default FlagList::Hash.
   FlagList::Hash();
 
