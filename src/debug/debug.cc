@@ -4431,7 +4431,10 @@ GetOrCreatePromiseDependencyGraphData(Isolate* isolate, Handle<Object> promise) 
   return iter->second;
 }
 
+extern bool RecordReplayReportsPromises();
+
 void AddPromiseDependencyGraphAdoption(Isolate* isolate, Handle<Object> promise, Handle<Object> adopted) {
+  DCHECK(RecordReplayReportsPromises());
   PromiseDependencyGraphData& data = GetOrCreatePromiseDependencyGraphData(isolate, promise);
   PromiseDependencyGraphData& adopted_data = GetOrCreatePromiseDependencyGraphData(isolate, adopted);
 
@@ -4440,28 +4443,6 @@ void AddPromiseDependencyGraphAdoption(Isolate* isolate, Handle<Object> promise,
                                          adopted_data.new_node_id,
                                          "{\"kind\":\"adoptedPromise\"}");
   }
-}
-
-extern bool gRecordReplayDependencyGraphInstrumented;
-extern bool gRecordReplayReportPromises;
-
-bool RecordReplayShouldCallOnPromiseHook() {
-  // Ideally we would be able to avoid calling the promise hook when recording
-  // and its results aren't needed, but the isolate state we set to ensure
-  // the hook gets called have effects on the state of certain promises that
-  // affect how the process behaves and are not fully understood.
-  //
-  // See https://linear.app/replay/issue/TT-1361
-  //
-  // For now we workaround this problem by setting this state consistently and
-  // add a small amount of recording overhead. The value is recorded, so it is
-  // the same when replaying even where the dependency-graph feature is only
-  // disabled when replaying.
-  return gRecordReplayDependencyGraphInstrumented && IsMainThread();
-}
-
-bool RecordReplayReportsPromises() {
-  return gRecordReplayReportPromises && IsMainThread();
 }
 
 void RecordReplayOnPromiseHook(Isolate* isolate, PromiseHookType type,

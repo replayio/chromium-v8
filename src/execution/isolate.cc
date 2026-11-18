@@ -3576,7 +3576,6 @@ v8::PageAllocator* Isolate::page_allocator() const {
 }
 
 extern void RecordReplayOnMainThreadIsolateCreated(Isolate* isolate);
-extern bool RecordReplayShouldCallOnPromiseHook();
 
 Isolate::Isolate(std::unique_ptr<i::IsolateAllocator> isolate_allocator,
                  bool is_shared)
@@ -4716,7 +4715,7 @@ bool Isolate::Init(SnapshotData* startup_snapshot_data,
   // Force the promise hook once the roots exist, so that the promise hook
   // protector is invalidated with it: optimized code must not inline promise
   // operations that skip the hook.
-  if (RecordReplayShouldCallOnPromiseHook()) {
+  if (recordreplay::DependencyGraphInstrumented()) {
     PromiseHookStateUpdated();
   }
 
@@ -5153,7 +5152,7 @@ void Isolate::UpdatePromiseHookProtector() {
 void Isolate::PromiseHookStateUpdated() {
   promise_hook_flags_ =
     (promise_hook_flags_ & PromiseHookFields::HasContextPromiseHook::kMask) |
-    PromiseHookFields::HasIsolatePromiseHook::encode(promise_hook_ || RecordReplayShouldCallOnPromiseHook()) |
+    PromiseHookFields::HasIsolatePromiseHook::encode(promise_hook_ || recordreplay::DependencyGraphInstrumented()) |
     PromiseHookFields::HasAsyncEventDelegate::encode(async_event_delegate_) |
     PromiseHookFields::IsDebugActive::encode(debug()->is_active());
 
@@ -5521,8 +5520,7 @@ void Isolate::RunPromiseHook(PromiseHookType type, Handle<JSPromise> promise,
   if (RecordReplayReportsPromises()) {
     RecordReplayOnPromiseHook(this, type, promise, parent);
   }
-  // Without an embedder hook, RecordReplayShouldCallOnPromiseHook() forces
-  // the flag.
+  DCHECK(promise_hook_ || recordreplay::DependencyGraphInstrumented());
   if (!promise_hook_) return;
   promise_hook_(type, v8::Utils::PromiseToLocal(promise),
                 v8::Utils::ToLocal(parent));

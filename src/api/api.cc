@@ -11165,17 +11165,6 @@ bool gRecordReplayAssertValues;
 bool gRecordReplayAssertProgress;
 bool gRecordReplayAssertTrackedObjects;
 
-// Whether the recording was made with the dependency-graph feature, which
-// forces the promise hook on main thread isolates. Recorded: the forced hook
-// selects promise builtin paths (TT-1361).
-bool gRecordReplayDependencyGraphInstrumented;
-
-// Whether the dependency graph is updated (V8RecordReplayUpdateDependencyGraph)
-// and whether promise hooks report to it (RecordReplayReportsPromises), on the
-// main thread. Set once, so checking them makes no driver calls.
-bool gRecordReplayUpdateDependencyGraph;
-bool gRecordReplayReportPromises;
-
 // Use V8's GC as upstream does while recording/replaying.
 // This is on by default and controlled by the v8-flags-gc feature.
 bool gRecordReplayEnableGCFeatures;
@@ -11952,12 +11941,60 @@ extern "C" DLLEXPORT bool V8RecordReplayAllowSideEffects() {
   return recordreplay::AllowSideEffects();
 }
 
+// Whether dependency graph instrumentation runs, whether the graph is updated,
+// and whether promises are reported: see DependencyGraphInstrumented,
+// DependencyGraphEnabled and RecordReplayReportsPromises. Set once by
+// InitializeDependencyGraph, so the checks make no driver calls.
+static bool gDependencyGraphInstrumented;
+static bool gDependencyGraphEnabled;
+static bool gDependencyGraphReportsPromises;
+
+static void InitializeDependencyGraph() {
+  // Recorded: the flag selects promise builtin paths (TT-1361), and the driver
+  // can disable the feature when replaying only (REPLAYING_DISABLE_FEATURES).
+  bool dependency_graph = recordreplay::FeatureEnabled("dependency-graph");
+  gDependencyGraphInstrumented =
+      recordreplay::IsRecordingOrReplaying() &&
+      recordreplay::RecordReplayValue("DependencyGraphInstrumented",
+                                      dependency_graph);
+  i::gRecordReplayAssertDependencyGraph =
+      !!getenv("RECORD_REPLAY_DEPENDENCY_GRAPH_ASSERTS");
+  // Asserted updates follow the recording: with dependency graph asserts, the
+  // graph is updated as when recording, whatever the replay-time feature.
+  gDependencyGraphEnabled =
+      gDependencyGraphInstrumented &&
+      ((recordreplay::IsReplaying() && dependency_graph) ||
+       i::gRecordReplayAssertDependencyGraph);
+  gDependencyGraphReportsPromises =
+      gDependencyGraphEnabled ||
+      (gDependencyGraphInstrumented && i::gRecordReplayAssertTrackedObjects);
+}
+
+bool recordreplay::DependencyGraphInstrumented() {
+  return gDependencyGraphInstrumented && IsMainThread();
+}
+
+bool recordreplay::DependencyGraphEnabled() {
+  return gDependencyGraphEnabled && IsMainThread();
+}
+
+namespace internal {
+
+// Whether RecordReplayOnPromiseHook and AddPromiseDependencyGraphAdoption are
+// called: while the graph is updated, and while tracked object asserts are on,
+// as those include the object IDs the calls assign to promises.
+bool RecordReplayReportsPromises() {
+  return gDependencyGraphReportsPromises && IsMainThread();
+}
+
+}  // namespace internal
+
 extern "C" DLLEXPORT bool V8RecordReplayUpdateDependencyGraph() {
-  return i::gRecordReplayUpdateDependencyGraph && IsMainThread();
+  return recordreplay::DependencyGraphEnabled();
 }
 
 extern "C" DLLEXPORT int V8RecordReplayNewDependencyGraphNode(const char* json) {
-  if (V8RecordReplayUpdateDependencyGraph()) {
+  if (recordreplay::DependencyGraphEnabled()) {
     int id = gRecordReplayNewDependencyGraphNode(json);
     if (i::gRecordReplayAssertDependencyGraph) {
       recordreplay::Assert("NewDependencyGraphNode id=%d %s",
@@ -11973,7 +12010,7 @@ int recordreplay::NewDependencyGraphNode(const char* json) {
 }
 
 extern "C" DLLEXPORT void V8RecordReplayAddDependencyGraphEdge(int source, int target, const char* json) {
-  if (V8RecordReplayUpdateDependencyGraph()) {
+  if (recordreplay::DependencyGraphEnabled()) {
     gRecordReplayAddDependencyGraphEdge(source, target, json);
     if (i::gRecordReplayAssertDependencyGraph) {
       recordreplay::Assert("NewDependencyGraphEdge source=%d target=%d %s",
@@ -11998,7 +12035,7 @@ extern "C" int V8RecordReplayDependencyGraphExecutionNode() {
 }
 
 extern "C" DLLEXPORT void V8RecordReplayBeginDependencyExecution(int node) {
-  if (V8RecordReplayUpdateDependencyGraph()) {
+  if (recordreplay::DependencyGraphEnabled()) {
     if (!gDependencyGraphExecutionStack) {
       gDependencyGraphExecutionStack = new std::vector<int>();
     }
@@ -12015,7 +12052,7 @@ void recordreplay::BeginDependencyExecution(int node) {
 }
 
 extern "C" DLLEXPORT void V8RecordReplayEndDependencyExecution() {
-  if (V8RecordReplayUpdateDependencyGraph()) {
+  if (recordreplay::DependencyGraphEnabled()) {
     gDependencyGraphExecutionStack->pop_back();
     gRecordReplayEndDependencyExecution();
     if (i::gRecordReplayAssertDependencyGraph) {
@@ -12440,28 +12477,7 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
                                         i::RecordReplayCallbackAssertDescribeData);
   }
 
-  // Currently the dependency graph is enabled by default. A feature disabled
-  // only when replaying does not change the instrumentation. It stops the
-  // reporting unless dependency graph asserts are on.
-  bool dependency_graph = V8RecordReplayFeatureEnabled("dependency-graph", nullptr);
-  i::gRecordReplayDependencyGraphInstrumented =
-    IsRecordingOrReplaying() &&
-    RecordReplayValue("DependencyGraphInstrumented", dependency_graph);
-
-  i::gRecordReplayAssertDependencyGraph = !!getenv("RECORD_REPLAY_DEPENDENCY_GRAPH_ASSERTS");
-
-  // Asserted updates follow the recording: with dependency graph asserts, the
-  // graph is updated as when recording, whatever the replay-time feature.
-  i::gRecordReplayUpdateDependencyGraph =
-    i::gRecordReplayDependencyGraphInstrumented &&
-    ((IsReplaying() && dependency_graph) ||
-     i::gRecordReplayAssertDependencyGraph);
-  // Promise hooks assign object IDs, so they report whenever those are
-  // asserted, as when recording.
-  i::gRecordReplayReportPromises =
-    i::gRecordReplayUpdateDependencyGraph ||
-    (i::gRecordReplayDependencyGraphInstrumented &&
-     i::gRecordReplayAssertTrackedObjects);
+  InitializeDependencyGraph();
 
   // Disable wasm background compilation.
   if (V8RecordReplayFeatureEnabled("disable-v8-flags-wasm-compilation-tasks", nullptr)) {

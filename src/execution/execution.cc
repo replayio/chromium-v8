@@ -18,7 +18,6 @@
 #endif  // V8_ENABLE_WEBASSEMBLY
 
 extern "C" int V8RecordReplayDependencyGraphExecutionNode();
-extern "C" bool V8RecordReplayUpdateDependencyGraph();
 
 namespace v8 {
 namespace internal {
@@ -396,7 +395,7 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
     }
 #endif
 
-    if (V8RecordReplayUpdateDependencyGraph() &&
+    if (recordreplay::DependencyGraphEnabled() &&
         recordreplay::IsReplaying() &&
         !recordreplay::AreEventsDisallowed() &&
         V8RecordReplayDependencyGraphExecutionNode() == 0 &&
