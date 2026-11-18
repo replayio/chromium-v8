@@ -12441,7 +12441,8 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
   }
 
   // Currently the dependency graph is enabled by default. A feature disabled
-  // only when replaying stops the reporting, not the instrumentation.
+  // only when replaying does not change the instrumentation. It stops the
+  // reporting unless dependency graph asserts are on.
   bool dependency_graph = V8RecordReplayFeatureEnabled("dependency-graph", nullptr);
   i::gRecordReplayDependencyGraphInstrumented =
     IsRecordingOrReplaying() &&
