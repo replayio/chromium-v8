@@ -1102,6 +1102,11 @@ int FutexEmulation::Wake(void* wait_location, uint32_t num_waiters_to_wake) {
 
 #if V8_ENABLE_WEBASSEMBLY
 int FutexEmulation::Wake(Address raw_waitqueue, uint32_t num_waiters_to_wake) {
+  // As in the Wake above: ordered against the waiters entering and leaving the
+  // wait list, which is what decides whether a wait this notify reaches has
+  // timed out. No RecordReplayTasksToPost, as a waitqueue has no async waiter.
+  recordreplay::AutoOrderedLock ordered_lock(gRecordReplayOrderedLockId);
+  replayio::AutoDisallowEvents disallow("FutexEmulation::Wake");
   DisallowGarbageCollection no_gc;
   int num_waiters_woken = 0;
 
