@@ -325,8 +325,7 @@ class FutexEmulation : public AllStatic {
       NoGarbageCollectionMutexGuard& lock_guard, bool use_timeout,
       base::TimeTicks timeout_time, T value, T loaded_value,
       std::optional<void*> wait_location,
-      std::optional<recordreplay::AutoOrderedLock>* record_replay_ordered_lock =
-          nullptr);
+      std::optional<recordreplay::AutoOrderedLock>* record_replay_ordered_lock);
 
   // Resolve the Promises of the async waiters which belong to |isolate|.
   // While recording or replaying, only those given record_replay_resolve_id.
