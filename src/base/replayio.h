@@ -49,6 +49,18 @@ inline bool MustNotRunUserJS() {
          !v8::recordreplay::HasDivergedFromRecording();
 }
 
+// Whether reading |name| on |object| would format an Error's stack with the
+// page's Error.prepareStackTrace now, when user JS must not run. True when
+// |name| is "stack", V8's own Error stack accessor is |object|'s own property
+// under that name, and no formatted stack is stored there yet, so the getter
+// would call ErrorUtils::FormatStackTrace. False once a stack is stored, since
+// the getter then hands that string back and formats nothing, and false for
+// everything else, a page getter shadowing "stack" among them.
+//
+// Defined in src/replay/replayio.cc.
+bool MustNotFormatErrorStack(v8::Local<v8::Object> object,
+                             v8::Local<v8::Name> name);
+
 // Marks nested code as replay-owned (IsInReplayCode). Independent of
 // AutoMaybeDisallowEvents; divergent replay-owned paths use both.
 struct AutoMaybeMarkReplayCode {

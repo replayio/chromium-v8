@@ -1515,6 +1515,21 @@ bool ValueMirror::getProperties(v8::Local<v8::Context> context,
         enumerable = !(attributes & v8::PropertyAttribute::DontEnum);
         configurable = !(attributes & v8::PropertyAttribute::DontDelete);
         isAccessorProperty = getterMirror || setterMirror;
+      } else if (v8::replayio::MustNotFormatErrorStack(object, v8Name)) {
+        // An Error's own "stack" is one of V8's own accessors, which a
+        // descriptor reads by calling: it is not a native accessor to the
+        // iterator above, so taking the descriptor below would format the
+        // stack with the page's Error.prepareStackTrace. With events
+        // disallowed that code must not run, so the property stays an accessor
+        // the viewer calls in a pause, where it may. Only this walk is
+        // covered; a descriptor taken elsewhere with events disallowed would
+        // still format.
+        getterMirror = createNativeGetter(context, object, v8Name);
+        setterMirror = createNativeSetter(context, object, v8Name);
+        writable = !(attributes & v8::PropertyAttribute::ReadOnly);
+        enumerable = !(attributes & v8::PropertyAttribute::DontEnum);
+        configurable = !(attributes & v8::PropertyAttribute::DontDelete);
+        isAccessorProperty = true;
       } else {
         v8::TryCatch tryCatchDescriptor(isolate);
         v8::debug::PropertyDescriptor descriptor;
