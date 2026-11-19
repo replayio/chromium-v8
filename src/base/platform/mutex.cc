@@ -62,13 +62,17 @@ Mutex::Mutex(const char* ordered_name) {
   // for that as well: the linker emulates an untimed FUTEX_WAIT by returning
   // EINTR, so a contended V8 base lock busy-waits there instead of blocking.
   //
-  // The capability is dormant rather than absent, which is why the name stays
-  // in the signature: nothing in V8 or in the embedders passes one today, and
+  // Beware that this leaves the capability dormant rather than absent: the
+  // constructor still accepts a name, so an audit that compares lock names
+  // against 10.8 reads these locks as ordered when they are not. Nothing in V8
+  // or in the embedders passes one today, which is why it is left this way
+  // rather than removed - and why removing it would be no loss to undo:
   // ordering can be restored without touching callers, by holding a
-  // recordreplay::CreateOrderedLock() id here and taking AutoOrderedLock in
-  // Lock/Unlock/TryLock and around a condition variable's reacquire. Until
-  // something needs that, asking for an ordered V8 base lock quietly gets an
-  // unordered one.
+  // recordreplay::CreateOrderedLock() id here (as zero when
+  // AreEventsDisallowed(), since a LazyMutex can be constructed anywhere) and
+  // taking AutoOrderedLock in Lock/Unlock/TryLock and around a condition
+  // variable's reacquire. Until something needs that, asking for an ordered V8
+  // base lock quietly gets an unordered one.
   (void)ordered_name;
 #ifdef DEBUG
   level_ = 0;

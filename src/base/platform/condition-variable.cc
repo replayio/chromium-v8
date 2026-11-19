@@ -10,12 +10,6 @@
 #include "absl/time/time.h"
 #include "src/base/platform/time.h"
 
-// No record/replay intervention of its own: WaitFor's deadline is computed by
-// absl (synchronization_internal::KernelTimeout), which reads the clock itself.
-// The 10.8 fork passed its own clock_gettime through right here; the reads now
-// live in absl/synchronization/internal/kernel_timeout.cc and are passed
-// through there.
-
 #if V8_OS_WIN
 #include <windows.h>
 #endif
@@ -36,6 +30,11 @@ void ConditionVariable::Wait(Mutex* mutex) {
   mutex->AssertUnheldAndMark();
 }
 
+// No record/replay intervention of its own. The 10.8 fork computed the deadline
+// here and wrapped its clock_gettime in AutoPassThroughEvents; the arithmetic
+// now belongs to absl (synchronization_internal::KernelTimeout), which reads
+// the clock itself, and the pass-through lives with those reads in
+// absl/synchronization/internal/kernel_timeout.cc.
 bool ConditionVariable::WaitFor(Mutex* mutex, const TimeDelta& rel_time) {
   uint64_t time = rel_time.InNanoseconds();
   absl::Duration duration = absl::Nanoseconds(time);
