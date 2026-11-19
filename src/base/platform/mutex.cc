@@ -51,14 +51,25 @@ bool RecursiveMutex::TryLock() {
   return false;
 }
 
-//extern "C" void V8RecordReplayAddOrderedSRWLock(const char* name, void* lock);
-
 Mutex::Mutex(const char* ordered_name) {
-  if (ordered_name) {
-    fprintf(stderr, "FIXME Mutex::Mutex Crashing...\n");
-    CHECK(0);
-    //V8RecordReplayAddOrderedSRWLock(ordered_name, &native_handle_);
-  }
+  // An ordered name is inert here, and deliberately not an error. The driver
+  // can order the acquisitions of a lock it was handed as a pthread_mutex_t
+  // (RecordReplayAddOrderedPthreadMutex), which is what the 10.8 fork's POSIX
+  // constructor did with this name. Upstream now builds Mutex on absl::Mutex,
+  // which spins and then blocks in syscall(SYS_futex, ...), a call the driver
+  // passes through and records nothing of, so there is nothing to register and
+  // no acquisition order in the recording for any V8 base lock. The replay pays
+  // for that as well: the linker emulates an untimed FUTEX_WAIT by returning
+  // EINTR, so a contended V8 base lock busy-waits there instead of blocking.
+  //
+  // The capability is dormant rather than absent, which is why the name stays
+  // in the signature: nothing in V8 or in the embedders passes one today, and
+  // ordering can be restored without touching callers, by holding a
+  // recordreplay::CreateOrderedLock() id here and taking AutoOrderedLock in
+  // Lock/Unlock/TryLock and around a condition variable's reacquire. Until
+  // something needs that, asking for an ordered V8 base lock quietly gets an
+  // unordered one.
+  (void)ordered_name;
 #ifdef DEBUG
   level_ = 0;
 #endif
