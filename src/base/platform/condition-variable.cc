@@ -31,10 +31,9 @@ void ConditionVariable::Wait(Mutex* mutex) {
 }
 
 // No record/replay intervention of its own. The 10.8 fork computed the deadline
-// here and wrapped its clock_gettime in AutoPassThroughEvents; the arithmetic
-// now belongs to absl (synchronization_internal::KernelTimeout), which reads
-// the clock itself, and the pass-through lives with those reads in
-// absl/synchronization/internal/kernel_timeout.cc.
+// here and wrapped its clock_gettime in AutoPassThroughEvents. The arithmetic
+// now belongs to absl, which reads the clock itself, and the pass-through lives
+// with those reads in absl/synchronization/internal/kernel_timeout.cc.
 bool ConditionVariable::WaitFor(Mutex* mutex, const TimeDelta& rel_time) {
   uint64_t time = rel_time.InNanoseconds();
   absl::Duration duration = absl::Nanoseconds(time);

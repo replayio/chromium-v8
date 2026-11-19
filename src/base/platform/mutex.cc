@@ -57,22 +57,19 @@ Mutex::Mutex(const char* ordered_name) {
   // (RecordReplayAddOrderedPthreadMutex), which is what the 10.8 fork's POSIX
   // constructor did with this name. Upstream now builds Mutex on absl::Mutex,
   // which spins and then blocks in syscall(SYS_futex, ...), a call the driver
-  // passes through and records nothing of, so there is nothing to register and
-  // no acquisition order in the recording for any V8 base lock. The replay pays
-  // for that as well: the linker emulates an untimed FUTEX_WAIT by returning
-  // EINTR, so a contended V8 base lock busy-waits there instead of blocking.
+  // passes through and records nothing of. So there is nothing to register: no
+  // V8 base lock has an acquisition order in a recording, and a contended one
+  // busy-waits while replaying, because the linker answers an untimed
+  // FUTEX_WAIT with EINTR.
   //
-  // Beware that this leaves the capability dormant rather than absent: the
-  // constructor still accepts a name, so an audit that compares lock names
-  // against 10.8 reads these locks as ordered when they are not. Nothing in V8
-  // or in the embedders passes one today, which is why it is left this way
-  // rather than removed - and why removing it would be no loss to undo:
-  // ordering can be restored without touching callers, by holding a
-  // recordreplay::CreateOrderedLock() id here (as zero when
-  // AreEventsDisallowed(), since a LazyMutex can be constructed anywhere) and
-  // taking AutoOrderedLock in Lock/Unlock/TryLock and around a condition
-  // variable's reacquire. Until something needs that, asking for an ordered V8
-  // base lock quietly gets an unordered one.
+  // The capability is left dormant rather than removed, because nothing in V8
+  // or in the embedders passes a name today and restoring it would need no
+  // caller to change: it would mean holding a recordreplay::CreateOrderedLock()
+  // id here, as zero when AreEventsDisallowed(), since a LazyMutex can be
+  // constructed anywhere, and taking AutoOrderedLock in Lock, Unlock, TryLock
+  // and around a condition variable's reacquire. Beware that an audit which
+  // compares lock names against 10.8 reads these locks as ordered while
+  // nothing orders them.
   (void)ordered_name;
 #ifdef DEBUG
   level_ = 0;
