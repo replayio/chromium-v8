@@ -502,10 +502,8 @@ Tagged<Object> FutexEmulation::WaitWasmManagedObject(
     Isolate* isolate, Tagged<HeapObject> object, int32_t offset,
     Tagged<Managed<FutexManagedObjectWaitList>> waitqueue, T expected_value,
     int64_t rel_timeout_ns) {
-  // As in WaitSync: released by WaitSyncImpl once the wait has entered the
-  // list, and taken again there for leaving it. The label is the one
-  // WaitSyncImpl re-enters this scope under, and that it records the
-  // value compare with.
+  // The lock and the disallow work as in WaitSync below. The label has to be
+  // the one WaitSyncImpl re-enters the disallow scope under.
   std::optional<recordreplay::AutoOrderedLock> ordered_lock;
   if (recordreplay::IsRecordingOrReplaying()) {
     ordered_lock.emplace(gRecordReplayOrderedLockId);
@@ -1102,9 +1100,8 @@ int FutexEmulation::Wake(void* wait_location, uint32_t num_waiters_to_wake) {
 
 #if V8_ENABLE_WEBASSEMBLY
 int FutexEmulation::Wake(Address raw_waitqueue, uint32_t num_waiters_to_wake) {
-  // As in the Wake above: ordered against the waiters entering and leaving the
-  // wait list, which is what decides whether a wait this notify reaches has
-  // timed out. No RecordReplayTasksToPost, as a waitqueue has no async waiter.
+  // The ordered lock as in the Wake above. No RecordReplayTasksToPost, as a
+  // waitqueue only ever holds sync waiters, so nothing here posts a task.
   recordreplay::AutoOrderedLock ordered_lock(gRecordReplayOrderedLockId);
   replayio::AutoDisallowEvents disallow("FutexEmulation::Wake");
   DisallowGarbageCollection no_gc;
