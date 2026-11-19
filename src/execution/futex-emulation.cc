@@ -502,6 +502,15 @@ Tagged<Object> FutexEmulation::WaitWasmManagedObject(
     Isolate* isolate, Tagged<HeapObject> object, int32_t offset,
     Tagged<Managed<FutexManagedObjectWaitList>> waitqueue, T expected_value,
     int64_t rel_timeout_ns) {
+  // As in WaitSync: released by WaitSyncImpl once the wait has entered the
+  // list, and taken again there for leaving it. The label is the one
+  // WaitSyncImpl re-enters this scope under, and that it records the
+  // value compare with.
+  std::optional<recordreplay::AutoOrderedLock> ordered_lock;
+  if (recordreplay::IsRecordingOrReplaying()) {
+    ordered_lock.emplace(gRecordReplayOrderedLockId);
+  }
+  replayio::AutoDisallowEvents disallow("FutexEmulation::WaitSync");
   VMState<ATOMICS_WAIT> state(isolate);
   base::TimeDelta rel_timeout =
       base::TimeDelta::FromNanoseconds(rel_timeout_ns);
@@ -535,7 +544,7 @@ Tagged<Object> FutexEmulation::WaitWasmManagedObject(
 
   return *WaitSyncImpl<FutexManagedObjectWaitList>(
       isolate, wait_list.raw(), node, lock_guard, use_timeout, timeout_time,
-      expected_value, loaded_control_value, {});
+      expected_value, loaded_control_value, {}, &ordered_lock);
 }
 
 template Tagged<Object> FutexEmulation::WaitWasmManagedObject<int32_t>(
