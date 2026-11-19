@@ -82,9 +82,8 @@ bool ReadsFormattedErrorStack(v8::Local<v8::Object> object,
                               v8::Local<v8::Name> name) {
   v8::internal::Isolate* isolate = v8::internal::Isolate::Current();
 
-  // Only an Error's own "stack". Naming the property before looking anything up
-  // keeps every other builtin getter a description walks out of here, Blink's
-  // attributes on an access-checked global proxy among them.
+  // Only an Error's own "stack". Checking the name first keeps the lookups
+  // below off every other builtin getter a description walks.
   if (*Utils::OpenDirectHandle(*name) != *isolate->factory()->stack_string()) {
     return false;
   }
@@ -116,10 +115,9 @@ bool ReadsFormattedErrorStack(v8::Local<v8::Object> object,
   }
 
   // The formatted stack is already stored, so the getter's
-  // ErrorUtils::GetFormattedStack hands that back and never calls
-  // FormatStackTrace, which is what reaches the page: its
-  // Error.prepareStackTrace, the lookup of that property on the Error
-  // constructor, and the name and message it reads when there is none.
+  // ErrorUtils::GetFormattedStack hands that back instead of calling
+  // FormatStackTrace, which is what reaches the page's
+  // Error.prepareStackTrace.
   v8::internal::ErrorUtils::StackPropertyLookupResult lookup =
       v8::internal::ErrorUtils::GetErrorStackProperty(isolate, error);
   if (v8::internal::IsErrorStackData(*lookup.error_stack)) {
