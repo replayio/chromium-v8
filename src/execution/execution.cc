@@ -323,9 +323,9 @@ static MaybeHandle<Object> RecordReplayBlockNonDeterministicUserJs(
   return isolate->factory()->undefined_value();
 }
 
-// Charges the native stack between the JS frame that called into C++ and the
-// JS code C++ is entering, see ThreadLocalTop::kReplayJsStackBudget. However
-// that JS code is left, what was charged before it is charged again.
+// Charges the native frames between JS code and the JS code C++ is entering
+// for it, see ThreadLocalTop::kReplayJsStackBudget. However that JS code is
+// left, what was charged before it is charged again.
 class V8_NODISCARD ReplayJsEntryScope {
  public:
   explicit ReplayJsEntryScope(Isolate* isolate)
@@ -333,7 +333,7 @@ class V8_NODISCARD ReplayJsEntryScope {
         depth_(isolate->replay_js_frame_depth()),
         entry_depth_(isolate->replay_js_entry_depth()) {
     if (!isolate_->replay_stack_budget()) return;
-    int depth = depth_ + isolate_->ReplayNativeStackDepth();
+    int depth = depth_ + ThreadLocalTop::kReplayJsEntryCost;
     isolate_->set_replay_js_frame_depth(depth);
     isolate_->set_replay_js_entry_depth(depth);
   }

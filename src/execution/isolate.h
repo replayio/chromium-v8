@@ -1297,13 +1297,6 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   int replay_js_entry_depth() const { return replay_js_entry_depth_; }
   void set_replay_js_entry_depth(int depth) { replay_js_entry_depth_ = depth; }
 
-  // The native stack in use above the JS frame that called into C++, in bytes
-  // and at most the budget. Zero if no JS frame did.
-  int ReplayNativeStackDepth();
-
-  // Whether C++ code called from JS is beyond the budget.
-  bool ReplayStackBudgetExceeded();
-
   MaterializedObjectStore* materialized_object_store() const {
     return materialized_object_store_;
   }
@@ -2673,9 +2666,7 @@ class StackLimitCheck {
   // Use this to check for stack-overflows in C++ code.
   bool HasOverflowed() const {
     StackGuard* stack_guard = isolate_->stack_guard();
-    return GetCurrentStackPosition() < stack_guard->real_climit() ||
-           (isolate_->replay_stack_budget() &&
-            isolate_->ReplayStackBudgetExceeded());
+    return GetCurrentStackPosition() < stack_guard->real_climit();
   }
   static bool HasOverflowed(LocalIsolate* local_isolate);
 

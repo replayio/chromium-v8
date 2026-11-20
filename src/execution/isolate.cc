@@ -2002,23 +2002,6 @@ class SetThreadInWasmFlagScope {
 #endif  // V8_ENABLE_WEBASSEMBLY
 }  // namespace
 
-int Isolate::ReplayNativeStackDepth() {
-  Address exit_fp = c_entry_fp(thread_local_top());
-  Address sp = GetCurrentStackPosition();
-  if (exit_fp <= sp) return 0;
-  return static_cast<int>(std::min<Address>(
-      exit_fp - sp, ThreadLocalTop::kReplayJsStackBudget));
-}
-
-bool Isolate::ReplayStackBudgetExceeded() {
-  DCHECK(replay_stack_budget_);
-  // Without a JS frame below, the stack in use is not one the recording and
-  // its replays share.
-  if (c_entry_fp(thread_local_top()) == kNullAddress) return false;
-  return replay_js_frame_depth() + ReplayNativeStackDepth() >=
-         ThreadLocalTop::kReplayJsStackBudget;
-}
-
 // What entering the function of a JS frame's summary charged: nothing where a
 // builtin continues in an optimized frame.
 static int ReplayJsFrameCost(Isolate* isolate,

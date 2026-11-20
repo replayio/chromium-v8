@@ -34,12 +34,16 @@ class ThreadLocalTop {
   // When recording/replaying, the stack has to overflow at the same place in a
   // recording and in its replays. The stack pointer cannot tell that place: the
   // stack a JS frame takes depends on the tier its function runs in, and the
-  // stack in use where JS is entered on what called V8. replay_js_frame_depth_
-  // counts bytes instead: each JS frame is charged what it takes in the
-  // interpreter (ReplayJsFrameCost), and the native stack between JS code and
-  // the JS code it calls through C++ what it takes (Isolate::
-  // ReplayNativeStackDepth). The stack overflows once that reaches the budget.
+  // stack in use where JS is entered on what called V8 and on how JS called
+  // it. replay_js_frame_depth_ counts bytes instead: each JS frame is charged
+  // what it takes in the interpreter (ReplayJsFrameCost), and each entry of JS
+  // from C++ a fixed amount (kReplayJsEntryCost). The stack overflows once
+  // that reaches the budget.
   static constexpr int kReplayJsStackBudget = 2 * 1024 * 1024;
+
+  // What the native frames between JS code and the JS code V8 enters for it
+  // take, as for a getter the runtime calls.
+  static constexpr int kReplayJsEntryCost = 2 * 1024;
 
   // What a JS frame takes besides its registers and parameters: the frame's
   // fixed slots, and a builtin's frame between it and the JS frame it calls.
