@@ -542,7 +542,7 @@ Tagged<Object> FutexEmulation::WaitWasmManagedObject(
 
   return *WaitSyncImpl<FutexManagedObjectWaitList>(
       isolate, wait_list.raw(), node, lock_guard, use_timeout, timeout_time,
-      expected_value, loaded_control_value, {}, &ordered_lock);
+      expected_value, loaded_control_value, {}, ordered_lock);
 }
 
 template Tagged<Object> FutexEmulation::WaitWasmManagedObject<int32_t>(
@@ -653,7 +653,7 @@ Tagged<Object> FutexEmulation::WaitSync(Isolate* isolate, void* wait_location,
   return *WaitSyncImpl<FutexWaitList, T>(isolate, wait_list, node, lock_guard,
                                          use_timeout, timeout_time, value,
                                          loaded_value, {wait_location},
-                                         &ordered_lock, pending_termination);
+                                         ordered_lock, pending_termination);
 }
 
 template <typename WaitList, typename T>
@@ -662,16 +662,13 @@ DirectHandle<Object> FutexEmulation::WaitSyncImpl(
     NoGarbageCollectionMutexGuard& lock_guard, bool use_timeout,
     base::TimeTicks timeout_time, T value, T loaded_value,
     std::optional<void*> wait_location,
-    std::optional<recordreplay::AutoOrderedLock>* record_replay_ordered_lock,
+    std::optional<recordreplay::AutoOrderedLock>& record_replay_ordered_lock,
     bool record_replay_pending_termination) {
   DCHECK(!node->IsWaiting());
 
   DirectHandle<Object> result;
-  bool found_other_value = loaded_value != value;
-  if (record_replay_ordered_lock) {
-    found_other_value = RecordReplayFoundOtherValue(found_other_value,
-                                                    "FutexEmulation::WaitSync");
-  }
+  bool found_other_value = RecordReplayFoundOtherValue(
+      loaded_value != value, "FutexEmulation::WaitSync");
   if (found_other_value) {
     return direct_handle(Smi::FromInt(WaitReturnValue::kNotEqualValue),
                          isolate);
@@ -683,9 +680,9 @@ DirectHandle<Object> FutexEmulation::WaitSyncImpl(
 
   // The ordered lock taken for entering the list is released with events
   // allowed, as OrderedUnlock does nothing otherwise.
-  if (record_replay_ordered_lock && *record_replay_ordered_lock) {
+  if (record_replay_ordered_lock) {
     recordreplay::EndDisallowEvents();
-    record_replay_ordered_lock->reset();
+    record_replay_ordered_lock.reset();
     recordreplay::BeginDisallowEventsWithLabel("FutexEmulation::WaitSync");
   }
 
@@ -776,12 +773,10 @@ DirectHandle<Object> FutexEmulation::WaitSyncImpl(
       // deadline above, which the recording's clock fixed, against the replaying
       // host's clock, and the two have no common origin, so the wait lasts
       // however far apart they happen to be, without a bound when the replaying
-      // host booted more recently than the recording's did. A wait with no
-      // ordered lock, as a wasm managed object's is, has nothing to settle it
-      // and waits as it does when recording. So does one made after diverging,
-      // where the deadline and the reads below are both on the continued
-      // timeline.
-      if (record_replay_ordered_lock && recordreplay::IsReplaying() &&
+      // host booted more recently than the recording's did. A wait made after
+      // diverging waits as it does when recording, because its deadline and the
+      // reads below are both on the continued timeline.
+      if (recordreplay::IsReplaying() &&
           !recordreplay::HasDivergedFromRecording()) {
         result =
             direct_handle(Smi::FromInt(WaitReturnValue::kTimedOut), isolate);
@@ -814,7 +809,7 @@ DirectHandle<Object> FutexEmulation::WaitSyncImpl(
   // decided it with events disallowed, so a replay could time out a wait the
   // recording's notify woke, or the other way around. A notify that takes
   // the lock first wakes the wait even if its timeout has passed.
-  if (record_replay_ordered_lock && recordreplay::IsRecordingOrReplaying()) {
+  if (recordreplay::IsRecordingOrReplaying()) {
     lock_guard.Unlock();
     // When the wait began with events available, they are allowed again here
     // although the loop ran with them disallowed. Its course can differ between
@@ -829,7 +824,7 @@ DirectHandle<Object> FutexEmulation::WaitSyncImpl(
       took_termination = recordreplay::RecordReplayValue(
           "Futex wait took termination", took_termination);
     }
-    record_replay_ordered_lock->emplace(gRecordReplayOrderedLockId);
+    record_replay_ordered_lock.emplace(gRecordReplayOrderedLockId);
     recordreplay::BeginDisallowEventsWithLabel("FutexEmulation::WaitSync");
     if (took_termination) {
       isolate->stack_guard()->ClearTerminateExecution();

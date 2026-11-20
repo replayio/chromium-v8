@@ -318,7 +318,9 @@ class FutexEmulation : public AllStatic {
 
   // |record_replay_ordered_lock| is the caller's hold on the FutexEmulation
   // ordered lock while recording or replaying, taken before the caller's
-  // replayio::AutoDisallowEvents scope; null for waits that aren't ordered.
+  // replayio::AutoDisallowEvents scope. The caller hands over its hold because
+  // the lock is released here once the wait has entered the list and taken
+  // again for leaving it.
   // |record_replay_pending_termination| is whether an ordered wait began with
   // a termination pending while events were available.
   template <typename WaitList, typename T>
@@ -327,7 +329,7 @@ class FutexEmulation : public AllStatic {
       NoGarbageCollectionMutexGuard& lock_guard, bool use_timeout,
       base::TimeTicks timeout_time, T value, T loaded_value,
       std::optional<void*> wait_location,
-      std::optional<recordreplay::AutoOrderedLock>* record_replay_ordered_lock,
+      std::optional<recordreplay::AutoOrderedLock>& record_replay_ordered_lock,
       bool record_replay_pending_termination = false);
 
   // Resolve the Promises of the async waiters which belong to |isolate|.
