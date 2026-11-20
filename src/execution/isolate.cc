@@ -2077,14 +2077,9 @@ static int ReplayFrameCharges(Isolate* isolate, JavaScriptFrame* frame,
     return ReplayJsFrameCost(isolate, frame->function().shared(),
                              UnoptimizedFrame::cast(frame)->GetBytecodeArray());
   }
-  if (frame->is_turbofan()) {
-    // Where a call cannot deoptimize, as one that throws, the frame does not
-    // tell which functions are inlined there.
-    int deopt_index = SafepointEntry::kNoDeoptIndex;
-    static_cast<OptimizedFrame*>(frame)->GetDeoptimizationData(&deopt_index);
-    if (deopt_index == SafepointEntry::kNoDeoptIndex) {
-      return ReplayJsFrameCost(isolate, frame->function().shared());
-    }
+  if (frame->is_turbofan() &&
+      !static_cast<OptimizedFrame*>(frame)->HasDeoptimizationIndex()) {
+    return ReplayJsFrameCost(isolate, frame->function().shared());
   }
   std::vector<FrameSummary> summaries;
   frame->Summarize(&summaries);
