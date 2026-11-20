@@ -2002,25 +2002,58 @@ class SetThreadInWasmFlagScope {
 #endif  // V8_ENABLE_WEBASSEMBLY
 }  // namespace
 
+int Isolate::ReplayNativeStackDepth() {
+  Address exit_fp = c_entry_fp(thread_local_top());
+  Address sp = GetCurrentStackPosition();
+  if (exit_fp <= sp) return 0;
+  return static_cast<int>(std::min<Address>(
+      exit_fp - sp, ThreadLocalTop::kReplayJsStackBudget));
+}
+
+bool Isolate::ReplayStackBudgetExceeded() {
+  DCHECK(replay_stack_budget_);
+  // Without a JS frame below, the stack in use is not one the recording and
+  // its replays share.
+  if (c_entry_fp(thread_local_top()) == kNullAddress) return false;
+  return replay_js_frame_depth() + ReplayNativeStackDepth() >=
+         ThreadLocalTop::kReplayJsStackBudget;
+}
+
+static int ReplayJsFrameCost(Isolate* isolate, JSFunction function) {
+  BytecodeArray bytecode = function.shared().GetBytecodeArray(isolate);
+  return ThreadLocalTop::ReplayJsFrameCost(bytecode.frame_size(),
+                                           bytecode.parameter_count());
+}
+
+// The charges of the JS frames from the pending handler's down to the
+// innermost JS entry frame, on top of what was charged there.
 static void ReplaySyncJsFrameDepth(Isolate* isolate) {
-  if (!recordreplay::IsRecordingOrReplaying("emit-opcodes")) return;
+  if (!isolate->replay_stack_budget()) return;
 
   HandleScope scope(isolate);
   int skip = static_cast<int>(
       isolate->thread_local_top()->num_frames_above_pending_handler_);
-  int depth = 0;
+  int depth = isolate->replay_js_entry_depth();
   int index = 0;
   for (StackFrameIterator it(isolate); !it.done(); it.Advance(), index++) {
     if (index < skip) continue;
     StackFrame* frame = it.frame();
+    if (frame->type() == StackFrame::ENTRY ||
+        frame->type() == StackFrame::CONSTRUCT_ENTRY) {
+      break;
+    }
     if (!frame->is_java_script()) continue;
     std::vector<FrameSummary> summaries;
     CommonFrame::cast(frame)->Summarize(&summaries);
     if (summaries.empty()) {
-      depth += 1;  // SyncEmptyCount
+      depth += ReplayJsFrameCost(isolate,
+                                 JavaScriptFrame::cast(frame)->function());
     } else {
       for (const FrameSummary& summary : summaries) {
-        if (summary.IsJavaScript()) depth++;
+        if (summary.IsJavaScript()) {
+          depth +=
+              ReplayJsFrameCost(isolate, *summary.AsJavaScript().function());
+        }
       }
     }
   }
@@ -3632,6 +3665,9 @@ Isolate::Isolate(std::unique_ptr<i::IsolateAllocator> isolate_allocator,
 
   if (recordreplay::IsRecordingOrReplaying() && IsMainThread()) {
     RecordReplayOnMainThreadIsolateCreated(this);
+    // The functions that charge the budget are those with record/replay
+    // opcodes, which only this thread's scripts have.
+    replay_stack_budget_ = recordreplay::IsRecordingOrReplaying("emit-opcodes");
   }
 }
 

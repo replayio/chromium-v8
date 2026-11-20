@@ -3696,24 +3696,38 @@ class ReplayIncrementAndCheckJsFrameDepth
   using Base = FixedInputNodeT<0, ReplayIncrementAndCheckJsFrameDepth>;
 
  public:
-  explicit ReplayIncrementAndCheckJsFrameDepth(uint64_t bitfield) : Base(bitfield) {}
+  explicit ReplayIncrementAndCheckJsFrameDepth(uint64_t bitfield, int amount)
+      : Base(bitfield), amount_(amount) {}
 
   static constexpr OpProperties kProperties = OpProperties::Writing() |
                                               OpProperties::Throw() |
                                               OpProperties::DeferredCall();
 
-  DECL_NODE_INTERFACE_WITH_EMPTY_PRINT_PARAMS()
+  // ThreadLocalTop::ReplayJsFrameCost of the function entered.
+  int amount() const { return amount_; }
+
+  DECL_NODE_INTERFACE()
+
+ private:
+  const int amount_;
 };
 
 class ReplayDecrementJsFrameDepth : public FixedInputNodeT<0, ReplayDecrementJsFrameDepth> {
   using Base = FixedInputNodeT<0, ReplayDecrementJsFrameDepth>;
 
  public:
-  explicit ReplayDecrementJsFrameDepth(uint64_t bitfield) : Base(bitfield) {}
+  explicit ReplayDecrementJsFrameDepth(uint64_t bitfield, int amount)
+      : Base(bitfield), amount_(amount) {}
 
   static constexpr OpProperties kProperties = OpProperties::Writing();
 
-  DECL_NODE_INTERFACE_WITH_EMPTY_PRINT_PARAMS()
+  // ThreadLocalTop::ReplayJsFrameCost of the function left.
+  int amount() const { return amount_; }
+
+  DECL_NODE_INTERFACE()
+
+ private:
+  const int amount_;
 };
 
 class ThrowReferenceErrorIfHole

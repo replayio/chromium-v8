@@ -1288,6 +1288,22 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   THREAD_LOCAL_TOP_ACCESSOR(int, replay_js_frame_depth)
   THREAD_LOCAL_TOP_ADDRESS(int, replay_js_frame_depth)
 
+  // Whether this isolate's stack overflows by
+  // ThreadLocalTop::kReplayJsStackBudget.
+  bool replay_stack_budget() const { return replay_stack_budget_; }
+
+  // What replay_js_frame_depth was where the innermost JS entry frame was
+  // entered.
+  int replay_js_entry_depth() const { return replay_js_entry_depth_; }
+  void set_replay_js_entry_depth(int depth) { replay_js_entry_depth_ = depth; }
+
+  // The native stack in use above the JS frame that called into C++, in bytes
+  // and at most the budget. Zero if no JS frame did.
+  int ReplayNativeStackDepth();
+
+  // Whether C++ code called from JS is beyond the budget.
+  bool ReplayStackBudgetExceeded();
+
   MaterializedObjectStore* materialized_object_store() const {
     return materialized_object_store_;
   }
@@ -2386,6 +2402,9 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   bool record_replay_invoking_api_interrupts_ = false;
   Address record_replay_api_interrupts_js_fp_ = kNullAddress;
 
+  bool replay_stack_budget_ = false;
+  int replay_js_entry_depth_ = 0;
+
   std::unique_ptr<replayio::ReplayIsolateData> replay_data_;
 
 #define GLOBAL_BACKING_STORE(type, name, initialvalue) type name##_;
@@ -2654,7 +2673,9 @@ class StackLimitCheck {
   // Use this to check for stack-overflows in C++ code.
   bool HasOverflowed() const {
     StackGuard* stack_guard = isolate_->stack_guard();
-    return GetCurrentStackPosition() < stack_guard->real_climit();
+    return GetCurrentStackPosition() < stack_guard->real_climit() ||
+           (isolate_->replay_stack_budget() &&
+            isolate_->ReplayStackBudgetExceeded());
   }
   static bool HasOverflowed(LocalIsolate* local_isolate);
 

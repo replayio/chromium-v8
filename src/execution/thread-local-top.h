@@ -30,7 +30,31 @@ class ThreadLocalTop {
   // refactor this to really consist of just Addresses and 32-bit
   // integer fields.
   static constexpr uint32_t kSizeInBytes = 27 * kSystemPointerSize;
-  static constexpr int kReplayMaxJsFrameDepth = 1024;
+
+  // When recording/replaying, the stack has to overflow at the same place in a
+  // recording and in its replays. The stack pointer cannot tell that place: the
+  // stack a JS frame takes depends on the tier its function runs in, and the
+  // stack in use where JS is entered on what called V8. replay_js_frame_depth_
+  // counts bytes instead: each JS frame is charged what it takes in the
+  // interpreter (ReplayJsFrameCost), and the native stack between JS code and
+  // the JS code it calls through C++ what it takes (Isolate::
+  // ReplayNativeStackDepth). The stack overflows once that reaches the budget.
+  static constexpr int kReplayJsStackBudget = 2 * 1024 * 1024;
+
+  // What a JS frame takes besides its registers and parameters: the frame's
+  // fixed slots, and a builtin's frame between it and the JS frame it calls.
+  static constexpr int kReplayJsFrameOverhead = 22 * kSystemPointerSize;
+
+  // The stack the isolate that has the budget may use: the budget, and as much
+  // again for what is not charged. The stack pointer's limit is not reached
+  // while that holds.
+  static constexpr int kReplayStackSize = 2 * kReplayJsStackBudget;
+
+  // The charge for a frame of a function with the given BytecodeArray sizes.
+  static constexpr int ReplayJsFrameCost(int frame_size, int parameter_count) {
+    return frame_size + parameter_count * kSystemPointerSize +
+           kReplayJsFrameOverhead;
+  }
 
   // Does early low-level initialization that does not depend on the
   // isolate being present.

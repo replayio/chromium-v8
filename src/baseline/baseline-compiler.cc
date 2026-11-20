@@ -2342,6 +2342,12 @@ void BaselineCompiler::VisitRecordReplayIncExecutionProgressCounter() {
               __ FunctionOperand(), kInterpreterAccumulatorRegister);
 }
 
+// ThreadLocalTop::ReplayJsFrameCost of the function being compiled.
+static int ReplayJsFrameCost(const BytecodeArray& bytecode) {
+  return ThreadLocalTop::ReplayJsFrameCost(bytecode.frame_size(),
+                                           bytecode.parameter_count());
+}
+
 void BaselineCompiler::VisitReplayIncJsFrameDepth() {
 #if V8_TARGET_ARCH_X64
   BaselineAssembler::ScratchRegisterScope scratch_scope(&basm_);
@@ -2349,8 +2355,8 @@ void BaselineCompiler::VisitReplayIncJsFrameDepth() {
   ExternalReference depth_ref = ExternalReference::Create(
       IsolateAddressId::kReplayJsFrameDepthAddress, masm_.isolate());
   Operand depth = masm_.ExternalReferenceAsOperand(depth_ref, scratch);
-  masm_.incl(depth);
-  masm_.cmpl(depth, Immediate(ThreadLocalTop::kReplayMaxJsFrameDepth));
+  masm_.addl(depth, Immediate(ReplayJsFrameCost(*bytecode_)));
+  masm_.cmpl(depth, Immediate(ThreadLocalTop::kReplayJsStackBudget));
   Label done;
   masm_.j(less, &done);
   CallRuntime(Runtime::kThrowStackOverflow);
@@ -2365,10 +2371,17 @@ void BaselineCompiler::VisitReplayIncJsFrameDepth() {
     masm_.Mov(address, Operand(ExternalReference::Create(
                            IsolateAddressId::kReplayJsFrameDepthAddress,
                            masm_.isolate())));
+    int cost = ReplayJsFrameCost(*bytecode_);
+    CHECK(is_uint24(cost));
+    // Each in the 12 bits an instruction encodes, as no scratch register is
+    // left.
+    static_assert(ThreadLocalTop::kReplayJsStackBudget % (1 << 12) == 0 &&
+                  ThreadLocalTop::kReplayJsStackBudget < (1 << 24));
     masm_.Ldr(depth, MemOperand(address));
-    masm_.Add(depth, depth, Operand(1));
+    masm_.Add(depth, depth, Operand(cost & 0xfff));
+    masm_.Add(depth, depth, Operand(cost & ~0xfff));
     masm_.Str(depth, MemOperand(address));
-    masm_.Cmp(depth, Operand(ThreadLocalTop::kReplayMaxJsFrameDepth));
+    masm_.Cmp(depth, Operand(ThreadLocalTop::kReplayJsStackBudget));
     masm_.B(lt, &done);
   }
   CallRuntime(Runtime::kThrowStackOverflow);
@@ -2386,7 +2399,7 @@ void BaselineCompiler::VisitReplayDecJsFrameDepth() {
   ExternalReference depth_ref = ExternalReference::Create(
       IsolateAddressId::kReplayJsFrameDepthAddress, masm_.isolate());
   Operand depth = masm_.ExternalReferenceAsOperand(depth_ref, scratch);
-  masm_.decl(depth);
+  masm_.subl(depth, Immediate(ReplayJsFrameCost(*bytecode_)));
 #elif V8_TARGET_ARCH_ARM64
   BaselineAssembler::ScratchRegisterScope scratch_scope(&basm_);
   Register address = scratch_scope.AcquireScratch();
@@ -2394,8 +2407,11 @@ void BaselineCompiler::VisitReplayDecJsFrameDepth() {
   masm_.Mov(address, Operand(ExternalReference::Create(
                          IsolateAddressId::kReplayJsFrameDepthAddress,
                          masm_.isolate())));
+  int cost = ReplayJsFrameCost(*bytecode_);
+  CHECK(is_uint24(cost));
   masm_.Ldr(depth, MemOperand(address));
-  masm_.Sub(depth, depth, Operand(1));
+  masm_.Sub(depth, depth, Operand(cost & 0xfff));
+  masm_.Sub(depth, depth, Operand(cost & ~0xfff));
   masm_.Str(depth, MemOperand(address));
 #else
   FATAL("ReplayDecJsFrameDepth Baseline lowering is x64/arm64 only");

@@ -2052,10 +2052,12 @@ const Operator* SimplifiedOperatorBuilder::IncrementAndCheckProgressCounter() {
                                2, 1, 0, 1, 1, 0);
 }
 
-const Operator* SimplifiedOperatorBuilder::ReplayDecrementJsFrameDepth() {
-  return zone()->New<Operator>(IrOpcode::kReplayDecrementJsFrameDepth,
-                               Operator::kNoDeopt | Operator::kNoThrow,
-                               "ReplayDecrementJsFrameDepth", 0, 1, 0, 1, 1, 0);
+const Operator* SimplifiedOperatorBuilder::ReplayDecrementJsFrameDepth(
+    int amount) {
+  return zone()->New<Operator1<int>>(
+      IrOpcode::kReplayDecrementJsFrameDepth,
+      Operator::kNoDeopt | Operator::kNoThrow, "ReplayDecrementJsFrameDepth",
+      0, 1, 0, 1, 1, 0, amount);
 }
 
 const Operator* SimplifiedOperatorBuilder::FastApiCall(

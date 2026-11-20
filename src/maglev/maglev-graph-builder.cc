@@ -15,6 +15,7 @@
 #include "src/compiler/heap-refs.h"
 #include "src/compiler/processed-feedback.h"
 #include "src/deoptimizer/deoptimize-reason.h"
+#include "src/execution/thread-local-top.h"
 #include "src/handles/maybe-handles-inl.h"
 #include "src/ic/handler-configuration-inl.h"
 #include "src/interpreter/bytecode-flags.h"
@@ -3387,11 +3388,15 @@ void MaglevGraphBuilder::VisitRecordReplayIncExecutionProgressCounter() {
 }
 
 void MaglevGraphBuilder::VisitReplayIncJsFrameDepth() {
-  AddNewNode<ReplayIncrementAndCheckJsFrameDepth>({});
+  AddNewNode<ReplayIncrementAndCheckJsFrameDepth>(
+      {}, ThreadLocalTop::ReplayJsFrameCost(
+              register_count() * kSystemPointerSize, parameter_count()));
 }
 
 void MaglevGraphBuilder::VisitReplayDecJsFrameDepth() {
-  AddNewNode<ReplayDecrementJsFrameDepth>({});
+  AddNewNode<ReplayDecrementJsFrameDepth>(
+      {}, ThreadLocalTop::ReplayJsFrameCost(
+              register_count() * kSystemPointerSize, parameter_count()));
 }
 
 void MaglevGraphBuilder::VisitRecordReplayNotifyActivity() {

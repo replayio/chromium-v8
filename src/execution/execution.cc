@@ -323,10 +323,51 @@ static MaybeHandle<Object> RecordReplayBlockNonDeterministicUserJs(
   return isolate->factory()->undefined_value();
 }
 
+// Charges the native stack between the JS frame that called into C++ and the
+// JS code C++ is entering, see ThreadLocalTop::kReplayJsStackBudget. However
+// that JS code is left, what was charged before it is charged again.
+class V8_NODISCARD ReplayJsEntryScope {
+ public:
+  explicit ReplayJsEntryScope(Isolate* isolate)
+      : isolate_(isolate),
+        depth_(isolate->replay_js_frame_depth()),
+        entry_depth_(isolate->replay_js_entry_depth()) {
+    if (!isolate_->replay_stack_budget()) return;
+    int depth = depth_ + isolate_->ReplayNativeStackDepth();
+    isolate_->set_replay_js_frame_depth(depth);
+    isolate_->set_replay_js_entry_depth(depth);
+  }
+
+  ~ReplayJsEntryScope() {
+    if (!isolate_->replay_stack_budget()) return;
+    isolate_->set_replay_js_frame_depth(depth_);
+    isolate_->set_replay_js_entry_depth(entry_depth_);
+  }
+
+  bool HasOverflowed() const {
+    return isolate_->replay_stack_budget() &&
+           isolate_->replay_js_frame_depth() >=
+               ThreadLocalTop::kReplayJsStackBudget;
+  }
+
+ private:
+  Isolate* const isolate_;
+  const int depth_;
+  const int entry_depth_;
+};
+
 V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
                                                  const InvokeParams& params) {
   RCS_SCOPE(isolate, RuntimeCallCounterId::kInvoke);
   RecordReplayScrubDivergentProgressScope scrub_divergent_progress;
+  ReplayJsEntryScope replay_js_entry(isolate);
+  if (replay_js_entry.HasOverflowed()) {
+    isolate->StackOverflow();
+    if (params.message_handling == Execution::MessageHandling::kReport) {
+      isolate->ReportPendingMessages();
+    }
+    return MaybeHandle<Object>();
+  }
   DCHECK(!params.receiver->IsJSGlobalObject());
   DCHECK_LE(params.argc, FixedArray::kMaxLength);
 
