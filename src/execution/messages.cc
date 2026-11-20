@@ -120,8 +120,11 @@ Handle<JSMessageObject> MessageHandler::MakeMessageObject(
       scheduledException = Handle<Object>(isolate->scheduled_exception(), isolate);
       isolate->clear_scheduled_exception();
     }
-    Handle<Object> current_exception =
-        exception.is_null() ? record_replay_exception : exception;
+    Handle<Object> current_exception = exception;
+    if (current_exception.is_null() && !record_replay_exception.is_null() &&
+        isolate->is_catchable_by_javascript(*record_replay_exception)) {
+      current_exception = record_replay_exception;
+    }
     Handle<Object>* prev_exception = gCurrentException;
     gCurrentException =
         current_exception.is_null() ? nullptr : &current_exception;

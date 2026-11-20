@@ -140,7 +140,7 @@ class MessageHandler {
  public:
   // Returns a message object for the API to use.
   // |record_replay_exception| is exposed as the current exception during the
-  // message's bookmark if no exception is pending.
+  // message's bookmark if no exception is pending and it is catchable.
   V8_EXPORT_PRIVATE static Handle<JSMessageObject> MakeMessageObject(
       Isolate* isolate, MessageTemplate type, const MessageLocation* location,
       Handle<Object> argument, Handle<FixedArray> stack_frames,
