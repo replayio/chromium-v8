@@ -11024,7 +11024,6 @@ extern bool RecordReplayHasRegisteredScript(Script script);
 void RecordReplayOnExceptionUnwind(Isolate* isolate) {
   CHECK(gRecordReplayIsRecordingOrReplaying);
   CHECK(IsMainThread());
-  CHECK(!gCurrentException);
 
   if (!gRecordReplayHasCheckpoint)
     return;
@@ -11070,11 +11069,13 @@ void RecordReplayOnExceptionUnwind(Isolate* isolate) {
     scheduledException = Handle<Object>(isolate->scheduled_exception(), isolate);
     isolate->clear_scheduled_exception();
   }
+  // Nested unwinds (e.g. in progress interrupt callbacks) shadow the outer one.
+  Handle<Object>* prev_exception = gCurrentException;
   gCurrentException = &exception;
 
   gRecordReplayOnExceptionUnwind();
 
-  gCurrentException = nullptr;
+  gCurrentException = prev_exception;
   CHECK(!isolate->has_pending_exception());
   isolate->set_pending_exception(*exception);
   isolate->set_pending_message(*message);
