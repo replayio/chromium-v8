@@ -1515,6 +1515,22 @@ bool ValueMirror::getProperties(v8::Local<v8::Context> context,
         enumerable = !(attributes & v8::PropertyAttribute::DontEnum);
         configurable = !(attributes & v8::PropertyAttribute::DontDelete);
         isAccessorProperty = getterMirror || setterMirror;
+      } else if (v8::replayio::MustNotRunUserJS() &&
+               v8::replayio::ReadingRunsUserJS(object, v8Name)) {
+        // One of V8's own accessors whose getter reaches the page, which
+        // today means an Error's own "stack" and its Error.prepareStackTrace.
+        // The iterator above does not count V8's own accessors as native ones,
+        // so taking the descriptor below would read this one by calling it.
+        // The property stays an accessor instead, for the viewer to call in a
+        // pause, where page code may run because the viewer asked for it. Only
+        // this walk is covered: a descriptor taken elsewhere while user JS
+        // must not run would still call the getter.
+        getterMirror = createNativeGetter(context, object, v8Name);
+        setterMirror = createNativeSetter(context, object, v8Name);
+        writable = !(attributes & v8::PropertyAttribute::ReadOnly);
+        enumerable = !(attributes & v8::PropertyAttribute::DontEnum);
+        configurable = !(attributes & v8::PropertyAttribute::DontDelete);
+        isAccessorProperty = true;
       } else {
         v8::TryCatch tryCatchDescriptor(isolate);
         v8::debug::PropertyDescriptor descriptor;
