@@ -82,6 +82,7 @@ class JSPromise
  private:
   // ES section #sec-triggerpromisereactions
   static Handle<Object> TriggerPromiseReactions(Isolate* isolate,
+                                                Handle<JSPromise> promise,
                                                 Handle<Object> reactions,
                                                 Handle<Object> argument,
                                                 PromiseReaction::Type type);

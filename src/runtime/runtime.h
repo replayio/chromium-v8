@@ -400,6 +400,7 @@ namespace internal {
   F(PromiseRejectEventFromStack, 2, 1)   \
   F(PromiseRevokeReject, 1, 1)           \
   F(PromiseStatus, 1, 1)                 \
+  F(RecordReplayPromiseReactionJob, 2, 1) \
   F(RejectPromise, 3, 1)                 \
   F(ResolvePromise, 2, 1)                \
   F(PromiseRejectAfterResolved, 2, 1)    \

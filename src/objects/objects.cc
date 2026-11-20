@@ -5502,7 +5502,7 @@ Handle<Object> JSPromise::Fulfill(Handle<JSPromise> promise,
   promise->set_status(Promise::kFulfilled);
 
   // 7. Return TriggerPromiseReactions(reactions, value).
-  return TriggerPromiseReactions(isolate, reactions, value,
+  return TriggerPromiseReactions(isolate, promise, reactions, value,
                                  PromiseReaction::kFulfill);
 }
 
@@ -5555,7 +5555,7 @@ Handle<Object> JSPromise::Reject(Handle<JSPromise> promise,
   }
 
   // 8. Return TriggerPromiseReactions(reactions, reason).
-  return TriggerPromiseReactions(isolate, reactions, reason,
+  return TriggerPromiseReactions(isolate, promise, reactions, reason,
                                  PromiseReaction::kReject);
 }
 
@@ -5663,6 +5663,7 @@ MaybeHandle<Object> JSPromise::Resolve(Handle<JSPromise> promise,
 
 // static
 Handle<Object> JSPromise::TriggerPromiseReactions(Isolate* isolate,
+                                                  Handle<JSPromise> promise,
                                                   Handle<Object> reactions,
                                                   Handle<Object> argument,
                                                   PromiseReaction::Type type) {
@@ -5765,6 +5766,13 @@ Handle<Object> JSPromise::TriggerPromiseReactions(Isolate* isolate,
 
     MicrotaskQueue* microtask_queue = handler_context->microtask_queue();
     if (microtask_queue) {
+      if (RecordReplayReportsPromises()) {
+        RecordReplayOnPromiseReactionJob(
+            isolate, promise,
+            handle(Handle<PromiseReactionJobTask>::cast(task)
+                       ->promise_or_capability(),
+                   isolate));
+      }
       microtask_queue->EnqueueMicrotask(
           *Handle<PromiseReactionJobTask>::cast(task));
     }

@@ -7,6 +7,7 @@
 #include "src/execution/arguments-inl.h"
 #include "src/execution/microtask-queue.h"
 #include "src/objects/js-promise-inl.h"
+#include "src/replay/replayio.h"
 
 #include "src/base/replayio.h"
 
@@ -133,6 +134,16 @@ RUNTIME_FUNCTION(Runtime_PromiseHookAfter) {
   Handle<JSReceiver> promise = args.at<JSReceiver>(0);
   if (promise->IsJSPromise()) {
     isolate->OnPromiseAfter(Handle<JSPromise>::cast(promise));
+  }
+  return ReadOnlyRoots(isolate).undefined_value();
+}
+
+RUNTIME_FUNCTION(Runtime_RecordReplayPromiseReactionJob) {
+  HandleScope scope(isolate);
+  DCHECK_EQ(2, args.length());
+  if (RecordReplayReportsPromises()) {
+    RecordReplayOnPromiseReactionJob(isolate, args.at<JSPromise>(0),
+                                     args.at(1));
   }
   return ReadOnlyRoots(isolate).undefined_value();
 }

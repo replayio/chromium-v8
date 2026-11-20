@@ -7,12 +7,19 @@
 namespace v8 {
 namespace internal {
 class Isolate;
+class JSPromise;
+class Object;
 class String;
 
-// Whether promise hooks and thenable adoptions report to the dependency graph
-// (RecordReplayOnPromiseHook, AddPromiseDependencyGraphAdoption), on this
-// thread. Defined in api.cc.
+// Whether promise hooks, thenable adoptions and reaction jobs report to the
+// dependency graph (RecordReplayOnPromiseHook, AddPromiseDependencyGraphAdoption,
+// RecordReplayOnPromiseReactionJob), on this thread. Defined in api.cc.
 bool RecordReplayReportsPromises();
+
+// Reports the reaction job enqueued for a reaction of the settled promise, with
+// the reaction's promise_or_capability. Defined in debug.cc.
+void RecordReplayOnPromiseReactionJob(Isolate* isolate, Handle<JSPromise> settled,
+                                      Handle<Object> promise_or_capability);
 }  // namespace internal
 
 namespace replayio {
