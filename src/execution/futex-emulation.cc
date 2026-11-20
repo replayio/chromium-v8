@@ -725,6 +725,25 @@ DirectHandle<Object> FutexEmulation::WaitSyncImpl(
 
     // No interrupts, now wait.
     if (use_timeout) {
+      // A replay does not wait here when the ordered lock below settles the
+      // outcome, because a notify that reached this waiter in the recording has
+      // already run there and cleared node->waiting_. Waiting would compare the
+      // deadline above, which the recording's clock fixed, against the replaying
+      // host's clock, and the two have no common origin, so the wait lasts
+      // however far apart they happen to be, without a bound when the replaying
+      // host booted more recently than the recording's did. A wait with no
+      // ordered lock, as a wasm managed object's is, has nothing to settle it
+      // and waits as it does when recording. So does one made after diverging,
+      // where the deadline and the reads below are both on the continued
+      // timeline.
+      if (record_replay_ordered_lock && recordreplay::IsReplaying() &&
+          !recordreplay::HasDivergedFromRecording()) {
+        result =
+            direct_handle(Smi::FromInt(WaitReturnValue::kTimedOut), isolate);
+        timed_out = true;
+        break;
+      }
+
       base::TimeTicks current_time = base::TimeTicks::Now();
       if (current_time >= timeout_time) {
         result =
