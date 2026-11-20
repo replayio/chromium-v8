@@ -70,6 +70,12 @@ class JSPromise
   static MaybeHandle<JSPromise> ReactionPromise(
       Isolate* isolate, Handle<Object> promise_or_capability);
 
+  // Enqueues the job on its context's microtask queue, if any, and reports it
+  // to the dependency graph with the settle that triggered it.
+  static void EnqueueReactionJob(Isolate* isolate,
+                                 Handle<PromiseReactionJobTask> task,
+                                 int reaction_settle_node_id);
+
   // Dispatched behavior.
   DECL_PRINTER(JSPromise)
   DECL_VERIFIER(JSPromise)

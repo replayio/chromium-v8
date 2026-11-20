@@ -6,7 +6,6 @@
 #include "src/debug/debug.h"
 #include "src/execution/arguments-inl.h"
 #include "src/execution/microtask-queue.h"
-#include "src/objects/contexts-inl.h"
 #include "src/objects/js-promise-inl.h"
 #include "src/objects/promise-inl.h"
 #include "src/replay/replayio.h"
@@ -140,15 +139,16 @@ RUNTIME_FUNCTION(Runtime_PromiseHookAfter) {
   return ReadOnlyRoots(isolate).undefined_value();
 }
 
-RUNTIME_FUNCTION(Runtime_RecordReplayPromiseReactionJob) {
+RUNTIME_FUNCTION(Runtime_RecordReplayEnqueuePromiseReactionJob) {
   HandleScope scope(isolate);
   DCHECK_EQ(2, args.length());
-  Handle<PromiseReactionJobTask> task = args.at<PromiseReactionJobTask>(1);
-  // EnqueueMicrotask drops the job without a microtask queue.
-  if (RecordReplayReportsPromises() &&
-      task->context().native_context().microtask_queue()) {
-    RecordReplayOnPromiseReactionJob(isolate, args.at<JSPromise>(0), task);
-  }
+  Handle<JSPromise> settled = args.at<JSPromise>(0);
+  int reaction_settle_node_id =
+      RecordReplayReportsPromises()
+          ? RecordReplayPromiseReactionSettleNodeId(isolate, settled)
+          : 0;
+  JSPromise::EnqueueReactionJob(isolate, args.at<PromiseReactionJobTask>(1),
+                                reaction_settle_node_id);
   return ReadOnlyRoots(isolate).undefined_value();
 }
 

@@ -4404,19 +4404,21 @@ struct PromiseDependencyGraphData {
   // Graph node ID for the point the promise was created.
   int new_node_id = 0;
 
-  // Graph node ID for the point the promise was settled.
+  // Graph node ID of the promise's first kResolve hook: its settle, or the
+  // resolve with a thenable it then adopts.
   int settled_node_id = 0;
 
-  // persistent_id of the thenable the promise last adopted, if any. Its
-  // settled_node_id is then that resolve, not the settle.
+  // persistent_id of the thenable the promise was last resolved with; 0 if
+  // none.
   int adopted_persistent_id = 0;
 
-  // Graph node ID of the settle that triggered the promise's reactions: its
-  // own, or, for an adopted thenable, the thenable's; 0 if not recorded.
+  // Graph node ID of the settle that triggers the promise's reactions:
+  // settled_node_id, or with an adopted thenable that thenable's
+  // reaction_settle_node_id; 0 if not recorded.
   int reaction_settle_node_id = 0;
 
   // Graph node ID of the reaction job enqueued for this derived promise, until
-  // the job runs.
+  // its kBefore hook.
   int job_node_id = 0;
 };
 
@@ -4458,28 +4460,33 @@ void AddPromiseDependencyGraphAdoption(Isolate* isolate, Handle<Object> promise,
   }
 }
 
-void RecordReplayOnPromiseSettle(Isolate* isolate, Handle<JSPromise> promise) {
+int RecordReplayOnPromiseSettle(Isolate* isolate, Handle<JSPromise> promise) {
   DCHECK(RecordReplayReportsPromises());
   DCHECK_NE(Promise::kPending, promise->status());
   HandleScope scope(isolate);
 
   PromiseDependencyGraphData& data =
     GetOrCreatePromiseDependencyGraphData(isolate, promise);
-  if (!data.adopted_persistent_id) {
-    data.reaction_settle_node_id = data.settled_node_id;
-    return;
-  }
-  // Settled through the adopted thenable: its settle, if one is recorded.
   data.reaction_settle_node_id =
-    gPromiseDependencyGraphDataMap->at(data.adopted_persistent_id).reaction_settle_node_id;
+    data.adopted_persistent_id
+      ? gPromiseDependencyGraphDataMap->at(data.adopted_persistent_id).reaction_settle_node_id
+      : data.settled_node_id;
+  return data.reaction_settle_node_id;
+}
+
+int RecordReplayPromiseReactionSettleNodeId(Isolate* isolate, Handle<JSPromise> settled) {
+  DCHECK(RecordReplayReportsPromises());
+  DCHECK_NE(Promise::kPending, settled->status());
+  HandleScope scope(isolate);
+
+  return GetOrCreatePromiseDependencyGraphData(isolate, settled).reaction_settle_node_id;
 }
 
 // Enqueued by the later of the settle and the attach (then), so the job node is
 // created in that code's execution.
-void RecordReplayOnPromiseReactionJob(Isolate* isolate, Handle<JSPromise> settled,
+void RecordReplayOnPromiseReactionJob(Isolate* isolate, int reaction_settle_node_id,
                                       Handle<PromiseReactionJobTask> task) {
   DCHECK(RecordReplayReportsPromises());
-  DCHECK_NE(Promise::kPending, settled->status());
   HandleScope scope(isolate);
 
   // The promise whose kBefore hook starts the job's range.
@@ -4490,18 +4497,16 @@ void RecordReplayOnPromiseReactionJob(Isolate* isolate, Handle<JSPromise> settle
     return;
   }
 
-  PromiseDependencyGraphData& settled_data =
-    GetOrCreatePromiseDependencyGraphData(isolate, settled);
   PromiseDependencyGraphData& data =
     GetOrCreatePromiseDependencyGraphData(isolate, derived);
 
   const char* reaction =
-    settled->status() == Promise::kFulfilled ? "fulfill" : "reject";
+    task->IsPromiseFulfillReactionJobTask() ? "fulfill" : "reject";
   std::string job_node_str =
     StringPrintf("{\"kind\":\"promiseReactionJob\",\"reaction\":\"%s\"}", reaction);
   data.job_node_id = recordreplay::NewDependencyGraphNode(job_node_str.c_str());
-  if (settled_data.reaction_settle_node_id) {
-    recordreplay::AddDependencyGraphEdge(settled_data.reaction_settle_node_id, data.job_node_id,
+  if (reaction_settle_node_id) {
+    recordreplay::AddDependencyGraphEdge(reaction_settle_node_id, data.job_node_id,
                                          "{\"kind\":\"reactionSettle\"}");
   }
   if (data.new_node_id) {

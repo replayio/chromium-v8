@@ -5511,9 +5511,6 @@ void Isolate::RunAllPromiseHooks(PromiseHookType type,
   }
 }
 
-extern void RecordReplayOnPromiseHook(Isolate* isolate, PromiseHookType type,
-                                      Handle<JSPromise> promise, Handle<Object> parent);
-
 void Isolate::RunPromiseHook(PromiseHookType type, Handle<JSPromise> promise,
                              Handle<Object> parent) {
   if (!HasIsolatePromiseHooks()) return;
