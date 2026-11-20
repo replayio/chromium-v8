@@ -329,19 +329,15 @@ static MaybeHandle<Object> RecordReplayBlockNonDeterministicUserJs(
 class V8_NODISCARD ReplayJsEntryScope {
  public:
   explicit ReplayJsEntryScope(Isolate* isolate)
-      : isolate_(isolate),
-        depth_(isolate->replay_js_frame_depth()),
-        entry_depth_(isolate->replay_js_entry_depth()) {
+      : isolate_(isolate), depth_(isolate->replay_js_frame_depth()) {
     if (!isolate_->replay_stack_budget()) return;
-    int depth = depth_ + ThreadLocalTop::kReplayJsEntryCost;
-    isolate_->set_replay_js_frame_depth(depth);
-    isolate_->set_replay_js_entry_depth(depth);
+    isolate_->set_replay_js_frame_depth(depth_ +
+                                        ThreadLocalTop::kReplayJsEntryCost);
   }
 
   ~ReplayJsEntryScope() {
     if (!isolate_->replay_stack_budget()) return;
     isolate_->set_replay_js_frame_depth(depth_);
-    isolate_->set_replay_js_entry_depth(entry_depth_);
   }
 
   bool HasOverflowed() const {
@@ -353,7 +349,6 @@ class V8_NODISCARD ReplayJsEntryScope {
  private:
   Isolate* const isolate_;
   const int depth_;
-  const int entry_depth_;
 };
 
 V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,

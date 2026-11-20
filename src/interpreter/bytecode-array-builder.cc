@@ -114,7 +114,12 @@ Handle<BytecodeArray> BytecodeArrayBuilder::ToBytecodeArray(IsolateT* isolate) {
 
   if (register_optimizer_) {
     register_optimizer_->Flush();
-    register_count = register_optimizer_->maxiumum_register_index() + 1;
+    // A frame is charged by its registers when recording/replaying, see
+    // ThreadLocalTop::ReplayJsFrameCost: those the optimizer leaves in use
+    // depend on bytecodes that only a replay has.
+    if (!emit_record_replay_opcodes_) {
+      register_count = register_optimizer_->maxiumum_register_index() + 1;
+    }
   }
 
   Handle<ByteArray> handler_table =

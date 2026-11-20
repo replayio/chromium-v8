@@ -2002,41 +2002,43 @@ class SetThreadInWasmFlagScope {
 #endif  // V8_ENABLE_WEBASSEMBLY
 }  // namespace
 
-// What entering the function of a JS frame's summary charged: nothing where a
-// builtin continues in an optimized frame.
+// What entering the function of a JS frame's summary charged: nothing for a
+// builtin that continues in an optimized frame, nor for a function of a script
+// without record/replay opcodes.
 static int ReplayJsFrameCost(Isolate* isolate,
                              const FrameSummary::JavaScriptFrameSummary& js) {
   AbstractCode code = *js.abstract_code();
   PtrComprCageBase cage_base(isolate);
   if (!code.IsBytecodeArray(cage_base)) return 0;
+  Object script = js.function()->shared().script();
+  if (!script.IsScript() ||
+      !Script::cast(script).record_replay_instrumented()) {
+    return 0;
+  }
   BytecodeArray bytecode = code.GetBytecodeArray();
   return ThreadLocalTop::ReplayJsFrameCost(bytecode.frame_size(),
                                            bytecode.parameter_count());
 }
 
-// The charges of the JS frames from the pending handler's down to the
-// innermost JS entry frame, on top of what was charged there.
+// Takes back the charges of the JS frames an exception leaves on its way to
+// the pending handler.
 static void ReplaySyncJsFrameDepth(Isolate* isolate) {
   if (!isolate->replay_stack_budget()) return;
 
   HandleScope scope(isolate);
-  int skip = static_cast<int>(
+  int above = static_cast<int>(
       isolate->thread_local_top()->num_frames_above_pending_handler_);
-  int depth = isolate->replay_js_entry_depth();
+  int depth = isolate->replay_js_frame_depth();
   int index = 0;
-  for (StackFrameIterator it(isolate); !it.done(); it.Advance(), index++) {
-    if (index < skip) continue;
+  for (StackFrameIterator it(isolate); !it.done() && index < above;
+       it.Advance(), index++) {
     StackFrame* frame = it.frame();
-    if (frame->type() == StackFrame::ENTRY ||
-        frame->type() == StackFrame::CONSTRUCT_ENTRY) {
-      break;
-    }
     if (!frame->is_java_script()) continue;
     std::vector<FrameSummary> summaries;
     CommonFrame::cast(frame)->Summarize(&summaries);
     for (const FrameSummary& summary : summaries) {
       if (summary.IsJavaScript()) {
-        depth += ReplayJsFrameCost(isolate, summary.AsJavaScript());
+        depth -= ReplayJsFrameCost(isolate, summary.AsJavaScript());
       }
     }
   }

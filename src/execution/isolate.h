@@ -1292,11 +1292,6 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   // ThreadLocalTop::kReplayJsStackBudget.
   bool replay_stack_budget() const { return replay_stack_budget_; }
 
-  // What replay_js_frame_depth was where the innermost JS entry frame was
-  // entered.
-  int replay_js_entry_depth() const { return replay_js_entry_depth_; }
-  void set_replay_js_entry_depth(int depth) { replay_js_entry_depth_ = depth; }
-
   MaterializedObjectStore* materialized_object_store() const {
     return materialized_object_store_;
   }
@@ -2396,7 +2391,6 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   Address record_replay_api_interrupts_js_fp_ = kNullAddress;
 
   bool replay_stack_budget_ = false;
-  int replay_js_entry_depth_ = 0;
 
   std::unique_ptr<replayio::ReplayIsolateData> replay_data_;
 
