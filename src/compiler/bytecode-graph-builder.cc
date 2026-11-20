@@ -3627,13 +3627,6 @@ void BytecodeGraphBuilder::VisitRecordReplayIncExecutionProgressCounter() {
   CHECK(needs_eager_checkpoint());
 }
 
-// ThreadLocalTop::ReplayJsFrameCost of the function a graph is built of.
-static int ReplayJsFrameCost(BytecodeArrayRef bytecode) {
-  return ThreadLocalTop::ReplayJsFrameCost(
-      bytecode.register_count() * kSystemPointerSize,
-      bytecode.parameter_count());
-}
-
 void BytecodeGraphBuilder::VisitReplayIncJsFrameDepth() {
   // SoftSO before TempSchedule so IfException attaches to ThrowCall.
   // Simplified ops only — machine value ops are Typer UNREACHABLE.
@@ -3646,7 +3639,8 @@ void BytecodeGraphBuilder::VisitReplayIncJsFrameDepth() {
   Node* depth = NewNode(simplified()->LoadField(depth_access), depth_addr);
   Node* incremented =
       NewNode(simplified()->NumberAdd(), depth,
-              jsgraph()->SmiConstant(ReplayJsFrameCost(bytecode_array())));
+              jsgraph()->SmiConstant(static_cast<int32_t>(
+                  bytecode_iterator().GetIndexOperand(0))));
   NewNode(simplified()->StoreField(depth_access), depth_addr, incremented);
 
   Node* overflow = NewNode(
@@ -3670,7 +3664,7 @@ void BytecodeGraphBuilder::VisitReplayIncJsFrameDepth() {
 
 void BytecodeGraphBuilder::VisitReplayDecJsFrameDepth() {
   Node* node = NewNode(simplified()->ReplayDecrementJsFrameDepth(
-      ReplayJsFrameCost(bytecode_array())));
+      static_cast<int>(bytecode_iterator().GetIndexOperand(0))));
   environment()->RecordAfterState(node, Environment::kAttachFrameState);
 }
 

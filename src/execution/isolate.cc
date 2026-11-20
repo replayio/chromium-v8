@@ -41,6 +41,7 @@
 #include "src/debug/debug-frames.h"
 #if V8_ENABLE_WEBASSEMBLY
 #include "src/debug/debug-wasm-objects.h"
+#include "src/interpreter/bytecode-array-iterator.h"
 #include "src/wasm/stacks.h"
 #endif  // V8_ENABLE_WEBASSEMBLY
 #include "src/debug/debug.h"
@@ -2000,22 +2001,28 @@ class SetThreadInWasmFlagScope {
 #endif  // V8_ENABLE_WEBASSEMBLY
 }  // namespace
 
-// What entering the function of a JS frame's summary charged: nothing for a
-// builtin that continues in an optimized frame, nor for a function of a script
-// without record/replay opcodes.
+// What entering the function of a JS frame's summary charged: the operand of
+// its ReplayIncJsFrameDepth bytecodes. Nothing for a builtin that continues in
+// an optimized frame, nor for a function of a script without record/replay
+// opcodes.
 static int ReplayJsFrameCost(Isolate* isolate,
                              const FrameSummary::JavaScriptFrameSummary& js) {
-  AbstractCode code = *js.abstract_code();
   PtrComprCageBase cage_base(isolate);
-  if (!code.IsBytecodeArray(cage_base)) return 0;
+  if (!js.abstract_code()->IsBytecodeArray(cage_base)) return 0;
   Object script = js.function()->shared().script();
   if (!script.IsScript() ||
       !Script::cast(script).record_replay_instrumented()) {
     return 0;
   }
-  BytecodeArray bytecode = code.GetBytecodeArray();
-  return ThreadLocalTop::ReplayJsFrameCost(bytecode.frame_size(),
-                                           bytecode.parameter_count());
+  interpreter::BytecodeArrayIterator bytecodes(
+      handle(js.abstract_code()->GetBytecodeArray(), isolate));
+  for (; !bytecodes.done(); bytecodes.Advance()) {
+    if (bytecodes.current_bytecode() ==
+        interpreter::Bytecode::kReplayIncJsFrameDepth) {
+      return static_cast<int>(bytecodes.GetIndexOperand(0));
+    }
+  }
+  return 0;
 }
 
 // Whether the function of a JS frame's summary handles an exception thrown

@@ -2342,12 +2342,6 @@ void BaselineCompiler::VisitRecordReplayIncExecutionProgressCounter() {
               __ FunctionOperand(), kInterpreterAccumulatorRegister);
 }
 
-// ThreadLocalTop::ReplayJsFrameCost of the function being compiled.
-static int ReplayJsFrameCost(const BytecodeArray& bytecode) {
-  return ThreadLocalTop::ReplayJsFrameCost(bytecode.frame_size(),
-                                           bytecode.parameter_count());
-}
-
 void BaselineCompiler::VisitReplayIncJsFrameDepth() {
 #if V8_TARGET_ARCH_X64
   BaselineAssembler::ScratchRegisterScope scratch_scope(&basm_);
@@ -2355,7 +2349,7 @@ void BaselineCompiler::VisitReplayIncJsFrameDepth() {
   ExternalReference depth_ref = ExternalReference::Create(
       IsolateAddressId::kReplayJsFrameDepthAddress, masm_.isolate());
   Operand depth = masm_.ExternalReferenceAsOperand(depth_ref, scratch);
-  masm_.addl(depth, Immediate(ReplayJsFrameCost(*bytecode_)));
+  masm_.addl(depth, Immediate(static_cast<int32_t>(Index(0))));
   masm_.cmpl(depth, Immediate(ThreadLocalTop::kReplayJsStackBudget));
   Label done;
   masm_.j(less, &done);
@@ -2371,7 +2365,7 @@ void BaselineCompiler::VisitReplayIncJsFrameDepth() {
     masm_.Mov(address, Operand(ExternalReference::Create(
                            IsolateAddressId::kReplayJsFrameDepthAddress,
                            masm_.isolate())));
-    int cost = ReplayJsFrameCost(*bytecode_);
+    int cost = static_cast<int>(Index(0));
     CHECK(is_uint24(cost));
     // Each in the 12 bits an instruction encodes, as no scratch register is
     // left.
@@ -2399,7 +2393,7 @@ void BaselineCompiler::VisitReplayDecJsFrameDepth() {
   ExternalReference depth_ref = ExternalReference::Create(
       IsolateAddressId::kReplayJsFrameDepthAddress, masm_.isolate());
   Operand depth = masm_.ExternalReferenceAsOperand(depth_ref, scratch);
-  masm_.subl(depth, Immediate(ReplayJsFrameCost(*bytecode_)));
+  masm_.subl(depth, Immediate(static_cast<int32_t>(Index(0))));
 #elif V8_TARGET_ARCH_ARM64
   BaselineAssembler::ScratchRegisterScope scratch_scope(&basm_);
   Register address = scratch_scope.AcquireScratch();
@@ -2407,7 +2401,7 @@ void BaselineCompiler::VisitReplayDecJsFrameDepth() {
   masm_.Mov(address, Operand(ExternalReference::Create(
                          IsolateAddressId::kReplayJsFrameDepthAddress,
                          masm_.isolate())));
-  int cost = ReplayJsFrameCost(*bytecode_);
+  int cost = static_cast<int>(Index(0));
   CHECK(is_uint24(cost));
   masm_.Ldr(depth, MemOperand(address));
   masm_.Sub(depth, depth, Operand(cost & 0xfff));

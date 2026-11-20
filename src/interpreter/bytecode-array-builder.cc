@@ -114,12 +114,7 @@ Handle<BytecodeArray> BytecodeArrayBuilder::ToBytecodeArray(IsolateT* isolate) {
 
   if (register_optimizer_) {
     register_optimizer_->Flush();
-    // A frame is charged by its registers when recording/replaying, see
-    // ThreadLocalTop::ReplayJsFrameCost: those the optimizer leaves in use
-    // depend on bytecodes that only a replay has.
-    if (!emit_record_replay_opcodes_) {
-      register_count = register_optimizer_->maxiumum_register_index() + 1;
-    }
+    register_count = register_optimizer_->maxiumum_register_index() + 1;
   }
 
   Handle<ByteArray> handler_table =
@@ -1539,7 +1534,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayTrackObjectId(Register o
 
 BytecodeArrayBuilder& BytecodeArrayBuilder::ReplayOnFrameEnter() {
   if (emit_record_replay_opcodes_) {
-    OutputReplayIncJsFrameDepth();
+    OutputReplayIncJsFrameDepth(replay_frame_cost_);
   }
   RecordReplayInstrumentation("main");
   return *this;
@@ -1548,7 +1543,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::ReplayOnFrameEnter() {
 BytecodeArrayBuilder& BytecodeArrayBuilder::ReplayOnFrameEnterGenerator(
     Register generator_object) {
   if (emit_record_replay_opcodes_) {
-    OutputReplayIncJsFrameDepth();
+    OutputReplayIncJsFrameDepth(replay_frame_cost_);
   }
   RecordReplayInstrumentationGenerator("generator", generator_object);
   return *this;
@@ -1556,7 +1551,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::ReplayOnFrameEnterGenerator(
 
 BytecodeArrayBuilder& BytecodeArrayBuilder::ReplayOnFrameExit() {
   if (emit_record_replay_opcodes_) {
-    OutputReplayDecJsFrameDepth();
+    OutputReplayDecJsFrameDepth(replay_frame_cost_);
   }
   RecordReplayInstrumentation("exit");
   return *this;
@@ -1565,7 +1560,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::ReplayOnFrameExit() {
 BytecodeArrayBuilder& BytecodeArrayBuilder::ReplayOnFrameReturn(
     Register return_value) {
   if (emit_record_replay_opcodes_) {
-    OutputReplayDecJsFrameDepth();
+    OutputReplayDecJsFrameDepth(replay_frame_cost_);
   }
   RecordReplayInstrumentationReturn("exit", return_value);
   return *this;

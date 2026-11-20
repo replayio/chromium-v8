@@ -2861,15 +2861,7 @@ IGNITION_HANDLER(ReplayIncJsFrameDepth, InterpreterAssembler) {
                                 isolate()));
   TNode<Int32T> depth =
       UncheckedCast<Int32T>(Load(MachineType::Int32(), depth_addr));
-  // ThreadLocalTop::ReplayJsFrameCost of this function.
-  TNode<HeapObject> bytecode_array =
-      UncheckedCast<HeapObject>(LoadRegister(Register::bytecode_array()));
-  TNode<Int32T> cost = Int32Add(
-      Int32Add(LoadObjectField<Int32T>(bytecode_array,
-                                       BytecodeArray::kFrameSizeOffset),
-               LoadObjectField<Int32T>(bytecode_array,
-                                       BytecodeArray::kParameterSizeOffset)),
-      Int32Constant(ThreadLocalTop::kReplayJsFrameOverhead));
+  TNode<Int32T> cost = Signed(BytecodeOperandIdxInt32(0));
   TNode<Int32T> new_depth = Int32Add(depth, cost);
   StoreNoWriteBarrier(MachineRepresentation::kWord32, depth_addr, new_depth);
 
@@ -2894,15 +2886,7 @@ IGNITION_HANDLER(ReplayDecJsFrameDepth, InterpreterAssembler) {
                                 isolate()));
   TNode<Int32T> depth =
       UncheckedCast<Int32T>(Load(MachineType::Int32(), depth_addr));
-  // ThreadLocalTop::ReplayJsFrameCost of this function.
-  TNode<HeapObject> bytecode_array =
-      UncheckedCast<HeapObject>(LoadRegister(Register::bytecode_array()));
-  TNode<Int32T> cost = Int32Add(
-      Int32Add(LoadObjectField<Int32T>(bytecode_array,
-                                       BytecodeArray::kFrameSizeOffset),
-               LoadObjectField<Int32T>(bytecode_array,
-                                       BytecodeArray::kParameterSizeOffset)),
-      Int32Constant(ThreadLocalTop::kReplayJsFrameOverhead));
+  TNode<Int32T> cost = Signed(BytecodeOperandIdxInt32(0));
   TNode<Int32T> new_depth = Int32Sub(depth, cost);
   StoreNoWriteBarrier(MachineRepresentation::kWord32, depth_addr, new_depth);
   Dispatch();

@@ -3703,7 +3703,7 @@ class ReplayIncrementAndCheckJsFrameDepth
                                               OpProperties::Throw() |
                                               OpProperties::DeferredCall();
 
-  // ThreadLocalTop::ReplayJsFrameCost of the function entered.
+  // The charge of the function entered, its bytecode's operand.
   int amount() const { return amount_; }
 
   DECL_NODE_INTERFACE()
@@ -3721,7 +3721,7 @@ class ReplayDecrementJsFrameDepth : public FixedInputNodeT<0, ReplayDecrementJsF
 
   static constexpr OpProperties kProperties = OpProperties::Writing();
 
-  // ThreadLocalTop::ReplayJsFrameCost of the function left.
+  // The charge of the function left, its bytecode's operand.
   int amount() const { return amount_; }
 
   DECL_NODE_INTERFACE()

@@ -330,27 +330,15 @@ static MaybeHandle<Object> RecordReplayBlockNonDeterministicUserJs(
 static std::string ReplayDiagStack(Isolate* isolate) {
   std::ostringstream os;
   int count = 0;
-  int sum = 0;
   for (JavaScriptFrameIterator it(isolate); !it.done(); it.Advance()) {
-    JavaScriptFrame* frame = it.frame();
-    SharedFunctionInfo shared = frame->function().shared();
-    if (!shared.HasBytecodeArray()) continue;
-    BytecodeArray bytecode = shared.GetBytecodeArray(isolate);
-    int cost = ThreadLocalTop::ReplayJsFrameCost(bytecode.frame_size(),
-                                                 bytecode.parameter_count());
-    Object script = shared.script();
-    bool instrumented =
-        script.IsScript() && Script::cast(script).record_replay_instrumented();
+    SharedFunctionInfo shared = it.frame()->function().shared();
     if (count < 8) {
       std::unique_ptr<char[]> name = shared.DebugNameCStr();
-      os << " " << name.get() << ":" << cost << (instrumented ? "i" : "u")
-         << (frame->is_unoptimized() ? "U" : "O");
+      os << " " << name.get() << (it.frame()->is_unoptimized() ? ":U" : ":O");
     }
     count++;
-    if (instrumented) sum += cost;
   }
-  return "n=" + std::to_string(count) + " sum=" + std::to_string(sum) +
-         os.str();
+  return "n=" + std::to_string(count) + os.str();
 }
 
 // Charges the native frames between JS code and the JS code C++ is entering

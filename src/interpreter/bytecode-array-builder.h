@@ -479,6 +479,10 @@ class V8_EXPORT_PRIVATE BytecodeArrayBuilder final {
                                                           int source_position = kNoSourcePosition);
   BytecodeArrayBuilder& RecordReplayTrackObjectId(Register object);
 
+  // What entering and leaving a frame of the function charges, see
+  // ThreadLocalTop::ReplayJsFrameCost.
+  void set_replay_frame_cost(int cost) { replay_frame_cost_ = cost; }
+
   BytecodeArrayBuilder& ReplayOnFrameEnter();
   BytecodeArrayBuilder& ReplayOnFrameEnterGenerator(Register generator_object);
   BytecodeArrayBuilder& ReplayOnFrameExit();
@@ -716,6 +720,7 @@ class V8_EXPORT_PRIVATE BytecodeArrayBuilder final {
   BytecodeSourceInfo deferred_source_info_;
   int most_recent_source_position_ = -1;
   bool emit_record_replay_opcodes_ = false;
+  int replay_frame_cost_ = 0;
   bool emit_record_replay_assert_values_ = false;
   std::unordered_set<int> record_replay_instrumentation_site_locations_;
   struct RecordReplayPendingBreakpoint {

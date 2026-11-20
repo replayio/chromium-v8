@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "src/execution/thread-local-top.h"
 #include "src/interpreter/bytecode-generator.h"
 
 #include <map>
@@ -1431,6 +1432,9 @@ void BytecodeGenerator::GenerateBytecodeBody() {
 
   builder()->RecordReplayOnProgress();
 
+  builder()->set_replay_frame_cost(ThreadLocalTop::ReplayJsFrameCost(
+      closure_scope()->ReplayDeclaredVariableCount(),
+      info()->num_parameters_including_this()));
   if (IsResumableFunction(literal->kind())) {
     builder()->ReplayOnFrameEnterGenerator(generator_object());
   } else {

@@ -35,18 +35,20 @@ class ThreadLocalTop {
   // recording and in its replays. The stack pointer cannot tell that place: the
   // stack a JS frame takes depends on the tier its function runs in, and the
   // stack in use where JS is entered on what called V8 and on how JS called
-  // it. replay_js_frame_depth_ counts bytes instead: each JS frame is charged
-  // what it takes in the interpreter (ReplayJsFrameCost), and each entry of JS
-  // from C++ a fixed amount (kReplayJsEntryCost). The stack overflows once
-  // that reaches the budget.
+  // it. Nor can the registers of a function's bytecode: a replay allocates its
+  // variables in contexts. replay_js_frame_depth_ counts bytes instead: each
+  // JS frame is charged by the parameters and variables its function declares
+  // (ReplayJsFrameCost), and each entry of JS from C++ a fixed amount
+  // (kReplayJsEntryCost). The stack overflows once that reaches the budget.
   static constexpr int kReplayJsStackBudget = 2 * 1024 * 1024;
 
   // What the native frames between JS code and the JS code V8 enters for it
   // take, as for a getter the runtime calls.
   static constexpr int kReplayJsEntryCost = 2 * 1024;
 
-  // What a JS frame takes besides its registers and parameters: the frame's
-  // fixed slots, and a builtin's frame between it and the JS frame it calls.
+  // What a JS frame takes besides its variables and parameters: the frame's
+  // fixed slots, registers of expressions, and a builtin's frame between it
+  // and the JS frame it calls.
   static constexpr int kReplayJsFrameOverhead = 22 * kSystemPointerSize;
 
   // The stack the isolate that has the budget may use: the budget, and as much
@@ -54,9 +56,11 @@ class ThreadLocalTop {
   // while that holds.
   static constexpr int kReplayStackSize = 2 * kReplayJsStackBudget;
 
-  // The charge for a frame of a function with the given BytecodeArray sizes.
-  static constexpr int ReplayJsFrameCost(int frame_size, int parameter_count) {
-    return frame_size + parameter_count * kSystemPointerSize +
+  // The charge for a frame of a function that declares as many variables and
+  // parameters: the operand of its ReplayIncJsFrameDepth bytecodes.
+  static constexpr int ReplayJsFrameCost(int variable_count,
+                                         int parameter_count) {
+    return (variable_count + parameter_count) * kSystemPointerSize +
            kReplayJsFrameOverhead;
   }
 
