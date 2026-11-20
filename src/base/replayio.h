@@ -28,7 +28,12 @@ inline bool CheckReplayOwned() {
 // says only that a pause is being served. Which commands may run user JS there
 // is the driver's choice per command (AllowSideEffects): an evaluation or a
 // property read the viewer asked for may, a describe (Pause.getObjectPreview)
-// may not, since it would change the state later commands of the pause see.
+// must not, since it would change the state later commands of the pause see.
+//
+// Only the sites that ask this enforce it: a C++ entry into a function of a
+// registered script (Execution's Invoke) and the inspector's reads while
+// describing (value-mirror.cc). Replay's own handler JS still runs, and a
+// property it reads itself reaches a page accessor as any JS read does.
 //
 // Replay's own code doesn't run the same way when recording and replaying.
 // Replay's inspector session is installed only when replaying (unless the
