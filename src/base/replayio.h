@@ -49,16 +49,25 @@ inline bool MustNotRunUserJS() {
          !v8::recordreplay::HasDivergedFromRecording();
 }
 
-// Whether reading |name| on |object| returns a stack the page has already
-// formatted: |name| is "stack", the read calls V8's own Error stack getter as an
-// own property of |object|, and the formatted stack is already stored there. The
-// read then formats nothing, so it runs no user JS and gives the string the
-// recording saw, which is what the read returns when recording and when nothing
-// is recorded at all. False for everything else, including an Error whose stack
-// has not been formatted yet: formatting it is what runs the page's code.
+// Whether reading |name| on |object| runs the page's code, which it must not
+// where MustNotRunUserJS() holds.
+//
+// The category is V8's own getters installed as an object's own accessor, which
+// a description does read: an accessor the page installed is not in it, since a
+// description reports a page getter rather than calling it. V8 declares which
+// of its own getters a read can have an effect through, on the template the
+// getter is an API function of, and the only one today is an Error's own
+// "stack", whose getter formats the stack with the page's
+// Error.prepareStackTrace.
+//
+// False for an Error whose stack is already stored, which the getter hands back
+// as it is, and for a page that formats stacks V8's way, where V8 builds the
+// string itself and the page's own read would get that same string. True for
+// any other getter V8 marks as having an effect, since nothing here knows how
+// to read one safely.
+//
 // Defined in src/replay/replayio.cc.
-bool ReadsFormattedErrorStack(v8::Local<v8::Object> object,
-                              v8::Local<v8::Name> name);
+bool ReadingRunsUserJS(v8::Local<v8::Object> object, v8::Local<v8::Name> name);
 
 // Marks nested code as replay-owned (IsInReplayCode). Independent of
 // AutoMaybeDisallowEvents; divergent replay-owned paths use both.

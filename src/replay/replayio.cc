@@ -62,69 +62,137 @@ v8::internal::MaybeHandle<v8::internal::String> RecordReplayStringHandle(
 
 namespace {
 
-// V8's own Error stack getter, as an Error's accessor pair holds it once the
-// template it is installed from has been instantiated.
-bool IsErrorStackGetter(v8::internal::Isolate* isolate,
-                        v8::internal::Tagged<v8::internal::Object> getter) {
+
+}  // namespace
+
+namespace {
+
+// Whether getting |name| on |receiver| reads a plain string: a data property up
+// the chain, or nothing at all, with no accessor, proxy, interceptor or access
+// check on the way and no value to convert.
+bool ReadsPlainString(
+    v8::internal::Isolate* isolate,
+    v8::internal::DirectHandle<v8::internal::JSReceiver> receiver,
+    v8::internal::DirectHandle<v8::internal::Name> name) {
+  v8::internal::LookupIterator it(isolate, receiver, name);
+  if (!it.IsFound()) {
+    return true;
+  }
+  if (it.state() != v8::internal::LookupIterator::DATA) {
+    return false;
+  }
+  return v8::internal::IsString(*it.GetDataValue());
+}
+
+// Whether reading an Error's own "stack" runs the page's code. The getter
+// formats the stack where none is stored yet, and formatting reaches the page
+// through its Error.prepareStackTrace, the lookup of that property on the Error
+// constructor, and the name and message V8's own formatter reads. A stack
+// already stored costs none of that, since the getter hands that string back.
+bool ErrorStackReadRunsUserJS(
+    v8::internal::Isolate* isolate,
+    v8::internal::DirectHandle<v8::internal::JSObject> error) {
+  v8::internal::ErrorUtils::StackPropertyLookupResult lookup =
+      v8::internal::ErrorUtils::GetErrorStackProperty(isolate, error);
+  if (v8::internal::IsErrorStackData(*lookup.error_stack)) {
+    if (v8::internal::Cast<v8::internal::ErrorStackData>(lookup.error_stack)
+            ->HasFormattedStack()) {
+      return false;
+    }
+  } else if (!v8::internal::IsFixedArray(*lookup.error_stack)) {
+    return false;
+  }
+
+  // An embedder callback formats in place of all of this, and what it runs is
+  // its own business. Chromium installs none, node does.
+  if (isolate->HasPrepareStackTraceCallback()) {
+    return true;
+  }
+  v8::internal::DirectHandle<v8::internal::NativeContext> error_context;
+  if (!error->GetCreationContext(isolate).ToHandle(&error_context)) {
+    return true;
+  }
+  v8::internal::DirectHandle<v8::internal::JSFunction> error_function(
+      error_context->error_function(), isolate);
+  v8::internal::LookupIterator it(
+      isolate, error_function,
+      isolate->factory()->InternalizeUtf8String("prepareStackTrace"));
+  if (it.IsFound()) {
+    if (it.state() != v8::internal::LookupIterator::DATA) {
+      return true;
+    }
+    if (v8::internal::IsJSFunction(*it.GetDataValue())) {
+      return true;
+    }
+  }
+
+  // Without one, V8 builds the stack out of the frames itself, reading the
+  // Error's name and message the way Error.prototype.toString does.
+  return !ReadsPlainString(isolate, error, isolate->factory()->name_string()) ||
+         !ReadsPlainString(isolate, error,
+                           isolate->factory()->message_string());
+}
+
+}  // namespace
+
+bool ReadingRunsUserJS(v8::Local<v8::Object> object,
+                       v8::Local<v8::Name> name) {
+  v8::internal::Isolate* isolate = v8::internal::Isolate::Current();
+  v8::internal::DirectHandle<v8::internal::JSReceiver> receiver =
+      Utils::OpenDirectHandle(*object);
+
+  // An own accessor of the object whose getter is one of V8's own, which is the
+  // whole category. A getter the page installed ends here: a description
+  // reports a page accessor rather than calling it.
+  v8::internal::PropertyKey key(isolate, Utils::OpenDirectHandle(*name));
+  if (key.is_element()) {
+    return false;
+  }
+  v8::internal::LookupIterator it(isolate, receiver, key,
+                                  v8::internal::LookupIterator::OWN);
+  if (!it.IsFound() || it.state() != v8::internal::LookupIterator::ACCESSOR) {
+    return false;
+  }
+  v8::internal::DirectHandle<v8::internal::Object> accessors =
+      it.GetAccessors();
+  if (!v8::internal::IsAccessorPair(*accessors)) {
+    return false;
+  }
+  v8::internal::Tagged<v8::internal::Object> getter =
+      v8::internal::Cast<v8::internal::AccessorPair>(*accessors)->getter();
   if (!v8::internal::IsJSFunction(getter)) {
     return false;
   }
   v8::internal::Tagged<v8::internal::SharedFunctionInfo> shared =
       v8::internal::Cast<v8::internal::JSFunction>(getter)->shared();
-  return shared->IsApiFunction() &&
-         shared->api_func_data() ==
-             *isolate->factory()->error_stack_getter_fun_template();
-}
-
-}  // namespace
-
-bool ReadsFormattedErrorStack(v8::Local<v8::Object> object,
-                              v8::Local<v8::Name> name) {
-  v8::internal::Isolate* isolate = v8::internal::Isolate::Current();
-
-  // Only an Error's own "stack". Checking the name first keeps the lookups
-  // below off every other builtin getter a description walks.
-  if (*Utils::OpenDirectHandle(*name) != *isolate->factory()->stack_string()) {
+  if (!shared->IsApiFunction()) {
     return false;
   }
-  v8::internal::DirectHandle<v8::internal::JSReceiver> receiver =
-      Utils::OpenDirectHandle(*object);
-  if (!v8::internal::IsJSObject(*receiver)) {
-    return false;
-  }
-  v8::internal::DirectHandle<v8::internal::JSObject> error =
-      v8::internal::Cast<v8::internal::JSObject>(receiver);
+  v8::internal::Tagged<v8::internal::FunctionTemplateInfo> api_func_data =
+      shared->api_func_data();
 
-  // V8's own Error stack getter, as an own property, so that reading "stack" on
-  // |object| really calls it: a page getter shadowing an inherited one, a proxy
-  // trap, an interceptor and an access check all end the lookup elsewhere.
-  v8::internal::LookupIterator it(isolate, error,
-                                  isolate->factory()->stack_string(), error,
-                                  v8::internal::LookupIterator::OWN);
-  if (it.state() != v8::internal::LookupIterator::ACCESSOR) {
-    return false;
-  }
-  v8::internal::DirectHandle<v8::internal::Object> accessors =
-      it.GetAccessors();
-  if (!v8::internal::IsAccessorPair(*accessors) ||
-      !IsErrorStackGetter(
-          isolate,
-          v8::internal::Cast<v8::internal::AccessorPair>(*accessors)
-              ->getter())) {
+  // V8 says which of its getters a read can have an effect through, on the
+  // template it builds them from, and the rest cost nothing to read.
+  if (!api_func_data->has_side_effects()) {
     return false;
   }
 
-  // The formatted stack is already stored, so the getter's
-  // ErrorUtils::GetFormattedStack hands that back instead of calling
-  // FormatStackTrace, which is what reaches the page's
-  // Error.prepareStackTrace.
-  v8::internal::ErrorUtils::StackPropertyLookupResult lookup =
-      v8::internal::ErrorUtils::GetErrorStackProperty(isolate, error);
-  if (v8::internal::IsErrorStackData(*lookup.error_stack)) {
-    return v8::internal::Cast<v8::internal::ErrorStackData>(lookup.error_stack)
-        ->HasFormattedStack();
+  // What a read costs past that gate is particular to the getter, so each one
+  // V8 marks this way needs its own answer. V8's own general answer is no help:
+  // Debug::PerformSideEffectCheckForCallback goes by the declared type, so it
+  // refuses to read a page's Error whatever state it is in, and the fork
+  // short-circuits that check altogether while replaying with events
+  // disallowed.
+  if (api_func_data ==
+      *isolate->factory()->error_stack_getter_fun_template()) {
+    return v8::internal::IsJSObject(*receiver) &&
+           ErrorStackReadRunsUserJS(
+               isolate, v8::internal::Cast<v8::internal::JSObject>(receiver));
   }
-  return v8::internal::IsString(*lookup.error_stack);
+
+  // A getter V8 marks as having an effect with no answer here. Reading it is
+  // assumed to reach the page.
+  return true;
 }
 
 }  // namespace replayio
