@@ -2861,12 +2861,13 @@ IGNITION_HANDLER(ReplayIncJsFrameDepth, InterpreterAssembler) {
                                 isolate()));
   TNode<Int32T> depth =
       UncheckedCast<Int32T>(Load(MachineType::Int32(), depth_addr));
-  TNode<Int32T> new_depth = Int32Add(depth, Int32Constant(1));
+  TNode<Int32T> cost = Signed(BytecodeOperandIdxInt32(0));
+  TNode<Int32T> new_depth = Int32Add(depth, cost);
   StoreNoWriteBarrier(MachineRepresentation::kWord32, depth_addr, new_depth);
 
   Label ok(this), overflow(this, Label::kDeferred);
   GotoIf(Int32GreaterThanOrEqual(
-             new_depth, Int32Constant(ThreadLocalTop::kReplayMaxJsFrameDepth)),
+             new_depth, Int32Constant(ThreadLocalTop::kReplayJsStackBudget)),
          &overflow);
   Goto(&ok);
 
@@ -2885,8 +2886,29 @@ IGNITION_HANDLER(ReplayDecJsFrameDepth, InterpreterAssembler) {
                                 isolate()));
   TNode<Int32T> depth =
       UncheckedCast<Int32T>(Load(MachineType::Int32(), depth_addr));
-  TNode<Int32T> new_depth = Int32Sub(depth, Int32Constant(1));
+  TNode<Int32T> cost = Signed(BytecodeOperandIdxInt32(0));
+  TNode<Int32T> new_depth = Int32Sub(depth, cost);
   StoreNoWriteBarrier(MachineRepresentation::kWord32, depth_addr, new_depth);
+  Dispatch();
+}
+
+IGNITION_HANDLER(ReplaySaveJsFrameDepth, InterpreterAssembler) {
+  TNode<ExternalReference> depth_addr = ExternalConstant(
+      ExternalReference::Create(IsolateAddressId::kReplayJsFrameDepthAddress,
+                                isolate()));
+  TNode<Int32T> depth =
+      UncheckedCast<Int32T>(Load(MachineType::Int32(), depth_addr));
+  StoreRegisterAtOperandIndex(SmiFromInt32(depth), 0);
+  Dispatch();
+}
+
+IGNITION_HANDLER(ReplayRestoreJsFrameDepth, InterpreterAssembler) {
+  TNode<ExternalReference> depth_addr = ExternalConstant(
+      ExternalReference::Create(IsolateAddressId::kReplayJsFrameDepthAddress,
+                                isolate()));
+  TNode<Smi> depth = CAST(LoadRegisterAtOperandIndex(0));
+  StoreNoWriteBarrier(MachineRepresentation::kWord32, depth_addr,
+                      SmiToInt32(depth));
   Dispatch();
 }
 

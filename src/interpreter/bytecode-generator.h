@@ -5,6 +5,8 @@
 #ifndef V8_INTERPRETER_BYTECODE_GENERATOR_H_
 #define V8_INTERPRETER_BYTECODE_GENERATOR_H_
 
+#include <vector>
+
 #include "src/ast/ast.h"
 #include "src/execution/isolate.h"
 #include "src/interpreter/bytecode-array-builder.h"
@@ -560,6 +562,10 @@ class BytecodeGenerator final : public AstVisitor<BytecodeGenerator> {
   // seeing an assignment to one of its properties. This is emitted at
   // most once per function.
   bool record_replay_has_track_this_ = false;
+
+  // Of the try blocks being generated, the registers that keep what the stack
+  // is charged, see BytecodeArrayBuilder::ReplaySaveJsFrameDepth.
+  std::vector<Register> replay_depth_registers_;
 
   LoopScope* current_loop_scope_;
 

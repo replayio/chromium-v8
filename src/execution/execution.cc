@@ -323,10 +323,52 @@ static MaybeHandle<Object> RecordReplayBlockNonDeterministicUserJs(
   return isolate->factory()->undefined_value();
 }
 
+// Charges the native frames between JS code and the JS code C++ is entering
+// for it, see ThreadLocalTop::kReplayJsStackBudget. However that JS code is
+// left, what was charged before it is charged again. Replay's own code is not
+// the recording's: it is entered wherever a replay runs it, also where the
+// stack has overflowed, and charges nothing.
+class V8_NODISCARD ReplayJsEntryScope {
+ public:
+  explicit ReplayJsEntryScope(Isolate* isolate)
+      : isolate_(isolate),
+        charges_(isolate->replay_stack_budget() &&
+                 !recordreplay::IsInReplayCode() &&
+                 !recordreplay::AreEventsDisallowed()),
+        depth_(isolate->replay_js_frame_depth()) {
+    if (!charges_) return;
+    isolate_->set_replay_js_frame_depth(depth_ +
+                                        ThreadLocalTop::kReplayJsEntryCost);
+  }
+
+  ~ReplayJsEntryScope() {
+    if (!isolate_->replay_stack_budget()) return;
+    isolate_->set_replay_js_frame_depth(depth_);
+  }
+
+  bool HasOverflowed() const {
+    return charges_ && isolate_->replay_js_frame_depth() >=
+                           ThreadLocalTop::kReplayJsStackBudget;
+  }
+
+ private:
+  Isolate* const isolate_;
+  const bool charges_;
+  const int depth_;
+};
+
 V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
                                                  const InvokeParams& params) {
   RCS_SCOPE(isolate, RuntimeCallCounterId::kInvoke);
   RecordReplayScrubDivergentProgressScope scrub_divergent_progress;
+  ReplayJsEntryScope replay_js_entry(isolate);
+  if (replay_js_entry.HasOverflowed()) {
+    isolate->StackOverflow();
+    if (params.message_handling == Execution::MessageHandling::kReport) {
+      isolate->ReportPendingMessages();
+    }
+    return MaybeHandle<Object>();
+  }
   DCHECK(!params.receiver->IsJSGlobalObject());
   DCHECK_LE(params.argc, FixedArray::kMaxLength);
 
