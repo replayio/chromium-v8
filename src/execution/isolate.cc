@@ -1588,16 +1588,7 @@ bool Isolate::MayAccess(Handle<Context> accessing_context,
   }
 }
 
-static bool gHasPrintedStack = false;
-
 Object Isolate::StackOverflow() {
-  if (recordreplay::IsRecordingOrReplaying() && !gHasPrintedStack) {
-    gHasPrintedStack = true;
-    std::stringstream stack;
-    PrintCurrentStackTrace(stack);
-    recordreplay::Print("Stack overflow: %s", stack.str().c_str());
-  }
-
   // Whoever calls this method should not have overflown the stack limit by too
   // much. Otherwise we risk actually running out of stack space.
   // We allow for up to 8kB overflow, because we typically allow up to 4KB
