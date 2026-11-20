@@ -5471,9 +5471,6 @@ void JSPromise::set_async_task_id(int id) {
   set_flags(AsyncTaskIdBits::update(flags(), id));
 }
 
-
-void AddPromiseDependencyGraphAdoption(Isolate* isolate, Handle<Object> promise, Handle<Object> adoption);
-
 // static
 Handle<Object> JSPromise::Fulfill(Handle<JSPromise> promise,
                                   Handle<Object> value) {
@@ -5502,7 +5499,7 @@ Handle<Object> JSPromise::Fulfill(Handle<JSPromise> promise,
   promise->set_status(Promise::kFulfilled);
 
   // 7. Return TriggerPromiseReactions(reactions, value).
-  return TriggerPromiseReactions(isolate, reactions, value,
+  return TriggerPromiseReactions(isolate, promise, reactions, value,
                                  PromiseReaction::kFulfill);
 }
 
@@ -5555,7 +5552,7 @@ Handle<Object> JSPromise::Reject(Handle<JSPromise> promise,
   }
 
   // 8. Return TriggerPromiseReactions(reactions, reason).
-  return TriggerPromiseReactions(isolate, reactions, reason,
+  return TriggerPromiseReactions(isolate, promise, reactions, reason,
                                  PromiseReaction::kReject);
 }
 
@@ -5662,7 +5659,19 @@ MaybeHandle<Object> JSPromise::Resolve(Handle<JSPromise> promise,
 }
 
 // static
+MaybeHandle<JSPromise> JSPromise::ReactionPromise(
+    Isolate* isolate, Handle<Object> promise_or_capability) {
+  Handle<Object> promise = promise_or_capability;
+  if (promise->IsPromiseCapability()) {
+    promise = handle(PromiseCapability::cast(*promise).promise(), isolate);
+  }
+  if (!promise->IsJSPromise()) return {};
+  return Handle<JSPromise>::cast(promise);
+}
+
+// static
 Handle<Object> JSPromise::TriggerPromiseReactions(Isolate* isolate,
+                                                  Handle<JSPromise> promise,
                                                   Handle<Object> reactions,
                                                   Handle<Object> argument,
                                                   PromiseReaction::Type type) {
@@ -5682,6 +5691,10 @@ Handle<Object> JSPromise::TriggerPromiseReactions(Isolate* isolate,
     }
     reactions = handle(reversed, isolate);
   }
+
+  int reaction_settle_node_id = RecordReplayReportsPromises()
+                                    ? RecordReplayOnPromiseSettle(isolate, promise)
+                                    : 0;
 
   // Morph the {reactions} into PromiseReactionJobTasks
   // and push them onto the microtask queue.
@@ -5763,14 +5776,25 @@ Handle<Object> JSPromise::TriggerPromiseReactions(Isolate* isolate,
                                kContinuationPreservedEmbedderDataOffset));
     }
 
-    MicrotaskQueue* microtask_queue = handler_context->microtask_queue();
-    if (microtask_queue) {
-      microtask_queue->EnqueueMicrotask(
-          *Handle<PromiseReactionJobTask>::cast(task));
-    }
+    EnqueueReactionJob(isolate, Handle<PromiseReactionJobTask>::cast(task),
+                       reaction_settle_node_id);
   }
 
   return isolate->factory()->undefined_value();
+}
+
+// static
+void JSPromise::EnqueueReactionJob(Isolate* isolate,
+                                   Handle<PromiseReactionJobTask> task,
+                                   int reaction_settle_node_id) {
+  MicrotaskQueue* microtask_queue =
+      task->context().native_context().microtask_queue();
+  // None once the context shut down: the job is dropped.
+  if (!microtask_queue) return;
+  if (RecordReplayReportsPromises()) {
+    RecordReplayOnPromiseReactionJob(isolate, reaction_settle_node_id, task);
+  }
+  microtask_queue->EnqueueMicrotask(*task);
 }
 
 template <typename Derived, typename Shape>

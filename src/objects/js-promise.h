@@ -65,6 +65,17 @@ class JSPromise
   V8_WARN_UNUSED_RESULT static MaybeHandle<Object> Resolve(
       Handle<JSPromise> promise, Handle<Object> resolution);
 
+  // The JSPromise of a reaction's promise_or_capability, which the promise
+  // hooks of its job report; empty if there is none.
+  static MaybeHandle<JSPromise> ReactionPromise(
+      Isolate* isolate, Handle<Object> promise_or_capability);
+
+  // Enqueues the job on its context's microtask queue, if any, and reports it
+  // to the dependency graph with the settle that triggered it.
+  static void EnqueueReactionJob(Isolate* isolate,
+                                 Handle<PromiseReactionJobTask> task,
+                                 int reaction_settle_node_id);
+
   // Dispatched behavior.
   DECL_PRINTER(JSPromise)
   DECL_VERIFIER(JSPromise)
@@ -82,6 +93,7 @@ class JSPromise
  private:
   // ES section #sec-triggerpromisereactions
   static Handle<Object> TriggerPromiseReactions(Isolate* isolate,
+                                                Handle<JSPromise> promise,
                                                 Handle<Object> reactions,
                                                 Handle<Object> argument,
                                                 PromiseReaction::Type type);
