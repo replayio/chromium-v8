@@ -4,11 +4,8 @@
 
 #include "src/execution/execution.h"
 
-#include <sstream>
-
 #include "src/api/api-inl.h"
 #include "src/debug/debug.h"
-#include "src/execution/frames-inl.h"
 #include "src/execution/frames.h"
 #include "src/execution/isolate-inl.h"
 #include "src/execution/vm-state-inl.h"
@@ -326,21 +323,6 @@ static MaybeHandle<Object> RecordReplayBlockNonDeterministicUserJs(
   return isolate->factory()->undefined_value();
 }
 
-// DIAGNOSTIC
-static std::string ReplayDiagStack(Isolate* isolate) {
-  std::ostringstream os;
-  int count = 0;
-  for (JavaScriptFrameIterator it(isolate); !it.done(); it.Advance()) {
-    SharedFunctionInfo shared = it.frame()->function().shared();
-    if (count < 8) {
-      std::unique_ptr<char[]> name = shared.DebugNameCStr();
-      os << " " << name.get() << (it.frame()->is_unoptimized() ? ":U" : ":O");
-    }
-    count++;
-  }
-  return "n=" + std::to_string(count) + os.str();
-}
-
 // Charges the native frames between JS code and the JS code C++ is entering
 // for it, see ThreadLocalTop::kReplayJsStackBudget. However that JS code is
 // left, what was charged before it is charged again.
@@ -349,12 +331,6 @@ class V8_NODISCARD ReplayJsEntryScope {
   explicit ReplayJsEntryScope(Isolate* isolate)
       : isolate_(isolate), depth_(isolate->replay_js_frame_depth()) {
     if (!isolate_->replay_stack_budget()) return;
-    // DIAGNOSTIC
-    if (depth_ < 64 * 1024) {
-      recordreplay::AssertMaybeEventsDisallowed(
-          "[DIAG] JsEntry depth=%d %s", depth_,
-          ReplayDiagStack(isolate_).c_str());
-    }
     isolate_->set_replay_js_frame_depth(depth_ +
                                         ThreadLocalTop::kReplayJsEntryCost);
   }
