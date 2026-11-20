@@ -331,6 +331,9 @@ class V8_NODISCARD ReplayJsEntryScope {
   explicit ReplayJsEntryScope(Isolate* isolate)
       : isolate_(isolate), depth_(isolate->replay_js_frame_depth()) {
     if (!isolate_->replay_stack_budget()) return;
+    // DIAGNOSTIC
+    recordreplay::AssertMaybeEventsDisallowed("[DIAG] JsEntry depth=%d",
+                                              depth_);
     isolate_->set_replay_js_frame_depth(depth_ +
                                         ThreadLocalTop::kReplayJsEntryCost);
   }

@@ -1589,6 +1589,13 @@ bool Isolate::MayAccess(Handle<Context> accessing_context,
 }
 
 Object Isolate::StackOverflow() {
+  // DIAGNOSTIC
+  recordreplay::AssertMaybeEventsDisallowed(
+      "[DIAG] StackOverflow depth=%d room=%d budget=%d", replay_js_frame_depth(),
+      static_cast<int>((GetCurrentStackPosition() -
+                        stack_guard()->real_climit()) /
+                       1024),
+      static_cast<int>(replay_stack_budget_));
   // Whoever calls this method should not have overflown the stack limit by too
   // much. Otherwise we risk actually running out of stack space.
   // We allow for up to 8kB overflow, because we typically allow up to 4KB
@@ -2071,6 +2078,10 @@ static void ReplaySyncJsFrameDepth(Isolate* isolate) {
       }
     }
   }
+  // DIAGNOSTIC
+  recordreplay::AssertMaybeEventsDisallowed(
+      "[DIAG] ReplaySyncJsFrameDepth above=%d before=%d after=%d", above,
+      isolate->replay_js_frame_depth(), depth);
   isolate->set_replay_js_frame_depth(depth);
 }
 
