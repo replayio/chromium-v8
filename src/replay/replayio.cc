@@ -56,12 +56,26 @@ bool ReadsPlainString(v8::internal::Isolate* isolate,
   return it.GetDataValue()->IsString();
 }
 
-// Whether formatting this Error's stack runs the page's code: a
-// prepareStackTrace function for V8 to call, or the page standing in the way
-// of the reads V8's own formatter makes.
-bool FormattingStackRunsUserJS(
+// Whether reading an Error's own "stack" runs the page's code. The getter
+// formats the stack where none is stored yet, and formatting reaches the page
+// through its Error.prepareStackTrace, the lookup of that property on the Error
+// constructor, and the name and message V8's own formatter reads. A stack
+// already stored costs none of that, since the getter hands that string back.
+bool ErrorStackReadRunsUserJS(
     v8::internal::Isolate* isolate,
     v8::internal::Handle<v8::internal::JSObject> error) {
+  v8::internal::Handle<v8::internal::Object> error_stack =
+      v8::internal::JSReceiver::GetDataProperty(
+          isolate, error, isolate->factory()->error_stack_symbol());
+  if (error_stack->IsErrorStackData()) {
+    if (v8::internal::Handle<v8::internal::ErrorStackData>::cast(error_stack)
+            ->HasFormattedStack()) {
+      return false;
+    }
+  } else if (!error_stack->IsFixedArray()) {
+    return false;
+  }
+
   // An embedder callback formats in place of all of this, and what it runs is
   // its own business. Chromium installs none, node does.
   if (isolate->HasPrepareStackTraceCallback()) {
@@ -131,31 +145,22 @@ bool ReadingRunsUserJS(v8::Local<v8::Object> object,
     return false;
   }
 
+  // What a read costs past that gate is particular to the accessor, so each one
+  // V8 marks this way needs its own answer. V8's own general answer is no help:
+  // Debug::PerformSideEffectCheck goes by the declared type and allows
+  // kHasSideEffectToReceiver only for an object created during the evaluation,
+  // so it refuses to read a page's Error whatever state it is in, and the fork
+  // short-circuits that check altogether while replaying with events
+  // disallowed.
   if (*accessor == *isolate->factory()->error_stack_accessor()) {
-    if (!receiver->IsJSObject()) {
-      return false;
-    }
-    v8::internal::Handle<v8::internal::JSObject> error =
-        v8::internal::Handle<v8::internal::JSObject>::cast(receiver);
-
-    // The shapes ErrorUtils::GetFormattedStack formats. A stack already stored
-    // costs none of that, since the getter hands the stored string back.
-    v8::internal::Handle<v8::internal::Object> error_stack =
-        v8::internal::JSReceiver::GetDataProperty(
-            isolate, error, isolate->factory()->error_stack_symbol());
-    bool formats;
-    if (error_stack->IsErrorStackData()) {
-      formats = !v8::internal::Handle<v8::internal::ErrorStackData>::cast(
-                     error_stack)
-                     ->HasFormattedStack();
-    } else {
-      formats = error_stack->IsFixedArray();
-    }
-    return formats && FormattingStackRunsUserJS(isolate, error);
+    return receiver->IsJSObject() &&
+           ErrorStackReadRunsUserJS(
+               isolate,
+               v8::internal::Handle<v8::internal::JSObject>::cast(receiver));
   }
 
-  // Some other accessor V8 marks as having an effect, which nothing here knows
-  // how to read safely. Reading it is assumed to reach the page.
+  // An accessor V8 marks as having an effect with no answer here. Reading it is
+  // assumed to reach the page.
   return true;
 }
 
