@@ -2020,6 +2020,40 @@ static int ReplayJsFrameCost(Isolate* isolate,
                                            bytecode.parameter_count());
 }
 
+// Whether the function of a JS frame's summary handles an exception thrown
+// where the summary is in its bytecode.
+static bool ReplayHandlesException(
+    Isolate* isolate, const FrameSummary::JavaScriptFrameSummary& js) {
+  HandlerTable table(js.abstract_code()->GetBytecodeArray());
+  return table.LookupRange(js.code_offset(), nullptr, nullptr) != -1;
+}
+
+// The charges of the functions that an exception leaves in the frame of its
+// handler: an optimized frame's function has others inlined, and the handler
+// is that of the innermost one that handles where it is, as it is without
+// inlining. A builtin continues in such a frame without bytecode: either it
+// handles the exception, or a function further out does.
+static int ReplayInlinedCostsLeft(Isolate* isolate,
+                                  const std::vector<FrameSummary>& summaries) {
+  PtrComprCageBase cage_base(isolate);
+  int left = 0;
+  int inner = 0;
+  for (auto summary = summaries.rbegin(); summary != summaries.rend();
+       ++summary) {
+    if (!summary->IsJavaScript()) continue;
+    const FrameSummary::JavaScriptFrameSummary& js = summary->AsJavaScript();
+    if (!js.abstract_code()->IsBytecodeArray(cage_base)) {
+      left += inner;
+      inner = 0;
+    } else if (ReplayHandlesException(isolate, js)) {
+      return left + inner;
+    } else {
+      inner += ReplayJsFrameCost(isolate, js);
+    }
+  }
+  return left;
+}
+
 // Takes back the charges of the JS frames an exception leaves on its way to
 // the pending handler.
 static void ReplaySyncJsFrameDepth(Isolate* isolate) {
@@ -2030,12 +2064,16 @@ static void ReplaySyncJsFrameDepth(Isolate* isolate) {
       isolate->thread_local_top()->num_frames_above_pending_handler_);
   int depth = isolate->replay_js_frame_depth();
   int index = 0;
-  for (StackFrameIterator it(isolate); !it.done() && index < above;
+  for (StackFrameIterator it(isolate); !it.done() && index <= above;
        it.Advance(), index++) {
     StackFrame* frame = it.frame();
     if (!frame->is_java_script()) continue;
     std::vector<FrameSummary> summaries;
     CommonFrame::cast(frame)->Summarize(&summaries);
+    if (index == above) {
+      depth -= ReplayInlinedCostsLeft(isolate, summaries);
+      break;
+    }
     for (const FrameSummary& summary : summaries) {
       if (summary.IsJavaScript()) {
         depth -= ReplayJsFrameCost(isolate, summary.AsJavaScript());
