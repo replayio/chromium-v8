@@ -22,7 +22,7 @@ extern "C" int V8RecordReplayDependencyGraphExecutionNode();
 namespace v8 {
 namespace internal {
 
-extern bool RecordReplayIsDivergentUserJSWithoutPause(const SharedFunctionInfo& shared);
+extern bool RecordReplayMustNotRunUserFunction(const SharedFunctionInfo& shared);
 extern bool gRecordReplayIsRecordingOrReplaying;
 extern bool gRecordReplayHasCheckpoint;
 extern void RecordReplayBeforeInvoke(Isolate* isolate, Handle<JSFunction> function);
@@ -310,16 +310,29 @@ static std::string GetFunctionLocationInfo(Isolate* isolate, Handle<JSFunction> 
   return os.str();
 }
 
-// Block C++→JS entry that can run registered user JS while events are disallowed.
-static MaybeHandle<Object> RecordReplayBlockNonDeterministicUserJs(
+static bool gHasPrintedBlockedUserJSStack = false;
+
+// Block C++→JS entry into registered user JS where it must not run
+// (replayio::MustNotRunUserJS).
+static MaybeHandle<Object> RecordReplayBlockUserJS(
     Isolate* isolate, const char* kind, const std::string& detail) {
+  // Every block is reported with the function it blocked. Only the first one
+  // in a process carries the JS stack, since a pause can block per described
+  // value.
   std::stringstream stack;
-  isolate->PrintCurrentStackTrace(stack);
-  recordreplay::Warning("NonDeterministicUserJSBlocked",
-                        {{"trigger", kind},
-                         {"progress", *gProgressCounter},
-                         {"detail", detail},
-                         {"jsStack", stack.str()}});
+  if (!gHasPrintedBlockedUserJSStack) {
+    gHasPrintedBlockedUserJSStack = true;
+    isolate->PrintCurrentStackTrace(stack);
+  }
+  // The kind predates blocking in pauses, where the call is disallowed rather
+  // than non-deterministic. |inPause| says which.
+  recordreplay::Warning(
+      "NonDeterministicUserJSBlocked",
+      {{"trigger", kind},
+       {"inPause", recordreplay::HasDivergedFromRecording()},
+       {"progress", *gProgressCounter},
+       {"detail", detail},
+       {"jsStack", stack.str()}});
   return isolate->factory()->undefined_value();
 }
 
@@ -469,11 +482,12 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
     return isolate->factory()->undefined_value();
   }
 
-  // User JS must not run on divergent paths unless paused.
+  // User JS must not run from Replay's own code, unless a pause command
+  // allows side effects.
   if (params.target->IsJSFunction()) {
     Handle<JSFunction> function = Handle<JSFunction>::cast(params.target);
-    if (RecordReplayIsDivergentUserJSWithoutPause(function->shared())) {
-      return RecordReplayBlockNonDeterministicUserJs(
+    if (RecordReplayMustNotRunUserFunction(function->shared())) {
+      return RecordReplayBlockUserJS(
           isolate, "JSInvoke", GetFunctionLocationInfo(isolate, function));
     }
   }
