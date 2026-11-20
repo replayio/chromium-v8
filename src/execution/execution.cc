@@ -4,8 +4,11 @@
 
 #include "src/execution/execution.h"
 
+#include <sstream>
+
 #include "src/api/api-inl.h"
 #include "src/debug/debug.h"
+#include "src/execution/frames-inl.h"
 #include "src/execution/frames.h"
 #include "src/execution/isolate-inl.h"
 #include "src/execution/vm-state-inl.h"
@@ -323,6 +326,33 @@ static MaybeHandle<Object> RecordReplayBlockNonDeterministicUserJs(
   return isolate->factory()->undefined_value();
 }
 
+// DIAGNOSTIC
+static std::string ReplayDiagStack(Isolate* isolate) {
+  std::ostringstream os;
+  int count = 0;
+  int sum = 0;
+  for (JavaScriptFrameIterator it(isolate); !it.done(); it.Advance()) {
+    JavaScriptFrame* frame = it.frame();
+    SharedFunctionInfo shared = frame->function().shared();
+    if (!shared.HasBytecodeArray()) continue;
+    BytecodeArray bytecode = shared.GetBytecodeArray(isolate);
+    int cost = ThreadLocalTop::ReplayJsFrameCost(bytecode.frame_size(),
+                                                 bytecode.parameter_count());
+    Object script = shared.script();
+    bool instrumented =
+        script.IsScript() && Script::cast(script).record_replay_instrumented();
+    if (count < 8) {
+      std::unique_ptr<char[]> name = shared.DebugNameCStr();
+      os << " " << name.get() << ":" << cost << (instrumented ? "i" : "u")
+         << (frame->is_unoptimized() ? "U" : "O");
+    }
+    count++;
+    if (instrumented) sum += cost;
+  }
+  return "n=" + std::to_string(count) + " sum=" + std::to_string(sum) +
+         os.str();
+}
+
 // Charges the native frames between JS code and the JS code C++ is entering
 // for it, see ThreadLocalTop::kReplayJsStackBudget. However that JS code is
 // left, what was charged before it is charged again.
@@ -332,8 +362,11 @@ class V8_NODISCARD ReplayJsEntryScope {
       : isolate_(isolate), depth_(isolate->replay_js_frame_depth()) {
     if (!isolate_->replay_stack_budget()) return;
     // DIAGNOSTIC
-    recordreplay::AssertMaybeEventsDisallowed("[DIAG] JsEntry depth=%d",
-                                              depth_);
+    if (depth_ < 64 * 1024) {
+      recordreplay::AssertMaybeEventsDisallowed(
+          "[DIAG] JsEntry depth=%d %s", depth_,
+          ReplayDiagStack(isolate_).c_str());
+    }
     isolate_->set_replay_js_frame_depth(depth_ +
                                         ThreadLocalTop::kReplayJsEntryCost);
   }
