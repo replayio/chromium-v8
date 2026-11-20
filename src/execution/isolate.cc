@@ -41,7 +41,6 @@
 #include "src/debug/debug-frames.h"
 #if V8_ENABLE_WEBASSEMBLY
 #include "src/debug/debug-wasm-objects.h"
-#include "src/interpreter/bytecode-array-iterator.h"
 #include "src/wasm/stacks.h"
 #endif  // V8_ENABLE_WEBASSEMBLY
 #include "src/debug/debug.h"
@@ -72,6 +71,7 @@
 #include "src/init/bootstrapper.h"
 #include "src/init/setup-isolate.h"
 #include "src/init/v8.h"
+#include "src/interpreter/bytecode-array-iterator.h"
 #include "src/interpreter/interpreter.h"
 #include "src/libsampler/sampler.h"
 #include "src/logging/counters.h"

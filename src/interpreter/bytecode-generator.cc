@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "src/execution/thread-local-top.h"
 #include "src/interpreter/bytecode-generator.h"
 
 #include <map>
@@ -19,6 +18,7 @@
 #include "src/codegen/unoptimized-compilation-info.h"
 #include "src/common/globals.h"
 #include "src/compiler-dispatcher/lazy-compile-dispatcher.h"
+#include "src/execution/thread-local-top.h"
 #include "src/heap/parked-scope.h"
 #include "src/interpreter/bytecode-flags.h"
 #include "src/interpreter/bytecode-jump-table.h"
