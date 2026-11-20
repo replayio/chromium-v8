@@ -2019,8 +2019,14 @@ bool Isolate::ReplayStackBudgetExceeded() {
          ThreadLocalTop::kReplayJsStackBudget;
 }
 
-static int ReplayJsFrameCost(Isolate* isolate, JSFunction function) {
-  BytecodeArray bytecode = function.shared().GetBytecodeArray(isolate);
+// What entering the function of a JS frame's summary charged: nothing where a
+// builtin continues in an optimized frame.
+static int ReplayJsFrameCost(Isolate* isolate,
+                             const FrameSummary::JavaScriptFrameSummary& js) {
+  AbstractCode code = *js.abstract_code();
+  PtrComprCageBase cage_base(isolate);
+  if (!code.IsBytecodeArray(cage_base)) return 0;
+  BytecodeArray bytecode = code.GetBytecodeArray();
   return ThreadLocalTop::ReplayJsFrameCost(bytecode.frame_size(),
                                            bytecode.parameter_count());
 }
@@ -2045,15 +2051,9 @@ static void ReplaySyncJsFrameDepth(Isolate* isolate) {
     if (!frame->is_java_script()) continue;
     std::vector<FrameSummary> summaries;
     CommonFrame::cast(frame)->Summarize(&summaries);
-    if (summaries.empty()) {
-      depth += ReplayJsFrameCost(isolate,
-                                 JavaScriptFrame::cast(frame)->function());
-    } else {
-      for (const FrameSummary& summary : summaries) {
-        if (summary.IsJavaScript()) {
-          depth +=
-              ReplayJsFrameCost(isolate, *summary.AsJavaScript().function());
-        }
+    for (const FrameSummary& summary : summaries) {
+      if (summary.IsJavaScript()) {
+        depth += ReplayJsFrameCost(isolate, summary.AsJavaScript());
       }
     }
   }
