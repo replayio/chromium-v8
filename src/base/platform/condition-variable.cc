@@ -10,8 +10,6 @@
 #include "absl/time/time.h"
 #include "src/base/platform/time.h"
 
-#include "replayio.h"
-
 #if V8_OS_WIN
 #include <windows.h>
 #endif
@@ -32,6 +30,12 @@ void ConditionVariable::Wait(Mutex* mutex) {
   mutex->AssertUnheldAndMark();
 }
 
+// No record/replay intervention of its own. The relative duration this hands to
+// absl becomes clock reads in synchronization_internal::KernelTimeout, and the
+// driver must not record them: a replay serves the timed futex wait against the
+// host clock, so a deadline built from replayed clock values would have passed
+// already and the wait would return at once. Those reads are passed through
+// where absl makes them, in absl/synchronization/internal/kernel_timeout.cc.
 bool ConditionVariable::WaitFor(Mutex* mutex, const TimeDelta& rel_time) {
   uint64_t time = rel_time.InNanoseconds();
   absl::Duration duration = absl::Nanoseconds(time);

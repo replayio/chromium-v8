@@ -51,14 +51,27 @@ bool RecursiveMutex::TryLock() {
   return false;
 }
 
-//extern "C" void V8RecordReplayAddOrderedSRWLock(const char* name, void* lock);
-
 Mutex::Mutex(const char* ordered_name) {
-  if (ordered_name) {
-    fprintf(stderr, "FIXME Mutex::Mutex Crashing...\n");
-    CHECK(0);
-    //V8RecordReplayAddOrderedSRWLock(ordered_name, &native_handle_);
-  }
+  // An ordered name is inert here, and deliberately not an error. Mutex is an
+  // absl::Mutex, which spins and then blocks in syscall(SYS_futex, ...), a call
+  // the driver passes through and records nothing of, so there is no handle to
+  // register and no acquisition order in the recording for any V8 base lock.
+  // What the driver can order is a lock it is handed as a pthread_mutex_t
+  // (RecordReplayAddOrderedPthreadMutex), and no V8 base primitive owns one.
+  // The replay pays for this as well: the linker answers an untimed FUTEX_WAIT
+  // with EINTR, so a contended V8 base lock busy-waits there instead of
+  // blocking.
+  //
+  // The parameter stays because nothing passes a name today, and restoring the
+  // ordering would then need no caller to change: it would mean holding a
+  // recordreplay::CreateOrderedLock() id here, as zero when
+  // AreEventsDisallowed(), since a LazyMutex can be constructed anywhere, and
+  // taking AutoOrderedLock in Lock, Unlock, TryLock and around a condition
+  // variable's reacquire. Beware that this leaves the capability dormant rather
+  // than absent: a name asked for here is accepted and does nothing, so an
+  // audit that reads lock names as evidence of ordering reads these locks as
+  // ordered while nothing orders them.
+  (void)ordered_name;
 #ifdef DEBUG
   level_ = 0;
 #endif
