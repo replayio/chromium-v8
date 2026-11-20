@@ -30,10 +30,12 @@ void ConditionVariable::Wait(Mutex* mutex) {
   mutex->AssertUnheldAndMark();
 }
 
-// No record/replay intervention of its own. The 10.8 fork computed the deadline
-// here and wrapped its clock_gettime in AutoPassThroughEvents. The arithmetic
-// now belongs to absl, which reads the clock itself, and the pass-through lives
-// with those reads in absl/synchronization/internal/kernel_timeout.cc.
+// No record/replay intervention of its own. The relative duration this hands to
+// absl becomes clock reads in synchronization_internal::KernelTimeout, and the
+// driver must not record them: a replay serves the timed futex wait against the
+// host clock, so a deadline built from replayed clock values would have passed
+// already and the wait would return at once. Those reads are passed through
+// where absl makes them, in absl/synchronization/internal/kernel_timeout.cc.
 bool ConditionVariable::WaitFor(Mutex* mutex, const TimeDelta& rel_time) {
   uint64_t time = rel_time.InNanoseconds();
   absl::Duration duration = absl::Nanoseconds(time);
