@@ -49,6 +49,26 @@ inline bool MustNotRunUserJS() {
          !v8::recordreplay::HasDivergedFromRecording();
 }
 
+// Whether reading |name| on |object| runs none of the page's code, so that a
+// description may read it where MustNotRunUserJS() holds. The description's gate
+// is otherwise closed to every builtin getter, so this says yes only for reads
+// whose cost it knows, and no for everything else.
+//
+// The one it knows is an Error's own "stack", whose getter formats the stack
+// with the page's Error.prepareStackTrace. Yes where the stack is already
+// stored, which the getter hands back as it is, where the property holds
+// something the getter returns untouched, and where the page formats stacks
+// V8's way, so V8 builds the string itself and the page's own read would get
+// that same string. No while the page's formatter would run.
+//
+// The property has to be |object|'s own accessor whose getter is one of V8's,
+// so a page getter shadowing an inherited one, a proxy trap, an interceptor and
+// an access check all end the lookup elsewhere.
+//
+// Defined in src/replay/replayio.cc.
+bool ReadingIsFreeOfUserJS(v8::Local<v8::Object> object,
+                           v8::Local<v8::Name> name);
+
 // Marks nested code as replay-owned (IsInReplayCode). Independent of
 // AutoMaybeDisallowEvents; divergent replay-owned paths use both.
 struct AutoMaybeMarkReplayCode {
