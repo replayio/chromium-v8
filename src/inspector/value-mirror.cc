@@ -1728,7 +1728,7 @@ bool ValueMirror::getProperties(v8::Local<v8::Context> context,
           if (name != "__proto__" && !getterFunction.IsEmpty() &&
               isBuiltinGetter(getterFunction) &&
               (!v8::replayio::MustNotRunUserJS() ||
-               !v8::replayio::ReadingRunsUserJS(object, v8Name)) &&
+               v8::replayio::ReadingIsFreeOfUserJS(object, v8Name)) &&
               !doesAttributeHaveObservableSideEffectOnGet(context, object,
                                                           v8Name)) {
             v8::TryCatch tryCatchFunction(isolate);

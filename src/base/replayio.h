@@ -49,25 +49,25 @@ inline bool MustNotRunUserJS() {
          !v8::recordreplay::HasDivergedFromRecording();
 }
 
-// Whether reading |name| on |object| runs the page's code, which it must not
-// where MustNotRunUserJS() holds.
+// Whether reading |name| on |object| runs none of the page's code, so that a
+// description may read it where MustNotRunUserJS() holds. The description's gate
+// is otherwise closed to every builtin getter, so this says yes only for reads
+// whose cost it knows, and no for everything else.
 //
-// The category is V8's own getters installed as an object's own accessor, which
-// a description does read: an accessor the page installed is not in it, since a
-// description reports a page getter rather than calling it. V8 declares which
-// of its own getters a read can have an effect through, on the template the
-// getter is an API function of, and the only one today is an Error's own
-// "stack", whose getter formats the stack with the page's
-// Error.prepareStackTrace.
+// The one it knows is an Error's own "stack", whose getter formats the stack
+// with the page's Error.prepareStackTrace. Yes where the stack is already
+// stored, which the getter hands back as it is, where the property holds
+// something the getter returns untouched, and where the page formats stacks
+// V8's way, so V8 builds the string itself and the page's own read would get
+// that same string. No while the page's formatter would run.
 //
-// False for an Error whose stack is already stored, which the getter hands back
-// as it is, and for a page that formats stacks V8's way, where V8 builds the
-// string itself and the page's own read would get that same string. True for
-// any other getter V8 marks as having an effect, since nothing here knows how
-// to read one safely.
+// The property has to be |object|'s own accessor whose getter is one of V8's,
+// so a page getter shadowing an inherited one, a proxy trap, an interceptor and
+// an access check all end the lookup elsewhere.
 //
 // Defined in src/replay/replayio.cc.
-bool ReadingRunsUserJS(v8::Local<v8::Object> object, v8::Local<v8::Name> name);
+bool ReadingIsFreeOfUserJS(v8::Local<v8::Object> object,
+                           v8::Local<v8::Name> name);
 
 // Marks nested code as replay-owned (IsInReplayCode). Independent of
 // AutoMaybeDisallowEvents; divergent replay-owned paths use both.

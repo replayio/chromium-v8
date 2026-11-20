@@ -135,15 +135,18 @@ bool ErrorStackReadRunsUserJS(
 
 }  // namespace
 
-bool ReadingRunsUserJS(v8::Local<v8::Object> object,
-                       v8::Local<v8::Name> name) {
+bool ReadingIsFreeOfUserJS(v8::Local<v8::Object> object,
+                           v8::Local<v8::Name> name) {
   v8::internal::Isolate* isolate = v8::internal::Isolate::Current();
   v8::internal::DirectHandle<v8::internal::JSReceiver> receiver =
       Utils::OpenDirectHandle(*object);
+  if (!v8::internal::IsJSObject(*receiver)) {
+    return false;
+  }
 
-  // An own accessor of the object whose getter is one of V8's own, which is the
-  // whole category. A getter the page installed ends here: a description
-  // reports a page accessor rather than calling it.
+  // One of V8's own getters, as an own accessor of the object, so that reading
+  // |name| really calls it: a page getter shadowing an inherited one, a proxy
+  // trap, an interceptor and an access check all end the lookup elsewhere.
   v8::internal::PropertyKey key(isolate, Utils::OpenDirectHandle(*name));
   if (key.is_element()) {
     return false;
@@ -168,31 +171,21 @@ bool ReadingRunsUserJS(v8::Local<v8::Object> object,
   if (!shared->IsApiFunction()) {
     return false;
   }
-  v8::internal::Tagged<v8::internal::FunctionTemplateInfo> api_func_data =
-      shared->api_func_data();
 
-  // V8 says which of its getters a read can have an effect through, on the
-  // template it builds them from, and the rest cost nothing to read.
-  if (!api_func_data->has_side_effects()) {
+  // Each getter needs its own answer, since what a read costs depends on what
+  // it does with the state the receiver is in, and the one V8 marks as having
+  // an effect today is an Error's stack. What would generalize this is the
+  // side-effect type V8 declares on the template a getter is an API function
+  // of (FunctionTemplateInfo::has_side_effects), but reading every getter V8
+  // declares free of them is a wider change than this gate: it would report
+  // values for builtin getters the gate refuses today, with no case covering
+  // any of them.
+  if (shared->api_func_data() !=
+      *isolate->factory()->error_stack_getter_fun_template()) {
     return false;
   }
-
-  // What a read costs past that gate is particular to the getter, so each one
-  // V8 marks this way needs its own answer. V8's own general answer is no help:
-  // Debug::PerformSideEffectCheckForCallback goes by the declared type, so it
-  // refuses to read a page's Error whatever state it is in, and the fork
-  // short-circuits that check altogether while replaying with events
-  // disallowed.
-  if (api_func_data ==
-      *isolate->factory()->error_stack_getter_fun_template()) {
-    return v8::internal::IsJSObject(*receiver) &&
-           ErrorStackReadRunsUserJS(
-               isolate, v8::internal::Cast<v8::internal::JSObject>(receiver));
-  }
-
-  // A getter V8 marks as having an effect with no answer here. Reading it is
-  // assumed to reach the page.
-  return true;
+  return !ErrorStackReadRunsUserJS(
+      isolate, v8::internal::Cast<v8::internal::JSObject>(receiver));
 }
 
 }  // namespace replayio
