@@ -49,13 +49,16 @@ inline bool MustNotRunUserJS() {
          !v8::recordreplay::HasDivergedFromRecording();
 }
 
-// Whether reading |name| on |object| would format an Error's stack with the
-// page's Error.prepareStackTrace now, when user JS must not run. True when
-// |name| is "stack", V8's own Error stack accessor is |object|'s own property
-// under that name, and no formatted stack is stored there yet, so the getter
-// would call ErrorUtils::FormatStackTrace. False once a stack is stored, since
-// the getter then hands that string back and formats nothing, and false for
-// everything else, a page getter shadowing "stack" among them.
+// Whether reading |name| on |object| would run the page's code to format an
+// Error's stack now, when user JS must not run. True when |name| is "stack",
+// V8's own Error stack accessor is |object|'s own property under that name, no
+// formatted stack is stored there yet, and formatting one would reach the
+// page: an Error.prepareStackTrace function to call, or the page in the way of
+// the name and message V8's own formatter reads. False for everything else, a
+// page getter shadowing "stack" among them, and false in the two cases where
+// the read costs the page nothing: a stack already stored, which the getter
+// hands back as it is, and a page that formats stacks V8's way, whose stack
+// the preview reports as it always has.
 //
 // Defined in src/replay/replayio.cc.
 bool MustNotFormatErrorStack(v8::Local<v8::Object> object,
