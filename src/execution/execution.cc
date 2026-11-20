@@ -342,7 +342,7 @@ class V8_NODISCARD ReplayJsEntryScope {
   }
 
   ~ReplayJsEntryScope() {
-    if (!charges_) return;
+    if (!isolate_->replay_stack_budget()) return;
     isolate_->set_replay_js_frame_depth(depth_);
   }
 

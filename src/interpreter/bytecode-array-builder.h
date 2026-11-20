@@ -486,7 +486,12 @@ class V8_EXPORT_PRIVATE BytecodeArrayBuilder final {
   BytecodeArrayBuilder& ReplayOnFrameEnter();
   // Keeps what is charged where a try block is entered, and charges it again
   // where its handler is: an exception leaves frames without their functions
-  // returning. See ThreadLocalTop::kReplayJsStackBudget.
+  // returning. See ThreadLocalTop::kReplayJsStackBudget. Every function's try
+  // blocks do so when recording/replaying, also those of a script without
+  // record/replay opcodes: the frames an exception leaves may be of others.
+  bool replay_keeps_js_frame_depth() const {
+    return replay_keeps_js_frame_depth_;
+  }
   BytecodeArrayBuilder& ReplaySaveJsFrameDepth(Register depth);
   BytecodeArrayBuilder& ReplayRestoreJsFrameDepth(Register depth);
   BytecodeArrayBuilder& ReplayOnFrameEnterGenerator(Register generator_object);
@@ -726,6 +731,7 @@ class V8_EXPORT_PRIVATE BytecodeArrayBuilder final {
   int most_recent_source_position_ = -1;
   bool emit_record_replay_opcodes_ = false;
   int replay_frame_cost_ = 0;
+  bool replay_keeps_js_frame_depth_ = false;
   bool emit_record_replay_assert_values_ = false;
   std::unordered_set<int> record_replay_instrumentation_site_locations_;
   struct RecordReplayPendingBreakpoint {

@@ -2183,21 +2183,25 @@ void BytecodeGenerator::BuildTryCatch(
   builder()->MoveRegister(Register::current_context(), context);
 
   // As is what the stack is charged when recording/replaying.
-  Register replay_depth = register_allocator()->NewRegister();
-  builder()->ReplaySaveJsFrameDepth(replay_depth);
+  const bool replay_keeps_depth = builder()->replay_keeps_js_frame_depth();
+  Register replay_depth;
+  if (replay_keeps_depth) {
+    replay_depth = register_allocator()->NewRegister();
+    builder()->ReplaySaveJsFrameDepth(replay_depth);
+  }
 
   // Evaluate the try-block inside a control scope. This simulates a handler
   // that is intercepting 'throw' control commands.
   try_control_builder.BeginTry(context);
   {
     ControlScopeForTryCatch scope(this, &try_control_builder);
-    replay_depth_registers_.push_back(replay_depth);
+    if (replay_keeps_depth) replay_depth_registers_.push_back(replay_depth);
     try_body_func();
-    replay_depth_registers_.pop_back();
+    if (replay_keeps_depth) replay_depth_registers_.pop_back();
   }
   try_control_builder.EndTry();
 
-  builder()->ReplayRestoreJsFrameDepth(replay_depth);
+  if (replay_keeps_depth) builder()->ReplayRestoreJsFrameDepth(replay_depth);
 
   // Unlike in gecko, we need to increment the progress counter at catch
   // blocks so we can detect when exceptions are initially thrown vs. being
@@ -2251,17 +2255,21 @@ void BytecodeGenerator::BuildTryFinally(
   builder()->MoveRegister(Register::current_context(), context);
 
   // As is what the stack is charged when recording/replaying.
-  Register replay_depth = register_allocator()->NewRegister();
-  builder()->ReplaySaveJsFrameDepth(replay_depth);
+  const bool replay_keeps_depth = builder()->replay_keeps_js_frame_depth();
+  Register replay_depth;
+  if (replay_keeps_depth) {
+    replay_depth = register_allocator()->NewRegister();
+    builder()->ReplaySaveJsFrameDepth(replay_depth);
+  }
 
   // Evaluate the try-block inside a control scope. This simulates a handler
   // that is intercepting all control commands.
   try_control_builder.BeginTry(context);
   {
     ControlScopeForTryFinally scope(this, &try_control_builder, &commands);
-    replay_depth_registers_.push_back(replay_depth);
+    if (replay_keeps_depth) replay_depth_registers_.push_back(replay_depth);
     try_body_func();
-    replay_depth_registers_.pop_back();
+    if (replay_keeps_depth) replay_depth_registers_.pop_back();
   }
   try_control_builder.EndTry();
 
@@ -2269,7 +2277,7 @@ void BytecodeGenerator::BuildTryFinally(
   commands.RecordFallThroughPath();
   try_control_builder.LeaveTry();
   try_control_builder.BeginHandler();
-  builder()->ReplayRestoreJsFrameDepth(replay_depth);
+  if (replay_keeps_depth) builder()->ReplayRestoreJsFrameDepth(replay_depth);
   commands.RecordHandlerReThrowPath();
 
   // Pending message object is saved on entry.
