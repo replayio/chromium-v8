@@ -1540,6 +1540,22 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::ReplayOnFrameEnter() {
   return *this;
 }
 
+BytecodeArrayBuilder& BytecodeArrayBuilder::ReplaySaveJsFrameDepth(
+    Register depth) {
+  if (emit_record_replay_opcodes_) {
+    OutputReplaySaveJsFrameDepth(depth);
+  }
+  return *this;
+}
+
+BytecodeArrayBuilder& BytecodeArrayBuilder::ReplayRestoreJsFrameDepth(
+    Register depth) {
+  if (emit_record_replay_opcodes_) {
+    OutputReplayRestoreJsFrameDepth(depth);
+  }
+  return *this;
+}
+
 BytecodeArrayBuilder& BytecodeArrayBuilder::ReplayOnFrameEnterGenerator(
     Register generator_object) {
   if (emit_record_replay_opcodes_) {

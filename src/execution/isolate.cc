@@ -2027,52 +2027,9 @@ static int ReplayJsFrameCost(Isolate* isolate,
                            js.abstract_code()->GetBytecodeArray());
 }
 
-// Whether the function of a JS frame's summary handles an exception thrown
-// where the summary is in its bytecode.
-static bool ReplayHandlesException(
-    const FrameSummary::JavaScriptFrameSummary& js) {
-  HandlerTable table(js.abstract_code()->GetBytecodeArray());
-  return table.LookupRange(js.code_offset(), nullptr, nullptr) != -1;
-}
-
-// The charges of the functions in an optimized frame, which has others inlined
-// into its own. In the frame of an exception's handler, those of the functions
-// the exception leaves are not among them: the handler is that of the
-// innermost function that handles where it is, as it is without inlining. A
-// builtin continues in such a frame without bytecode: either it handles the
-// exception, or a function further out does.
-static int ReplayOptimizedFrameCharges(
-    Isolate* isolate, const std::vector<FrameSummary>& summaries,
-    bool handles) {
-  PtrComprCageBase cage_base(isolate);
-  int charges = 0;
-  int left = 0;
-  int inner = 0;
-  bool handled = !handles;
-  for (auto summary = summaries.rbegin(); summary != summaries.rend();
-       ++summary) {
-    if (!summary->IsJavaScript()) continue;
-    const FrameSummary::JavaScriptFrameSummary& js = summary->AsJavaScript();
-    int cost = ReplayJsFrameCost(isolate, js);
-    charges += cost;
-    if (handled) continue;
-    if (!js.abstract_code()->IsBytecodeArray(cage_base)) {
-      left += inner;
-      inner = 0;
-    } else if (ReplayHandlesException(js)) {
-      left += inner;
-      handled = true;
-    } else {
-      inner += cost;
-    }
-  }
-  return charges - left;
-}
-
-// The charges of the functions in a JS frame, of the pending handler's those
-// that an exception does not leave.
-static int ReplayFrameCharges(Isolate* isolate, JavaScriptFrame* frame,
-                              bool handles) {
+// The charges of the functions in a JS frame: an optimized one has others
+// inlined into its own.
+static int ReplayFrameCharges(Isolate* isolate, JavaScriptFrame* frame) {
   if (frame->is_unoptimized()) {
     return ReplayJsFrameCost(isolate, frame->function().shared(),
                              UnoptimizedFrame::cast(frame)->GetBytecodeArray());
@@ -2083,11 +2040,20 @@ static int ReplayFrameCharges(Isolate* isolate, JavaScriptFrame* frame,
   }
   std::vector<FrameSummary> summaries;
   frame->Summarize(&summaries);
-  return ReplayOptimizedFrameCharges(isolate, summaries, handles);
+  int charges = 0;
+  for (const FrameSummary& summary : summaries) {
+    if (summary.IsJavaScript()) {
+      charges += ReplayJsFrameCost(isolate, summary.AsJavaScript());
+    }
+  }
+  return charges;
 }
 
-// Charges what the frames from the pending handler's down do: an exception
-// left the frames above it without their functions returning.
+// Charges what the frames below the pending handler's do: an exception left
+// the frames above it without their functions returning. A handler of bytecode
+// charges what its try block kept (ReplayRestoreJsFrameDepth), and leaving JS
+// code what was charged where it was entered (ReplayJsEntryScope): this is for
+// a handler of a builtin.
 static void ReplaySyncJsFrameDepth(Isolate* isolate) {
   if (!isolate->replay_stack_budget()) return;
   // Replay's own code is charged nothing, see ReplayJsEntryScope.
@@ -2103,12 +2069,13 @@ static void ReplaySyncJsFrameDepth(Isolate* isolate) {
   for (StackFrameIterator it(isolate); !it.done(); it.Advance(), index++) {
     if (index < above) continue;
     StackFrame* frame = it.frame();
-    if (frame->type() == StackFrame::ENTRY ||
-        frame->type() == StackFrame::CONSTRUCT_ENTRY) {
+    bool is_entry = frame->type() == StackFrame::ENTRY ||
+                    frame->type() == StackFrame::CONSTRUCT_ENTRY;
+    if (index == above && (is_entry || frame->is_java_script())) return;
+    if (is_entry) {
       depth += ThreadLocalTop::kReplayJsEntryCost;
     } else if (frame->is_java_script()) {
-      depth += ReplayFrameCharges(isolate, JavaScriptFrame::cast(frame),
-                                  index == above);
+      depth += ReplayFrameCharges(isolate, JavaScriptFrame::cast(frame));
     }
   }
   isolate->set_replay_js_frame_depth(depth);

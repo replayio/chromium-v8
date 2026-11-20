@@ -439,6 +439,8 @@ namespace interpreter {
   V(RecordReplayNotifyActivity, ImplicitRegisterUse::kNone)                    \
   V(ReplayIncJsFrameDepth, ImplicitRegisterUse::kNone, OperandType::kIdx)      \
   V(ReplayDecJsFrameDepth, ImplicitRegisterUse::kNone, OperandType::kIdx)      \
+  V(ReplaySaveJsFrameDepth, ImplicitRegisterUse::kNone, OperandType::kRegOut)  \
+  V(ReplayRestoreJsFrameDepth, ImplicitRegisterUse::kNone, OperandType::kReg)  \
   V(RecordReplayInstrumentation, ImplicitRegisterUse::kNone,                   \
     OperandType::kIdx)                                                         \
   V(RecordReplayInstrumentationGenerator, ImplicitRegisterUse::kNone,          \

@@ -484,6 +484,11 @@ class V8_EXPORT_PRIVATE BytecodeArrayBuilder final {
   void set_replay_frame_cost(int cost) { replay_frame_cost_ = cost; }
 
   BytecodeArrayBuilder& ReplayOnFrameEnter();
+  // Keeps what is charged where a try block is entered, and charges it again
+  // where its handler is: an exception leaves frames without their functions
+  // returning. See ThreadLocalTop::kReplayJsStackBudget.
+  BytecodeArrayBuilder& ReplaySaveJsFrameDepth(Register depth);
+  BytecodeArrayBuilder& ReplayRestoreJsFrameDepth(Register depth);
   BytecodeArrayBuilder& ReplayOnFrameEnterGenerator(Register generator_object);
   BytecodeArrayBuilder& ReplayOnFrameExit();
   BytecodeArrayBuilder& ReplayOnFrameReturn(Register return_value);

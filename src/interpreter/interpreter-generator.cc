@@ -2892,6 +2892,26 @@ IGNITION_HANDLER(ReplayDecJsFrameDepth, InterpreterAssembler) {
   Dispatch();
 }
 
+IGNITION_HANDLER(ReplaySaveJsFrameDepth, InterpreterAssembler) {
+  TNode<ExternalReference> depth_addr = ExternalConstant(
+      ExternalReference::Create(IsolateAddressId::kReplayJsFrameDepthAddress,
+                                isolate()));
+  TNode<Int32T> depth =
+      UncheckedCast<Int32T>(Load(MachineType::Int32(), depth_addr));
+  StoreRegisterAtOperandIndex(SmiFromInt32(depth), 0);
+  Dispatch();
+}
+
+IGNITION_HANDLER(ReplayRestoreJsFrameDepth, InterpreterAssembler) {
+  TNode<ExternalReference> depth_addr = ExternalConstant(
+      ExternalReference::Create(IsolateAddressId::kReplayJsFrameDepthAddress,
+                                isolate()));
+  TNode<Smi> depth = CAST(LoadRegisterAtOperandIndex(0));
+  StoreNoWriteBarrier(MachineRepresentation::kWord32, depth_addr,
+                      SmiToInt32(depth));
+  Dispatch();
+}
+
 IGNITION_HANDLER(RecordReplayNotifyActivity, InterpreterAssembler) {
   TNode<Context> context = GetContext();
   CallRuntime(Runtime::kRecordReplayNotifyActivity, context);

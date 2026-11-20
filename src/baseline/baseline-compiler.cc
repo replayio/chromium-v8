@@ -2412,6 +2412,17 @@ void BaselineCompiler::VisitReplayDecJsFrameDepth() {
 #endif
 }
 
+void BaselineCompiler::VisitReplaySaveJsFrameDepth() {
+  SaveAccumulatorScope accumulator_scope(&basm_);
+  CallRuntime(Runtime::kReplayJsFrameDepth);
+  StoreRegister(0, kInterpreterAccumulatorRegister);
+}
+
+void BaselineCompiler::VisitReplayRestoreJsFrameDepth() {
+  SaveAccumulatorScope accumulator_scope(&basm_);
+  CallRuntime(Runtime::kReplaySetJsFrameDepth, RegisterOperand(0));
+}
+
 void BaselineCompiler::VisitRecordReplayNotifyActivity() {
   // Returns the accumulator, see VisitRecordReplayIncExecutionProgressCounter.
   CallRuntime(Runtime::kRecordReplayBaselineNotifyActivity,

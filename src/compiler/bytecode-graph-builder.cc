@@ -3668,6 +3668,26 @@ void BytecodeGraphBuilder::VisitReplayDecJsFrameDepth() {
   environment()->RecordAfterState(node, Environment::kAttachFrameState);
 }
 
+void BytecodeGraphBuilder::VisitReplaySaveJsFrameDepth() {
+  FieldAccess depth_access(kUntaggedBase, 0, MaybeHandle<Name>(),
+                           MaybeHandle<Map>(), Type::Signed32(),
+                           MachineType::Int32(), kNoWriteBarrier,
+                           "ReplayJsFrameDepth");
+  Node* depth_addr = jsgraph()->ExternalConstant(ExternalReference::Create(
+      IsolateAddressId::kReplayJsFrameDepthAddress, isolate()));
+  Node* depth = NewNode(simplified()->LoadField(depth_access), depth_addr);
+  environment()->BindRegister(bytecode_iterator().GetRegisterOperand(0), depth);
+}
+
+void BytecodeGraphBuilder::VisitReplayRestoreJsFrameDepth() {
+  PrepareEagerCheckpoint();
+  Node* depth = environment()->LookupRegister(
+      bytecode_iterator().GetRegisterOperand(0));
+  Node* node = NewNode(
+      javascript()->CallRuntime(Runtime::kReplaySetJsFrameDepth), depth);
+  environment()->RecordAfterState(node, Environment::kAttachFrameState);
+}
+
 void BytecodeGraphBuilder::VisitRecordReplayNotifyActivity() {
   PrepareEagerCheckpoint();
   const Operator* op = javascript()->CallRuntime(Runtime::kRecordReplayNotifyActivity);

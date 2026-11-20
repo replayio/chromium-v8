@@ -76,6 +76,22 @@ RUNTIME_FUNCTION(Runtime_ThrowStackOverflow) {
   return isolate->StackOverflow();
 }
 
+// What the stack is charged when recording/replaying, for the code of tiers
+// that do not read and write it themselves. See
+// ThreadLocalTop::kReplayJsStackBudget.
+RUNTIME_FUNCTION(Runtime_ReplayJsFrameDepth) {
+  SealHandleScope shs(isolate);
+  DCHECK_EQ(0, args.length());
+  return Smi::FromInt(isolate->replay_js_frame_depth());
+}
+
+RUNTIME_FUNCTION(Runtime_ReplaySetJsFrameDepth) {
+  SealHandleScope shs(isolate);
+  DCHECK_EQ(1, args.length());
+  isolate->set_replay_js_frame_depth(args.smi_value_at(0));
+  return ReadOnlyRoots(isolate).undefined_value();
+}
+
 RUNTIME_FUNCTION(Runtime_ThrowSymbolAsyncIteratorInvalid) {
   HandleScope scope(isolate);
   DCHECK_EQ(0, args.length());
