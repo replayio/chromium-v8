@@ -11981,10 +11981,10 @@ bool recordreplay::DependencyGraphEnabled() {
 
 namespace internal {
 
-// Whether RecordReplayOnPromiseHook, AddPromiseDependencyGraphAdoption and
-// RecordReplayOnPromiseReactionJob are called: while the graph is updated, and
-// while tracked object asserts are on, as those include the object IDs the
-// calls assign to promises.
+// Whether RecordReplayOnPromiseHook, AddPromiseDependencyGraphAdoption,
+// RecordReplayOnPromiseSettle and RecordReplayOnPromiseReactionJob are called:
+// while the graph is updated, and while tracked object asserts are on, as those
+// include the object IDs the calls assign to promises.
 bool RecordReplayReportsPromises() {
   return gDependencyGraphReportsPromises && IsMainThread();
 }

@@ -4407,9 +4407,13 @@ struct PromiseDependencyGraphData {
   // Graph node ID for the point the promise was settled.
   int settled_node_id = 0;
 
-  // Whether the promise was resolved with a thenable: settled_node_id is then
-  // that resolve, and the settle that triggers the reactions has no node.
-  bool adopts_thenable = false;
+  // persistent_id of the thenable the promise last adopted, if any. Its
+  // settled_node_id is then that resolve, not the settle.
+  int adopted_persistent_id = 0;
+
+  // Graph node ID of the settle that triggered the promise's reactions: its
+  // own, or, for an adopted thenable, the thenable's; 0 if not recorded.
+  int reaction_settle_node_id = 0;
 
   // Graph node ID of the reaction job enqueued for this derived promise, until
   // the job runs.
@@ -4446,12 +4450,28 @@ void AddPromiseDependencyGraphAdoption(Isolate* isolate, Handle<Object> promise,
   PromiseDependencyGraphData& data = GetOrCreatePromiseDependencyGraphData(isolate, promise);
   PromiseDependencyGraphData& adopted_data = GetOrCreatePromiseDependencyGraphData(isolate, adopted);
 
-  data.adopts_thenable = true;
+  data.adopted_persistent_id = adopted_data.persistent_id;
   if (adopted_data.new_node_id) {
     recordreplay::AddDependencyGraphEdge(data.settled_node_id,
                                          adopted_data.new_node_id,
                                          "{\"kind\":\"adoptedPromise\"}");
   }
+}
+
+void RecordReplayOnPromiseSettle(Isolate* isolate, Handle<JSPromise> promise) {
+  DCHECK(RecordReplayReportsPromises());
+  DCHECK_NE(Promise::kPending, promise->status());
+  HandleScope scope(isolate);
+
+  PromiseDependencyGraphData& data =
+    GetOrCreatePromiseDependencyGraphData(isolate, promise);
+  if (!data.adopted_persistent_id) {
+    data.reaction_settle_node_id = data.settled_node_id;
+    return;
+  }
+  // Settled through the adopted thenable: its settle, if one is recorded.
+  data.reaction_settle_node_id =
+    gPromiseDependencyGraphDataMap->at(data.adopted_persistent_id).reaction_settle_node_id;
 }
 
 // Enqueued by the later of the settle and the attach (then), so the job node is
@@ -4480,8 +4500,8 @@ void RecordReplayOnPromiseReactionJob(Isolate* isolate, Handle<JSPromise> settle
   std::string job_node_str =
     StringPrintf("{\"kind\":\"promiseReactionJob\",\"reaction\":\"%s\"}", reaction);
   data.job_node_id = recordreplay::NewDependencyGraphNode(job_node_str.c_str());
-  if (settled_data.settled_node_id && !settled_data.adopts_thenable) {
-    recordreplay::AddDependencyGraphEdge(settled_data.settled_node_id, data.job_node_id,
+  if (settled_data.reaction_settle_node_id) {
+    recordreplay::AddDependencyGraphEdge(settled_data.reaction_settle_node_id, data.job_node_id,
                                          "{\"kind\":\"reactionSettle\"}");
   }
   if (data.new_node_id) {

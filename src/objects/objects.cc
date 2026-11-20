@@ -5695,6 +5695,10 @@ Handle<Object> JSPromise::TriggerPromiseReactions(Isolate* isolate,
     reactions = handle(reversed, isolate);
   }
 
+  if (RecordReplayReportsPromises()) {
+    RecordReplayOnPromiseSettle(isolate, promise);
+  }
+
   // Morph the {reactions} into PromiseReactionJobTasks
   // and push them onto the microtask queue.
   while (!reactions->IsSmi()) {

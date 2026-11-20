@@ -11,10 +11,15 @@ class JSPromise;
 class PromiseReactionJobTask;
 class String;
 
-// Whether promise hooks, thenable adoptions and reaction jobs report to the
-// dependency graph (RecordReplayOnPromiseHook, AddPromiseDependencyGraphAdoption,
+// Whether promise hooks, thenable adoptions, settles and reaction jobs report to
+// the dependency graph (RecordReplayOnPromiseHook,
+// AddPromiseDependencyGraphAdoption, RecordReplayOnPromiseSettle,
 // RecordReplayOnPromiseReactionJob), on this thread. Defined in api.cc.
 bool RecordReplayReportsPromises();
+
+// Records the settle of the promise, before its reaction jobs are enqueued.
+// Defined in debug.cc.
+void RecordReplayOnPromiseSettle(Isolate* isolate, Handle<JSPromise> promise);
 
 // Reports the reaction job enqueued for a reaction of the settled promise.
 // Defined in debug.cc.
