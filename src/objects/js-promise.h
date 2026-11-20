@@ -65,6 +65,11 @@ class JSPromise
   V8_WARN_UNUSED_RESULT static MaybeHandle<Object> Resolve(
       Handle<JSPromise> promise, Handle<Object> resolution);
 
+  // The JSPromise of a reaction's promise_or_capability, which the promise
+  // hooks of its job report; empty if there is none.
+  static MaybeHandle<JSPromise> ReactionPromise(
+      Isolate* isolate, Handle<Object> promise_or_capability);
+
   // Dispatched behavior.
   DECL_PRINTER(JSPromise)
   DECL_VERIFIER(JSPromise)

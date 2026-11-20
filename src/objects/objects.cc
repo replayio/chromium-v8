@@ -5662,6 +5662,17 @@ MaybeHandle<Object> JSPromise::Resolve(Handle<JSPromise> promise,
 }
 
 // static
+MaybeHandle<JSPromise> JSPromise::ReactionPromise(
+    Isolate* isolate, Handle<Object> promise_or_capability) {
+  Handle<Object> promise = promise_or_capability;
+  if (promise->IsPromiseCapability()) {
+    promise = handle(PromiseCapability::cast(*promise).promise(), isolate);
+  }
+  if (!promise->IsJSPromise()) return {};
+  return Handle<JSPromise>::cast(promise);
+}
+
+// static
 Handle<Object> JSPromise::TriggerPromiseReactions(Isolate* isolate,
                                                   Handle<JSPromise> promise,
                                                   Handle<Object> reactions,
@@ -5768,10 +5779,7 @@ Handle<Object> JSPromise::TriggerPromiseReactions(Isolate* isolate,
     if (microtask_queue) {
       if (RecordReplayReportsPromises()) {
         RecordReplayOnPromiseReactionJob(
-            isolate, promise,
-            handle(Handle<PromiseReactionJobTask>::cast(task)
-                       ->promise_or_capability(),
-                   isolate));
+            isolate, promise, Handle<PromiseReactionJobTask>::cast(task));
       }
       microtask_queue->EnqueueMicrotask(
           *Handle<PromiseReactionJobTask>::cast(task));

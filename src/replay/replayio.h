@@ -8,7 +8,7 @@ namespace v8 {
 namespace internal {
 class Isolate;
 class JSPromise;
-class Object;
+class PromiseReactionJobTask;
 class String;
 
 // Whether promise hooks, thenable adoptions and reaction jobs report to the
@@ -16,10 +16,10 @@ class String;
 // RecordReplayOnPromiseReactionJob), on this thread. Defined in api.cc.
 bool RecordReplayReportsPromises();
 
-// Reports the reaction job enqueued for a reaction of the settled promise, with
-// the reaction's promise_or_capability. Defined in debug.cc.
+// Reports the reaction job enqueued for a reaction of the settled promise.
+// Defined in debug.cc.
 void RecordReplayOnPromiseReactionJob(Isolate* isolate, Handle<JSPromise> settled,
-                                      Handle<Object> promise_or_capability);
+                                      Handle<PromiseReactionJobTask> task);
 }  // namespace internal
 
 namespace replayio {
