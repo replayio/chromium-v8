@@ -497,6 +497,13 @@ Tagged<Object> FutexEmulation::WaitWasmManagedObject(
     Isolate* isolate, Tagged<HeapObject> object, int32_t offset,
     Tagged<Managed<FutexManagedObjectWaitList>> waitqueue, T expected_value,
     int64_t rel_timeout_ns) {
+  // The lock and the disallow work as in WaitSync below. The label has to be
+  // the one WaitSyncImpl re-enters the disallow scope under.
+  std::optional<recordreplay::AutoOrderedLock> ordered_lock;
+  if (recordreplay::IsRecordingOrReplaying()) {
+    ordered_lock.emplace(gRecordReplayOrderedLockId);
+  }
+  replayio::AutoDisallowEvents disallow("FutexEmulation::WaitSync");
   VMState<ATOMICS_WAIT> state(isolate);
   base::TimeDelta rel_timeout =
       base::TimeDelta::FromNanoseconds(rel_timeout_ns);
@@ -530,7 +537,7 @@ Tagged<Object> FutexEmulation::WaitWasmManagedObject(
 
   return *WaitSyncImpl<FutexManagedObjectWaitList>(
       isolate, wait_list.raw(), node, lock_guard, use_timeout, timeout_time,
-      expected_value, loaded_control_value, {});
+      expected_value, loaded_control_value, {}, ordered_lock);
 }
 
 template Tagged<Object> FutexEmulation::WaitWasmManagedObject<int32_t>(
@@ -632,7 +639,7 @@ Tagged<Object> FutexEmulation::WaitSync(Isolate* isolate, void* wait_location,
   return *WaitSyncImpl<FutexWaitList, T>(isolate, wait_list, node, lock_guard,
                                          use_timeout, timeout_time, value,
                                          loaded_value, {wait_location},
-                                         &ordered_lock);
+                                         ordered_lock);
 }
 
 template <typename WaitList, typename T>
@@ -641,15 +648,12 @@ DirectHandle<Object> FutexEmulation::WaitSyncImpl(
     NoGarbageCollectionMutexGuard& lock_guard, bool use_timeout,
     base::TimeTicks timeout_time, T value, T loaded_value,
     std::optional<void*> wait_location,
-    std::optional<recordreplay::AutoOrderedLock>* record_replay_ordered_lock) {
+    std::optional<recordreplay::AutoOrderedLock>& record_replay_ordered_lock) {
   DCHECK(!node->IsWaiting());
 
   DirectHandle<Object> result;
-  bool found_other_value = loaded_value != value;
-  if (record_replay_ordered_lock) {
-    found_other_value = RecordReplayFoundOtherValue(found_other_value,
-                                                    "FutexEmulation::WaitSync");
-  }
+  bool found_other_value = RecordReplayFoundOtherValue(
+      loaded_value != value, "FutexEmulation::WaitSync");
   if (found_other_value) {
     return direct_handle(Smi::FromInt(WaitReturnValue::kNotEqualValue),
                          isolate);
@@ -661,9 +665,9 @@ DirectHandle<Object> FutexEmulation::WaitSyncImpl(
 
   // The ordered lock taken for entering the list is released with events
   // allowed, as OrderedUnlock does nothing otherwise.
-  if (record_replay_ordered_lock && *record_replay_ordered_lock) {
+  if (record_replay_ordered_lock) {
     recordreplay::EndDisallowEvents();
-    record_replay_ordered_lock->reset();
+    record_replay_ordered_lock.reset();
     recordreplay::BeginDisallowEventsWithLabel("FutexEmulation::WaitSync");
   }
 
@@ -731,12 +735,10 @@ DirectHandle<Object> FutexEmulation::WaitSyncImpl(
       // deadline above, which the recording's clock fixed, against the replaying
       // host's clock, and the two have no common origin, so the wait lasts
       // however far apart they happen to be, without a bound when the replaying
-      // host booted more recently than the recording's did. A wait with no
-      // ordered lock, as a wasm managed object's is, has nothing to settle it
-      // and waits as it does when recording. So does one made after diverging,
-      // where the deadline and the reads below are both on the continued
-      // timeline.
-      if (record_replay_ordered_lock && recordreplay::IsReplaying() &&
+      // host booted more recently than the recording's did. A wait made after
+      // diverging waits as it does when recording, because its deadline and the
+      // reads below are both on the continued timeline.
+      if (recordreplay::IsReplaying() &&
           !recordreplay::HasDivergedFromRecording()) {
         result =
             direct_handle(Smi::FromInt(WaitReturnValue::kTimedOut), isolate);
@@ -769,10 +771,10 @@ DirectHandle<Object> FutexEmulation::WaitSyncImpl(
   // decided it with events disallowed, so a replay could time out a wait the
   // recording's notify woke, or the other way around. A notify that takes
   // the lock first wakes the wait even if its timeout has passed.
-  if (record_replay_ordered_lock && recordreplay::IsRecordingOrReplaying()) {
+  if (recordreplay::IsRecordingOrReplaying()) {
     lock_guard.Unlock();
     recordreplay::EndDisallowEvents();
-    record_replay_ordered_lock->emplace(gRecordReplayOrderedLockId);
+    record_replay_ordered_lock.emplace(gRecordReplayOrderedLockId);
     recordreplay::BeginDisallowEventsWithLabel("FutexEmulation::WaitSync");
     lock_guard.Lock();
     if (timed_out && !node->waiting_) {
@@ -1038,6 +1040,10 @@ int FutexEmulation::Wake(void* wait_location, uint32_t num_waiters_to_wake) {
 
 #if V8_ENABLE_WEBASSEMBLY
 int FutexEmulation::Wake(Address raw_waitqueue, uint32_t num_waiters_to_wake) {
+  // The ordered lock as in the Wake above. No RecordReplayTasksToPost, as a
+  // waitqueue only ever holds sync waiters, so nothing here posts a task.
+  recordreplay::AutoOrderedLock ordered_lock(gRecordReplayOrderedLockId);
+  replayio::AutoDisallowEvents disallow("FutexEmulation::Wake");
   DisallowGarbageCollection no_gc;
   int num_waiters_woken = 0;
 
