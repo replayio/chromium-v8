@@ -14041,6 +14041,10 @@ class FinishRecordingTask final : public Task {
   void Run() final { DoFinishRecording(); }
 };
 
+static void RecordReplayFinishRecordingInterrupt(v8::Isolate*, void*) {
+  DoFinishRecording();
+}
+
 // Data for making sure we finish the recording if the main thread is stuck
 // doing a synchronous operation.
 static std::atomic<bool> gNeedFinishRecording;
@@ -14079,6 +14083,14 @@ extern "C" DLLEXPORT void V8RecordReplayFinishRecording() {
         CHECK(internal::gMainThreadIsolate);
         auto runner = internal::V8::GetCurrentPlatform()->GetForegroundTaskRunner((Isolate*)internal::gMainThreadIsolate);
         runner->PostTask(std::make_unique<FinishRecordingTask>());
+        // A main thread that keeps running JS reaches neither that task nor a
+        // wait that can finish the recording. While recording or replaying,
+        // an API interrupt runs at a recorded progress point, so the
+        // recording finishes at the same point in a replay.
+        if (recordreplay::IsRecordingOrReplaying("interrupts")) {
+          internal::gMainThreadIsolate->RequestInterrupt(
+              RecordReplayFinishRecordingInterrupt, nullptr);
+        }
 #if V8_OS_WIN
         Sleep(UINT32_MAX);
 #else
