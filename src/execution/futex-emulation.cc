@@ -22,6 +22,7 @@
 #include "src/objects/js-promise-inl.h"
 #include "src/objects/managed.h"
 #include "src/objects/objects-inl.h"
+#include "src/replay/replayio.h"
 #include "src/tasks/cancelable-task.h"
 
 namespace v8::internal {
@@ -596,6 +597,7 @@ Tagged<Object> FutexEmulation::WaitSync(Isolate* isolate, void* wait_location,
   if (recordreplay::IsRecordingOrReplaying()) {
     ordered_lock.emplace(gRecordReplayOrderedLockId);
   }
+  const bool events_available = ordered_lock && replayio::AreEventsAvailable();
   replayio::AutoDisallowEvents disallow("FutexEmulation::WaitSync");
   VMState<ATOMICS_WAIT> state(isolate);
   base::TimeDelta rel_timeout =
@@ -617,6 +619,14 @@ Tagged<Object> FutexEmulation::WaitSync(Isolate* isolate, void* wait_location,
     timeout_time = current_time + rel_timeout;
   }
 
+  // An inspector resume can leave a termination pending without waking the
+  // isolate, and the wait then takes it only if an unrelated interrupt wakes
+  // it. Those wakes are not in the recorded order, so the recording notes
+  // whether the wait took the termination and the replay follows it. This is
+  // checked before locking the wait list, because RequestInterrupt takes the
+  // wait list's mutex while holding the one the check takes.
+  const bool pending_termination =
+      events_available && isolate->stack_guard()->CheckTerminateExecution();
   NoGarbageCollectionMutexGuard lock_guard(wait_list->mutex());
 
   std::atomic<T>* p = reinterpret_cast<std::atomic<T>*>(wait_location);
@@ -632,7 +642,7 @@ Tagged<Object> FutexEmulation::WaitSync(Isolate* isolate, void* wait_location,
   return *WaitSyncImpl<FutexWaitList, T>(isolate, wait_list, node, lock_guard,
                                          use_timeout, timeout_time, value,
                                          loaded_value, {wait_location},
-                                         &ordered_lock);
+                                         &ordered_lock, pending_termination);
 }
 
 template <typename WaitList, typename T>
@@ -641,7 +651,8 @@ DirectHandle<Object> FutexEmulation::WaitSyncImpl(
     NoGarbageCollectionMutexGuard& lock_guard, bool use_timeout,
     base::TimeTicks timeout_time, T value, T loaded_value,
     std::optional<void*> wait_location,
-    std::optional<recordreplay::AutoOrderedLock>* record_replay_ordered_lock) {
+    std::optional<recordreplay::AutoOrderedLock>* record_replay_ordered_lock,
+    bool record_replay_pending_termination) {
   DCHECK(!node->IsWaiting());
 
   DirectHandle<Object> result;
@@ -659,17 +670,45 @@ DirectHandle<Object> FutexEmulation::WaitSyncImpl(
   node->waiting_ = true;
   wait_list->AddNode(node);
 
+  bool timed_out = false;
+  const bool replay_termination =
+      record_replay_pending_termination && recordreplay::IsReplaying();
   // The ordered lock taken for entering the list is released with events
   // allowed, as OrderedUnlock does nothing otherwise.
   if (record_replay_ordered_lock && *record_replay_ordered_lock) {
+    // Reading the decision can block, until a later recording chunk arrives
+    // or for good when the recording stopped while this thread was waiting.
+    // Every isolate shares the wait list's mutex, and Wake() and NotifyWake()
+    // need it meanwhile.
+    if (replay_termination) lock_guard.Unlock();
     recordreplay::EndDisallowEvents();
     record_replay_ordered_lock->reset();
+    constexpr uintptr_t kNoDecision = 2;
+    uintptr_t took_termination = kNoDecision;
+    if (replay_termination) {
+      took_termination = recordreplay::RecordReplayValue(
+          "Futex wait took termination", kNoDecision);
+    }
     recordreplay::BeginDisallowEventsWithLabel("FutexEmulation::WaitSync");
+    if (replay_termination) {
+      lock_guard.Lock();
+      // Divergence during the read returns kNoDecision and leaves the loop
+      // to inspect the actual interrupt and deadline. A wait the recording
+      // did not terminate is settled by the exit block, as a replaying timed
+      // wait is below.
+      if (took_termination == 1) {
+        node->interrupted_ = true;
+      } else if (took_termination == 0) {
+        result =
+            direct_handle(Smi::FromInt(WaitReturnValue::kTimedOut), isolate);
+        timed_out = true;
+      }
+    }
   }
 
-  bool timed_out = false;
-
   while (true) {
+    // The replay's recorded decision can already have settled the wait.
+    if (!result.is_null()) break;
     if (V8_UNLIKELY(node->interrupted_)) {
       // Reset the interrupted flag while still holding the mutex.
       node->interrupted_ = false;
@@ -697,10 +736,18 @@ DirectHandle<Object> FutexEmulation::WaitSyncImpl(
       // disallowed, as they are here, so it doesn't terminate, and going back
       // to waiting would ignore the termination, so it is handled here. Either
       // this thread requested it before it waited (an embedder's worker
-      // exiting), which the replay reaches the same way, or another thread
-      // did, which invalidated the recording (StackGuard::RequestInterrupt).
+      // exiting), and the replay takes it where the recording did (see
+      // pending_termination in WaitSync), or another thread did, which
+      // invalidated the recording (StackGuard::RequestInterrupt).
       if (!IsExceptionHole(interrupt_object) &&
           isolate->stack_guard()->HasTerminationRequest()) {
+        if (record_replay_pending_termination && !replay_termination) {
+          recordreplay::EndDisallowEvents();
+          recordreplay::RecordReplayValue("Futex wait took termination",
+                                          true);
+          recordreplay::BeginDisallowEventsWithLabel(
+              "FutexEmulation::WaitSync");
+        }
         interrupt_object = isolate->TerminateExecution();
       }
 
@@ -772,6 +819,10 @@ DirectHandle<Object> FutexEmulation::WaitSyncImpl(
   if (record_replay_ordered_lock && recordreplay::IsRecordingOrReplaying()) {
     lock_guard.Unlock();
     recordreplay::EndDisallowEvents();
+    if (record_replay_pending_termination && !replay_termination &&
+        !IsExceptionHole(*result)) {
+      recordreplay::RecordReplayValue("Futex wait took termination", false);
+    }
     record_replay_ordered_lock->emplace(gRecordReplayOrderedLockId);
     recordreplay::BeginDisallowEventsWithLabel("FutexEmulation::WaitSync");
     lock_guard.Lock();
