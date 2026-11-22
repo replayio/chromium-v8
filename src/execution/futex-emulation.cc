@@ -502,12 +502,14 @@ Tagged<Object> FutexEmulation::WaitWasmManagedObject(
     Isolate* isolate, Tagged<HeapObject> object, int32_t offset,
     Tagged<Managed<FutexManagedObjectWaitList>> waitqueue, T expected_value,
     int64_t rel_timeout_ns) {
-  // The lock and the disallow work as in WaitSync below. The label has to be
-  // the one WaitSyncImpl re-enters the disallow scope under.
+  // The lock, the disallow and the pending termination all work as in WaitSync
+  // below. The label has to be the one WaitSyncImpl re-enters the disallow
+  // scope under.
   std::optional<recordreplay::AutoOrderedLock> ordered_lock;
   if (recordreplay::IsRecordingOrReplaying()) {
     ordered_lock.emplace(gRecordReplayOrderedLockId);
   }
+  const bool events_available = ordered_lock && replayio::AreEventsAvailable();
   replayio::AutoDisallowEvents disallow("FutexEmulation::WaitSync");
   VMState<ATOMICS_WAIT> state(isolate);
   base::TimeDelta rel_timeout =
@@ -529,6 +531,11 @@ Tagged<Object> FutexEmulation::WaitWasmManagedObject(
     timeout_time = current_time + rel_timeout;
   }
 
+  // Checked before the wait list's mutex is taken, for the reason WaitSync
+  // gives.
+  const bool pending_termination =
+      events_available && isolate->stack_guard()->CheckTerminateExecution();
+
   Managed<FutexManagedObjectWaitList>::Ptr wait_list = waitqueue->ptr();
   NoGarbageCollectionMutexGuard lock_guard(GetWaitList()->mutex());
 
@@ -542,7 +549,8 @@ Tagged<Object> FutexEmulation::WaitWasmManagedObject(
 
   return *WaitSyncImpl<FutexManagedObjectWaitList>(
       isolate, wait_list.raw(), node, lock_guard, use_timeout, timeout_time,
-      expected_value, loaded_control_value, {}, ordered_lock);
+      expected_value, loaded_control_value, {}, ordered_lock,
+      pending_termination);
 }
 
 template Tagged<Object> FutexEmulation::WaitWasmManagedObject<int32_t>(

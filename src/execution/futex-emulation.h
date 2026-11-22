@@ -330,7 +330,7 @@ class FutexEmulation : public AllStatic {
       base::TimeTicks timeout_time, T value, T loaded_value,
       std::optional<void*> wait_location,
       std::optional<recordreplay::AutoOrderedLock>& record_replay_ordered_lock,
-      bool record_replay_pending_termination = false);
+      bool record_replay_pending_termination);
 
   // Resolve the Promises of the async waiters which belong to |isolate|.
   // While recording or replaying, only those given record_replay_resolve_id.
