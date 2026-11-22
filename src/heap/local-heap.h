@@ -48,18 +48,15 @@ __attribute__((tls_model(V8_TLS_MODEL))) extern thread_local LocalHeap*
 //            for a collection. Useful when threads do not need heap access for
 //            some time or for blocking operations like locking a mutex.
 // Runs |wait| with the current thread's local heap parked, when it has one that
-// is running. The replay runtime calls this through a callback it is given
-// while replaying, each time a thread blocks waiting for its turn in a lock's
-// recorded order, and nothing else should: parking is only correct here because
-// such a thread is not going to touch the heap until its turn comes.
+// is running. The replay runtime calls this for every wait a thread performs
+// inside it, and nothing else should.
 //
-// A thread owning a running local heap has to reach a safepoint of its own
-// before a global safepoint can start, and it reaches one by running. A thread
-// blocked for its recorded turn is not running, and the turn can belong to the
-// very thread the global safepoint is waiting on, in which case the safepoint
-// waits for this thread and this thread waits for the safepoint. Parking for
-// the wait leaves the safepoint free to finish; the thread blocks again on the
-// way out for as long as the safepoint lasts.
+// A thread owning a running local heap has to stop at a safepoint of its own
+// before a global safepoint can start, and it gets there by running. A thread
+// the replay has blocked is not running, and what it waits for can be owed by
+// the very thread the safepoint is waiting on, so the two wait for each other.
+// Parking for the wait leaves the safepoint free to finish, and unparking
+// blocks the thread again for as long as the safepoint lasts.
 void RecordReplayWaitWhileParked(void (*wait)(void*), void* data);
 
 class V8_EXPORT_PRIVATE LocalHeap {

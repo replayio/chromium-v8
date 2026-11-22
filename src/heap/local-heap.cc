@@ -34,11 +34,11 @@ void RecordReplayWaitWhileParked(void (*wait)(void*), void* data) {
     wait(data);
     return;
   }
-  // As where V8 parks for a blocking operation of its own: a safepoint is only
-  // ever requested for a collection, so parking for one must not turn into
-  // performing a collection here. Without this, ParkSlowPath runs a requested
-  // collection on a main thread, which would mean collecting from the middle of
-  // a wait for a lock the replay has not handed over yet.
+  // A safepoint is only ever requested for a collection, so parking for one
+  // must not turn into performing a collection here. ParkSlowPath otherwise
+  // runs a main thread's requested collection from the middle of a wait the
+  // replay has not released yet. V8's own blocking sites park under this scope
+  // for the same reason.
   IgnoreLocalGCRequests ignore_gc_requests(local_heap->heap());
   local_heap->ExecuteWhileParked([wait, data]() { wait(data); });
 }
