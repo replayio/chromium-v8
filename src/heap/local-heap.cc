@@ -28,6 +28,15 @@
 namespace v8 {
 namespace internal {
 
+void RecordReplayWaitWhileParked(void (*wait)(void*), void* data) {
+  LocalHeap* local_heap = LocalHeap::Current();
+  if (!local_heap || !local_heap->IsRunning()) {
+    wait(data);
+    return;
+  }
+  local_heap->ExecuteWhileParked([wait, data]() { wait(data); });
+}
+
 thread_local LocalHeap* g_current_local_heap_ V8_CONSTINIT = nullptr;
 
 V8_TLS_DEFINE_GETTER(LocalHeap::TryGetCurrent, LocalHeap*,

@@ -84,6 +84,7 @@
 #include "src/handles/traced-handles-inl.h"
 #include "src/heap/heap-inl.h"
 #include "src/heap/heap-layout-inl.h"
+#include "src/heap/local-heap-inl.h"
 #include "src/heap/heap-write-barrier.h"
 #include "src/heap/safepoint.h"
 #include "src/heap/visit-object.h"
@@ -12672,6 +12673,8 @@ typedef char* (CommandCallbackRaw)(const char* params);
   Macro(RecordReplaySetCrashReasonCallback, (const char* (*aCallback)()))     \
   Macro(RecordReplaySetChangeInstrumentCallback,                              \
         (void (*callback)(bool wantInstrumentation)))                         \
+  Macro(RecordReplaySetWaitWhileParkedCallback,                                \
+        (void (*callback)(void (*wait)(void*), void* data)))                  \
   Macro(RecordReplaySetProgressCallback, (void (*aCallback)(uint64_t)))       \
   Macro(RecordReplaySetProgressInterruptCallback, (void (*aCallback)()))      \
   Macro(RecordReplayEnableProgressCheckpoints, ())                            \
@@ -14204,6 +14207,7 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
   i::gProgressCounter = gRecordReplayProgressCounter();
 
   gRecordReplaySetChangeInstrumentCallback(i::RecordReplayChangeInstrument);
+  gRecordReplaySetWaitWhileParkedCallback(i::RecordReplayWaitWhileParked);
   gRecordReplaySetProgressCallback(i::RecordReplaySetTargetProgress);
   gRecordReplaySetProgressInterruptCallback(i::RecordReplayProgressInterruptCallback);
   gRecordReplayEnableProgressCheckpoints();
