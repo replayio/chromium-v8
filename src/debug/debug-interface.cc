@@ -39,6 +39,11 @@
 #endif  // V8_ENABLE_WEBASSEMBLY
 
 namespace v8 {
+
+namespace internal {
+extern bool RecordReplayIsDisallowedScriptId(int script_id);
+}  // namespace internal
+
 namespace debug {
 
 void SetContextId(Local<Context> context, int id) {
@@ -1022,6 +1027,13 @@ void GetLoadedScripts(Isolate* v8_isolate,
       if (script->type() != i::Script::Type::kNormal) continue;
 #endif  // V8_ENABLE_WEBASSEMBLY
       if (!script->HasValidSource()) continue;
+      // Scripts created with events disallowed (e.g. the replay's own) don't
+      // exist on the other side of the recording, so a client enumerating the
+      // loaded scripts (Debugger.enable) mustn't see them.
+      if (recordreplay::IsRecordingOrReplaying() &&
+          i::RecordReplayIsDisallowedScriptId(script->id())) {
+        continue;
+      }
       i::HandleScope handle_scope(isolate);
       i::DirectHandle<i::Script> script_handle(script, isolate);
       scripts.emplace_back(v8_isolate, ToApiHandle<Script>(script_handle));
