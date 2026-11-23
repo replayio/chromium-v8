@@ -12884,6 +12884,16 @@ static void RecordReplayProgressInterruptCallback() {
   if (recordreplay::IsRecordingOrReplaying("interrupts")) {
     isolate->RecordReplayInvokeApiInterruptCallbacksAtProgress();
   }
+  // A deferred termination is taken in the runtime call that reaches the
+  // target progress, after this callback (see
+  // RecordReplayTakeDeferredTermination). The interrupt can also run where C++
+  // advances the counter (a bookmark) or while the termination is postponed,
+  // and the termination then waits for the next one, so it is requested while
+  // the termination is deferred, also when it is taken right after this.
+  if (recordreplay::IsRecording() &&
+      isolate->record_replay_deferred_termination()) {
+    RecordReplayTriggerProgressInterrupt();
+  }
 }
 
 void RecordReplayInstrument(const char* kind, const char* function, int function_index) {

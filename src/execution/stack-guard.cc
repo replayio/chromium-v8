@@ -6,12 +6,14 @@
 
 #include "src/base/atomicops.h"
 #include "src/compiler-dispatcher/optimizing-compile-dispatcher.h"
+#include "src/execution/frames-inl.h"
 #include "src/execution/interrupts-scope.h"
 #include "src/execution/isolate.h"
 #include "src/execution/protectors-inl.h"
 #include "src/execution/simulator.h"
 #include "src/logging/counters.h"
 #include "src/objects/backing-store.h"
+#include "src/objects/script-inl.h"
 #include "src/roots/roots-inl.h"
 #include "src/tracing/trace-event.h"
 #include "src/utils/memcopy.h"
@@ -166,6 +168,36 @@ bool StackGuard::CheckInterrupt(InterruptFlag flag) {
   return (thread_local_.interrupt_flags_ & flag) != 0;
 }
 
+extern void RecordReplayTriggerProgressInterrupt();
+
+// On the main thread, JS code's stack checks leave a termination the thread
+// requested for itself pending, and it is taken at the progress counter's next
+// advance instead, which every tier reaches at the same points: a progress
+// interrupt makes baseline and optimized code call into the VM there, and the
+// replay calls into it where the recording did (see
+// RecordReplayTakeDeferredTermination in runtime-debug.cc). Other checks
+// (debugger statements, breakpoints, wasm, the runtime's own) still take it at
+// once, as before.
+//
+// Other threads have no progress interrupts and keep taking it at the next
+// stack check (see RequestInterrupt). So does a termination requested while
+// events are disallowed. JS without progress instrumentation (scripts compiled
+// with events disallowed or ignored by URL) never advances the counter, so a
+// stack check in it stops the deferral (see
+// RecordReplayKeepsTerminationDeferred), and the termination is taken there as
+// on other threads, at a point that depends on the code's tier.
+static void RecordReplayDeferTermination(Isolate* isolate) {
+  if (!recordreplay::IsRecordingOrReplaying("interrupts") || !IsMainThread() ||
+      recordreplay::AreEventsDisallowed() ||
+      recordreplay::HasDivergedFromRecording()) {
+    return;
+  }
+  isolate->set_record_replay_deferred_termination(true);
+  if (recordreplay::IsRecording()) {
+    RecordReplayTriggerProgressInterrupt();
+  }
+}
+
 void StackGuard::RequestInterrupt(InterruptFlag flag) {
   // Terminating execution stops the isolate's thread at whichever check for
   // it the thread reaches next. A replay stops at the same point when both
@@ -173,23 +205,34 @@ void StackGuard::RequestInterrupt(InterruptFlag flag) {
   // which don't depend on timing or on the tier its code runs in.
   //
   // The request is one when the thread makes it itself (the inspector's
-  // Runtime.terminateExecution, an embedder's worker exiting): the replay
-  // makes it at the same point. Requested from another thread (a worker the
-  // page's thread stops while it runs script, an evaluation's timeout), which
-  // check comes next is a race, also when the thread happens not to reach
-  // one, so the request invalidates the recording here. Only a recording can
-  // be invalidated: when replaying, such a request is Replay's own work.
+  // Runtime.terminateExecution or a resume with terminateOnResume, an
+  // embedder's worker exiting): the replay makes it at the same point.
+  // Requested from another thread (a worker the page's thread stops while it
+  // runs script, an evaluation's timeout), which check comes next is a race,
+  // also when the thread happens not to reach one, so the request invalidates
+  // the recording here. Only a recording can be invalidated: when replaying,
+  // such a request is Replay's own work.
   //
-  // The check is one when it is Atomics.wait's, or the stack check at the
-  // entry of a function that is called. It isn't when a loop makes it:
-  // unoptimized code only checks there once the function's interrupt budget
-  // is used up, optimized code in every iteration. See
-  // RecordReplayLoopCheckLeavesInterrupts. (Optimized code has no check at
-  // the entry of a function it inlined, which nothing accounts for.)
-  if (flag == TERMINATE_EXECUTION && recordreplay::IsRecording() &&
-      isolate_->thread_id() != ThreadId::Current()) {
-    recordreplay::InvalidateRecording(
-        "Requested terminate execution from another thread");
+  // The check is one when it is Atomics.wait's. A stack check isn't, as where
+  // JS code has one depends on how it was compiled: optimized code has none at
+  // the entry of a function it inlined, and the replay inlines differently than
+  // the recording, as its bytecode is larger (instrumentation opcodes, forced
+  // context allocation). Loops check once the function's interrupt budget is
+  // used up in unoptimized code, and in every iteration in optimized code. The
+  // main thread takes the termination at a progress advance instead (see
+  // RecordReplayDeferTermination). On other threads, a stack check at a
+  // function's entry takes it, which leaves them exposed to the difference in
+  // inlining, and one in a loop invalidates the recording (see
+  // RecordReplayLoopCheckLeavesInterrupts).
+  if (flag == TERMINATE_EXECUTION) {
+    if (isolate_->thread_id() != ThreadId::Current()) {
+      if (recordreplay::IsRecording()) {
+        recordreplay::InvalidateRecording(
+            "Requested terminate execution from another thread");
+      }
+    } else {
+      RecordReplayDeferTermination(isolate_);
+    }
   }
 
   ExecutionAccess access(isolate_);
@@ -218,6 +261,9 @@ void StackGuard::ClearInterrupt(InterruptFlag flag) {
   // Clear the interrupt flag from the active interrupt flags.
   thread_local_.interrupt_flags_ &= ~flag;
   update_interrupt_requests_and_stack_limits(access);
+  if (flag == TERMINATE_EXECUTION) {
+    isolate_->set_record_replay_deferred_termination(false);
+  }
 }
 
 bool StackGuard::HasTerminationRequest() {
@@ -228,6 +274,7 @@ bool StackGuard::HasTerminationRequest() {
   if ((thread_local_.interrupt_flags_ & TERMINATE_EXECUTION) != 0) {
     thread_local_.interrupt_flags_ &= ~TERMINATE_EXECUTION;
     update_interrupt_requests_and_stack_limits(access);
+    isolate_->set_record_replay_deferred_termination(false);
     return true;
   }
   return false;
@@ -235,8 +282,11 @@ bool StackGuard::HasTerminationRequest() {
 
 bool StackGuard::RecordReplayLoopCheckLeavesInterrupts() {
   // HandleInterrupts leaves everything pending while events are disallowed.
+  // A deferred termination is left to HandleInterrupts, which leaves it
+  // pending and handles the other interrupts.
   if (!recordreplay::IsRecordingOrReplaying() ||
-      recordreplay::AreEventsDisallowed() || !CheckTerminateExecution()) {
+      recordreplay::AreEventsDisallowed() || !CheckTerminateExecution() ||
+      RecordReplayKeepsTerminationDeferred()) {
     return false;
   }
   if (recordreplay::IsRecording()) {
@@ -252,7 +302,32 @@ bool StackGuard::RecordReplayLoopCheckLeavesInterrupts() {
   return !recordreplay::HasDivergedFromRecording();
 }
 
-int StackGuard::FetchAndClearInterrupts(InterruptLevel level) {
+// Whether a JS stack check leaves a deferred termination pending. A replay
+// that diverged from the recording has no recorded progress interrupts, at
+// which baseline and optimized code would take it. JS without progress
+// instrumentation never takes it, so the deferral ends at a check that the
+// topmost JS frame of such code makes. An optimized frame counts as its own
+// function's, so a loop inlined from such code into an instrumented function
+// keeps the termination deferred for as long as it runs.
+bool StackGuard::RecordReplayKeepsTerminationDeferred() {
+  if (V8_LIKELY(!isolate_->record_replay_deferred_termination()) ||
+      recordreplay::HasDivergedFromRecording()) {
+    return false;
+  }
+  JavaScriptStackFrameIterator it(isolate_);
+  if (!it.done()) {
+    Tagged<Object> script = it.frame()->function()->shared()->script();
+    if (IsScript(script) &&
+        Cast<Script>(script)->record_replay_instrumented()) {
+      return true;
+    }
+  }
+  isolate_->set_record_replay_deferred_termination(false);
+  return false;
+}
+
+int StackGuard::FetchAndClearInterrupts(InterruptLevel level,
+                                        bool record_replay_defer_termination) {
   ExecutionAccess access(isolate_);
   InterruptFlag mask = InterruptLevelMask(level);
   if ((thread_local_.interrupt_flags_ & TERMINATE_EXECUTION) != 0) {
@@ -261,11 +336,20 @@ int StackGuard::FetchAndClearInterrupts(InterruptLevel level) {
     // fetch and clear that bit. On resume, V8 can continue processing other
     // interrupts.
     mask = TERMINATE_EXECUTION;
+    // A deferred termination stays requested, and the other interrupts are
+    // handled meanwhile.
+    if (record_replay_defer_termination) {
+      mask = static_cast<InterruptFlag>(InterruptLevelMask(level) &
+                                        ~TERMINATE_EXECUTION);
+    }
   }
 
   int result = static_cast<int>(thread_local_.interrupt_flags_ & mask);
   thread_local_.interrupt_flags_ &= ~mask;
   update_interrupt_requests_and_stack_limits(access);
+  if (result & TERMINATE_EXECUTION) {
+    isolate_->set_record_replay_deferred_termination(false);
+  }
   return result;
 }
 
@@ -339,7 +423,8 @@ class V8_NODISCARD ShouldBeZeroOnReturnScope final {
 
 }  // namespace
 
-Tagged<Object> StackGuard::HandleInterrupts(InterruptLevel level) {
+Tagged<Object> StackGuard::HandleInterrupts(InterruptLevel level,
+                                            bool record_replay_js_stack_check) {
   TRACE_EVENT("v8.execute", "V8.HandleInterrupts");
 
 #if DEBUG
@@ -358,7 +443,9 @@ Tagged<Object> StackGuard::HandleInterrupts(InterruptLevel level) {
 
   // Fetch and clear interrupt bits in one go. See comments inside the method
   // for special handling of TERMINATE_EXECUTION.
-  int interrupt_flags = FetchAndClearInterrupts(level);
+  const bool defer_termination =
+      record_replay_js_stack_check && RecordReplayKeepsTerminationDeferred();
+  int interrupt_flags = FetchAndClearInterrupts(level, defer_termination);
 
   // All interrupts should be fully processed when returning from this method.
   ShouldBeZeroOnReturnScope should_be_zero_on_return(&interrupt_flags);

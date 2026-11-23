@@ -1155,6 +1155,12 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   void RequestInvalidateNoProfilingProtector();
 
   void RecordReplayInvokeApiInterruptCallbacksAtProgress();
+  bool record_replay_deferred_termination() const {
+    return record_replay_deferred_termination_;
+  }
+  void set_record_replay_deferred_termination(bool deferred) {
+    record_replay_deferred_termination_ = deferred;
+  }
 
   // Administration
   void Iterate(RootVisitor* v);
@@ -2863,6 +2869,10 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   // api_interrupts_queue_ and has not run yet. Only the isolate's thread uses
   // this.
   std::queue<InterruptEntry> record_replay_api_interrupts_taken_;
+
+  // Set while a termination the main thread requested for itself waits for
+  // the progress counter's next advance (see StackGuard::RequestInterrupt).
+  bool record_replay_deferred_termination_ = false;
 
   std::unique_ptr<replayio::ReplayIsolateData> replay_data_;
 

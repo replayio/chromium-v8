@@ -1355,14 +1355,40 @@ static void OnExecutionProgress(Isolate* isolate, Handle<JSFunction> function) {
   }
 }
 
+// A termination the main thread requested for itself waits for the progress
+// counter's next advance (see RecordReplayDeferTermination in stack-guard.cc).
+// The interpreter calls into the VM at every advance, and baseline and
+// optimized code (unless progress is asserted or checked) only at the target
+// progress. When recording, the request's progress interrupt sets that to the
+// next advance, and the replay reaches the recorded interrupts at the same
+// progress. It waits longer while an InterruptsScope postpones it, as in a
+// pause. Optimized code's call at the target progress is
+// marked as not throwing, which holds for what JS can see: a termination
+// unwinds optimized frames without looking for handlers.
+static bool RecordReplayTakeDeferredTermination(Isolate* isolate) {
+  if (V8_LIKELY(!isolate->record_replay_deferred_termination()) ||
+      recordreplay::AreEventsDisallowed() ||
+      !isolate->stack_guard()->CheckTerminateExecution()) {
+    return false;
+  }
+  isolate->stack_guard()->ClearTerminateExecution();
+  return true;
+}
+
 RUNTIME_FUNCTION(Runtime_RecordReplayAssertExecutionProgress) {
   OnExecutionProgress(isolate, args.at<JSFunction>(0));
+  if (RecordReplayTakeDeferredTermination(isolate)) {
+    return isolate->TerminateExecution();
+  }
   return ReadOnlyRoots(isolate).undefined_value();
 }
 
 RUNTIME_FUNCTION(Runtime_RecordReplayTargetProgressReached) {
   CHECK(*gProgressCounter == gTargetProgress);
   RecordReplayOnTargetProgressReached();
+  if (RecordReplayTakeDeferredTermination(isolate)) {
+    return isolate->TerminateExecution();
+  }
   return ReadOnlyRoots(isolate).undefined_value();
 }
 
@@ -1379,12 +1405,18 @@ RUNTIME_FUNCTION(Runtime_RecordReplayNotifyActivity) {
 // resumes in the interpreter with the call's result as its accumulator.
 RUNTIME_FUNCTION(Runtime_RecordReplayBaselineExecutionProgress) {
   OnExecutionProgress(isolate, args.at<JSFunction>(0));
+  if (RecordReplayTakeDeferredTermination(isolate)) {
+    return isolate->TerminateExecution();
+  }
   return args[1];
 }
 
 RUNTIME_FUNCTION(Runtime_RecordReplayBaselineTargetProgressReached) {
   CHECK(*gProgressCounter == gTargetProgress);
   RecordReplayOnTargetProgressReached();
+  if (RecordReplayTakeDeferredTermination(isolate)) {
+    return isolate->TerminateExecution();
+  }
   return args[0];
 }
 
