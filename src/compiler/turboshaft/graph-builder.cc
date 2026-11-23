@@ -2933,15 +2933,17 @@ OpIndex GraphBuilder::Process(
 #endif  // V8_ENABLE_SANDBOX_HARDWARE_SUPPORT
 
     // Replay: increment the progress counter inline, and call into the VM
-    // when it reaches the target progress. The value inputs are the frame
-    // state for after the progress bytecode, which the call lazily deoptimizes
-    // to, and the context the call runs in. The call deoptimizes this code
-    // when what runs there could have written the heap (see
+    // when it reaches the progress limit (see RecordReplayUpdateProgressLimit).
+    // The value inputs are the frame state for after the progress bytecode,
+    // which the call lazily deoptimizes to, the closure the call is made for,
+    // and the context it runs in. The call deoptimizes this code when what runs
+    // there could have written the heap (see
     // RecordReplayOnTargetProgressReachedFromJS), so it has the loop stack
     // check's effects, and doesn't write.
     case IrOpcode::kIncrementAndCheckProgressCounter: {
       V<LazyFrameState> frame_state = Map<LazyFrameState>(node->InputAt(0));
-      V<Context> context = Map(node->InputAt(1));
+      V<JSFunction> closure = Map(node->InputAt(1));
+      V<Context> context = Map(node->InputAt(2));
       V<WordPtr> counter_address = __ ExternalConstant(
           ExternalReference::record_replay_progress_counter());
       V<Word64> counter =
@@ -2953,20 +2955,21 @@ OpIndex GraphBuilder::Process(
       __ Store(counter_address, incremented, StoreOp::Kind::RawAligned(),
                MemoryRepresentation::Uint64(),
                WriteBarrierKind::kNoWriteBarrier);
-      V<Word64> target =
+      V<Word64> limit =
           __ Load(__ ExternalConstant(
-                      ExternalReference::record_replay_target_progress()),
+                      ExternalReference::record_replay_progress_limit()),
                   LoadOp::Kind::RawAligned().NotLoadEliminable(),
                   MemoryRepresentation::Uint64());
-      IF (UNLIKELY(__ Word64Equal(incremented, target))) {
+      IF (UNLIKELY(__ Word64Equal(incremented, limit))) {
         OpIndex arguments[] = {
+            closure,
             __ ExternalConstant(ExternalReference::Create(
-                Runtime::kRecordReplayTargetProgressReached)),
-            __ Word32Constant(0), context};
+                Runtime::kRecordReplayProgressLimitReached)),
+            __ Word32Constant(1), context};
         __ Call(__ CEntryStubConstant(isolate, 1), frame_state,
                 base::VectorOf(arguments),
-                runtime::RecordReplayTargetProgressReached::Create(
-                    0, __ output_graph().graph_zone(), LazyDeoptOnThrow{false}),
+                runtime::RecordReplayProgressLimitReached::Create(
+                    1, __ output_graph().graph_zone(), LazyDeoptOnThrow{false}),
                 OpEffects()
                     .CanDependOnChecks()
                     .CanDeopt()
