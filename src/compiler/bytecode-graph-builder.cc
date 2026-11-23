@@ -3638,12 +3638,14 @@ void BytecodeGraphBuilder::VisitReplayIncJsFrameDepth() {
       IsolateAddressId::kReplayJsFrameDepthAddress, isolate()));
   Node* depth = NewNode(simplified()->LoadField(depth_access), depth_addr);
   Node* incremented =
-      NewNode(simplified()->NumberAdd(), depth, jsgraph()->SmiConstant(1));
+      NewNode(simplified()->NumberAdd(), depth,
+              jsgraph()->SmiConstant(static_cast<int32_t>(
+                  bytecode_iterator().GetIndexOperand(0))));
   NewNode(simplified()->StoreField(depth_access), depth_addr, incremented);
 
   Node* overflow = NewNode(
       simplified()->NumberLessThanOrEqual(),
-      jsgraph()->SmiConstant(ThreadLocalTop::kReplayMaxJsFrameDepth),
+      jsgraph()->SmiConstant(ThreadLocalTop::kReplayJsStackBudget),
       incremented);
   NewBranch(overflow, BranchHint::kFalse);
   {
@@ -3661,7 +3663,28 @@ void BytecodeGraphBuilder::VisitReplayIncJsFrameDepth() {
 }
 
 void BytecodeGraphBuilder::VisitReplayDecJsFrameDepth() {
-  Node* node = NewNode(simplified()->ReplayDecrementJsFrameDepth());
+  Node* node = NewNode(simplified()->ReplayDecrementJsFrameDepth(
+      static_cast<int>(bytecode_iterator().GetIndexOperand(0))));
+  environment()->RecordAfterState(node, Environment::kAttachFrameState);
+}
+
+void BytecodeGraphBuilder::VisitReplaySaveJsFrameDepth() {
+  FieldAccess depth_access(kUntaggedBase, 0, MaybeHandle<Name>(),
+                           MaybeHandle<Map>(), Type::Signed32(),
+                           MachineType::Int32(), kNoWriteBarrier,
+                           "ReplayJsFrameDepth");
+  Node* depth_addr = jsgraph()->ExternalConstant(ExternalReference::Create(
+      IsolateAddressId::kReplayJsFrameDepthAddress, isolate()));
+  Node* depth = NewNode(simplified()->LoadField(depth_access), depth_addr);
+  environment()->BindRegister(bytecode_iterator().GetRegisterOperand(0), depth);
+}
+
+void BytecodeGraphBuilder::VisitReplayRestoreJsFrameDepth() {
+  PrepareEagerCheckpoint();
+  Node* depth = environment()->LookupRegister(
+      bytecode_iterator().GetRegisterOperand(0));
+  Node* node = NewNode(
+      javascript()->CallRuntime(Runtime::kReplaySetJsFrameDepth), depth);
   environment()->RecordAfterState(node, Environment::kAttachFrameState);
 }
 

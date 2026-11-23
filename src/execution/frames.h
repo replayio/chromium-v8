@@ -851,6 +851,10 @@ class OptimizedFrame : public JavaScriptFrame {
 
   DeoptimizationData GetDeoptimizationData(int* deopt_index) const;
 
+  // Whether the frame is where its code can deoptimize, and so tells the
+  // functions inlined there. It is not at a call that rethrows.
+  bool HasDeoptimizationIndex() const;
+
   static int StackSlotOffsetRelativeToFp(int slot_index);
 
   // Lookup exception handler for current {pc}, returns -1 if none found.

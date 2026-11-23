@@ -3387,11 +3387,22 @@ void MaglevGraphBuilder::VisitRecordReplayIncExecutionProgressCounter() {
 }
 
 void MaglevGraphBuilder::VisitReplayIncJsFrameDepth() {
-  AddNewNode<ReplayIncrementAndCheckJsFrameDepth>({});
+  AddNewNode<ReplayIncrementAndCheckJsFrameDepth>(
+      {}, static_cast<int>(iterator_.GetIndexOperand(0)));
 }
 
 void MaglevGraphBuilder::VisitReplayDecJsFrameDepth() {
-  AddNewNode<ReplayDecrementJsFrameDepth>({});
+  AddNewNode<ReplayDecrementJsFrameDepth>(
+      {}, static_cast<int>(iterator_.GetIndexOperand(0)));
+}
+
+void MaglevGraphBuilder::VisitReplaySaveJsFrameDepth() {
+  StoreRegister(iterator_.GetRegisterOperand(0),
+                BuildCallRuntime(Runtime::kReplayJsFrameDepth, {}));
+}
+
+void MaglevGraphBuilder::VisitReplayRestoreJsFrameDepth() {
+  BuildCallRuntime(Runtime::kReplaySetJsFrameDepth, {LoadRegisterTagged(0)});
 }
 
 void MaglevGraphBuilder::VisitRecordReplayNotifyActivity() {

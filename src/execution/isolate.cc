@@ -71,6 +71,7 @@
 #include "src/init/bootstrapper.h"
 #include "src/init/setup-isolate.h"
 #include "src/init/v8.h"
+#include "src/interpreter/bytecode-array-iterator.h"
 #include "src/interpreter/interpreter.h"
 #include "src/libsampler/sampler.h"
 #include "src/logging/counters.h"
@@ -1588,16 +1589,7 @@ bool Isolate::MayAccess(Handle<Context> accessing_context,
   }
 }
 
-static bool gHasPrintedStack = false;
-
 Object Isolate::StackOverflow() {
-  if (recordreplay::IsRecordingOrReplaying() && !gHasPrintedStack) {
-    gHasPrintedStack = true;
-    std::stringstream stack;
-    PrintCurrentStackTrace(stack);
-    recordreplay::Print("Stack overflow: %s", stack.str().c_str());
-  }
-
   // Whoever calls this method should not have overflown the stack limit by too
   // much. Otherwise we risk actually running out of stack space.
   // We allow for up to 8kB overflow, because we typically allow up to 4KB
@@ -2002,26 +1994,88 @@ class SetThreadInWasmFlagScope {
 #endif  // V8_ENABLE_WEBASSEMBLY
 }  // namespace
 
+// What entering a function charged: the operand of its ReplayIncJsFrameDepth
+// bytecodes. Nothing for a function of a script without record/replay opcodes.
+static int ReplayJsFrameCost(Isolate* isolate, SharedFunctionInfo shared,
+                             BytecodeArray bytecode) {
+  Object script = shared.script();
+  if (!script.IsScript() ||
+      !Script::cast(script).record_replay_instrumented()) {
+    return 0;
+  }
+  interpreter::BytecodeArrayIterator bytecodes(handle(bytecode, isolate));
+  for (; !bytecodes.done(); bytecodes.Advance()) {
+    if (bytecodes.current_bytecode() ==
+        interpreter::Bytecode::kReplayIncJsFrameDepth) {
+      return static_cast<int>(bytecodes.GetIndexOperand(0));
+    }
+  }
+  return 0;
+}
+
+static int ReplayJsFrameCost(Isolate* isolate, SharedFunctionInfo shared) {
+  if (!shared.HasBytecodeArray()) return 0;
+  return ReplayJsFrameCost(isolate, shared, shared.GetBytecodeArray(isolate));
+}
+
+// Nothing for a builtin that continues in an optimized frame.
+static int ReplayJsFrameCost(Isolate* isolate,
+                             const FrameSummary::JavaScriptFrameSummary& js) {
+  PtrComprCageBase cage_base(isolate);
+  if (!js.abstract_code()->IsBytecodeArray(cage_base)) return 0;
+  return ReplayJsFrameCost(isolate, js.function()->shared(),
+                           js.abstract_code()->GetBytecodeArray());
+}
+
+// The charges of the functions in a JS frame: an optimized one has others
+// inlined into its own.
+static int ReplayFrameCharges(Isolate* isolate, JavaScriptFrame* frame) {
+  if (frame->is_unoptimized()) {
+    return ReplayJsFrameCost(isolate, frame->function().shared(),
+                             UnoptimizedFrame::cast(frame)->GetBytecodeArray());
+  }
+  if (frame->is_turbofan() &&
+      !static_cast<OptimizedFrame*>(frame)->HasDeoptimizationIndex()) {
+    return ReplayJsFrameCost(isolate, frame->function().shared());
+  }
+  std::vector<FrameSummary> summaries;
+  frame->Summarize(&summaries);
+  int charges = 0;
+  for (const FrameSummary& summary : summaries) {
+    if (summary.IsJavaScript()) {
+      charges += ReplayJsFrameCost(isolate, summary.AsJavaScript());
+    }
+  }
+  return charges;
+}
+
+// Charges what the frames below the pending handler's do: an exception left
+// the frames above it without their functions returning. A handler of bytecode
+// charges what its try block kept (ReplayRestoreJsFrameDepth), and leaving JS
+// code what was charged where it was entered (ReplayJsEntryScope): this is for
+// a handler of a builtin.
 static void ReplaySyncJsFrameDepth(Isolate* isolate) {
-  if (!recordreplay::IsRecordingOrReplaying("emit-opcodes")) return;
+  if (!isolate->replay_stack_budget()) return;
+  // Replay's own code is charged nothing, see ReplayJsEntryScope.
+  if (recordreplay::IsInReplayCode() || recordreplay::AreEventsDisallowed()) {
+    return;
+  }
 
   HandleScope scope(isolate);
-  int skip = static_cast<int>(
+  int above = static_cast<int>(
       isolate->thread_local_top()->num_frames_above_pending_handler_);
   int depth = 0;
   int index = 0;
   for (StackFrameIterator it(isolate); !it.done(); it.Advance(), index++) {
-    if (index < skip) continue;
+    if (index < above) continue;
     StackFrame* frame = it.frame();
-    if (!frame->is_java_script()) continue;
-    std::vector<FrameSummary> summaries;
-    CommonFrame::cast(frame)->Summarize(&summaries);
-    if (summaries.empty()) {
-      depth += 1;  // SyncEmptyCount
-    } else {
-      for (const FrameSummary& summary : summaries) {
-        if (summary.IsJavaScript()) depth++;
-      }
+    bool is_entry = frame->type() == StackFrame::ENTRY ||
+                    frame->type() == StackFrame::CONSTRUCT_ENTRY;
+    if (index == above && (is_entry || frame->is_java_script())) return;
+    if (is_entry) {
+      depth += ThreadLocalTop::kReplayJsEntryCost;
+    } else if (frame->is_java_script()) {
+      depth += ReplayFrameCharges(isolate, JavaScriptFrame::cast(frame));
     }
   }
   isolate->set_replay_js_frame_depth(depth);
@@ -3632,6 +3686,9 @@ Isolate::Isolate(std::unique_ptr<i::IsolateAllocator> isolate_allocator,
 
   if (recordreplay::IsRecordingOrReplaying() && IsMainThread()) {
     RecordReplayOnMainThreadIsolateCreated(this);
+    // The functions that charge the budget are those with record/replay
+    // opcodes, which only this thread's scripts have.
+    replay_stack_budget_ = recordreplay::IsRecordingOrReplaying("emit-opcodes");
   }
 }
 

@@ -217,7 +217,9 @@ void StackGuard::FreeThreadResources() {
 
 void StackGuard::ThreadLocal::Initialize(Isolate* isolate,
                                          const ExecutionAccess& lock) {
-  const uintptr_t kLimitSize = v8_flags.stack_size * KB;
+  const uintptr_t kLimitSize = isolate->replay_stack_budget()
+                                   ? ThreadLocalTop::kReplayStackSize
+                                   : v8_flags.stack_size * KB;
   DCHECK_GT(GetCurrentStackPosition(), kLimitSize);
   uintptr_t limit = GetCurrentStackPosition() - kLimitSize;
   real_jslimit_ = SimulatorStack::JsLimitFromCLimit(isolate, limit);

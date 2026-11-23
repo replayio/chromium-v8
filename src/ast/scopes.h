@@ -884,6 +884,11 @@ class V8_EXPORT_PRIVATE DeclarationScope : public Scope {
 
   FunctionKind function_kind() const { return function_kind_; }
 
+  // The variables the scope's function declares, in whichever of its scopes
+  // and wherever they are allocated: a replay allocates them in contexts, a
+  // recording those on the stack that it can.
+  int ReplayDeclaredVariableCount();
+
   // Inform the scope that the corresponding code uses "super".
   Scope* RecordSuperPropertyUsage() {
     DCHECK(IsConciseMethod(function_kind()) ||

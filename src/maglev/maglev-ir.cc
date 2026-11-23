@@ -3366,8 +3366,8 @@ void ReplayIncrementAndCheckJsFrameDepth::GenerateCode(
   ExternalReference depth_ref = ExternalReference::Create(
       IsolateAddressId::kReplayJsFrameDepthAddress, masm->isolate());
   MemOperand depth = __ ExternalReferenceAsOperand(depth_ref, scratch);
-  __ incl(depth);
-  __ cmpl(depth, Immediate(ThreadLocalTop::kReplayMaxJsFrameDepth));
+  __ addl(depth, Immediate(amount()));
+  __ cmpl(depth, Immediate(ThreadLocalTop::kReplayJsStackBudget));
   __ JumpToDeferredIf(
       greater_equal,
       [](MaglevAssembler* masm, ReplayIncrementAndCheckJsFrameDepth* node) {
@@ -3377,6 +3377,10 @@ void ReplayIncrementAndCheckJsFrameDepth::GenerateCode(
         __ Abort(AbortReason::kUnexpectedReturnFromThrow);
       },
       this);
+}
+void ReplayIncrementAndCheckJsFrameDepth::PrintParams(
+    std::ostream& os, MaglevGraphLabeller* graph_labeller) const {
+  os << "(" << amount() << ")";
 }
 
 void ReplayDecrementJsFrameDepth::AllocateVreg(
@@ -3389,7 +3393,11 @@ void ReplayDecrementJsFrameDepth::GenerateCode(MaglevAssembler* masm,
   ExternalReference depth_ref = ExternalReference::Create(
       IsolateAddressId::kReplayJsFrameDepthAddress, masm->isolate());
   MemOperand depth = __ ExternalReferenceAsOperand(depth_ref, scratch);
-  __ decl(depth);
+  __ subl(depth, Immediate(amount()));
+}
+void ReplayDecrementJsFrameDepth::PrintParams(
+    std::ostream& os, MaglevGraphLabeller* graph_labeller) const {
+  os << "(" << amount() << ")";
 }
 
 void ThrowReferenceErrorIfHole::AllocateVreg(
