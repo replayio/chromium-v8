@@ -6327,6 +6327,12 @@ MaybeReduceResult MaglevReducer<BaseT>::TryReducePromiseThenImpl(
     const char* trace_name, CallArguments& args, ValueNode* on_fulfilled,
     ValueNode* on_rejected, bool needs_then_protector) {
   DCHECK(args.mode() == CallArguments::kDefault);
+  // Replay: as in JSCallReducer::ReducePromisePrototypeThen.
+  if (recordreplay::IsRecordingOrReplaying(
+          "disable-v8-optimize-promises",
+          "MaglevReducer::TryReducePromiseThenImpl")) {
+    return {};
+  }
   if (!CanSpeculateCall()) return {};
   if (args.receiver_mode() == ConvertReceiverMode::kNullOrUndefined) {
     TRACE(TraceColor::kRed << "! Failed to reduce " << trace_name
@@ -6593,6 +6599,12 @@ MaybeReduceResult MaglevReducer<BaseT>::TryReducePromiseResolveTrampoline(
   // "then" property (which also rules out JSPromise values), produces a
   // fresh fulfilled promise. Allocate it inline instead of going through
   // the PromiseResolveTrampoline and PromiseResolve builtins.
+  // Replay: as in JSNativeContextSpecialization::ReduceJSPromiseResolve.
+  if (recordreplay::IsRecordingOrReplaying(
+          "disable-v8-optimize-promises",
+          "MaglevReducer::TryReducePromiseResolveTrampoline")) {
+    return {};
+  }
   if (args.mode() != CallArguments::kDefault) return {};
   if (args.receiver_mode() == ConvertReceiverMode::kNullOrUndefined) {
     TRACE(TraceColor::kRed << "! Failed to reduce Promise.resolve - no "

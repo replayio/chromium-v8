@@ -93,6 +93,11 @@
 #include "src/utils/utils.h"
 #include "src/zone/zone.h"
 
+namespace v8::internal {
+extern bool gRecordReplayAssertProgress;
+extern bool gRecordReplayInstrumentationEnabled;
+}  // namespace v8::internal
+
 namespace v8::internal::maglev {
 
 #define TRACE(...)                        \
@@ -9750,6 +9755,12 @@ MaybeReduceResult MaglevGraphBuilder::TryReduceArrayPrototypeSort(
 
   // Suppress for correctness fuzzing (different behavior vs. builtin).
   if (V8_UNLIKELY(v8_flags.correctness_fuzzer_suppressions)) return {};
+  // Replay: as in JSCallReducer::ReduceArraySort.
+  if (recordreplay::IsRecordingOrReplaying(
+          "disable-v8-inline-array-sort",
+          "MaglevGraphBuilder::TryReduceArrayPrototypeSort")) {
+    return {};
+  }
 
   if (!CanSpeculateCall()) return {};
 
@@ -12491,7 +12502,10 @@ ReduceResult MaglevGraphBuilder::VisitIntrinsicAsyncFunctionAwait(
   ValueNode* value;
   GET_VALUE_OR_ABORT(value, GetTaggedValue(args[1]));
 
-  if (!broker()->dependencies()->DependOnPromiseHookProtector() ||
+  if (recordreplay::IsRecordingOrReplaying(
+          "disable-v8-optimize-promises",
+          "MaglevGraphBuilder::VisitIntrinsicAsyncFunctionAwait") ||
+      !broker()->dependencies()->DependOnPromiseHookProtector() ||
       !broker()->dependencies()->DependOnPromiseSpeciesProtector() ||
       !broker()->dependencies()->DependOnPromiseThenProtector()) {
     SetAccumulator(BuildCallBuiltin<Builtin::kAsyncFunctionAwait>(
@@ -12564,6 +12578,11 @@ ReduceResult MaglevGraphBuilder::VisitIntrinsicAsyncFunctionAwait(
 
 MaybeReduceResult MaglevGraphBuilder::TryReduceAsyncFunctionEnter(
     ValueNode* closure, ValueNode* receiver) {
+  if (recordreplay::IsRecordingOrReplaying(
+          "disable-v8-optimize-promises",
+          "MaglevGraphBuilder::TryReduceAsyncFunctionEnter")) {
+    return {};
+  }
   if (!broker()->dependencies()->DependOnPromiseHookProtector()) return {};
 
   // We check that we'll be able to allocate the register file here at the start
@@ -12609,6 +12628,11 @@ ReduceResult MaglevGraphBuilder::VisitIntrinsicAsyncFunctionEnter(
 
 MaybeReduceResult MaglevGraphBuilder::TryReduceAsyncFunctionReject(
     ValueNode* async_function_object, ValueNode* reason) {
+  if (recordreplay::IsRecordingOrReplaying(
+          "disable-v8-optimize-promises",
+          "MaglevGraphBuilder::TryReduceAsyncFunctionReject")) {
+    return {};
+  }
   if (!broker()->dependencies()->DependOnPromiseHookProtector()) return {};
 
   ValueNode* promise;
@@ -12654,6 +12678,11 @@ ReduceResult MaglevGraphBuilder::VisitIntrinsicAsyncFunctionReject(
 
 MaybeReduceResult MaglevGraphBuilder::TryReduceAsyncFunctionResolve(
     ValueNode* async_function_object, ValueNode* value) {
+  if (recordreplay::IsRecordingOrReplaying(
+          "disable-v8-optimize-promises",
+          "MaglevGraphBuilder::TryReduceAsyncFunctionResolve")) {
+    return {};
+  }
   if (!broker()->dependencies()->DependOnPromiseHookProtector()) return {};
 
   ValueNode* promise = nullptr;
@@ -16457,27 +16486,55 @@ ReduceResult MaglevGraphBuilder::VisitIncBlockCounter() {
   return ReduceResult::Done();
 }
 
+// Assertions on progress need the VM call at every advance. Otherwise the
+// counter is updated inline, and the VM is called at the target progress or
+// while progress checks are enabled (see
+// RecordReplayIncrementAndCheckProgressCounter). Unlike baseline code and
+// TurboFan, which decide when they compile, Maglev tests whether checks are
+// enabled when the code runs: they are enabled while events are disallowed on
+// the main thread, as they are while this compiles
+// (Compiler::CompileOptimized). That node keeps the 64-bit counter in one
+// register, and is only used on x64 and arm64, the 64-bit architectures
+// baseline code has the inline update on.
 ReduceResult MaglevGraphBuilder::VisitRecordReplayIncExecutionProgressCounter() {
   ValueNode* closure = GetClosure();
+#if V8_TARGET_ARCH_X64 || V8_TARGET_ARCH_ARM64
+  if (!gRecordReplayAssertProgress && !is_turbolev()) {
+    RETURN_IF_ABORT(
+        AddNewNode<RecordReplayIncrementAndCheckProgressCounter>({closure}));
+    return ReduceResult::Done();
+  }
+#endif
   RETURN_IF_ABORT(BuildCallRuntime(
       Runtime::kRecordReplayAssertExecutionProgress, {closure}));
   return ReduceResult::Done();
 }
 
-// Replay: the frame depth bytecodes have no Maglev lowering here. Replay's V8
-// 10.8 lowers them to dedicated nodes (ReplayIncrementAndCheckJsFrameDepth,
-// ReplayDecrementJsFrameDepth) in its x64-only Maglev, which is off by default
-// there. Skipping them would unbalance the depth counter across deopts and
-// exception unwinds (Isolate::UnwindAndFindHandler recounts every JavaScript
-// frame), so functions carrying them are not compiled by Maglev.
+// Replay: Turboshaft has no lowering of the frame depth nodes yet, so
+// functions carrying the frame depth bytecodes are not compiled by Turbolev.
+// Skipping them would unbalance the depth counter across deopts and exception
+// unwinds (Isolate::UnwindAndFindHandler recounts every JavaScript frame).
+// The nodes aren't writes, which would make Maglev forget what it knows about
+// JS objects at every function entry and exit, so the checkpointed frame is
+// dropped by hand: an eager deopt resuming before them would count again.
 ReduceResult MaglevGraphBuilder::VisitReplayIncJsFrameDepth() {
-  should_abort_compilation_ = true;
-  return reducer_.BuildAbort(AbortReason::kUnreachable);
+  if (is_turbolev()) {
+    should_abort_compilation_ = true;
+    return reducer_.BuildAbort(AbortReason::kUnreachable);
+  }
+  RETURN_IF_ABORT(AddNewNode<ReplayIncrementAndCheckJsFrameDepth>({}));
+  latest_checkpointed_frame_ = nullptr;
+  return ReduceResult::Done();
 }
 
 ReduceResult MaglevGraphBuilder::VisitReplayDecJsFrameDepth() {
-  should_abort_compilation_ = true;
-  return reducer_.BuildAbort(AbortReason::kUnreachable);
+  if (is_turbolev()) {
+    should_abort_compilation_ = true;
+    return reducer_.BuildAbort(AbortReason::kUnreachable);
+  }
+  RETURN_IF_ABORT(AddNewNode<ReplayDecrementJsFrameDepth>({}));
+  latest_checkpointed_frame_ = nullptr;
+  return ReduceResult::Done();
 }
 
 ReduceResult MaglevGraphBuilder::VisitRecordReplayNotifyActivity() {
@@ -16485,7 +16542,14 @@ ReduceResult MaglevGraphBuilder::VisitRecordReplayNotifyActivity() {
   return ReduceResult::Done();
 }
 
+// The instrumentation calls do nothing while instrumentation is disabled, and
+// changing it discards all optimized code (see RecordReplayChangeInstrument),
+// so they are left out then, as TurboFan does. The generator's call always
+// runs, see Runtime_RecordReplayInstrumentationGenerator.
 ReduceResult MaglevGraphBuilder::VisitRecordReplayInstrumentation() {
+  if (!gRecordReplayInstrumentationEnabled) {
+    return ReduceResult::Done();
+  }
   ValueNode* closure = GetClosure();
   ValueNode* index = GetSmiConstant(iterator_.GetConstantPoolIndexOperand(0));
   RETURN_IF_ABORT(BuildCallRuntime(Runtime::kRecordReplayInstrumentation,
@@ -16504,6 +16568,9 @@ ReduceResult MaglevGraphBuilder::VisitRecordReplayInstrumentationGenerator() {
 }
 
 ReduceResult MaglevGraphBuilder::VisitRecordReplayInstrumentationReturn() {
+  if (!gRecordReplayInstrumentationEnabled) {
+    return ReduceResult::Done();
+  }
   ValueNode* closure = GetClosure();
   ValueNode* index = GetSmiConstant(iterator_.GetConstantPoolIndexOperand(0));
   ValueNode* return_value = LoadRegister(1);
