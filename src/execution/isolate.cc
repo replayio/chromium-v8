@@ -2729,7 +2729,7 @@ Handle<JSMessageObject> Isolate::CreateMessage(Handle<Object> exception,
 
   return MessageHandler::MakeMessageObject(
       this, MessageTemplate::kUncaughtException, location, exception,
-      stack_trace_object);
+      stack_trace_object, exception);
 }
 
 Handle<JSMessageObject> Isolate::CreateMessageFromException(
