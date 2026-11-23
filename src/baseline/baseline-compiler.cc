@@ -3020,15 +3020,23 @@ void BaselineCompiler::VisitIncBlockCounter() {
 void BaselineCompiler::VisitRecordReplayIncExecutionProgressCounter() {
   // The progress calls return the accumulator, which is live after
   // ResumeGenerator and at the start of catch blocks.
+  //
+  // Assertions on progress need the VM call. So do checks on progress, which
+  // are enabled while events are disallowed on the main thread, so whether
+  // they are is tested when the code runs: baseline code compiled while they
+  // are enabled would otherwise make the VM call at every advance, and code
+  // compiled while they are not would never check. Otherwise increment the
+  // counter inline and only call into the VM at the target progress.
 #if V8_TARGET_ARCH_X64
-  // Assertions and checks on progress need the VM call. Otherwise increment
-  // the counter inline and only call into the VM at the target progress.
-  if (!gRecordReplayAssertProgress && !gRecordReplayCheckProgress) {
-    Label done;
+  if (!gRecordReplayAssertProgress) {
+    Label check_progress, done;
     {
       BaselineAssembler::ScratchRegisterScope scratch_scope(&basm_);
       Register address = scratch_scope.AcquireScratch();
       Register counter = scratch_scope.AcquireScratch();
+      masm_.Move(address, ExternalReference::record_replay_check_progress());
+      masm_.cmpl(Operand(address, 0), Immediate(0));
+      masm_.j(not_equal, &check_progress);
       masm_.Move(address, ExternalReference::record_replay_progress_counter());
       masm_.movq(counter, Operand(address, 0));
       masm_.incq(counter);
@@ -3039,16 +3047,24 @@ void BaselineCompiler::VisitRecordReplayIncExecutionProgressCounter() {
     }
     CallRuntime(Runtime::kRecordReplayBaselineTargetProgressReached,
                 kInterpreterAccumulatorRegister);
+    __ Jump(&done);
+    __ Bind(&check_progress);
+    CallRuntime(Runtime::kRecordReplayBaselineExecutionProgress,
+                __ FunctionOperand(), kInterpreterAccumulatorRegister);
     __ Bind(&done);
     return;
   }
 #elif V8_TARGET_ARCH_ARM64
-  if (!gRecordReplayAssertProgress && !gRecordReplayCheckProgress) {
-    Label done;
+  if (!gRecordReplayAssertProgress) {
+    Label check_progress, done;
     {
       BaselineAssembler::ScratchRegisterScope scratch_scope(&basm_);
       Register address = scratch_scope.AcquireScratch();
       Register counter = scratch_scope.AcquireScratch();
+      masm_.Mov(address,
+                Operand(ExternalReference::record_replay_check_progress()));
+      masm_.Ldr(counter.W(), MemOperand(address));
+      masm_.Cbnz(counter.W(), &check_progress);
       masm_.Mov(address,
                 Operand(ExternalReference::record_replay_progress_counter()));
       masm_.Ldr(counter, MemOperand(address));
@@ -3062,6 +3078,10 @@ void BaselineCompiler::VisitRecordReplayIncExecutionProgressCounter() {
     }
     CallRuntime(Runtime::kRecordReplayBaselineTargetProgressReached,
                 kInterpreterAccumulatorRegister);
+    __ Jump(&done);
+    __ Bind(&check_progress);
+    CallRuntime(Runtime::kRecordReplayBaselineExecutionProgress,
+                __ FunctionOperand(), kInterpreterAccumulatorRegister);
     __ Bind(&done);
     return;
   }
