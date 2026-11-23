@@ -1724,13 +1724,17 @@ bool ValueMirror::getProperties(v8::Local<v8::Context> context,
           // for the viewer to call. A read that reaches none of the page's code
           // is the exception: an Error's stack the page has already formatted
           // gives the string the recording saw, and one V8 formats its own way
-          // gives what the page's own read would.
+          // gives what the page's own read would. That answer is the whole gate
+          // there. The rule below refuses almost every getter once the replay
+          // has diverged, to keep the embedder's own from crashing in a pause
+          // (RUN-1478), and it has nothing to say about a read that runs no
+          // code at all.
           if (name != "__proto__" && !getterFunction.IsEmpty() &&
               isBuiltinGetter(getterFunction) &&
-              (!v8::replayio::MustNotRunUserJS() ||
-               v8::replayio::ReadingIsFreeOfUserJS(object, v8Name)) &&
-              !doesAttributeHaveObservableSideEffectOnGet(context, object,
-                                                          v8Name)) {
+              (v8::replayio::MustNotRunUserJS()
+                   ? v8::replayio::ReadingIsFreeOfUserJS(object, v8Name)
+                   : !doesAttributeHaveObservableSideEffectOnGet(
+                         context, object, v8Name))) {
             v8::TryCatch tryCatchFunction(isolate);
             v8::Local<v8::Value> value;
             if (object->Get(context, v8Name).ToLocal(&value)) {
