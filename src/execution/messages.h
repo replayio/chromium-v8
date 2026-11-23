@@ -134,13 +134,34 @@ class MessageFormatter {
                                Handle<Object> arg2 = Handle<Object>());
 };
 
+// Whether Replay may see |exception| as the current exception: it is catchable
+// and not thrown from a script Replay hides. Defined in api.cc.
+bool RecordReplayShouldExposeException(Isolate* isolate,
+                                       Handle<Object> exception);
+
+// Exposes |exception| (none if null) to Replay as the current exception while
+// in scope; nested scopes shadow outer ones. Defined in api.cc.
+class V8_NODISCARD RecordReplayCurrentExceptionScope {
+ public:
+  explicit RecordReplayCurrentExceptionScope(Handle<Object>* exception);
+  ~RecordReplayCurrentExceptionScope();
+  RecordReplayCurrentExceptionScope(const RecordReplayCurrentExceptionScope&) =
+      delete;
+  RecordReplayCurrentExceptionScope& operator=(
+      const RecordReplayCurrentExceptionScope&) = delete;
+
+ private:
+  Handle<Object>* prev_exception_;
+};
+
 // A message handler is a convenience interface for accessing the list
 // of message listeners registered in an environment
 class MessageHandler {
  public:
   // Returns a message object for the API to use.
-  // |record_replay_exception| is exposed as the current exception during the
-  // message's bookmark if no exception is pending and it is catchable.
+  // |record_replay_exception|, else a pending exception, is exposed as the
+  // current exception during the message's bookmark, unless
+  // RecordReplayShouldExposeException rejects it.
   V8_EXPORT_PRIVATE static Handle<JSMessageObject> MakeMessageObject(
       Isolate* isolate, MessageTemplate type, const MessageLocation* location,
       Handle<Object> argument, Handle<FixedArray> stack_frames,

@@ -11019,7 +11019,47 @@ extern "C" void V8RecordReplayGetCurrentException(MaybeLocal<Value>* exception) 
 }
 
 
+RecordReplayCurrentExceptionScope::RecordReplayCurrentExceptionScope(
+    Handle<Object>* exception)
+    : prev_exception_(gCurrentException) {
+  gCurrentException = exception;
+}
+
+RecordReplayCurrentExceptionScope::~RecordReplayCurrentExceptionScope() {
+  gCurrentException = prev_exception_;
+}
+
 extern bool RecordReplayHasRegisteredScript(Script script);
+
+// Whether the top JS frame is in a script Replay doesn't know about.
+static bool RecordReplayIsInUnregisteredScript(Isolate* isolate) {
+  HandleScope scope(isolate);
+  // Note: Most of this is copied from |ComputeLocation| in messages.cc.
+  JavaScriptFrameIterator it(isolate);
+  if (it.done()) {
+    return false;
+  }
+  // Compute the location from the function and the relocation info of the
+  // baseline code. For optimized code this will use the deoptimization
+  // information to get canonical location information.
+  std::vector<FrameSummary> frames;
+  it.frame()->Summarize(&frames);
+  if (frames.empty()) {  // There might not always be a frame due to RUN-1920.
+    return false;
+  }
+  auto& summary = frames.back().AsJavaScript();
+  Handle<SharedFunctionInfo> shared(summary.function()->shared(), isolate);
+  Handle<Object> script(shared->script(), isolate);
+  return script->IsScript() &&
+         !RecordReplayHasRegisteredScript(*Handle<Script>::cast(script));
+}
+
+bool RecordReplayShouldExposeException(Isolate* isolate,
+                                       Handle<Object> exception) {
+  return gRecordReplayIsRecordingOrReplaying &&
+         isolate->is_catchable_by_javascript(*exception) &&
+         !RecordReplayIsInUnregisteredScript(isolate);
+}
 
 void RecordReplayOnExceptionUnwind(Isolate* isolate) {
   CHECK(gRecordReplayIsRecordingOrReplaying);
@@ -11034,32 +11074,9 @@ void RecordReplayOnExceptionUnwind(Isolate* isolate) {
     return;
 
   Handle<Object> exception(isolate->pending_exception(), isolate);
-  if (!isolate->is_catchable_by_javascript(*exception))
+  // Don't report errors from unregistered scripts.
+  if (!RecordReplayShouldExposeException(isolate, exception))
     return;
-
-  {
-    // Note: Most of this is copied from |ComputeLocation| in messages.cc.
-    JavaScriptFrameIterator it(isolate);
-    if (!it.done()) {
-      // Compute the location from the function and the relocation info of the
-      // baseline code. For optimized code this will use the deoptimization
-      // information to get canonical location information.
-      std::vector<FrameSummary> frames;
-      it.frame()->Summarize(&frames);
-      if (!frames.empty()) { // There might not always be a frame due to RUN-1920.
-        auto& summary = frames.back().AsJavaScript();
-        Handle<SharedFunctionInfo> shared(summary.function()->shared(), isolate);
-        Handle<Object> script(shared->script(), isolate);
-        if (script->IsScript()) {
-          Handle<Script> casted_script = Handle<Script>::cast(script);
-          if (!RecordReplayHasRegisteredScript(*casted_script)) {
-            // Don't repor errors from unregistered.
-            return;
-          }
-        }
-      }
-    }
-  }
 
   isolate->clear_pending_exception();
   Handle<Object> message(isolate->pending_message(), isolate);
@@ -11069,13 +11086,10 @@ void RecordReplayOnExceptionUnwind(Isolate* isolate) {
     scheduledException = Handle<Object>(isolate->scheduled_exception(), isolate);
     isolate->clear_scheduled_exception();
   }
-  // Nested unwinds (e.g. in progress interrupt callbacks) shadow the outer one.
-  Handle<Object>* prev_exception = gCurrentException;
-  gCurrentException = &exception;
-
-  gRecordReplayOnExceptionUnwind();
-
-  gCurrentException = prev_exception;
+  {
+    RecordReplayCurrentExceptionScope exception_scope(&exception);
+    gRecordReplayOnExceptionUnwind();
+  }
   CHECK(!isolate->has_pending_exception());
   isolate->set_pending_exception(*exception);
   isolate->set_pending_message(*message);
