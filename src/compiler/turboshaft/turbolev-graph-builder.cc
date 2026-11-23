@@ -5868,6 +5868,21 @@ class GraphBuildingNodeProcessor {
     // used as a frontend for Turboshaft.
     UNREACHABLE();
   }
+  // Maglev doesn't emit the record/replay nodes when it is used as a frontend
+  // for Turboshaft, see MaglevGraphBuilder::VisitReplayIncJsFrameDepth.
+  maglev::ProcessResult Process(
+      maglev::RecordReplayIncrementAndCheckProgressCounter*,
+      const maglev::ProcessingState&) {
+    UNREACHABLE();
+  }
+  maglev::ProcessResult Process(maglev::ReplayIncrementAndCheckJsFrameDepth*,
+                                const maglev::ProcessingState&) {
+    UNREACHABLE();
+  }
+  maglev::ProcessResult Process(maglev::ReplayDecrementJsFrameDepth*,
+                                const maglev::ProcessingState&) {
+    UNREACHABLE();
+  }
   maglev::ProcessResult Process(maglev::HandleNoHeapWritesInterrupt* node,
                                 const maglev::ProcessingState&) {
     DCHECK(!v8_flags.disable_loop_stack_checks);

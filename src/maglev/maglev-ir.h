@@ -490,6 +490,9 @@ class ExceptionHandlerInfo;
   V(StoreContextSlotWithWriteBarrier)         \
   V(StoreTrustedPointerFieldWithWriteBarrier) \
   V(HandleNoHeapWritesInterrupt)              \
+  V(RecordReplayIncrementAndCheckProgressCounter) \
+  V(ReplayIncrementAndCheckJsFrameDepth)      \
+  V(ReplayDecrementJsFrameDepth)              \
   V(ReduceInterruptBudgetForLoop)             \
   V(ReduceInterruptBudgetForReturn)           \
   V(ThrowReferenceErrorIfTdzHole)             \
@@ -11143,6 +11146,58 @@ class HandleNoHeapWritesInterrupt
   void SetValueLocationConstraints() {}
   void GenerateCode(MaglevAssembler*, const ProcessingState&);
   int MaxCallStackArgs() const { return 0; }
+};
+
+// The record/replay progress counter's update, as baseline code makes it:
+// increment the counter inline, and call into the VM at the target progress,
+// where what runs (pausing, breakpoints, instrumentation changes) can run JS
+// and discard this code, or while progress checks are enabled, which they are
+// while events are disallowed on the main thread.
+class RecordReplayIncrementAndCheckProgressCounter
+    : public FixedInputNodeT<1, RecordReplayIncrementAndCheckProgressCounter> {
+ public:
+  explicit RecordReplayIncrementAndCheckProgressCounter(uint64_t bitfield)
+      : Base(bitfield) {}
+
+  DECLARE_INPUTS(Closure)
+  DECLARE_INPUT_TYPES(Tagged)
+
+  static constexpr OpProperties kProperties =
+      OpProperties::DeferredCall() | OpProperties::AnySideEffects() |
+      OpProperties::LazyDeopt() | OpProperties::NotIdempotent();
+
+  int MaxCallStackArgs() const { return 1; }
+  void SetValueLocationConstraints();
+  void GenerateCode(MaglevAssembler*, const ProcessingState&);
+};
+
+// The JS frame depth that a replay's stack overflows are thrown at, see
+// ThreadLocalTop::kReplayMaxJsFrameDepth. Nothing JS can see reads or writes
+// it, so neither node is a write.
+class ReplayIncrementAndCheckJsFrameDepth
+    : public FixedInputNodeT<0, ReplayIncrementAndCheckJsFrameDepth> {
+ public:
+  explicit ReplayIncrementAndCheckJsFrameDepth(uint64_t bitfield)
+      : Base(bitfield) {}
+
+  static constexpr OpProperties kProperties = OpProperties::CanThrow() |
+                                              OpProperties::DeferredCall() |
+                                              OpProperties::NotIdempotent();
+
+  int MaxCallStackArgs() const { return 0; }
+  void SetValueLocationConstraints();
+  void GenerateCode(MaglevAssembler*, const ProcessingState&);
+};
+
+class ReplayDecrementJsFrameDepth
+    : public FixedInputNodeT<0, ReplayDecrementJsFrameDepth> {
+ public:
+  explicit ReplayDecrementJsFrameDepth(uint64_t bitfield) : Base(bitfield) {}
+
+  static constexpr OpProperties kProperties = OpProperties::NotIdempotent();
+
+  void SetValueLocationConstraints();
+  void GenerateCode(MaglevAssembler*, const ProcessingState&);
 };
 
 class ReduceInterruptBudgetForLoop

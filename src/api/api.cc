@@ -14263,9 +14263,10 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
   // it of work with events allowed: Maglev when finished jobs are finalized
   // from the interrupt its worker requests, Sparkplug whenever a batch of
   // functions is due. Sparkplug's job also compiles on a recorded thread that
-  // the collector has to stop. Maglev wouldn't compile instrumented functions
-  // anyway (MaglevGraphBuilder::VisitReplayIncJsFrameDepth).
-  RecordReplayTurnOffFlag(i::v8_flags.maglev);
+  // the collector has to stop. So both compile on the thread that asks for
+  // the code instead, Maglev inside Compiler::CompileOptimized's disallowed
+  // events: its concurrent dispatcher is disabled (see
+  // MaglevConcurrentDispatcher's constructor).
   RecordReplayTurnOffFlag(i::v8_flags.concurrent_sparkplug);
 
   // A default derived constructor (`class B extends A {}`) is a function like

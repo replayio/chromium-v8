@@ -347,6 +347,9 @@ class MaglevConcurrentDispatcher::JobTask final : public v8::JobTask {
 MaglevConcurrentDispatcher::MaglevConcurrentDispatcher(Isolate* isolate)
     : isolate_(isolate) {
   bool enable = v8_flags.concurrent_recompilation && maglev::IsMaglevEnabled();
+  // Replay: Maglev compiles on the thread that asks for it while recording or
+  // replaying, see RecordReplayTurnOffFlag's callers in api.cc.
+  if (recordreplay::IsRecordingOrReplaying()) enable = false;
   if (enable) {
     if (FlagsMightEnableMaglevTracing()) {
       base::OS::PrintError(
