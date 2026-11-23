@@ -1288,6 +1288,10 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   THREAD_LOCAL_TOP_ACCESSOR(int, replay_js_frame_depth)
   THREAD_LOCAL_TOP_ADDRESS(int, replay_js_frame_depth)
 
+  // Whether this isolate's stack overflows by
+  // ThreadLocalTop::kReplayJsStackBudget.
+  bool replay_stack_budget() const { return replay_stack_budget_; }
+
   MaterializedObjectStore* materialized_object_store() const {
     return materialized_object_store_;
   }
@@ -2385,6 +2389,8 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   // callbacks, with the topmost JavaScript frame's fp when it started.
   bool record_replay_invoking_api_interrupts_ = false;
   Address record_replay_api_interrupts_js_fp_ = kNullAddress;
+
+  bool replay_stack_budget_ = false;
 
   std::unique_ptr<replayio::ReplayIsolateData> replay_data_;
 

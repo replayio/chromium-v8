@@ -74,6 +74,9 @@ BytecodeArrayBuilder::BytecodeArrayBuilder(
         zone->New<RegisterTransferWriter>(this));
   }
 
+  replay_keeps_js_frame_depth_ =
+      recordreplay::IsRecordingOrReplaying("emit-opcodes");
+
   if (RecordReplayShouldEmitOpcodes(record_replay_ignore)) {
     emit_record_replay_opcodes_ = true;
     emit_record_replay_assert_values_ = record_replay_assert_values;
@@ -1534,16 +1537,30 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayTrackObjectId(Register o
 
 BytecodeArrayBuilder& BytecodeArrayBuilder::ReplayOnFrameEnter() {
   if (emit_record_replay_opcodes_) {
-    OutputReplayIncJsFrameDepth();
+    OutputReplayIncJsFrameDepth(replay_frame_cost_);
   }
   RecordReplayInstrumentation("main");
+  return *this;
+}
+
+BytecodeArrayBuilder& BytecodeArrayBuilder::ReplaySaveJsFrameDepth(
+    Register depth) {
+  DCHECK(replay_keeps_js_frame_depth_);
+  OutputReplaySaveJsFrameDepth(depth);
+  return *this;
+}
+
+BytecodeArrayBuilder& BytecodeArrayBuilder::ReplayRestoreJsFrameDepth(
+    Register depth) {
+  DCHECK(replay_keeps_js_frame_depth_);
+  OutputReplayRestoreJsFrameDepth(depth);
   return *this;
 }
 
 BytecodeArrayBuilder& BytecodeArrayBuilder::ReplayOnFrameEnterGenerator(
     Register generator_object) {
   if (emit_record_replay_opcodes_) {
-    OutputReplayIncJsFrameDepth();
+    OutputReplayIncJsFrameDepth(replay_frame_cost_);
   }
   RecordReplayInstrumentationGenerator("generator", generator_object);
   return *this;
@@ -1551,7 +1568,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::ReplayOnFrameEnterGenerator(
 
 BytecodeArrayBuilder& BytecodeArrayBuilder::ReplayOnFrameExit() {
   if (emit_record_replay_opcodes_) {
-    OutputReplayDecJsFrameDepth();
+    OutputReplayDecJsFrameDepth(replay_frame_cost_);
   }
   RecordReplayInstrumentation("exit");
   return *this;
@@ -1560,7 +1577,7 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::ReplayOnFrameExit() {
 BytecodeArrayBuilder& BytecodeArrayBuilder::ReplayOnFrameReturn(
     Register return_value) {
   if (emit_record_replay_opcodes_) {
-    OutputReplayDecJsFrameDepth();
+    OutputReplayDecJsFrameDepth(replay_frame_cost_);
   }
   RecordReplayInstrumentationReturn("exit", return_value);
   return *this;

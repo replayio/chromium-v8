@@ -18,6 +18,7 @@
 #include "src/codegen/unoptimized-compilation-info.h"
 #include "src/common/globals.h"
 #include "src/compiler-dispatcher/lazy-compile-dispatcher.h"
+#include "src/execution/thread-local-top.h"
 #include "src/heap/parked-scope.h"
 #include "src/interpreter/bytecode-flags.h"
 #include "src/interpreter/bytecode-jump-table.h"
@@ -1431,6 +1432,9 @@ void BytecodeGenerator::GenerateBytecodeBody() {
 
   builder()->RecordReplayOnProgress();
 
+  builder()->set_replay_frame_cost(ThreadLocalTop::ReplayJsFrameCost(
+      closure_scope()->ReplayDeclaredVariableCount(),
+      info()->num_parameters_including_this()));
   if (IsResumableFunction(literal->kind())) {
     builder()->ReplayOnFrameEnterGenerator(generator_object());
   } else {
@@ -2178,14 +2182,26 @@ void BytecodeGenerator::BuildTryCatch(
   Register context = register_allocator()->NewRegister();
   builder()->MoveRegister(Register::current_context(), context);
 
+  // As is what the stack is charged when recording/replaying.
+  const bool replay_keeps_depth = builder()->replay_keeps_js_frame_depth();
+  Register replay_depth;
+  if (replay_keeps_depth) {
+    replay_depth = register_allocator()->NewRegister();
+    builder()->ReplaySaveJsFrameDepth(replay_depth);
+  }
+
   // Evaluate the try-block inside a control scope. This simulates a handler
   // that is intercepting 'throw' control commands.
   try_control_builder.BeginTry(context);
   {
     ControlScopeForTryCatch scope(this, &try_control_builder);
+    if (replay_keeps_depth) replay_depth_registers_.push_back(replay_depth);
     try_body_func();
+    if (replay_keeps_depth) replay_depth_registers_.pop_back();
   }
   try_control_builder.EndTry();
+
+  if (replay_keeps_depth) builder()->ReplayRestoreJsFrameDepth(replay_depth);
 
   // Unlike in gecko, we need to increment the progress counter at catch
   // blocks so we can detect when exceptions are initially thrown vs. being
@@ -2238,12 +2254,22 @@ void BytecodeGenerator::BuildTryFinally(
   Register context = register_allocator()->NewRegister();
   builder()->MoveRegister(Register::current_context(), context);
 
+  // As is what the stack is charged when recording/replaying.
+  const bool replay_keeps_depth = builder()->replay_keeps_js_frame_depth();
+  Register replay_depth;
+  if (replay_keeps_depth) {
+    replay_depth = register_allocator()->NewRegister();
+    builder()->ReplaySaveJsFrameDepth(replay_depth);
+  }
+
   // Evaluate the try-block inside a control scope. This simulates a handler
   // that is intercepting all control commands.
   try_control_builder.BeginTry(context);
   {
     ControlScopeForTryFinally scope(this, &try_control_builder, &commands);
+    if (replay_keeps_depth) replay_depth_registers_.push_back(replay_depth);
     try_body_func();
+    if (replay_keeps_depth) replay_depth_registers_.pop_back();
   }
   try_control_builder.EndTry();
 
@@ -2251,6 +2277,7 @@ void BytecodeGenerator::BuildTryFinally(
   commands.RecordFallThroughPath();
   try_control_builder.LeaveTry();
   try_control_builder.BeginHandler();
+  if (replay_keeps_depth) builder()->ReplayRestoreJsFrameDepth(replay_depth);
   commands.RecordHandlerReThrowPath();
 
   // Pending message object is saved on entry.
@@ -4776,6 +4803,11 @@ void BytecodeGenerator::BuildSuspendPoint(int position) {
 
   builder()->RecordReplayOnProgress();
   builder()->ReplayOnFrameEnterGenerator(generator_object());
+  // The try blocks the function is resumed in were entered where the stack
+  // was charged otherwise.
+  for (Register replay_depth : replay_depth_registers_) {
+    builder()->ReplaySaveJsFrameDepth(replay_depth);
+  }
 }
 
 void BytecodeGenerator::VisitYield(Yield* expr) {

@@ -275,6 +275,8 @@ namespace internal {
   F(ThrowReferenceError, 1, 1)                             \
   F(ThrowAccessedUninitializedVariable, 1, 1)              \
   F(ThrowStackOverflow, 0, 1)                              \
+  F(ReplayJsFrameDepth, 0, 1)                              \
+  F(ReplaySetJsFrameDepth, 1, 1)                           \
   F(ThrowSymbolAsyncIteratorInvalid, 0, 1)                 \
   F(ThrowSymbolIteratorInvalid, 0, 1)                      \
   F(ThrowThrowMethodMissing, 0, 1)                         \

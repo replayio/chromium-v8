@@ -2306,6 +2306,12 @@ int TurbofanFrame::FindReturnPCForTrampoline(CodeT code,
   return safepoints.find_return_pc(trampoline_pc);
 }
 
+bool OptimizedFrame::HasDeoptimizationIndex() const {
+  int deopt_index = SafepointEntry::kNoDeoptIndex;
+  GetDeoptimizationData(&deopt_index);
+  return deopt_index != SafepointEntry::kNoDeoptIndex;
+}
+
 DeoptimizationData OptimizedFrame::GetDeoptimizationData(
     int* deopt_index) const {
   DCHECK(is_optimized());

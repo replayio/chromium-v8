@@ -11046,7 +11046,11 @@ void RecordReplayOnExceptionUnwind(Isolate* isolate) {
       // baseline code. For optimized code this will use the deoptimization
       // information to get canonical location information.
       std::vector<FrameSummary> frames;
-      it.frame()->Summarize(&frames);
+      // An optimized frame that rethrows has no summary, and warns of it.
+      if (!it.frame()->is_turbofan() ||
+          static_cast<OptimizedFrame*>(it.frame())->HasDeoptimizationIndex()) {
+        it.frame()->Summarize(&frames);
+      }
       if (!frames.empty()) { // There might not always be a frame due to RUN-1920.
         auto& summary = frames.back().AsJavaScript();
         Handle<SharedFunctionInfo> shared(summary.function()->shared(), isolate);
@@ -11091,9 +11095,12 @@ extern "C" uint64_t* V8RecordReplayGetProgressCounter() {
 
 bool gRecordReplayInstrumentationEnabled;
 
+extern void RecordReplayClearCountedFrames();
+
 void RecordReplayChangeInstrument(bool enabled) {
   CHECK(!enabled || recordreplay::IsReplaying());
   gRecordReplayInstrumentationEnabled = enabled;
+  RecordReplayClearCountedFrames();
 
   // All optimized code needs to be recompiled when instrumentation changes,
   // as instrumentation calls will be optimized out when instrumentation is

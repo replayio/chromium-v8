@@ -1598,6 +1598,18 @@ void Scope::ForEach(FunctionType callback) {
   }
 }
 
+int DeclarationScope::ReplayDeclaredVariableCount() {
+  int count = 0;
+  ForEach([this, &count](Scope* scope) {
+    // Another function's variables are in its own frames, and a script's are
+    // properties of the global object.
+    if (scope != this && scope->is_function_scope()) return kContinue;
+    if (!scope->is_script_scope()) count += scope->num_var();
+    return kDescend;
+  });
+  return count;
+}
+
 bool Scope::IsConstructorScope() const {
   return is_declaration_scope() &&
          IsClassConstructor(AsDeclarationScope()->function_kind());

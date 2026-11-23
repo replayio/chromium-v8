@@ -5060,7 +5060,8 @@ Node* EffectControlLinearizer::LowerReplayDecrementJsFrameDepth(Node* node) {
   Node* depth_addr = __ ExternalConstant(ExternalReference::Create(
       IsolateAddressId::kReplayJsFrameDepthAddress, isolate()));
   Node* depth = __ Load(MachineType::Int32(), depth_addr, 0);
-  Node* decremented = __ Int32Sub(depth, __ Int32Constant(1));
+  Node* decremented =
+      __ Int32Sub(depth, __ Int32Constant(OpParameter<int>(node->op())));
   __ Store(StoreRepresentation(MachineRepresentation::kWord32, kNoWriteBarrier),
            depth_addr, 0, decremented);
   return __ Int32Constant(0);
