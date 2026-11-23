@@ -3585,38 +3585,123 @@ static Handle<Object> RecordReplayConvertFunctionOffsetToLocation(
 
 bool RecordReplayHasRegisteredScript(Script script);
 
+// The frames of registered scripts' functions in a JS frame: an optimized one
+// has others inlined into its own.
+static size_t RecordReplayCountFrames(Isolate* isolate, StackFrame* frame) {
+  size_t count = 0;
+  std::vector<FrameSummary> frames;
+  CommonFrame::cast(frame)->Summarize(&frames);
+
+  // We don't strictly need to iterate the frames in reverse order, but it
+  // helps when logging the stack contents for debugging.
+  for (int i = (int)frames.size() - 1; i >= 0; i--) {
+    const auto& summary = frames[i];
+    CHECK(summary.IsJavaScript());
+    const auto& js = summary.AsJavaScript();
+
+    Handle<SharedFunctionInfo> shared(js.function()->shared(), isolate);
+
+    // See GetStackLocation.
+    if (!shared->StartPosition() && !shared->EndPosition()) {
+      continue;
+    }
+
+    Handle<Script> script(Script::cast(shared->script()), isolate);
+    if (script->id() && RecordReplayHasRegisteredScript(*script)) {
+      count++;
+    }
+  }
+  return count;
+}
+
+// Target.countStackFrames is asked at the first instrumentation site after each
+// exception unwind. Walking the whole stack there takes time by the square of
+// its depth where an exception is rethrown frame by frame, as through finally
+// blocks. So the JS frames a count walked are kept, each with the count of the
+// frames older than it, and the next count walks down to the youngest of them
+// that is still there.
+//
+// A kept count holds while no counted frame older than its frame is left, and
+// none is left unseen: counted frames are those of instrumented functions
+// (RecordReplayRegisterScript), which are left at an "exit" instrumentation
+// site or by an exception, and either drops what is kept of the frame left and
+// of the younger ones. Sites are only reached while instrumentation is enabled:
+// nothing is kept otherwise, nor across a change of it.
+struct ReplayCountedFrame {
+  Address fp;
+  // The counted frames older than this one.
+  size_t older;
+};
+
+// By address, youngest last.
+static std::vector<ReplayCountedFrame>* gReplayCountedFrames;
+
+extern bool gRecordReplayInstrumentationEnabled;
+
+// The frames whose frame pointer is below the address have been left.
+static void ReplayDropCountedFramesBelow(Address address) {
+  if (!gReplayCountedFrames) return;
+  while (!gReplayCountedFrames->empty() &&
+         gReplayCountedFrames->back().fp < address) {
+    gReplayCountedFrames->pop_back();
+  }
+}
+
+void RecordReplayOnFramesUnwound(Address handler_sp) {
+  if (!IsMainThread()) return;
+  ReplayDropCountedFramesBelow(handler_sp);
+}
+
+void RecordReplayOnFrameExit(Isolate* isolate) {
+  if (!gReplayCountedFrames || gReplayCountedFrames->empty()) return;
+  JavaScriptFrameIterator it(isolate);
+  if (it.done()) return;
+  ReplayDropCountedFramesBelow(it.frame()->fp() + 1);
+}
+
+void RecordReplayClearCountedFrames() {
+  if (gReplayCountedFrames) gReplayCountedFrames->clear();
+}
+
 static Handle<Object> RecordReplayCountStackFrames(Isolate* isolate,
                                                    Handle<Object> params) {
   // This is handled in C++ instead of via a protocol JS handler for efficiency.
   // Counting the stack frames is a common operation when there are many
   // exception unwinds and so forth.
+  const bool keeps = gRecordReplayInstrumentationEnabled && IsMainThread();
+  if (keeps && !gReplayCountedFrames) {
+    gReplayCountedFrames = new std::vector<ReplayCountedFrame>;
+  }
+
+  // The JS frames walked, youngest first, each with the count of the frames
+  // down to it.
+  std::vector<ReplayCountedFrame> walked;
   size_t count = 0;
+  size_t older = 0;
+  bool found = false;
   for (StackFrameIterator it(isolate); !it.done(); it.Advance()) {
     StackFrame* frame = it.frame();
     if (!frame->is_java_script()) {
       continue;
     }
-    std::vector<FrameSummary> frames;
-    CommonFrame::cast(frame)->Summarize(&frames);
+    count += RecordReplayCountFrames(isolate, frame);
+    if (!keeps) continue;
+    // The walk passes every frame there is.
+    ReplayDropCountedFramesBelow(frame->fp());
+    if (!gReplayCountedFrames->empty() &&
+        gReplayCountedFrames->back().fp == frame->fp()) {
+      older = gReplayCountedFrames->back().older;
+      found = true;
+      break;
+    }
+    walked.push_back({frame->fp(), count});
+  }
+  count += older;
 
-    // We don't strictly need to iterate the frames in reverse order, but it
-    // helps when logging the stack contents for debugging.
-    for (int i = (int)frames.size() - 1; i >= 0; i--) {
-      const auto& summary = frames[i];
-      CHECK(summary.IsJavaScript());
-      const auto& js = summary.AsJavaScript();
-
-      Handle<SharedFunctionInfo> shared(js.function()->shared(), isolate);
-
-      // See GetStackLocation.
-      if (!shared->StartPosition() && !shared->EndPosition()) {
-        continue;
-      }
-
-      Handle<Script> script(Script::cast(shared->script()), isolate);
-      if (script->id() && RecordReplayHasRegisteredScript(*script)) {
-        count++;
-      }
+  if (keeps) {
+    if (!found) gReplayCountedFrames->clear();
+    for (auto frame = walked.rbegin(); frame != walked.rend(); ++frame) {
+      gReplayCountedFrames->push_back({frame->fp, count - frame->older});
     }
   }
 

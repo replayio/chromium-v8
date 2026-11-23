@@ -11095,9 +11095,12 @@ extern "C" uint64_t* V8RecordReplayGetProgressCounter() {
 
 bool gRecordReplayInstrumentationEnabled;
 
+extern void RecordReplayClearCountedFrames();
+
 void RecordReplayChangeInstrument(bool enabled) {
   CHECK(!enabled || recordreplay::IsReplaying());
   gRecordReplayInstrumentationEnabled = enabled;
+  RecordReplayClearCountedFrames();
 
   // All optimized code needs to be recompiled when instrumentation changes,
   // as instrumentation calls will be optimized out when instrumentation is

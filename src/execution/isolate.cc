@@ -1994,6 +1994,10 @@ class SetThreadInWasmFlagScope {
 #endif  // V8_ENABLE_WEBASSEMBLY
 }  // namespace
 
+// The frames above the stack pointer of an exception's handler are left, see
+// RecordReplayCountStackFrames.
+extern void RecordReplayOnFramesUnwound(Address handler_sp);
+
 // What entering a function charged: the operand of its ReplayIncJsFrameDepth
 // bytecodes. Nothing for a function of a script without record/replay opcodes.
 static int ReplayJsFrameCost(Isolate* isolate, SharedFunctionInfo shared,
@@ -2116,6 +2120,11 @@ Object Isolate::UnwindAndFindHandler() {
         num_frames_above_handler;
 
     ReplaySyncJsFrameDepth(this);
+    if (recordreplay::IsReplaying()) {
+      // Restarting a frame has no stack pointer to return to.
+      RecordReplayOnFramesUnwound(handler_sp != kNullAddress ? handler_sp
+                                                             : handler_fp);
+    }
 
     // Return and clear pending exception. The contract is that:
     // (1) the pending exception is stored in one place (no duplication), and

@@ -1545,6 +1545,8 @@ void ParseRecordReplayFunctionId(const std::string& function_id,
   *source_position = atoi(strchr(raw, ':') + 1);
 }
 
+extern void RecordReplayOnFrameExit(Isolate* isolate);
+
 static inline void OnInstrumentation(Isolate* isolate,
                                      Handle<JSFunction> function, int32_t index) {
   CHECK(RecordReplayBytecodeAllowed());
@@ -1561,6 +1563,9 @@ static inline void OnInstrumentation(Isolate* isolate,
 
   RecordReplayInstrument(site.kind_, site.function_id_.c_str(),
                          site.function_index_);
+
+  // The frame is left, see RecordReplayCountStackFrames.
+  if (!strcmp(site.kind_, "exit")) RecordReplayOnFrameExit(isolate);
 }
 
 extern bool gRecordReplayInstrumentationEnabled;
