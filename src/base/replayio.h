@@ -22,8 +22,15 @@ inline bool CheckReplayOwned() {
 
 // Whether user JS (an accessor, toString, Symbol.toPrimitive, a callback the
 // page installed) must not run now: Replay's own code is running, so events
-// are disallowed, and the replay hasn't diverged into a pause, where user JS
-// may run because nothing it does reaches the replayed execution.
+// are disallowed, and nothing has asked for the page's code to run.
+//
+// A pause diverges the replay before it handles any command, because a
+// command's own script is code the recording does not contain, so divergence
+// says nothing about whether the page's code may run. What says is the command:
+// the backend allows side effects for the ones that answer with something the
+// viewer asked the page for, the evaluations and Pause.getObjectProperty, and
+// refuses them for the rest, Pause.getObjectPreview among them. The driver
+// reports which of the two is running as AllowSideEffects.
 //
 // Replay's own code doesn't run the same way when recording and replaying.
 // Replay's inspector session is installed only when replaying (unless the
@@ -46,7 +53,8 @@ inline bool CheckReplayOwned() {
 // later, on demand, would still have to run in a pause.
 inline bool MustNotRunUserJS() {
   return v8::recordreplay::AreEventsDisallowed() &&
-         !v8::recordreplay::HasDivergedFromRecording();
+         (!v8::recordreplay::HasDivergedFromRecording() ||
+          !v8::recordreplay::AllowSideEffects());
 }
 
 // Whether reading |name| on |object| runs none of the page's code, so that a
