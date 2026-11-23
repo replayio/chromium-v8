@@ -678,13 +678,15 @@ class ExternalReference {
 
   V8_EXPORT_PRIVATE static ExternalReference isolate_address();
 
-  // Replay: the record/replay progress counter and target progress. Not in
-  // EXTERNAL_REFERENCE_LIST: the counter's address is only known once
-  // recording/replaying has started (it is null in mksnapshot), so it has no
-  // stable slot in the external reference table. Only for code generated at
-  // runtime (Sparkplug, TurboFan), which is never serialized.
+  // Replay: the record/replay progress counter, target progress and whether
+  // progress checks are enabled. Not in EXTERNAL_REFERENCE_LIST: the counter's
+  // address is only known once recording/replaying has started (it is null in
+  // mksnapshot), so it has no stable slot in the external reference table.
+  // Only for code generated at runtime (Sparkplug, Maglev, TurboFan), which is
+  // never serialized.
   V8_EXPORT_PRIVATE static ExternalReference record_replay_progress_counter();
   V8_EXPORT_PRIVATE static ExternalReference record_replay_target_progress();
+  V8_EXPORT_PRIVATE static ExternalReference record_replay_check_progress();
 
   V8_EXPORT_PRIVATE V8_NOINLINE static ExternalReference
   runtime_function_table_address_for_unittests(Isolate* isolate);
