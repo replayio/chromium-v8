@@ -1220,8 +1220,7 @@ static void OnExecutionProgress(Isolate* isolate, Handle<JSFunction> function) {
     CHECK(RecordReplayHasRegisteredScript(*script));
 
     if (replayio::MustNotRunUserJS()) {
-      // Print JS stack if user JS ran where it must not: outside a pause,
-      // or in a pause command that allows no side effects (|inPause|).
+      // Print JS stack if user JS ran where it must not.
       if (!gHasPrintedStack) {  // Prevent flood.
         gHasPrintedStack = true;
         HandleScope scope(isolate);
@@ -1405,8 +1404,7 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertValue) {
 
   if ((RecordReplayMustNotRunUserFunction(function->shared())) ||
       (recordreplay::IsReplaying() && recordreplay::HadMismatch())) {
-    // Print JS stack if user JS ran where it must not (|inPause| says whether
-    // that was in a pause), or if we had a mismatch.
+    // Print JS stack if user JS ran where it must not, or if we had a mismatch.
     if (!gHasPrintedStack) {  // Prevent flood.
       gHasPrintedStack = true;
       std::stringstream stack;

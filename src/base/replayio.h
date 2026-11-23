@@ -24,17 +24,6 @@ inline bool CheckReplayOwned() {
 // page installed) must not run now: Replay's own code is running, so events
 // are disallowed, and no pause command that allows side effects is running.
 //
-// Every pause request diverges before its first command, so having diverged
-// says only that a pause is being served. Which commands may run user JS there
-// is the driver's choice per command (AllowSideEffects): an evaluation or a
-// property read the viewer asked for may, a describe (Pause.getObjectPreview)
-// must not, since it would change the state later commands of the pause see.
-//
-// Only the sites that ask this enforce it: a C++ entry into a function of a
-// registered script (Execution's Invoke) and the inspector's reads while
-// describing (value-mirror.cc). Replay's own handler JS still runs, and a
-// property it reads itself reaches a page accessor as any JS read does.
-//
 // Replay's own code doesn't run the same way when recording and replaying.
 // Replay's inspector session is installed only when replaying (unless the
 // replay-only-command-handling feature is disabled), and the driver gathers

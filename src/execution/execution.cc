@@ -312,20 +312,15 @@ static std::string GetFunctionLocationInfo(Isolate* isolate, Handle<JSFunction> 
 
 static bool gHasPrintedBlockedUserJSStack = false;
 
-// Block C++→JS entry into registered user JS where it must not run
-// (replayio::MustNotRunUserJS).
+// Block C++→JS entry into registered user JS where it must not run.
 static MaybeHandle<Object> RecordReplayBlockUserJS(
     Isolate* isolate, const char* kind, const std::string& detail) {
-  // Every block is reported with the function it blocked. Only the first one
-  // in a process carries the JS stack, since a pause can block per described
-  // value.
+  // A pause can block once per described value: print the stack once.
   std::stringstream stack;
   if (!gHasPrintedBlockedUserJSStack) {
     gHasPrintedBlockedUserJSStack = true;
     isolate->PrintCurrentStackTrace(stack);
   }
-  // The kind predates blocking in pauses, where the call is disallowed rather
-  // than non-deterministic. |inPause| says which.
   recordreplay::Warning(
       "NonDeterministicUserJSBlocked",
       {{"trigger", kind},
@@ -482,8 +477,7 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
     return isolate->factory()->undefined_value();
   }
 
-  // User JS must not run from Replay's own code, unless a pause command
-  // allows side effects.
+  // User JS must not run from Replay's own code unless side effects are allowed.
   if (params.target->IsJSFunction()) {
     Handle<JSFunction> function = Handle<JSFunction>::cast(params.target);
     if (RecordReplayMustNotRunUserFunction(function->shared())) {

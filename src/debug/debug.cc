@@ -3748,8 +3748,7 @@ bool RecordReplayHasRegisteredScript(Script script) {
     gRegisteredScripts->find(script.id()) != gRegisteredScripts->end();
 }
 
-// Whether |shared| is a user function that must not run now: outside a pause
-// it would diverge the replay, in a pause the command allows no side effects.
+// Whether |shared| is registered user JS that must not run now.
 bool RecordReplayMustNotRunUserFunction(
     const SharedFunctionInfo& shared) {
   return replayio::MustNotRunUserJS() && shared.script().IsScript() &&
