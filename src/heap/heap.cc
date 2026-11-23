@@ -495,6 +495,12 @@ size_t Heap::Available() {
 }
 
 bool Heap::CanExpandOldGeneration(size_t size) const {
+  if (recordreplay::IsReplaying()) {
+    // Always allow expanding the heap when replaying, as memory usage can be
+    // larger when replaying than recording, and the driver can give the replay
+    // a smaller old space limit than the recording had.
+    return true;
+  }
   if (force_oom_ || force_gc_on_next_allocation_) return false;
   if (OldGenerationCapacity() + size > limits()->max_old_generation_size()) {
     return false;
@@ -506,6 +512,13 @@ bool Heap::CanExpandOldGeneration(size_t size) const {
 
 bool Heap::IsOldGenerationExpansionAllowed(
     size_t size, const base::MutexGuard& expansion_mutex_witness) const {
+  if (recordreplay::IsReplaying()) {
+    // Always allow expanding the heap when replaying, for the reason
+    // CanExpandOldGeneration() does. That one only gates the allocation slow
+    // paths, so without this the page allocations themselves still fail at the
+    // limit and the replay dies of an OOM the recorded run never had.
+    return true;
+  }
   return OldGenerationCapacity() + size <= limits()->max_old_generation_size();
 }
 
