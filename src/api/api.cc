@@ -12035,6 +12035,27 @@ extern "C" int V8RecordReplayDependencyGraphExecutionNode() {
   return gDependencyGraphExecutionStack->back();
 }
 
+// Cause execution: the innermost open execution with a node, as the backend
+// assigns executionParent. 0 if there is none.
+extern "C" DLLEXPORT int V8RecordReplayDependencyGraphCauseExecutionNode() {
+  if (!IsMainThread() || !gDependencyGraphExecutionStack) {
+    return 0;
+  }
+  auto it = std::find_if(gDependencyGraphExecutionStack->rbegin(),
+                         gDependencyGraphExecutionStack->rend(),
+                         [](int node) { return node != 0; });
+  return it == gDependencyGraphExecutionStack->rend() ? 0 : *it;
+}
+
+// Number of open executions without a node.
+extern "C" DLLEXPORT size_t V8RecordReplayDependencyGraphNodelessExecutionCount() {
+  if (!IsMainThread() || !gDependencyGraphExecutionStack) {
+    return 0;
+  }
+  return std::count(gDependencyGraphExecutionStack->begin(),
+                    gDependencyGraphExecutionStack->end(), 0);
+}
+
 extern "C" DLLEXPORT void V8RecordReplayBeginDependencyExecution(int node) {
   if (recordreplay::DependencyGraphEnabled()) {
     if (!gDependencyGraphExecutionStack) {
