@@ -24,7 +24,7 @@ namespace internal {
 
 extern bool RecordReplayIsDivergentUserJSWithoutPause(const SharedFunctionInfo& shared);
 extern bool gRecordReplayIsRecordingOrReplaying;
-extern bool gRecordReplayHasCheckpoint;
+extern bool gRecordReplayHandlersReady;
 extern void RecordReplayBeforeInvoke(Isolate* isolate, Handle<JSFunction> function);
 extern uint64_t* gProgressCounter;
 extern std::string GetScriptName(Handle<Script> script);
@@ -428,10 +428,10 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
     }
   }
 
-  // Replay: JS of an instrumented script about to run before the first
-  // checkpoint can start the recording, before entering it.
+  // Replay: JS of an instrumented script about to run before the handlers are
+  // ready can make its window the root frame, before entering it.
   if (V8_UNLIKELY(gRecordReplayIsRecordingOrReplaying) &&
-      !gRecordReplayHasCheckpoint && params.target->IsJSFunction() &&
+      !gRecordReplayHandlersReady && params.target->IsJSFunction() &&
       AllowJavascriptExecution::IsAllowed(isolate) &&
       ThrowOnJavascriptExecution::IsAllowed(isolate) &&
       DumpOnJavascriptExecution::IsAllowed(isolate)) {

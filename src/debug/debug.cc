@@ -3458,9 +3458,13 @@ v8::Local<v8::Object> RecordReplayGetBytecode(v8::Isolate* isolate_,
 extern void RecordReplayAddPossibleBreakpoint(int line, int column, const char* function_id, int function_index);
 
 static void EnsureIsolateContext(Isolate* isolate, base::Optional<SaveAndSwitchContext>& ssc);
+static bool RecordReplayHasNoCommandContext(Isolate* isolate);
 
 void RecordReplayGetPossibleBreakpointsCallback(const char* script_id_str) {
   Isolate* isolate = Isolate::Current();
+  if (RecordReplayHasNoCommandContext(isolate)) {
+    return;
+  }
   base::Optional<SaveAndSwitchContext> ssc;
   EnsureIsolateContext(isolate, ssc);
 
@@ -3845,11 +3849,11 @@ static void RecordReplayAnnounceScript(Isolate* isolate, Handle<Script> script,
   RecordReplayOnNewSource(isolate, id.get(), kind, url.length() ? url.c_str() : nullptr);
 }
 
-extern bool gRecordReplayHasCheckpoint;
+extern bool gRecordReplayHandlersReady;
 
-// Ids of the scripts registered before the first checkpoint, in order. The
-// recorder only takes sources from the first checkpoint on.
-static std::vector<int>* gRecordReplayScriptsBeforeFirstCheckpoint;
+// Ids of the scripts registered before the handlers are ready, in order: an
+// announcement runs the replay scripts' new-script handlers.
+static std::vector<int>* gRecordReplayScriptsBeforeHandlersReady;
 
 static void RecordReplayRegisterScript(Handle<Script> script) {
   CHECK(IsMainThread());
@@ -3883,30 +3887,28 @@ static void RecordReplayRegisterScript(Handle<Script> script) {
   }
   gRegisteredScripts->insert(script->id());
 
-  if (!gRecordReplayHasCheckpoint) {
-    if (!gRecordReplayScriptsBeforeFirstCheckpoint) {
-      gRecordReplayScriptsBeforeFirstCheckpoint = new std::vector<int>;
+  if (!gRecordReplayHandlersReady) {
+    if (!gRecordReplayScriptsBeforeHandlersReady) {
+      gRecordReplayScriptsBeforeHandlersReady = new std::vector<int>;
     }
-    gRecordReplayScriptsBeforeFirstCheckpoint->push_back(script->id());
+    gRecordReplayScriptsBeforeHandlersReady->push_back(script->id());
     return;
   }
 
   RecordReplayAnnounceScript(isolate, script, url);
 }
 
-void RecordReplayRegisterScriptsBeforeFirstCheckpoint() {
-  if (!gRecordReplayScriptsBeforeFirstCheckpoint) {
+void RecordReplayRegisterScriptsBeforeHandlersReady() {
+  if (!gRecordReplayScriptsBeforeHandlersReady) {
     return;
   }
   std::unique_ptr<std::vector<int>> script_ids(
-      gRecordReplayScriptsBeforeFirstCheckpoint);
-  gRecordReplayScriptsBeforeFirstCheckpoint = nullptr;
+      gRecordReplayScriptsBeforeHandlersReady);
+  gRecordReplayScriptsBeforeHandlersReady = nullptr;
 
   Isolate* isolate = Isolate::Current();
   HandleScope scope(isolate);
-  // The first checkpoint can be taken between tasks, with no context entered:
-  // when the first replay window isn't a root frame (e.g. an iframe of the
-  // initial about:blank), the root frame's context comes later.
+  // The handlers can become ready with no context entered.
   base::Optional<SaveAndSwitchContext> ssc;
   EnsureIsolateContext(isolate, ssc);
   for (int script_id : *script_ids) {
@@ -3916,8 +3918,9 @@ void RecordReplayRegisterScriptsBeforeFirstCheckpoint() {
 }
 
 // Embedder callback for JS of an instrumented script about to run before the
-// first checkpoint, with the context of the function about to run. The embedder can start the
-// recording there, before that JS runs (see RecordReplayBeforeInvoke).
+// handlers are ready, with the context of the function about to run. The
+// embedder can make that window the root frame there, before that JS runs (see
+// RecordReplayBeforeInvoke).
 typedef void (*RecordReplayInstrumentedScriptCallback)(
     v8::Isolate* isolate, v8::Local<v8::Context> context);
 static RecordReplayInstrumentedScriptCallback gRecordReplayInstrumentedScriptBeforeFirstCheckpoint;
@@ -3931,7 +3934,7 @@ extern "C" void V8RecordReplaySetInstrumentedScriptBeforeFirstCheckpointCallback
 // code with events allowed: the conditions under which a compile is
 // instrumented, so the embedder never sees calls made by Replay's own JS.
 void RecordReplayBeforeInvoke(Isolate* isolate, Handle<JSFunction> function) {
-  if (gRecordReplayHasCheckpoint ||
+  if (gRecordReplayHandlersReady ||
       !gRecordReplayInstrumentedScriptBeforeFirstCheckpoint || !IsMainThread() ||
       recordreplay::AreEventsDisallowed() ||
       recordreplay::IsInReplayCode("RecordReplayBeforeInvoke")) {
@@ -3972,11 +3975,29 @@ static InternalCommandCallback gInternalCommandCallbacks[] = {
 static Eternal<Value>* gCommandCallback;
 
 extern "C" void V8RecordReplayGetDefaultContext(v8::Isolate* isolate, v8::Local<v8::Context>* cx);
+extern bool RecordReplayHasDefaultContext();
 std::string RecordReplayContextAddressToken(v8::Isolate* isolate,
                                             uintptr_t ctxAddr, bool includeId);
 extern uint64_t* gProgressCounter;
 extern int gRecordReplayCheckProgress;
 int gPauseContextGroupId = 0;
+
+// Whether commands run with no context: from the first checkpoint, before the
+// root frame's context exists and outside of any JS. No JS frames exist then.
+static bool RecordReplayHasNoCommandContext(Isolate* isolate) {
+  return isolate->context().is_null() && !RecordReplayHasDefaultContext();
+}
+
+// The result of a command with no context or no handler for it: an empty stack.
+static char* EmptyCommandResult(const char* command) {
+  if (!strcmp(command, "Pause.getAllFrames")) {
+    return strdup("{\"frames\":[],\"data\":{}}");
+  }
+  if (!strcmp(command, "Target.countStackFrames")) {
+    return strdup("{\"count\":0}");
+  }
+  return strdup("{}");
+}
 
 // Make sure that the isolate has a context by switching to the default
 // context if necessary.
@@ -4049,6 +4070,9 @@ char* CommandCallback(const char* command, const char* params) {
   AutoMarkReplayCode amrc;
 
   Isolate* isolate = Isolate::Current();
+  if (RecordReplayHasNoCommandContext(isolate)) {
+    return EmptyCommandResult(command);
+  }
   replayio::AutoDisallowEvents disallow("CommandCallback", (v8::Isolate*)isolate);
   base::Optional<SaveAndSwitchContext> ssc;
   EnsureIsolateContext(isolate, ssc);
@@ -4100,7 +4124,10 @@ char* CommandCallback(const char* command, const char* params) {
     }
   }
   if (rv.is_null()) {
-    CHECK(gCommandCallback);
+    // Before the root frame's scripts installed the handlers.
+    if (!gCommandCallback) {
+      return EmptyCommandResult(command);
+    }
     Local<v8::Value> callbackValue = gCommandCallback->Get((v8::Isolate*)isolate);
     Handle<Object> callback = Utils::OpenHandle(*callbackValue);
 

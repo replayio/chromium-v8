@@ -10895,6 +10895,7 @@ typedef char* (CommandCallbackRaw)(const char* params);
   Macro(RecordReplayNewCheckpoint, ())                                        \
   Macro(RecordReplayNewCheckpointFlushed, ())                                 \
   Macro(RecordReplaySetScriptAlive, (bool alive))                             \
+  Macro(RecordReplaySetRecordingReady, (bool ready))                          \
   Macro(RecordReplayRegisterPointerWithName,                                  \
         (const char* name, const void* ptr))                                  \
   Macro(RecordReplayUnregisterPointer, (const void* ptr))                     \
@@ -10969,21 +10970,25 @@ ForEachRecordReplaySymbolVoid(DeclareRecordReplaySymbolVoid)
 
 namespace internal {
 
+// The first checkpoint was taken: the origin of the recording, its progress
+// and its time.
 bool gRecordReplayHasCheckpoint;
 
-extern void RecordReplayRegisterScriptsBeforeFirstCheckpoint();
+// The default context and the replay scripts' command handlers exist
+// (V8RecordReplayHandlersReady). Data the backend reads through handler
+// commands waits for this.
+bool gRecordReplayHandlersReady;
+
+extern void RecordReplayRegisterScriptsBeforeHandlersReady();
 
 extern uint64_t* gProgressCounter;
 
 // The recording starts the progress counter from zero at the first checkpoint,
 // and nothing should advance it before: the embedder takes the first
-// checkpoint before any instrumented JS runs in a window it starts the
-// recording at (RecordReplayBeforeInvoke), and instrumented JS in other
-// windows (e.g. Chrome's error pages, if theirs is) is expected to run in
-// renderers that never take a checkpoint. The reset is defensive, for a
-// renderer that runs such JS and starts the recording later; it is safe, as
-// nothing before the first checkpoint is addressed by progress and recording
-// and replaying run the same code before it.
+// checkpoint once the main isolate is entered, before any JS runs. The reset
+// is defensive; it is safe, as nothing before the first checkpoint is
+// addressed by progress and recording and replaying run the same code before
+// it.
 void RecordReplayBeforeFirstCheckpoint() {
   if (*gProgressCounter) {
     recordreplay::Warning("ProgressBeforeFirstCheckpoint",
@@ -10994,13 +10999,13 @@ void RecordReplayBeforeFirstCheckpoint() {
 
 void RecordReplayOnNewSource(Isolate* isolate, const char* id,
                              const char* kind, const char* url) {
-  if (gRecordReplayHasCheckpoint) {
+  if (gRecordReplayHandlersReady) {
     gRecordReplayOnNewSource(id, kind, url);
   }
 }
 
 void RecordReplayOnConsoleMessage(size_t bookmark) {
-  if (gRecordReplayHasCheckpoint) {
+  if (gRecordReplayHandlersReady) {
     gRecordReplayOnConsoleMessage(bookmark);
   }
 }
@@ -11294,6 +11299,10 @@ extern "C" void V8RecordReplaySetDefaultContext(v8::Isolate* isolate, v8::Local<
   if (IsMainThread()) {
     gDefaultContext = new Eternal<v8::Context>(isolate, cx);
   }
+}
+
+bool RecordReplayHasDefaultContext() {
+  return gDefaultContext != nullptr;
 }
 
 extern "C" void V8RecordReplayGetDefaultContext(v8::Isolate* isolate, v8::Local<v8::Context>* cx) {
@@ -11746,19 +11755,26 @@ void recordreplay::InvalidateRecording(const char* why) {
   }
 }
 
+// Checkpoints need the main isolate entered: the driver's commands and scans
+// at a checkpoint run in it. Commands answered without a context:
+// CommandCallback.
+static bool CanCreateCheckpoint() {
+  return recordreplay::IsRecordingOrReplaying() && IsMainThread() &&
+         internal::gMainThreadIsolate &&
+         internal::Isolate::TryGetCurrent() == internal::gMainThreadIsolate;
+}
+
+static void BeforeCheckpoint() {
+  if (!internal::gRecordReplayHasCheckpoint) {
+    internal::RecordReplayBeforeFirstCheckpoint();
+  }
+  internal::gRecordReplayHasCheckpoint = true;
+}
+
 void recordreplay::NewCheckpoint() {
-  // We can only create checkpoints if a context has been created. A context is
-  // needed to process commands which we might get from the driver.
-  if (IsRecordingOrReplaying() && IsMainThread() && internal::gDefaultContext) {
-    bool first = !internal::gRecordReplayHasCheckpoint;
-    if (first) {
-      internal::RecordReplayBeforeFirstCheckpoint();
-    }
-    internal::gRecordReplayHasCheckpoint = true;
+  if (CanCreateCheckpoint()) {
+    BeforeCheckpoint();
     gRecordReplayNewCheckpoint();
-    if (first) {
-      internal::RecordReplayRegisterScriptsBeforeFirstCheckpoint();
-    }
   }
 }
 
@@ -11767,23 +11783,26 @@ extern "C" DLLEXPORT void V8RecordReplayNewCheckpoint() {
 }
 
 void recordreplay::NewCheckpointFlushed() {
-  // We can only create checkpoints if a context has been created. A context is
-  // needed to process commands which we might get from the driver.
-  if (IsRecordingOrReplaying() && IsMainThread() && internal::gDefaultContext) {
-    bool first = !internal::gRecordReplayHasCheckpoint;
-    if (first) {
-      internal::RecordReplayBeforeFirstCheckpoint();
-    }
-    internal::gRecordReplayHasCheckpoint = true;
+  if (CanCreateCheckpoint()) {
+    BeforeCheckpoint();
     gRecordReplayNewCheckpointFlushed();
-    if (first) {
-      internal::RecordReplayRegisterScriptsBeforeFirstCheckpoint();
-    }
   }
 }
 
 extern "C" DLLEXPORT void V8RecordReplayNewCheckpointFlushed() {
   recordreplay::NewCheckpointFlushed();
+}
+
+// Called by the embedder once the root frame's replay scripts ran. A no-op
+// without the default context: commands that the handlers answer run there.
+extern "C" DLLEXPORT void V8RecordReplayHandlersReady() {
+  if (!recordreplay::IsRecordingOrReplaying() || !IsMainThread() ||
+      !internal::gDefaultContext || internal::gRecordReplayHandlersReady) {
+    return;
+  }
+  internal::gRecordReplayHandlersReady = true;
+  internal::RecordReplayRegisterScriptsBeforeHandlersReady();
+  gRecordReplaySetRecordingReady(true);
 }
 
 extern "C" DLLEXPORT void V8RecordReplaySetScriptAlive(bool alive) {
@@ -12108,7 +12127,7 @@ extern "C" DLLEXPORT void* V8RecordReplayIdPointer(int id) {
 
 extern "C" DLLEXPORT uint64_t V8RecordReplayNewBookmark() {
   internal::Isolate* isolate = internal::Isolate::Current();
-  if (internal::gRecordReplayHasCheckpoint &&
+  if (internal::gRecordReplayHandlersReady &&
       isolate && internal::AllowJavascriptExecution::IsAllowed(isolate)) {
     // Our bookmark code invokes JS. Make sure that that is possible and allowed.
     // https://linear.app/replay/issue/RUN-1908/fix-devtools-crashes
@@ -12119,42 +12138,42 @@ extern "C" DLLEXPORT uint64_t V8RecordReplayNewBookmark() {
 
 extern "C" DLLEXPORT void V8RecordReplayOnNetworkRequest(const char* id, const char* kind, uint64_t bookmark) {
   CHECK(recordreplay::IsRecordingOrReplaying());
-  if (internal::gRecordReplayHasCheckpoint) {
+  if (internal::gRecordReplayHandlersReady) {
     gRecordReplayOnNetworkRequest(id, kind, bookmark);
   }
 }
 
 extern "C" DLLEXPORT void V8RecordReplayOnNetworkRequestEvent(const char* id) {
   CHECK(recordreplay::IsRecordingOrReplaying());
-  if (internal::gRecordReplayHasCheckpoint) {
+  if (internal::gRecordReplayHandlersReady) {
     gRecordReplayOnNetworkRequestEvent(id);
   }
 }
 
 extern "C" DLLEXPORT void V8RecordReplayOnNetworkStreamStart(const char* id, const char* kind, const char* parentId) {
   CHECK(recordreplay::IsRecordingOrReplaying());
-  if (internal::gRecordReplayHasCheckpoint) {
+  if (internal::gRecordReplayHandlersReady) {
     gRecordReplayOnNetworkStreamStart(id, kind, parentId);
   }
 }
 
 extern "C" DLLEXPORT void V8RecordReplayOnNetworkStreamData(const char* id, size_t offset, size_t length, uint64_t bookmark) {
   CHECK(recordreplay::IsRecordingOrReplaying());
-  if (internal::gRecordReplayHasCheckpoint) {
+  if (internal::gRecordReplayHandlersReady) {
     gRecordReplayOnNetworkStreamData(id, offset, length, bookmark);
   }
 }
 
 extern "C" DLLEXPORT void V8RecordReplayOnNetworkStreamEnd(const char* id, size_t length) {
   CHECK(recordreplay::IsRecordingOrReplaying());
-  if (internal::gRecordReplayHasCheckpoint) {
+  if (internal::gRecordReplayHandlersReady) {
     gRecordReplayOnNetworkStreamEnd(id, length);
   }
 }
 
 extern "C" size_t V8RecordReplayPaintStart() {
   DCHECK(recordreplay::IsRecordingOrReplaying());
-  if (!internal::gRecordReplayHasCheckpoint) {
+  if (!internal::gRecordReplayHandlersReady) {
     return 0;
   }
   internal::gRecordReplayHasPaint = true;
@@ -12197,7 +12216,7 @@ extern "C" void V8RecordReplayAddMetadata(const char* jsonString) {
 
 extern "C" DLLEXPORT void V8RecordReplayOnAnnotation(const char* kind, const char* contents) {
   DCHECK(recordreplay::IsRecordingOrReplaying());
-  if (internal::gRecordReplayHasCheckpoint) {
+  if (internal::gRecordReplayHandlersReady) {
     gRecordReplayOnAnnotation(kind, contents);
   }
 }
@@ -12243,7 +12262,7 @@ extern "C" DLLEXPORT void V8RecordReplayOnKeyEvent(const char* kind, const char*
 
 extern "C" DLLEXPORT void V8RecordReplayOnNavigationEvent(const char* kind, const char* url) {
   DCHECK(recordreplay::IsRecordingOrReplaying());
-  if (!internal::gRecordReplayHasCheckpoint) {
+  if (!internal::gRecordReplayHandlersReady) {
     return;
   }
   gRecordReplayOnNavigationEvent(kind, url);
@@ -12456,6 +12475,8 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
   gRecordReplayEnableProgressCheckpoints();
   gRecordReplaySetTrackObjectsCallback(i::TrackObjectsCallback);
   gRecordReplaySetPossibleBreakpointsCallback(i::RecordReplayGetPossibleBreakpointsCallback);
+  // The driver keeps the recording only from V8RecordReplayHandlersReady on.
+  gRecordReplaySetRecordingReady(false);
 
   // Remember whether this recording was made on ARM.
 #if V8_TARGET_ARCH_ARM64
