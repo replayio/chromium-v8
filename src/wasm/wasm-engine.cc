@@ -1553,6 +1553,15 @@ Handle<Script> WasmEngine::GetOrCreateScript(
   }
   // Temporarily release the mutex to let the GC collect native modules.
   auto script = CreateWasmScript(isolate, native_module, source_url);
+  // Whether the weak handle above still finds the script depends on when the
+  // GC ran, and creating a new one takes a script id under an ordered lock,
+  // so keep it (and with it the native module) for the isolate's lifetime, as
+  // main-thread scripts already are when registered.
+  if (recordreplay::IsRecordingOrReplaying("leak-references",
+                                           "WasmEngine::GetOrCreateScript")) {
+    int index = -1;
+    isolate->eternal_handles()->Create(isolate, *script, &index);
+  }
   {
     base::MutexGuard guard(&mutex_);
     DCHECK_EQ(1, isolates_.count(isolate));
