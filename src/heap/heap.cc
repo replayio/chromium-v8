@@ -443,6 +443,12 @@ size_t Heap::Available() {
 }
 
 bool Heap::CanExpandOldGeneration(size_t size) {
+  if (recordreplay::IsReplaying()) {
+    // Always allow expanding the heap when replaying, as memory usage can be
+    // larger when replaying than recording, and the driver can give the replay
+    // a smaller old space limit than the recording had.
+    return true;
+  }
   if (force_oom_ || force_gc_on_next_allocation_) return false;
   if (OldGenerationCapacity() + size > max_old_generation_size()) return false;
   // The OldGenerationCapacity does not account compaction spaces used
