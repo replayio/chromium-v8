@@ -7,6 +7,8 @@
 #include "src/execution/arguments-inl.h"
 #include "src/execution/microtask-queue.h"
 #include "src/objects/js-promise-inl.h"
+#include "src/objects/promise-inl.h"
+#include "src/replay/replayio.h"
 
 #include "src/base/replayio.h"
 
@@ -120,9 +122,9 @@ RUNTIME_FUNCTION(Runtime_PromiseHookInit) {
 RUNTIME_FUNCTION(Runtime_PromiseHookBefore) {
   HandleScope scope(isolate);
   DCHECK_EQ(1, args.length());
-  Handle<JSReceiver> promise = args.at<JSReceiver>(0);
-  if (promise->IsJSPromise()) {
-    isolate->OnPromiseBefore(Handle<JSPromise>::cast(promise));
+  Handle<JSPromise> promise;
+  if (JSPromise::ReactionPromise(isolate, args.at(0)).ToHandle(&promise)) {
+    isolate->OnPromiseBefore(promise);
   }
   return ReadOnlyRoots(isolate).undefined_value();
 }
@@ -130,10 +132,23 @@ RUNTIME_FUNCTION(Runtime_PromiseHookBefore) {
 RUNTIME_FUNCTION(Runtime_PromiseHookAfter) {
   HandleScope scope(isolate);
   DCHECK_EQ(1, args.length());
-  Handle<JSReceiver> promise = args.at<JSReceiver>(0);
-  if (promise->IsJSPromise()) {
-    isolate->OnPromiseAfter(Handle<JSPromise>::cast(promise));
+  Handle<JSPromise> promise;
+  if (JSPromise::ReactionPromise(isolate, args.at(0)).ToHandle(&promise)) {
+    isolate->OnPromiseAfter(promise);
   }
+  return ReadOnlyRoots(isolate).undefined_value();
+}
+
+RUNTIME_FUNCTION(Runtime_RecordReplayEnqueuePromiseReactionJob) {
+  HandleScope scope(isolate);
+  DCHECK_EQ(2, args.length());
+  Handle<JSPromise> settled = args.at<JSPromise>(0);
+  int reaction_settle_node_id =
+      RecordReplayReportsPromises()
+          ? RecordReplayPromiseReactionSettleNodeId(isolate, settled)
+          : 0;
+  JSPromise::EnqueueReactionJob(isolate, args.at<PromiseReactionJobTask>(1),
+                                reaction_settle_node_id);
   return ReadOnlyRoots(isolate).undefined_value();
 }
 
