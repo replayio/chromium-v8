@@ -2989,6 +2989,10 @@ Tagged<Object> Isolate::ReThrow(Tagged<Object> exception,
   return ReThrow(exception);
 }
 
+// An optimized frame is summarized at the throw site's inlining, so an inlined
+// call that throws into a catch in its caller is still counted until the next
+// exception. That leaves the depth one frame too high in Maglev and TurboFan
+// code, which only matters within a frame of kReplayMaxJsFrameDepth.
 static void ReplaySyncJsFrameDepth(Isolate* isolate) {
   if (!recordreplay::IsRecordingOrReplaying("emit-opcodes")) return;
 
