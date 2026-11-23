@@ -9755,6 +9755,12 @@ MaybeReduceResult MaglevGraphBuilder::TryReduceArrayPrototypeSort(
 
   // Suppress for correctness fuzzing (different behavior vs. builtin).
   if (V8_UNLIKELY(v8_flags.correctness_fuzzer_suppressions)) return {};
+  // Replay: as in JSCallReducer::ReduceArraySort.
+  if (recordreplay::IsRecordingOrReplaying(
+          "disable-v8-inline-array-sort",
+          "MaglevGraphBuilder::TryReduceArrayPrototypeSort")) {
+    return {};
+  }
 
   if (!CanSpeculateCall()) return {};
 
@@ -16506,12 +16512,16 @@ ReduceResult MaglevGraphBuilder::VisitRecordReplayIncExecutionProgressCounter() 
 // functions carrying the frame depth bytecodes are not compiled by Turbolev.
 // Skipping them would unbalance the depth counter across deopts and exception
 // unwinds (Isolate::UnwindAndFindHandler recounts every JavaScript frame).
+// The nodes aren't writes, which would make Maglev forget what it knows about
+// JS objects at every function entry and exit, so the checkpointed frame is
+// dropped by hand: an eager deopt resuming before them would count again.
 ReduceResult MaglevGraphBuilder::VisitReplayIncJsFrameDepth() {
   if (is_turbolev()) {
     should_abort_compilation_ = true;
     return reducer_.BuildAbort(AbortReason::kUnreachable);
   }
   RETURN_IF_ABORT(AddNewNode<ReplayIncrementAndCheckJsFrameDepth>({}));
+  latest_checkpointed_frame_ = nullptr;
   return ReduceResult::Done();
 }
 
@@ -16521,6 +16531,7 @@ ReduceResult MaglevGraphBuilder::VisitReplayDecJsFrameDepth() {
     return reducer_.BuildAbort(AbortReason::kUnreachable);
   }
   RETURN_IF_ABORT(AddNewNode<ReplayDecrementJsFrameDepth>({}));
+  latest_checkpointed_frame_ = nullptr;
   return ReduceResult::Done();
 }
 

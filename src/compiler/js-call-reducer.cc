@@ -4130,6 +4130,13 @@ Reduction JSCallReducer::ReduceArraySort(Node* node,
                                          SharedFunctionInfoRef shared) {
   // Suppress for correctness fuzzing (different behavior vs. builtin).
   if (V8_UNLIKELY(v8_flags.correctness_fuzzer_suppressions)) return NoChange();
+  // Replay: the inlined sort calls the comparator a different number of times
+  // than the builtin, and which tier runs differs between recording and
+  // replaying.
+  if (recordreplay::IsRecordingOrReplaying("disable-v8-inline-array-sort",
+                                           "JSCallReducer::ReduceArraySort")) {
+    return NoChange();
+  }
 
   JSCallNode n(node);
   if (n.ArgumentCount() < 1) return NoChange();

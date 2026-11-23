@@ -11173,7 +11173,8 @@ class RecordReplayIncrementAndCheckProgressCounter
 
 // The JS frame depth that a replay's stack overflows are thrown at, see
 // ThreadLocalTop::kReplayMaxJsFrameDepth. Nothing JS can see reads or writes
-// it, so neither node is a write.
+// it, so neither node is a write (but see
+// MaglevGraphBuilder::VisitReplayIncJsFrameDepth).
 class ReplayIncrementAndCheckJsFrameDepth
     : public FixedInputNodeT<0, ReplayIncrementAndCheckJsFrameDepth> {
  public:
