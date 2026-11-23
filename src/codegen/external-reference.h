@@ -685,8 +685,7 @@ class ExternalReference {
   // Only for code generated at runtime (Sparkplug, Maglev, TurboFan), which is
   // never serialized.
   V8_EXPORT_PRIVATE static ExternalReference record_replay_progress_counter();
-  V8_EXPORT_PRIVATE static ExternalReference record_replay_target_progress();
-  V8_EXPORT_PRIVATE static ExternalReference record_replay_check_progress();
+  V8_EXPORT_PRIVATE static ExternalReference record_replay_progress_limit();
 
   V8_EXPORT_PRIVATE V8_NOINLINE static ExternalReference
   runtime_function_table_address_for_unittests(Isolate* isolate);

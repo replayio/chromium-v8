@@ -220,14 +220,17 @@ struct runtime : CallDescriptorBuilder {
     static constexpr Operator::Properties kProperties = Operator::kNoDeopt;
   };
 
-  // Replay: called when the inline progress counter reaches the target
-  // progress. What runs there (pausing, breakpoints, instrumentation changes)
-  // can discard the calling code, which then lazily deoptimizes.
-  struct RecordReplayTargetProgressReached
-      : public Descriptor<RecordReplayTargetProgressReached> {
+  // Replay: called when the inline progress counter reaches the progress
+  // limit. What runs at the target progress (pausing, breakpoints,
+  // instrumentation changes) can discard the calling code, which then lazily
+  // deoptimizes.
+  struct RecordReplayProgressLimitReached
+      : public Descriptor<RecordReplayProgressLimitReached> {
     static constexpr auto kFunction =
-        Runtime::kRecordReplayTargetProgressReached;
-    using Arguments = NoArguments;
+        Runtime::kRecordReplayProgressLimitReached;
+    struct Arguments : ArgumentsBase {
+      ARG(V<JSFunction>, closure)
+    };
     using returns_t = V<Object>;
 
     static constexpr bool kCanTriggerLazyDeopt = true;
