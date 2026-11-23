@@ -16486,14 +16486,16 @@ ReduceResult MaglevGraphBuilder::VisitIncBlockCounter() {
   return ReduceResult::Done();
 }
 
-// Assertions on progress need the VM call at every advance. Otherwise, as in
-// baseline code, the counter is updated inline, and the VM is called at the
-// target progress or while progress checks are enabled (see
-// RecordReplayIncrementAndCheckProgressCounter). Whether they are is tested
-// when the code runs: they are enabled while events are disallowed on the main
-// thread, as they are while this compiles (Compiler::CompileOptimized). That
-// node keeps the 64-bit counter in one register, and is only used on x64 and
-// arm64, the 64-bit architectures baseline code has the inline update on.
+// Assertions on progress need the VM call at every advance. Otherwise the
+// counter is updated inline, and the VM is called at the target progress or
+// while progress checks are enabled (see
+// RecordReplayIncrementAndCheckProgressCounter). Unlike baseline code and
+// TurboFan, which decide when they compile, Maglev tests whether checks are
+// enabled when the code runs: they are enabled while events are disallowed on
+// the main thread, as they are while this compiles
+// (Compiler::CompileOptimized). That node keeps the 64-bit counter in one
+// register, and is only used on x64 and arm64, the 64-bit architectures
+// baseline code has the inline update on.
 ReduceResult MaglevGraphBuilder::VisitRecordReplayIncExecutionProgressCounter() {
   ValueNode* closure = GetClosure();
 #if V8_TARGET_ARCH_X64 || V8_TARGET_ARCH_ARM64
