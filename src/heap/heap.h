@@ -1952,6 +1952,12 @@ class Heap {
 
   bool MaximumSizeMinorGC() { return maximum_size_minor_gcs_ > 0; }
 
+  // The fraction of max_old_generation_size() at which
+  // IsIneffectiveMarkCompact() starts calling the heap high. A replay raises
+  // its maximum at this same fraction, so that the raise covers the whole band
+  // that check treats as near the limit (see RecomputeLimits).
+  static constexpr double kHighHeapPercentage = 0.8;
+
   bool IsIneffectiveMarkCompact(size_t old_generation_size,
                                 double mutator_utilization);
   void CheckIneffectiveMarkCompact(size_t old_generation_size,
