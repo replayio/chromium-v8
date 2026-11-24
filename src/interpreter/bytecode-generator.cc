@@ -4775,7 +4775,7 @@ void BytecodeGenerator::BuildSuspendPoint(int position) {
   builder()->ResumeGenerator(generator_object(), registers);
 
   builder()->RecordReplayOnProgress();
-  builder()->ReplayOnFrameEnterGenerator(generator_object());
+  builder()->ReplayOnFrameResume(generator_object());
 }
 
 void BytecodeGenerator::VisitYield(Yield* expr) {

@@ -1552,6 +1552,15 @@ BytecodeArrayBuilder& BytecodeArrayBuilder::ReplayOnFrameEnterGenerator(
   return *this;
 }
 
+BytecodeArrayBuilder& BytecodeArrayBuilder::ReplayOnFrameResume(
+    Register generator_object) {
+  if (emit_record_replay_opcodes_) {
+    OutputReplayIncJsFrameDepth();
+  }
+  RecordReplayInstrumentationGenerator("resume", generator_object);
+  return *this;
+}
+
 BytecodeArrayBuilder& BytecodeArrayBuilder::ReplayOnFrameExit() {
   if (emit_record_replay_opcodes_) {
     OutputReplayDecJsFrameDepth();

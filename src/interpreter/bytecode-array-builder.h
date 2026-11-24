@@ -481,6 +481,7 @@ class V8_EXPORT_PRIVATE BytecodeArrayBuilder final {
 
   BytecodeArrayBuilder& ReplayOnFrameEnter();
   BytecodeArrayBuilder& ReplayOnFrameEnterGenerator(Register generator_object);
+  BytecodeArrayBuilder& ReplayOnFrameResume(Register generator_object);
   BytecodeArrayBuilder& ReplayOnFrameExit();
   BytecodeArrayBuilder& ReplayOnFrameReturn(Register return_value);
 
