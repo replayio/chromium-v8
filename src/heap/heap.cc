@@ -2474,6 +2474,34 @@ void Heap::RecomputeLimits(GarbageCollector collector) {
   if (collector == GarbageCollector::MARK_COMPACTOR) {
     external_memory_.ResetAfterGC();
 
+    if (recordreplay::IsReplaying()) {
+      // A replay's old generation grows past max_old_generation_size (see
+      // CanExpandOldGeneration), so the maximum is not a bound here, but it
+      // still paces collections, and that pace collapses as the heap
+      // approaches it. CalculateAllocationLimit() clamps every new allocation
+      // limit to halfway between the consumed size and the maximum, so the
+      // headroom it leaves shrinks towards nothing as the two converge, and
+      // once the heap is past the maximum there is none at all and
+      // OldGenerationSpaceAvailable() returns 0. A replay in that state
+      // collects for nearly every old generation page it needs, at a pace the
+      // recorded run was never held to.
+      //
+      // Keep the maximum ahead of the heap instead, at twice the consumed size
+      // because raising it to the consumed size would leave that clamp at
+      // exactly the current size and change nothing. Only the old generation
+      // maximum moves, as the replay branch of InvokeNearHeapLimitCallback()
+      // already does.
+      if (old_gen_size >= kHighHeapPercentage * max_old_generation_size()) {
+        const size_t allocator_limit = AllocatorLimitOnMaxOldGenerationSize();
+        const size_t raised = old_gen_size > allocator_limit / 2
+                                  ? allocator_limit
+                                  : 2 * old_gen_size;
+        if (raised > max_old_generation_size()) {
+          set_max_old_generation_size(raised);
+        }
+      }
+    }
+
     set_old_generation_allocation_limit(
         MemoryController<V8HeapTrait>::CalculateAllocationLimit(
             this, old_gen_size, min_old_generation_size_,
@@ -3691,7 +3719,6 @@ bool Heap::HasLowAllocationRate() {
 
 bool Heap::IsIneffectiveMarkCompact(size_t old_generation_size,
                                     double mutator_utilization) {
-  const double kHighHeapPercentage = 0.8;
   const double kLowMutatorUtilization = 0.4;
   return old_generation_size >=
              kHighHeapPercentage * max_old_generation_size() &&
@@ -3700,6 +3727,28 @@ bool Heap::IsIneffectiveMarkCompact(size_t old_generation_size,
 
 void Heap::CheckIneffectiveMarkCompact(size_t old_generation_size,
                                        double mutator_utilization) {
+  // A replay must not die of a heap limit the recorded run never hit, which
+  // this check does. A replay's old generation can hold more than the recorded
+  // run's did, and the driver can give it a different maximum, so a replay sits
+  // above kHighHeapPercentage of that maximum where the recording never did.
+  // That is 0.8 rather than the maximum itself, so a replay reaches it without
+  // growing past the limit at all. The collections that follow bring mutator
+  // utilization under the other half, and the fourth consecutive one ends the
+  // process in FatalProcessOutOfMemory below unless a near heap limit callback
+  // raises the maximum first.
+  //
+  // Keeping the maximum ahead of the heap (see RecomputeLimits) is what stops
+  // a replay getting there: that raise uses this same kHighHeapPercentage and
+  // runs earlier in the same collection, against the same old_gen_size passed
+  // here, so the size half above is false whenever it has room to work. It
+  // does not always have room, which is why this guard is here as well. The
+  // raise stops at AllocatorLimitOnMaxOldGenerationSize(), the pointer
+  // compression cage rather than SIZE_MAX, so on a large enough heap it cannot
+  // keep ahead at all. The near heap limit callback is no backstop either: the
+  // replay branch of InvokeNearHeapLimitCallback() raises the maximum only
+  // when a callback is registered, and the inspector's is the only installer
+  // there is. Return before the count, so a replay never carries one either.
+  if (recordreplay::IsReplaying()) return;
   const int kMaxConsecutiveIneffectiveMarkCompacts = 4;
   if (!v8_flags.detect_ineffective_gcs_near_heap_limit) return;
   if (!IsIneffectiveMarkCompact(old_generation_size, mutator_utilization)) {
