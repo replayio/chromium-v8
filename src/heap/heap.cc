@@ -459,6 +459,22 @@ bool Heap::CanExpandOldGeneration(size_t size) {
 
 bool Heap::CanExpandOldGenerationBackground(LocalHeap* local_heap,
                                             size_t size) {
+  if (recordreplay::IsReplaying()) {
+    // Always allow expanding the heap when replaying, for the same reason as
+    // CanExpandOldGeneration(): memory usage can be larger when replaying than
+    // recording, and the driver can give the replay a smaller old space limit
+    // than the recording had. MaxReserved() is derived from
+    // max_old_generation_size(), so the bound below shrinks with that limit.
+    //
+    // Refusing here is not a soft failure a collection recovers from. The
+    // caller retries through LocalHeap::PerformCollectionAndAllocateAgain(),
+    // which collects and allocates again three times and then calls
+    // FatalProcessOutOfMemory(). Its only other way out is the parked main
+    // thread that IsMainThreadParked() reads below, and a replay whose main
+    // thread is running collects for real on every one of those retries and
+    // comes back to a heap still over the bound.
+    return true;
+  }
   if (force_oom_) return false;
 
   // When the heap is tearing down, then GC requests from background threads
