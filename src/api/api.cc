@@ -12679,6 +12679,8 @@ typedef char* (CommandCallbackRaw)(const char* params);
         (void (*aCallback)(bool aTrackObjects)))                              \
   Macro(RecordReplaySetPossibleBreakpointsCallback,                           \
         (void (*aCallback)(const char*)))                                     \
+  Macro(RecordReplaySetCurrentGeneratorIdCallback, (int (*aCallback)()))     \
+  Macro(RecordReplaySetCountStackFramesCallback, (size_t (*aCallback)()))     \
   Macro(RecordReplaySetAssertDataCallbacks,                                   \
         (void (*aGetData)(void**, size_t*),                                   \
          char* (*aOnMismatch)(void*, size_t, void*, size_t),                  \
@@ -12892,6 +12894,8 @@ void RecordReplayInstrument(const char* kind, const char* function, int function
 
 extern void TrackObjectsCallback(bool track_objects);
 extern void RecordReplayGetPossibleBreakpointsCallback(const char* source_id);
+extern int RecordReplayCurrentGeneratorIdRaw();
+extern size_t RecordReplayCountStackFramesCallback();
 
 extern void RecordReplayCallbackAssertGetData(void** pbuf, size_t* psize);
 extern char* RecordReplayCallbackAssertOnDataMismatch(void* recorded, size_t recorded_size,
@@ -14209,6 +14213,8 @@ ForEachRecordReplaySymbolVoid(LoadRecordReplaySymbolVoid)
   gRecordReplayEnableProgressCheckpoints();
   gRecordReplaySetTrackObjectsCallback(i::TrackObjectsCallback);
   gRecordReplaySetPossibleBreakpointsCallback(i::RecordReplayGetPossibleBreakpointsCallback);
+  gRecordReplaySetCurrentGeneratorIdCallback(i::RecordReplayCurrentGeneratorIdRaw);
+  gRecordReplaySetCountStackFramesCallback(i::RecordReplayCountStackFramesCallback);
 
   // Remember whether this recording was made on ARM.
 #if V8_TARGET_ARCH_ARM64

@@ -4194,11 +4194,19 @@ static Handle<Object> RecordReplayConvertFunctionOffsetToLocation(
 
 bool RecordReplayHasRegisteredScript(Tagged<Script> script);
 
-static Handle<Object> RecordReplayCountStackFrames(Isolate* isolate,
-                                                   Handle<Object> params) {
-  // This is handled in C++ instead of via a protocol JS handler for efficiency.
-  // Counting the stack frames is a common operation when there are many
-  // exception unwinds and so forth.
+// The driver calls this directly, instead of sending a Target.countStackFrames
+// command, because scans count the frames at every generator resume and
+// exception unwind.
+size_t RecordReplayCountStackFramesCallback() {
+  CHECK(IsMainThread());
+  Isolate* isolate = Isolate::Current();
+  replayio::AutoDisallowEvents disallow("CountStackFrames", (v8::Isolate*)isolate);
+  // Before the context switch, which makes handles (see
+  // RecordReplayGetPossibleBreakpointsCallback).
+  HandleScope scope(isolate);
+  std::optional<SaveAndSwitchContext> ssc;
+  EnsureIsolateContext(isolate, ssc);
+
   size_t count = 0;
   for (StackFrameIterator it(isolate); !it.done(); it.Advance()) {
     StackFrame* frame = it.frame();
@@ -4228,9 +4236,7 @@ static Handle<Object> RecordReplayCountStackFrames(Isolate* isolate,
     }
   }
 
-  Handle<JSObject> rv = NewPlainObject(isolate);
-  SetProperty(isolate, rv, "count", count);
-  return rv;
+  return count;
 }
 
 static Handle<Object> RecordReplayGetFunctionsInRange(Isolate* isolate,
@@ -4315,17 +4321,6 @@ static Handle<Object> RecordReplayGetHTMLSource(Isolate* isolate, Handle<Object>
 
   Handle<JSObject> rv = NewPlainObject(isolate);
   SetProperty(isolate, rv, "contents", contents.c_str());
-  return rv;
-}
-
-extern int RecordReplayCurrentGeneratorIdRaw();
-
-static Handle<Object> RecordReplayCurrentGeneratorId(Isolate* isolate, Handle<Object> params) {
-  Handle<JSObject> rv = NewPlainObject(isolate);
-  int id = RecordReplayCurrentGeneratorIdRaw();
-  if (id) {
-    SetProperty(isolate, rv, "id", id);
-  }
   return rv;
 }
 
@@ -4574,10 +4569,8 @@ static InternalCommandCallback gInternalCommandCallbacks[] = {
   { "Debugger.getPossibleBreakpoints", RecordReplayGetPossibleBreakpoints },
   { "Target.convertLocationToFunctionOffset", RecordReplayConvertLocationToFunctionOffset },
   { "Target.convertFunctionOffsetToLocation", RecordReplayConvertFunctionOffsetToLocation },
-  { "Target.countStackFrames", RecordReplayCountStackFrames },
   { "Target.getFunctionsInRange", RecordReplayGetFunctionsInRange },
   { "Target.getHTMLSource", RecordReplayGetHTMLSource },
-  { "Target.currentGeneratorId", RecordReplayCurrentGeneratorId },
 };
 
 // Function to invoke on command callbacks which we don't have a C++ implementation for.
