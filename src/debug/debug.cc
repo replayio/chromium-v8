@@ -4190,6 +4190,7 @@ static Local<v8::Value> GetObjectIdMapForContext(v8::Isolate* v8_isolate, Local<
 }
 
 extern bool gRecordReplayAssertTrackedObjects;
+extern bool gRecordReplayAssertDependencyGraph;
 extern int (*gGetAPIObjectIdCallback)(v8::Local<v8::Object> object);
 
 static int gNextObjectId = 1;
@@ -4275,8 +4276,10 @@ bool RecordReplayTrackThisObjectAssignment(const std::string& property) {
 
   // By default we only track objects which might be React fibers. These will
   // have an "alternate" property assigned to in the constructor. Tracking objects
-  // is only needed when replaying.
-  if (recordreplay::IsReplaying() && property == "alternate") {
+  // is only needed when replaying, and when recording with dependency graph
+  // asserts, whose promise IDs come from the same counter.
+  if ((recordreplay::IsReplaying() || gRecordReplayAssertDependencyGraph) &&
+      property == "alternate") {
     return true;
   }
 
