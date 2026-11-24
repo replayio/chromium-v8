@@ -24,6 +24,7 @@ extern int RegisterInstrumentationSite(const char* kind, int source_position,
                                        int bytecode_offset);
 extern bool RecordReplayShouldEmitOpcodes(bool record_replay_ignore);
 extern bool gRecordReplayAssertTrackedObjects;
+extern bool gRecordReplayAssertDependencyGraph;
 
 extern size_t NumRunningBackgroundCompileTasks();
 
@@ -1421,10 +1422,12 @@ int BytecodeArrayBuilder::RecordReplayRegisterInstrumentationSite(
 }
 
 bool BytecodeArrayBuilder::EmitRecordReplayInstrumentationOpcodes() const {
-  // Instrumentation opcodes aren't needed when recording, except when we are asserting
-  // encountered values and need consistent IDs for these objects when recording.
-  // Generator instrumentation will create persistent object IDs.
-  return emit_record_replay_opcodes_ && (recordreplay::IsReplaying() || gRecordReplayAssertTrackedObjects);
+  // Instrumentation opcodes aren't needed when recording, except when asserting
+  // tracked objects or the dependency graph, which need objects to get the same
+  // IDs when recording as when replaying. Generator instrumentation creates
+  // persistent object IDs, and the dependency graph asserts include the IDs of
+  // promises, which come from the same counter.
+  return emit_record_replay_opcodes_ && (recordreplay::IsReplaying() || gRecordReplayAssertTrackedObjects || gRecordReplayAssertDependencyGraph);
 }
 
 BytecodeArrayBuilder& BytecodeArrayBuilder::RecordReplayInstrumentation(
