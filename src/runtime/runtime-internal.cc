@@ -418,7 +418,7 @@ RUNTIME_FUNCTION(Runtime_StackGuard) {
   }
 
   return isolate->stack_guard()->HandleInterrupts(
-      StackGuard::InterruptLevel::kAnyEffect);
+      StackGuard::InterruptLevel::kAnyEffect, true);
 }
 
 RUNTIME_FUNCTION(Runtime_HandleNoHeapWritesInterrupts) {
@@ -438,7 +438,7 @@ RUNTIME_FUNCTION(Runtime_HandleNoHeapWritesInterrupts) {
   }
 
   return isolate->stack_guard()->HandleInterrupts(
-      StackGuard::InterruptLevel::kNoHeapWrites);
+      StackGuard::InterruptLevel::kNoHeapWrites, true);
 }
 
 RUNTIME_FUNCTION(Runtime_StackGuardWithGap) {
@@ -454,7 +454,7 @@ RUNTIME_FUNCTION(Runtime_StackGuardWithGap) {
   }
 
   return isolate->stack_guard()->HandleInterrupts(
-      StackGuard::InterruptLevel::kAnyEffect);
+      StackGuard::InterruptLevel::kAnyEffect, true);
 }
 
 namespace {
@@ -477,12 +477,14 @@ Tagged<Object> BytecodeBudgetInterruptWithStackCheck(Isolate* isolate,
     return isolate->StackOverflow();
   } else if (check.InterruptRequested()) {
     // Replay: unoptimized code's loops only get here once the function's
-    // budget is used up. A termination left pending is taken before the
-    // function tiers up: optimized code has no check where it inlined a call.
+    // budget is used up. A termination left pending, unless it is deferred
+    // (see RecordReplayDeferTermination), is taken before the function tiers
+    // up: optimized code has no check where it inlined a call.
     if (isolate->stack_guard()->RecordReplayLoopCheckLeavesInterrupts()) {
       return ReadOnlyRoots(isolate).undefined_value();
     }
-    Tagged<Object> return_value = isolate->stack_guard()->HandleInterrupts();
+    Tagged<Object> return_value = isolate->stack_guard()->HandleInterrupts(
+        StackGuard::InterruptLevel::kAnyEffect, true);
     if (!IsUndefined(return_value)) {
       return return_value;
     }
@@ -549,7 +551,7 @@ RUNTIME_FUNCTION(Runtime_BytecodeBudgetLoopInterrupt_Maglev) {
       return ReadOnlyRoots(isolate).undefined_value();
     }
     Tagged<Object> return_value = isolate->stack_guard()->HandleInterrupts(
-        StackGuard::InterruptLevel::kNoHeapWrites);
+        StackGuard::InterruptLevel::kNoHeapWrites, true);
     if (!IsUndefined(return_value)) {
       return return_value;
     }
