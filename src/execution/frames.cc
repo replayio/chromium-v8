@@ -2195,8 +2195,10 @@ void OptimizedFrame::Summarize(std::vector<FrameSummary>* frames) const {
     CHECK(data.is_null());
 
     if (recordreplay::IsRecordingOrReplaying()) {
-      // Replay workaround: Sometimes, DeoptimizationData could not be found for an unknown reason.
-      // → Let this be a no-op instead of a crash.
+      // Replay: the exception unwind hook summarizes frames at pcs that
+      // upstream never summarizes (e.g. ReThrow, which gets a FrameState only
+      // while recording/replaying, see Linkage::NeedsFrameStateInput).
+      // Warn on any remaining such site instead of crashing.
       recordreplay::Warning("MissingOptimizedFrameDeoptimizationData");
       return;
     }
