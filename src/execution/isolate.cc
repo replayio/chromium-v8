@@ -115,6 +115,7 @@
 #include "src/profiler/tracing-cpu-profiler.h"
 #include "src/regexp/regexp-stack.h"
 #include "src/replay/replay-isolate-data.h"
+#include "src/replay/replayio.h"
 #include "src/roots/roots.h"
 #include "src/roots/static-roots.h"
 #include "src/sandbox/js-dispatch-table-inl.h"
@@ -4988,7 +4989,6 @@ v8::PageAllocator* Isolate::page_allocator() const {
 }
 
 extern void RecordReplayOnMainThreadIsolateCreated(Isolate* isolate);
-extern bool RecordReplayShouldCallOnPromiseHook();
 
 Isolate::Isolate(IsolateGroup* isolate_group)
     : isolate_data_(this, isolate_group),
@@ -5060,11 +5060,6 @@ Isolate::Isolate(IsolateGroup* isolate_group)
 
   if (recordreplay::IsRecordingOrReplaying() && IsMainThread()) {
     RecordReplayOnMainThreadIsolateCreated(this);
-  }
-
-  if (RecordReplayShouldCallOnPromiseHook()) {
-    promise_hook_flags_ =
-      PromiseHookFields::HasIsolatePromiseHook::encode(true);
   }
 }
 
@@ -6891,6 +6886,13 @@ bool Isolate::Init(SnapshotData* startup_snapshot_data,
   PerfettoLogger::RegisterIsolate(this);
 #endif  // defined(V8_USE_PERFETTO)
 
+  // Force the promise hook once the roots exist, so that the promise hook
+  // protector is invalidated with it: optimized code must not inline promise
+  // operations that skip the hook.
+  if (recordreplay::DependencyGraphInstrumented()) {
+    PromiseHookStateUpdated();
+  }
+
   initialized_ = true;
 
   return true;
@@ -7495,7 +7497,7 @@ void Isolate::UpdatePromiseHookProtector() {
 void Isolate::PromiseHookStateUpdated() {
   promise_hook_flags_ =
       (promise_hook_flags_ & PromiseHookFields::HasContextPromiseHook::kMask) |
-      PromiseHookFields::HasIsolatePromiseHook::encode(promise_hook_ || RecordReplayShouldCallOnPromiseHook()) |
+      PromiseHookFields::HasIsolatePromiseHook::encode(promise_hook_ || recordreplay::DependencyGraphInstrumented()) |
       PromiseHookFields::HasAsyncEventDelegate::encode(async_event_delegate_) |
       PromiseHookFields::IsDebugActive::encode(debug()->is_active());
 
@@ -7973,11 +7975,11 @@ void Isolate::RunPromiseHook(PromiseHookType type,
                              DirectHandle<JSPromise> promise,
                              DirectHandle<Object> parent) {
   if (!HasIsolatePromiseHooks()) return;
-  if (RecordReplayShouldCallOnPromiseHook()) {
+  if (RecordReplayReportsPromises()) {
     RecordReplayOnPromiseHook(this, type, promise, parent);
-    if (!promise_hook_) return;
   }
-  DCHECK(promise_hook_ != nullptr);
+  DCHECK(promise_hook_ || recordreplay::DependencyGraphInstrumented());
+  if (!promise_hook_) return;
   promise_hook_(type, v8::Utils::ToLocal(promise), v8::Utils::ToLocal(parent));
 }
 

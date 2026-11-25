@@ -30,7 +30,6 @@ extern bool gRecordReplayHasCheckpoint;
 extern void RecordReplayBeforeInvoke(Isolate* isolate,
                                      DirectHandle<JSFunction> function);
 extern uint64_t* gProgressCounter;
-extern bool gRecordReplayEnableDependencyGraph;
 extern std::string GetScriptName(Handle<Script> script);
 
 namespace {
@@ -434,9 +433,8 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
     }
 #endif
 
-    if (recordreplay::IsReplaying() &&
-        IsMainThread() &&
-        gRecordReplayEnableDependencyGraph &&
+    if (recordreplay::DependencyGraphEnabled() &&
+        recordreplay::IsReplaying() &&
         !recordreplay::AreEventsDisallowed() &&
         V8RecordReplayDependencyGraphExecutionNode() == 0 &&
         IsScript(function->shared()->script())) {

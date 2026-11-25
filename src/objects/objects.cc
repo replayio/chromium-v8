@@ -88,6 +88,7 @@
 #include "src/objects/turboshaft-types-inl.h"
 #include "src/parsing/preparse-data.h"
 #include "src/regexp/regexp.h"
+#include "src/replay/replayio.h"
 #include "src/roots/roots.h"
 #include "src/snapshot/deserializer.h"
 #include "src/strings/string-builder-inl.h"
@@ -4790,7 +4791,6 @@ Handle<Object> JSPromise::Reject(DirectHandle<JSPromise> promise,
                                  PromiseReaction::kReject);
 }
 
-extern bool RecordReplayShouldCallOnPromiseHook();
 void AddPromiseDependencyGraphAdoption(Isolate* isolate, DirectHandle<Object> promise, DirectHandle<Object> adoption);
 
 // https://tc39.es/ecma262/#sec-promise-resolve-functions
@@ -4869,7 +4869,7 @@ MaybeHandle<Object> JSPromise::Resolve(DirectHandle<JSPromise> promise,
     return Fulfill(promise, resolution_recv);
   }
 
-  if (RecordReplayShouldCallOnPromiseHook()) {
+  if (RecordReplayReportsPromises()) {
     // Fulfillment of this promise is delayed by adopted resolution.
     // Ref: Promise/A+ 2.3.2
     AddPromiseDependencyGraphAdoption(isolate, Cast<Object>(promise), resolution_obj);
