@@ -4003,8 +4003,12 @@ void BytecodeGraphBuilder::VisitRecordReplayIncExecutionProgressCounter() {
 }
 
 void BytecodeGraphBuilder::VisitReplayIncJsFrameDepth() {
-  // SoftSO before TempSchedule so IfException attaches to ThrowCall.
+  // An overflow deoptimizes before the depth is stored, and the interpreter
+  // throws the stack overflow when it runs this bytecode again. Throwing here
+  // would leave the function from inside every loop this code is inlined into,
+  // which keeps TurboFan from peeling those loops.
   // Simplified ops only — machine value ops are Typer UNREACHABLE.
+  PrepareEagerCheckpoint();
   FieldAccess depth_access(kUntaggedBase, 0, MaybeHandle<Name>(),
                            OptionalMapRef(), Type::Signed32(),
                            MachineType::Int32(), kNoWriteBarrier,
@@ -4014,25 +4018,11 @@ void BytecodeGraphBuilder::VisitReplayIncJsFrameDepth() {
   Node* depth = NewNode(simplified()->LoadField(depth_access), depth_addr);
   Node* incremented =
       NewNode(simplified()->NumberAdd(), depth, jsgraph()->SmiConstant(1));
+  Node* in_range = NewNode(
+      simplified()->NumberLessThan(), incremented,
+      jsgraph()->SmiConstant(ThreadLocalTop::kReplayMaxJsFrameDepth));
+  NewNode(simplified()->CheckIf(DeoptimizeReason::kOverflow), in_range);
   NewNode(simplified()->StoreField(depth_access), depth_addr, incremented);
-
-  Node* overflow = NewNode(
-      simplified()->NumberLessThanOrEqual(),
-      jsgraph()->SmiConstant(ThreadLocalTop::kReplayMaxJsFrameDepth),
-      incremented);
-  NewBranch(overflow, BranchHint::kFalse);
-  {
-    SubEnvironment sub_environment(this);
-    NewIfTrue();
-    BuildLoopExitsForFunctionExit(bytecode_analysis().GetInLivenessFor(
-        bytecode_iterator().current_offset()));
-    Node* throw_call =
-        NewNode(javascript()->CallRuntime(Runtime::kThrowStackOverflow));
-    environment()->RecordAfterState(throw_call, Environment::kAttachFrameState);
-    Node* control = NewNode(common()->Throw());
-    MergeControlToLeaveFunction(control);
-  }
-  NewIfFalse();
 }
 
 void BytecodeGraphBuilder::VisitReplayDecJsFrameDepth() {

@@ -11152,7 +11152,10 @@ class HandleNoHeapWritesInterrupt
 // the counter inline, and call into the VM at the target progress, where what
 // runs (pausing, breakpoints, instrumentation changes) can run JS and discard
 // this code. Optimized code doesn't run progress checks, see
-// BytecodeGraphBuilder::VisitRecordReplayIncExecutionProgressCounter.
+// BytecodeGraphBuilder::VisitRecordReplayIncExecutionProgressCounter. Like the
+// loop stack check, it isn't a heap write: the call deoptimizes this frame if
+// what ran there could have written the heap (see
+// RecordReplayOnTargetProgressReachedFromJS).
 class RecordReplayIncrementAndCheckProgressCounter
     : public FixedInputNodeT<1, RecordReplayIncrementAndCheckProgressCounter> {
  public:
@@ -11163,7 +11166,7 @@ class RecordReplayIncrementAndCheckProgressCounter
   DECLARE_INPUT_TYPES(Tagged)
 
   static constexpr OpProperties kProperties =
-      OpProperties::DeferredCall() | OpProperties::AnySideEffects() |
+      OpProperties::DeferredCall() | OpProperties::CanAllocate() |
       OpProperties::LazyDeopt() | OpProperties::NotIdempotent();
 
   int MaxCallStackArgs() const { return 1; }
