@@ -26,9 +26,23 @@
 #include "src/tracing/trace-event.h"
 #include "src/tracing/trace-id.h"
 
+namespace v8 {
+namespace internal {
+bool RecordReplayIsInternalScriptURL(const char* url);
+}
+}
+
 namespace v8_inspector {
 
 namespace {
+
+bool RecordReplayIsInternalScript(v8::Isolate* isolate,
+                                  v8::Local<v8::debug::Script> script) {
+  v8::Local<v8::String> name;
+  return script->Name().ToLocal(&name) &&
+         v8::internal::RecordReplayIsInternalScriptURL(
+             toProtocolString(isolate, name).utf8().c_str());
+}
 
 static const size_t kMaxAsyncTaskStacks = 8 * 1024;
 static const size_t kMaxExternalParents = 1 * 1024;
@@ -173,6 +187,13 @@ std::vector<std::unique_ptr<V8DebuggerScript>> V8Debugger::getCompiledScripts(
   for (size_t i = 0; i < scripts.size(); ++i) {
     v8::Local<v8::debug::Script> script = scripts[i].Get(m_isolate);
     if (!script->WasCompiled()) continue;
+    // Replay compiles scripts of its own into the page's contexts, and some of
+    // them only when replaying, so listing them would tell a session enabling
+    // the debugger about more scripts when replaying than when recording.
+    if (v8::recordreplay::IsRecordingOrReplaying() &&
+        RecordReplayIsInternalScript(m_isolate, script)) {
+      continue;
+    }
     if (!script->IsEmbedded()) {
       int contextId;
       if (!script->ContextId().To(&contextId)) continue;
