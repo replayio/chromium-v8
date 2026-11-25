@@ -73,12 +73,12 @@ void MessageHandler::DefaultMessageReport(Isolate* isolate,
   }
 }
 
-extern Handle<Object>* gCurrentException;
 extern "C" uint64_t V8RecordReplayNewBookmark();
 
 Handle<JSMessageObject> MessageHandler::MakeMessageObject(
     Isolate* isolate, MessageTemplate message, const MessageLocation* location,
-    Handle<Object> argument, Handle<FixedArray> stack_frames) {
+    Handle<Object> argument, Handle<FixedArray> stack_frames,
+    Handle<Object> record_replay_exception) {
   Factory* factory = isolate->factory();
 
   int start = -1;
@@ -108,7 +108,6 @@ Handle<JSMessageObject> MessageHandler::MakeMessageObject(
     if (isolate->has_pending_exception()) {
       exception = Handle<Object>(isolate->pending_exception(), isolate);
       isolate->clear_pending_exception();
-      gCurrentException = &exception;
     }
     Handle<Object> message;
     if (isolate->has_pending_message()) {
@@ -120,8 +119,17 @@ Handle<JSMessageObject> MessageHandler::MakeMessageObject(
       scheduledException = Handle<Object>(isolate->scheduled_exception(), isolate);
       isolate->clear_scheduled_exception();
     }
-    record_replay_bookmark = (int)V8RecordReplayNewBookmark();
-    gCurrentException = nullptr;
+    Handle<Object> current_exception =
+        record_replay_exception.is_null() ? exception : record_replay_exception;
+    if (!current_exception.is_null() &&
+        !RecordReplayShouldExposeException(isolate, current_exception)) {
+      current_exception = Handle<Object>();
+    }
+    {
+      RecordReplayCurrentExceptionScope exception_scope(
+          current_exception.is_null() ? nullptr : &current_exception);
+      record_replay_bookmark = (int)V8RecordReplayNewBookmark();
+    }
     CHECK(!isolate->has_pending_exception());
     if (!exception.is_null()) {
       isolate->set_pending_exception(*exception);

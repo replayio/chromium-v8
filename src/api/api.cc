@@ -11021,12 +11021,51 @@ extern "C" void V8RecordReplayGetCurrentException(MaybeLocal<Value>* exception) 
 }
 
 
+RecordReplayCurrentExceptionScope::RecordReplayCurrentExceptionScope(
+    Handle<Object>* exception)
+    : prev_exception_(gCurrentException) {
+  gCurrentException = exception;
+}
+
+RecordReplayCurrentExceptionScope::~RecordReplayCurrentExceptionScope() {
+  gCurrentException = prev_exception_;
+}
+
 extern bool RecordReplayHasRegisteredScript(Script script);
+
+// Whether the top JS frame is in a script Replay doesn't know about.
+static bool RecordReplayIsInUnregisteredScript(Isolate* isolate) {
+  HandleScope scope(isolate);
+  // Note: Most of this is copied from |ComputeLocation| in messages.cc.
+  JavaScriptFrameIterator it(isolate);
+  if (it.done()) {
+    return false;
+  }
+  // Compute the location from the function and the relocation info of the
+  // baseline code. For optimized code this will use the deoptimization
+  // information to get canonical location information.
+  std::vector<FrameSummary> frames;
+  it.frame()->Summarize(&frames);
+  if (frames.empty()) {  // There might not always be a frame due to RUN-1920.
+    return false;
+  }
+  auto& summary = frames.back().AsJavaScript();
+  Handle<SharedFunctionInfo> shared(summary.function()->shared(), isolate);
+  Handle<Object> script(shared->script(), isolate);
+  return script->IsScript() &&
+         !RecordReplayHasRegisteredScript(*Handle<Script>::cast(script));
+}
+
+bool RecordReplayShouldExposeException(Isolate* isolate,
+                                       Handle<Object> exception) {
+  return gRecordReplayIsRecordingOrReplaying &&
+         isolate->is_catchable_by_javascript(*exception) &&
+         !RecordReplayIsInUnregisteredScript(isolate);
+}
 
 void RecordReplayOnExceptionUnwind(Isolate* isolate) {
   CHECK(gRecordReplayIsRecordingOrReplaying);
   CHECK(IsMainThread());
-  CHECK(!gCurrentException);
 
   if (!gRecordReplayHasCheckpoint)
     return;
@@ -11037,32 +11076,9 @@ void RecordReplayOnExceptionUnwind(Isolate* isolate) {
     return;
 
   Handle<Object> exception(isolate->pending_exception(), isolate);
-  if (!isolate->is_catchable_by_javascript(*exception))
+  // Don't report errors from unregistered scripts.
+  if (!RecordReplayShouldExposeException(isolate, exception))
     return;
-
-  {
-    // Note: Most of this is copied from |ComputeLocation| in messages.cc.
-    JavaScriptFrameIterator it(isolate);
-    if (!it.done()) {
-      // Compute the location from the function and the relocation info of the
-      // baseline code. For optimized code this will use the deoptimization
-      // information to get canonical location information.
-      std::vector<FrameSummary> frames;
-      it.frame()->Summarize(&frames);
-      if (!frames.empty()) { // There might not always be a frame due to RUN-1920.
-        auto& summary = frames.back().AsJavaScript();
-        Handle<SharedFunctionInfo> shared(summary.function()->shared(), isolate);
-        Handle<Object> script(shared->script(), isolate);
-        if (script->IsScript()) {
-          Handle<Script> casted_script = Handle<Script>::cast(script);
-          if (!RecordReplayHasRegisteredScript(*casted_script)) {
-            // Don't repor errors from unregistered.
-            return;
-          }
-        }
-      }
-    }
-  }
 
   isolate->clear_pending_exception();
   Handle<Object> message(isolate->pending_message(), isolate);
@@ -11072,11 +11088,10 @@ void RecordReplayOnExceptionUnwind(Isolate* isolate) {
     scheduledException = Handle<Object>(isolate->scheduled_exception(), isolate);
     isolate->clear_scheduled_exception();
   }
-  gCurrentException = &exception;
-
-  gRecordReplayOnExceptionUnwind();
-
-  gCurrentException = nullptr;
+  {
+    RecordReplayCurrentExceptionScope exception_scope(&exception);
+    gRecordReplayOnExceptionUnwind();
+  }
   CHECK(!isolate->has_pending_exception());
   isolate->set_pending_exception(*exception);
   isolate->set_pending_message(*message);
@@ -11985,9 +12000,8 @@ bool recordreplay::DependencyGraphEnabled() {
 
 namespace internal {
 
-// Whether RecordReplayOnPromiseHook and AddPromiseDependencyGraphAdoption are
-// called: while the graph is updated, and while tracked object asserts are on,
-// as those include the object IDs the calls assign to promises.
+// True while the graph is updated, and while tracked object asserts are on, as
+// those include the object IDs the promise reports assign.
 bool RecordReplayReportsPromises() {
   return gDependencyGraphReportsPromises && IsMainThread();
 }
@@ -12028,15 +12042,45 @@ void recordreplay::AddDependencyGraphEdge(int source, int target, const char* js
   V8RecordReplayAddDependencyGraphEdge(source, target, json);
 }
 
+// Open executions, innermost last. Pushed and popped only while
+// DependencyGraphEnabled, so its contents are replay-time data, not recorded:
+// empty when recording without RECORD_REPLAY_DEPENDENCY_GRAPH_ASSERTS, and when
+// replaying with the dependency-graph feature disabled. Callers may gate only
+// dependency graph calls on what the readers below return.
 static std::vector<int>* gDependencyGraphExecutionStack;
 
+// The execution stack on this thread, or null if there is none.
+static const std::vector<int>* DependencyGraphExecutionStack() {
+  if (!IsMainThread()) {
+    return nullptr;
+  }
+  return gDependencyGraphExecutionStack;
+}
+
 extern "C" int V8RecordReplayDependencyGraphExecutionNode() {
-  if (!IsMainThread() ||
-      !gDependencyGraphExecutionStack ||
-      !gDependencyGraphExecutionStack->size()) {
+  const std::vector<int>* stack = DependencyGraphExecutionStack();
+  return stack && !stack->empty() ? stack->back() : 0;
+}
+
+// Cause execution: the innermost open execution with a node, as the backend
+// assigns executionParent. 0 if there is none.
+extern "C" DLLEXPORT int V8RecordReplayDependencyGraphCauseExecutionNode() {
+  const std::vector<int>* stack = DependencyGraphExecutionStack();
+  if (!stack) {
     return 0;
   }
-  return gDependencyGraphExecutionStack->back();
+  auto it = std::find_if(stack->rbegin(), stack->rend(),
+                         [](int node) { return node != 0; });
+  return it == stack->rend() ? 0 : *it;
+}
+
+// Number of open executions without a node.
+extern "C" DLLEXPORT size_t V8RecordReplayDependencyGraphNodelessExecutionCount() {
+  const std::vector<int>* stack = DependencyGraphExecutionStack();
+  if (!stack) {
+    return 0;
+  }
+  return static_cast<size_t>(std::count(stack->begin(), stack->end(), 0));
 }
 
 extern "C" DLLEXPORT void V8RecordReplayBeginDependencyExecution(int node) {
