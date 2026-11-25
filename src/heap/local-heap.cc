@@ -28,6 +28,21 @@
 namespace v8 {
 namespace internal {
 
+void RecordReplayWaitWhileParked(void (*wait)(void*), void* data) {
+  LocalHeap* local_heap = LocalHeap::Current();
+  if (!local_heap || !local_heap->IsRunning()) {
+    wait(data);
+    return;
+  }
+  // A safepoint is only ever requested for a collection, so parking for one
+  // must not turn into performing a collection here. ParkSlowPath otherwise
+  // runs a main thread's requested collection from the middle of a wait the
+  // replay has not released yet. V8's own blocking sites park under this scope
+  // for the same reason.
+  IgnoreLocalGCRequests ignore_gc_requests(local_heap->heap());
+  local_heap->ExecuteWhileParked([wait, data]() { wait(data); });
+}
+
 thread_local LocalHeap* g_current_local_heap_ V8_CONSTINIT = nullptr;
 
 V8_TLS_DEFINE_GETTER(LocalHeap::TryGetCurrent, LocalHeap*,
