@@ -1308,7 +1308,7 @@ void RecordReplayCallbackAssertDescribeData(void* buf, size_t buf_size) {
 extern bool gRecordReplayHasCheckpoint;
 
 extern void RecordReplayOnTargetProgressReached();
-extern bool RecordReplayIsDivergentUserJSWithoutPause(
+extern bool RecordReplayMustNotRunUserFunction(
     Tagged<SharedFunctionInfo> shared);
 
 static bool gHasPrintedStack = false;
@@ -1334,8 +1334,7 @@ static void OnExecutionProgress(Isolate* isolate, Handle<JSFunction> function) {
     CHECK(RecordReplayHasRegisteredScript(*script));
 
     if (replayio::MustNotRunUserJS()) {
-      // Print JS stack if user JS was executed non-deterministically
-      // and we were not paused.
+      // Print JS stack if user JS ran where it must not.
       if (!gHasPrintedStack) {  // Prevent flood.
         gHasPrintedStack = true;
         HandleScope scope(isolate);
@@ -1345,6 +1344,7 @@ static void OnExecutionProgress(Isolate* isolate, Handle<JSFunction> function) {
         recordreplay::Warning(
             "NonDeterministicUserJSUngated",
             {{"trigger", "JSProgress"},
+             {"inPause", recordreplay::HasDivergedFromRecording()},
              {"progress", *gProgressCounter},
              {"scriptId", script->id()},
              {"location",
@@ -1516,10 +1516,9 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertValue) {
       contents.c_str(), *gProgressCounter, script->id(),
       site.location_.c_str());
 
-  if ((RecordReplayIsDivergentUserJSWithoutPause(function->shared())) ||
+  if ((RecordReplayMustNotRunUserFunction(function->shared())) ||
       (recordreplay::IsReplaying() && recordreplay::HadMismatch())) {
-    // Print JS stack if user JS was executed non-deterministically
-    // and we were not paused, or if we had a mismatch.
+    // Print JS stack if user JS ran where it must not, or if we had a mismatch.
     if (!gHasPrintedStack) {  // Prevent flood.
       gHasPrintedStack = true;
       std::stringstream stack;
@@ -1529,7 +1528,8 @@ RUNTIME_FUNCTION(Runtime_RecordReplayAssertValue) {
           "AssertionSiteJSStack",
           {{"site", site.desc_},
            {"nonDeterministicUserJS",
-            RecordReplayIsDivergentUserJSWithoutPause(function->shared())},
+            RecordReplayMustNotRunUserFunction(function->shared())},
+           {"inPause", recordreplay::HasDivergedFromRecording()},
            {"progress", *gProgressCounter},
            {"scriptId", script->id()},
            {"location", site.location_},
