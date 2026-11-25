@@ -2805,7 +2805,9 @@ void BytecodeGraphBuilder::VisitReThrow() {
   BuildLoopExitsForFunctionExit(bytecode_analysis().GetInLivenessFor(
       bytecode_iterator().current_offset()));
   Node* value = environment()->LookupAccumulator();
-  NewNode(javascript()->CallRuntime(Runtime::kReThrow), value);
+  Node* call = NewNode(javascript()->CallRuntime(Runtime::kReThrow), value);
+  // Replay: only has a frame state input when recording/replaying.
+  environment()->BindAccumulator(call, Environment::kAttachFrameState);
   Node* control = NewNode(common()->Throw());
   MergeControlToLeaveFunction(control);
 }
