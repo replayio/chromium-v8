@@ -528,8 +528,8 @@ class V8_EXPORT_PRIVATE BytecodeArrayBuilder final {
   BytecodeArrayBuilder& RecordReplayTrackObjectId(Register object);
 
   BytecodeArrayBuilder& ReplayOnFrameEnter();
-  BytecodeArrayBuilder& ReplayOnFrameEnterGenerator(Register generator_object);
-  // The first half of ReplayOnFrameEnterGenerator, for where a resumable
+  BytecodeArrayBuilder& ReplayOnFrameResume(Register generator_object);
+  // The frame depth half of a generator frame's entry, for where a resumable
   // function's frame starts: its generator object doesn't exist yet there, so
   // the frame is announced (RecordReplayInstrumentationGenerator) once it does.
   BytecodeArrayBuilder& ReplayIncJsFrameDepth();
