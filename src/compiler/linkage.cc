@@ -4,6 +4,7 @@
 
 #include "src/compiler/linkage.h"
 
+#include "include/v8.h"  // For replay.
 #include "src/codegen/assembler-inl.h"
 #include "src/codegen/macro-assembler.h"
 #include "src/codegen/optimized-compilation-info.h"
@@ -275,8 +276,6 @@ bool Linkage::NeedsFrameStateInput(Runtime::FunctionId function) {
     case Runtime::kNewFunctionContext:
     case Runtime::kPushBlockContext:
     case Runtime::kPushCatchContext:
-    case Runtime::kReThrow:
-    case Runtime::kReThrowWithMessage:
     case Runtime::kStringEqual:
     case Runtime::kStringLessThan:
     case Runtime::kStringLessThanOrEqual:
@@ -286,6 +285,12 @@ bool Linkage::NeedsFrameStateInput(Runtime::FunctionId function) {
     case Runtime::kTraceEnter:
     case Runtime::kTraceExit:
       return false;
+
+    // Replay: the exception unwind hook summarizes the rethrowing frame
+    // (RecordReplayOnExceptionUnwind), which needs a deopt index here.
+    case Runtime::kReThrow:
+    case Runtime::kReThrowWithMessage:
+      return recordreplay::IsRecordingOrReplaying();
 
     // Some inline intrinsics are also safe to call without a FrameState.
     case Runtime::kInlineCreateIterResultObject:
