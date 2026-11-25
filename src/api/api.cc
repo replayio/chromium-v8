@@ -12028,15 +12028,45 @@ void recordreplay::AddDependencyGraphEdge(int source, int target, const char* js
   V8RecordReplayAddDependencyGraphEdge(source, target, json);
 }
 
+// Open executions, innermost last. Pushed and popped only while
+// DependencyGraphEnabled, so its contents are replay-time data, not recorded:
+// empty when recording without RECORD_REPLAY_DEPENDENCY_GRAPH_ASSERTS, and when
+// replaying with the dependency-graph feature disabled. Callers may gate only
+// dependency graph calls on what the readers below return.
 static std::vector<int>* gDependencyGraphExecutionStack;
 
+// The execution stack on this thread, or null if there is none.
+static const std::vector<int>* DependencyGraphExecutionStack() {
+  if (!IsMainThread()) {
+    return nullptr;
+  }
+  return gDependencyGraphExecutionStack;
+}
+
 extern "C" int V8RecordReplayDependencyGraphExecutionNode() {
-  if (!IsMainThread() ||
-      !gDependencyGraphExecutionStack ||
-      !gDependencyGraphExecutionStack->size()) {
+  const std::vector<int>* stack = DependencyGraphExecutionStack();
+  return stack && !stack->empty() ? stack->back() : 0;
+}
+
+// Cause execution: the innermost open execution with a node, as the backend
+// assigns executionParent. 0 if there is none.
+extern "C" DLLEXPORT int V8RecordReplayDependencyGraphCauseExecutionNode() {
+  const std::vector<int>* stack = DependencyGraphExecutionStack();
+  if (!stack) {
     return 0;
   }
-  return gDependencyGraphExecutionStack->back();
+  auto it = std::find_if(stack->rbegin(), stack->rend(),
+                         [](int node) { return node != 0; });
+  return it == stack->rend() ? 0 : *it;
+}
+
+// Number of open executions without a node.
+extern "C" DLLEXPORT size_t V8RecordReplayDependencyGraphNodelessExecutionCount() {
+  const std::vector<int>* stack = DependencyGraphExecutionStack();
+  if (!stack) {
+    return 0;
+  }
+  return static_cast<size_t>(std::count(stack->begin(), stack->end(), 0));
 }
 
 extern "C" DLLEXPORT void V8RecordReplayBeginDependencyExecution(int node) {
