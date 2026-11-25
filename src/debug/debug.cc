@@ -4351,8 +4351,8 @@ bool RecordReplayHasRegisteredScript(Tagged<Script> script) {
     gRegisteredScripts->find(script->id()) != gRegisteredScripts->end();
 }
 
-// Whether we are divergently calling into user JS without having paused first.
-bool RecordReplayIsDivergentUserJSWithoutPause(
+// Whether |shared| is registered user JS that must not run now.
+bool RecordReplayMustNotRunUserFunction(
     Tagged<SharedFunctionInfo> shared) {
   return replayio::MustNotRunUserJS() && IsScript(shared->script()) &&
          RecordReplayHasRegisteredScript(
