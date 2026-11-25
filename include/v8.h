@@ -166,6 +166,18 @@ static void AddDependencyGraphEdge(int source, int target, const char* json);
 static void BeginDependencyExecution(int node);
 static void EndDependencyExecution();
 
+// Whether the dependency graph is updated, on this thread: the main thread,
+// while instrumented and either replaying with the dependency-graph feature
+// enabled, or with RECORD_REPLAY_DEPENDENCY_GRAPH_ASSERTS.
+static bool DependencyGraphEnabled();
+// Whether dependency graph instrumentation runs, on this thread: the main
+// thread, when the recording was made with the dependency-graph feature. This
+// is recorded, so it is the same when recording and replaying, and code may
+// change its behavior on it: it forces the isolate promise hook, which selects
+// promise builtin paths (TT-1361). It holds whenever DependencyGraphEnabled
+// does.
+static bool DependencyGraphInstrumented();
+
 struct AutoDependencyExecution {
   AutoDependencyExecution(int node) {
     BeginDependencyExecution(node);

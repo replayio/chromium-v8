@@ -8,6 +8,11 @@ namespace v8 {
 namespace internal {
 class Isolate;
 class String;
+
+// Whether promise hooks and thenable adoptions report to the dependency graph
+// (RecordReplayOnPromiseHook, AddPromiseDependencyGraphAdoption), on this
+// thread. Defined in api.cc.
+bool RecordReplayReportsPromises();
 }  // namespace internal
 
 namespace replayio {
