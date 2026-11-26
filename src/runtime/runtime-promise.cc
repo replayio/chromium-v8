@@ -29,6 +29,10 @@ RUNTIME_FUNCTION(Runtime_PromiseRejectEventFromStack) {
   }
   isolate->RunAllPromiseHooks(PromiseHookType::kResolve, promise,
                               isolate->factory()->undefined_value());
+  // Created rejected (Promise.reject): no TriggerPromiseReactions settle.
+  if (RecordReplayReportsPromises()) {
+    RecordReplayOnPromiseSettle(isolate, promise);
+  }
   isolate->debug()->OnPromiseReject(rejected_promise, value);
 
   // Report only if we don't actually have a handler.
