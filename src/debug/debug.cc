@@ -8,6 +8,8 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
+#include <vector>
 
 #include "src/api/api-inl.h"
 #include "src/base/platform/mutex.h"
@@ -4412,18 +4414,26 @@ struct PromiseDependencyGraphData {
   // none.
   int adopted_persistent_id = 0;
 
-  // Graph node ID of the settle that triggers the promise's reactions:
-  // settled_node_id, or with an adopted thenable that thenable's
-  // reaction_settle_node_id; 0 if not recorded.
+  // Graph node ID of the settle which triggers the promise's reactions:
+  // settled_node_id, or with an adopted thenable the settle of the promise job
+  // which resolved it; 0 if not recorded.
   int reaction_settle_node_id = 0;
 
   // Graph node ID of the reaction job enqueued for this derived promise, until
   // its kBefore hook.
   int job_node_id = 0;
+
+  // reaction_settle_node_id the job was enqueued with.
+  int job_settle_node_id = 0;
 };
 
 typedef std::unordered_map<int32_t, PromiseDependencyGraphData> PromiseDependencyGraphDataMap;
 static PromiseDependencyGraphDataMap* gPromiseDependencyGraphDataMap;
+
+// Of each promise job running between its kBefore and kAfter hooks, innermost
+// last: the graph node ID of the settle which triggered it (a reaction job's
+// reactionSettle, a thenable job's resolve); 0 if not recorded.
+static std::vector<int>* gRunningPromiseJobSettles;
 
 static PromiseDependencyGraphData&
 GetOrCreatePromiseDependencyGraphData(Isolate* isolate, Handle<Object> promise) {
@@ -4467,10 +4477,17 @@ int RecordReplayOnPromiseSettle(Isolate* isolate, Handle<JSPromise> promise) {
 
   PromiseDependencyGraphData& data =
     GetOrCreatePromiseDependencyGraphData(isolate, promise);
-  data.reaction_settle_node_id =
-    data.adopted_persistent_id
-      ? gPromiseDependencyGraphDataMap->at(data.adopted_persistent_id).reaction_settle_node_id
-      : data.settled_node_id;
+  // With an adopted thenable, the resolving function its then got settles it:
+  // in the promise job which runs that function (a reaction of the thenable,
+  // or of a promise the thenable waits on; its own thenable job); else not
+  // recorded.
+  if (!data.adopted_persistent_id) {
+    data.reaction_settle_node_id = data.settled_node_id;
+  } else if (gRunningPromiseJobSettles && !gRunningPromiseJobSettles->empty()) {
+    data.reaction_settle_node_id = gRunningPromiseJobSettles->back();
+  } else {
+    data.reaction_settle_node_id = 0;
+  }
   return data.reaction_settle_node_id;
 }
 
@@ -4505,6 +4522,7 @@ void RecordReplayOnPromiseReactionJob(Isolate* isolate, int reaction_settle_node
   std::string job_node_str =
     StringPrintf("{\"kind\":\"promiseReactionJob\",\"reaction\":\"%s\"}", reaction);
   data.job_node_id = recordreplay::NewDependencyGraphNode(job_node_str.c_str());
+  data.job_settle_node_id = reaction_settle_node_id;
   if (reaction_settle_node_id) {
     recordreplay::AddDependencyGraphEdge(reaction_settle_node_id, data.job_node_id,
                                          "{\"kind\":\"reactionSettle\"}");
@@ -4550,8 +4568,13 @@ void RecordReplayOnPromiseHook(Isolate* isolate, PromiseHookType type,
     }
     case PromiseHookType::kBefore: {
       // Consumed: a later thenable job for the same promise is not this job.
-      int node_id = data.job_node_id;
-      data.job_node_id = 0;
+      int job_node_id = std::exchange(data.job_node_id, 0);
+      if (!gRunningPromiseJobSettles) {
+        gRunningPromiseJobSettles = new std::vector<int>();
+      }
+      gRunningPromiseJobSettles->push_back(
+          job_node_id ? data.job_settle_node_id : data.settled_node_id);
+      int node_id = job_node_id;
       if (!node_id) {
         node_id = data.settled_node_id ? data.settled_node_id : data.new_node_id;
       }
@@ -4559,9 +4582,31 @@ void RecordReplayOnPromiseHook(Isolate* isolate, PromiseHookType type,
       break;
     }
     case PromiseHookType::kAfter: {
+      // The kAfter of Isolate::OnTerminationDuringRunMicrotasks: RunMicrotasks
+      // has unwound the job (RecordReplayUnwindRunningPromiseJobs).
+      if (!isolate->is_execution_terminating()) {
+        CHECK(gRunningPromiseJobSettles && !gRunningPromiseJobSettles->empty());
+        gRunningPromiseJobSettles->pop_back();
+      }
       recordreplay::EndDependencyExecution();
       break;
     }
+  }
+}
+
+size_t RecordReplayRunningPromiseJobDepth() {
+  if (!RecordReplayReportsPromises() || !gRunningPromiseJobSettles) {
+    return 0;
+  }
+  return gRunningPromiseJobSettles->size();
+}
+
+void RecordReplayUnwindRunningPromiseJobs(size_t depth) {
+  if (!RecordReplayReportsPromises() || !gRunningPromiseJobSettles) {
+    return;
+  }
+  if (gRunningPromiseJobSettles->size() > depth) {
+    gRunningPromiseJobSettles->resize(depth);
   }
 }
 
