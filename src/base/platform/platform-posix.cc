@@ -46,6 +46,7 @@
 #include "src/base/platform/platform.h"
 #include "src/base/platform/time.h"
 #include "src/base/utils/random-number-generator.h"
+#include "v8.h"
 
 #ifdef V8_FAST_TLS_SUPPORTED
 #include <atomic>
@@ -594,8 +595,13 @@ bool OS::SetPermissions(void* address, size_t size, MemoryPermission access) {
 
 // static
 void OS::SetDataReadOnly(void* address, size_t size) {
-  CHECK_EQ(0, reinterpret_cast<uintptr_t>(address) % CommitPageSize());
-  CHECK_EQ(0, size % CommitPageSize());
+  // A replay of an arm64 macOS recording runs the x86_64 build, whose data is
+  // aligned to 4 KB pages, with the recording's 16 KB ones. Protecting it at
+  // the system's own page size then still works.
+  if (!recordreplay::IsRecordingOrReplaying()) {
+    CHECK_EQ(0, reinterpret_cast<uintptr_t>(address) % CommitPageSize());
+    CHECK_EQ(0, size % CommitPageSize());
+  }
 
   if (mprotect(address, size, PROT_READ) != 0) {
     FATAL("Failed to protect data memory at %p +%zu; error %d\n", address, size,
