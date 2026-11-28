@@ -188,5 +188,20 @@ bool ReadingIsFreeOfUserJS(v8::Local<v8::Object> object,
       isolate, v8::internal::Cast<v8::internal::JSObject>(receiver));
 }
 
+bool IsEmbedderGetterInPause(v8::Local<v8::Function> getter) {
+  if (!v8::recordreplay::HasDivergedFromRecording()) {
+    return false;
+  }
+  v8::internal::DirectHandle<v8::internal::JSReceiver> function =
+      Utils::OpenDirectHandle(*getter);
+  if (!v8::internal::IsJSFunction(*function)) {
+    return false;
+  }
+  v8::internal::Tagged<v8::internal::SharedFunctionInfo> shared =
+      v8::internal::Cast<v8::internal::JSFunction>(*function)->shared();
+  return shared->IsApiFunction() &&
+         !shared->api_func_data()->has_side_effects();
+}
+
 }  // namespace replayio
 }  // namespace v8

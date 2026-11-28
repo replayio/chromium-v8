@@ -1724,11 +1724,14 @@ bool ValueMirror::getProperties(v8::Local<v8::Context> context,
           // for the viewer to call. A read that reaches none of the page's code
           // is the exception: an Error's stack the page has already formatted
           // gives the string the recording saw, and one V8 formats its own way
-          // gives what the page's own read would.
+          // gives what the page's own read would. So is one of the embedder's
+          // getters in a pause, which reads only the getters RUN-1478 lists
+          // (see IsEmbedderGetterInPause).
           if (name != "__proto__" && !getterFunction.IsEmpty() &&
               isBuiltinGetter(getterFunction) &&
               (!v8::replayio::MustNotRunUserJS() ||
-               v8::replayio::ReadingIsFreeOfUserJS(object, v8Name)) &&
+               v8::replayio::ReadingIsFreeOfUserJS(object, v8Name) ||
+               v8::replayio::IsEmbedderGetterInPause(getterFunction)) &&
               !doesAttributeHaveObservableSideEffectOnGet(context, object,
                                                           v8Name)) {
             v8::TryCatch tryCatchFunction(isolate);

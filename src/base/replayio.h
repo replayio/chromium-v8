@@ -69,6 +69,21 @@ inline bool MustNotRunUserJS() {
 bool ReadingIsFreeOfUserJS(v8::Local<v8::Object> object,
                            v8::Local<v8::Name> name);
 
+// Whether |getter| is an API function its template declares free of side
+// effects, read in a pause, so that a description may read it where
+// MustNotRunUserJS() holds. This is safe only because a pause reads no getter
+// the RUN-1478 list in value-mirror.cc doesn't name, and those are Blink's Event
+// attributes, which return state the event holds and call no JS. Blink declares
+// an attribute getter free of side effects unless its IDL says otherwise, and
+// V8 declares its Error stack getter to have them, since it calls the page's
+// Error.prepareStackTrace. A JS builtin is no such guarantee: one installed as a
+// getter calls the page's code from inside V8 (Array.prototype.toString calls
+// the receiver's join), past the check in Invoke that refuses registered user
+// JS while MustNotRunUserJS() holds.
+//
+// Defined in src/replay/replayio.cc.
+bool IsEmbedderGetterInPause(v8::Local<v8::Function> getter);
+
 // Marks nested code as replay-owned (IsInReplayCode). Independent of
 // AutoMaybeDisallowEvents; divergent replay-owned paths use both.
 struct AutoMaybeMarkReplayCode {
